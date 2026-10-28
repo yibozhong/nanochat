@@ -32,4 +32,8 @@ Data preparation uses TinyStories V2 GPT-4's official train and validation files
 
 Every training run saves configuration, JSONL metrics, W&B identity, best weights, and two alternating complete checkpoint generations. Each rank saves its optimizer and RNG/data state; the latest pointer changes only after all rank shards finish. `--resume` restores the same run and data stream. Do not mark a cluster job resumable until its output-transfer and interruption/restart behavior have also been checked.
 
-Compilation preserves layer input boundaries for gradient targets: Gradformer compiles blocks, not the complete loss graph. Profiling reports actual step time and peak allocated/reserved GPU memory; do not infer Gradformer FLOPs from the unchanged baseline estimator. Performance and scientific conclusions belong in measured experiment reports.
+Compilation preserves layer input boundaries for gradient targets: Gradformer compiles blocks, the hidden update, the auxiliary loss, and the final vocabulary projection/CE as separate functions, retaining explicit layer-input nodes. Profiling reports actual step time and peak allocated/reserved GPU memory; do not infer Gradformer FLOPs from the unchanged baseline estimator. Performance and scientific conclusions belong in measured experiment reports.
+
+The recorded `training_seconds` sums timed optimizer steps. New runs also record `wall_seconds`, including setup, initial evaluation, compilation, periodic evaluation and checkpoint work from entry into the training function; time waiting in the cluster queue is excluded. Benchmark warmup is excluded from steady-state timings.
+
+For CHTC, see `gradformer/chtc/README.md`, the compiler-verified uv container definition, and submission templates. Source bundles can be created with `python -m gradformer.package`; only committed files are included. Data preparation defaults to the exact dataset commit used in the first experiments.

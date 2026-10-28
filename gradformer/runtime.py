@@ -42,7 +42,7 @@ def loss_forward(model, backend, x, y, capture):
     return value, states, predictions
 
 
-def compile_model(model, backend, update, enabled):
+def compile_model(model, backend, update, enabled, compile_head=True):
     if not enabled:
         return model
     if update == "baseline":
@@ -51,8 +51,13 @@ def compile_model(model, backend, update, enabled):
     # makes returned intermediate states sibling outputs of one AOT function.
     # Blocks can be compiled without removing the gradient-target boundaries.
     blocks = model.transformer.h if backend == "nanochat" else model.layers
+    # Adam bias correction specializes by depth; leave room for every layer
+    # plus the SGD and zero-history specializations in this pinned PyTorch version.
+    torch._dynamo.config.recompile_limit = max(torch._dynamo.config.recompile_limit, 2 * len(blocks) + 4)
     for block in blocks:
         block.forward = torch.compile(block.forward, dynamic=False)
+    if compile_head:
+        model._training_loss = torch.compile(model._training_loss, dynamic=False)
     native = importlib.import_module(model.__class__.__module__)
     if not hasattr(native.hidden_step, "_torchdynamo_orig_callable"):
         native.hidden_step = torch.compile(native.hidden_step, dynamic=False)

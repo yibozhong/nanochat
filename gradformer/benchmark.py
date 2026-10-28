@@ -3,6 +3,7 @@ import argparse
 import gc
 import json
 import os
+from pathlib import Path
 import statistics
 import time
 from contextlib import nullcontext
@@ -25,6 +26,7 @@ def main():
     parser.add_argument("--steps", type=int, default=20)
     parser.add_argument("--warmup", type=int, default=5)
     parser.add_argument("--compile", action="store_true")
+    parser.add_argument("--no-compile-head", action="store_true", help="Ablate vocabulary-loss fusion")
     parser.add_argument("--output", default="benchmark.json")
     args = parser.parse_args()
     rank, world = int(os.environ.get("RANK", 0)), int(os.environ.get("WORLD_SIZE", 1))
@@ -33,10 +35,13 @@ def main():
     if world > 1:
         dist.init_process_group("nccl", device_id=torch.device("cuda", local))
     device = torch.device("cuda", local)
+    source_path = Path("gradformer/source.json")
+    source = json.loads(source_path.read_text()) if source_path.exists() else {"status": "unversioned"}
     import wandb
     run = wandb.init(project="nanochat", entity="yibozhong657-none", job_type="benchmark",
                      name=f"gradformer-{args.backend}-benchmark-{'compile' if args.compile else 'eager'}",
-                     config={**vars(args), "world_size": world,
+                     config={**vars(args), "world_size": world, "source": source, "seed": 1337,
+                             "torch": torch.__version__,
                              "gpu": torch.cuda.get_device_name(local)}) if rank == 0 else None
     results = []
     cases = [("baseline", "reuse"), ("sgd", "reuse"), ("adam", "reference"), ("adam", "reuse")]
@@ -46,7 +51,7 @@ def main():
                           vocab=args.vocab, sequence=args.sequence, step_size=1.0 if update == "sgd" else .01,
                           device=device)
         optimizer = optimizer_for(model, args.backend, args.batch * args.sequence * world)
-        live = compile_model(model, args.backend, update, args.compile)
+        live = compile_model(model, args.backend, update, args.compile, compile_head=not args.no_compile_head)
         rng = torch.Generator(device=device).manual_seed(42 + rank)
         x = torch.randint(args.vocab, (args.batch, args.sequence), device=device, generator=rng)
         y = torch.randint(args.vocab, x.shape, device=device, generator=rng)
@@ -97,7 +102,7 @@ def main():
     if rank == 0:
         for row in results:
             row["slowdown_vs_baseline"] = row["step_seconds"] / results[0]["step_seconds"]
-        payload = dict(config=vars(args), world_size=world, gpu=torch.cuda.get_device_name(),
+        payload = dict(config=vars(args), source=source, world_size=world, gpu=torch.cuda.get_device_name(),
                        torch=torch.__version__, results=results)
         with open(args.output, "w") as f:
             json.dump(payload, f, indent=2)

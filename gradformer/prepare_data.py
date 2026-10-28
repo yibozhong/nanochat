@@ -51,11 +51,11 @@ def main():
     p.add_argument("--train-tokens", type=int, default=300_000_000)
     p.add_argument("--val-tokens", type=int, default=2_000_000)
     p.add_argument("--workers", type=int, default=8)
+    p.add_argument("--revision", default="f54c09fd23315a6f9c86f9dc80f725de7d8f9c64",
+                   help="Pinned Hugging Face dataset commit")
     args = p.parse_args()
     out = Path(args.output); out.mkdir(parents=True, exist_ok=True)
-    info = requests.get("https://huggingface.co/api/datasets/roneneldan/TinyStories", timeout=60)
-    info.raise_for_status()
-    revision = info.json()["sha"]
+    revision = args.revision
     tokenizer = spm.SentencePieceProcessor(model_file=args.tokenizer)
     assert tokenizer.vocab_size() < 65536
     import wandb

@@ -470,6 +470,13 @@ class GPT(nn.Module):
             group["initial_lr"] = group["lr"]
         return optimizer
 
+    def _training_loss(self, hidden, targets, loss_reduction="mean"):
+        # One compiler boundary for the large vocabulary projection and CE.
+        logits = self.lm_head(hidden)[..., :self.config.vocab_size].float()
+        logits = 15 * torch.tanh(logits / 15)
+        return F.cross_entropy(logits.view(-1, logits.size(-1)), targets.view(-1),
+                               ignore_index=-1, reduction=loss_reduction)
+
     def forward(self, idx, targets=None, kv_cache=None, loss_reduction='mean', capture_gradients=False):
         B, T = idx.size()
 
@@ -529,6 +536,10 @@ class GPT(nn.Module):
             x = x - self.backout_lambda.to(x.dtype) * x_backout
         x = norm(x)
 
+        if targets is not None:
+            loss = self._training_loss(x, targets, loss_reduction)
+            return (loss, h_inputs, predictions) if capture_gradients else loss
+
         # Forward the lm_head (compute logits)
         softcap = 15 # smoothly cap the logits to the range [-softcap, softcap]
         logits = self.lm_head(x) # (B, T, padded_vocab_size) <- very big tensor, large amount of memory
@@ -536,14 +547,7 @@ class GPT(nn.Module):
         logits = logits.float() # switch to fp32 for logit softcap and loss computation
         logits = softcap * torch.tanh(logits / softcap) # squash the logits
 
-        if targets is not None:
-            # training: given the targets, compute and return the loss
-            # TODO experiment with chunked cross-entropy?
-            loss = F.cross_entropy(logits.view(-1, logits.size(-1)), targets.view(-1), ignore_index=-1, reduction=loss_reduction)
-            return (loss, h_inputs, predictions) if capture_gradients else loss
-        else:
-            # inference: just return the logits directly
-            return (logits, h_inputs, predictions) if capture_gradients else logits
+        return (logits, h_inputs, predictions) if capture_gradients else logits
 
     @torch.inference_mode()
     def generate(self, tokens, max_tokens, temperature=1.0, top_k=None, seed=42):

@@ -1,0 +1,31 @@
+Bootstrap: docker
+From: python:3.11-bookworm
+
+%files
+    pyproject.toml /opt/project/pyproject.toml
+    uv.lock /opt/project/uv.lock
+
+%post
+    set -eu
+    /usr/bin/gcc --version
+    /usr/bin/g++ --version
+    python -m pip install --no-cache-dir uv==0.13.6
+    cd /opt/project
+    UV_NO_CACHE=1 uv sync --frozen --extra gpu --group gradformer --no-dev --no-install-project
+    uv pip freeze --python /opt/project/.venv/bin/python > /opt/gradformer-environment.txt
+    sha256sum pyproject.toml uv.lock > /opt/gradformer-locks.txt
+
+%environment
+    export PATH=/opt/project/.venv/bin:$PATH
+    export PYTHONUNBUFFERED=1
+    export OMP_NUM_THREADS=1
+    export CC=/usr/bin/gcc
+    export CXX=/usr/bin/g++
+    export WANDB_PROJECT=nanochat
+    export WANDB_ENTITY=yibozhong657-none
+
+%test
+    set -eu
+    test -x /usr/bin/gcc
+    /usr/bin/gcc --version
+    /opt/project/.venv/bin/python -c "import torch, wandb; print(torch.__version__, wandb.__version__)"

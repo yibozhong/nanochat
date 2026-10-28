@@ -1,0 +1,28 @@
+# Submit from the repository root, overriding image and inputs:
+# condor_submit gradformer/chtc/train.sub image=file:///staging/.../image.sif code=/absolute/code.tar.gz data=/absolute/dataset.tar
+universe = vanilla
+container_image = $(image)
+executable = gradformer/chtc/run.sh
+arguments = $(variant) $(seed)
+transfer_input_files = $(code),$(data),/home/yzhong239/.netrc
+encrypt_input_files = /home/yzhong239/.netrc
+transfer_output_files = results.tar
+transfer_output_remaps = "results.tar=results-$(Cluster)-$(Process).tar"
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+log = train.$(Cluster).$(Process).log
+output = train.$(Cluster).$(Process).out
+error = train.$(Cluster).$(Process).err
+requirements = (HasCHTCStaging == true)
+request_gpus = 8
+gpus_minimum_memory = 10000M
+gpus_minimum_capability = 8.0
+request_cpus = 8
+request_memory = 48GB
+request_disk = 25GB
++WantGPULab = true
++GPUJobLength = "short"
+queue variant, seed from (
+baseline 1337
+adam-mse-cos 1337
+)

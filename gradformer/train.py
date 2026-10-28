@@ -34,6 +34,8 @@ def batch(data, rng, batch_size, sequence, device):
 
 
 def main():
+    run_started = time.perf_counter()
+    wall_before = 0.0
     p = argparse.ArgumentParser()
     p.add_argument("--backend", choices=["nanochat", "llama2"], required=True)
     p.add_argument("--update", choices=["baseline", "sgd", "adam"], required=True)
@@ -102,6 +104,7 @@ def main():
         torch.set_rng_state(state["torch_rng"].cpu())
         torch.cuda.set_rng_state(state["cuda_rng"].cpu())
         start_step, training_seconds, best = state["step"], state["training_seconds"], state["best_val"]
+        wall_before = state.get("wall_seconds", 0.0)
     live = compile_model(model, args.backend, args.update, args.compile)
     import wandb
     run = None
@@ -119,6 +122,7 @@ def main():
 
     def emit(record):
         if rank == 0:
+            record["wall_seconds"] = wall_before + time.perf_counter() - run_started
             log_file.write(json.dumps(record) + "\n"); log_file.flush()
             run.log(record, step=record["step"])
             print(json.dumps(record), flush=True)
@@ -149,7 +153,8 @@ def main():
         directory.mkdir(exist_ok=True)
         atomic_save(dict(optimizer=optimizer.state_dict(), data_rng=rng.bit_generator.state,
                          torch_rng=torch.get_rng_state(), cuda_rng=torch.cuda.get_rng_state(),
-                         step=step, training_seconds=training_seconds, best_val=best),
+                         step=step, training_seconds=training_seconds, best_val=best,
+                         wall_seconds=wall_before + time.perf_counter() - run_started),
                     directory / f"rank-{rank}.pt")
         if rank == 0:
             atomic_save(model.state_dict(), directory / "model.pt")
@@ -247,10 +252,12 @@ def main():
                 dist.destroy_process_group()
             return
     if rank == 0:
+        wall_seconds = wall_before + time.perf_counter() - run_started
         run.summary.update(dict(best_val_ce=best, final_val_ce=value, training_seconds=training_seconds,
+                                wall_seconds=wall_seconds,
                                 tokens=steps * args.batch_tokens, completed=True))
         (out / "completed.json").write_text(json.dumps(dict(best_val_ce=best, final_val_ce=value,
-                                                           training_seconds=training_seconds,
+                                                           training_seconds=training_seconds, wall_seconds=wall_seconds,
                                                            tokens=steps * args.batch_tokens)))
         run.finish(); log_file.close()
     if world > 1:
