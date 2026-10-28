@@ -20,6 +20,8 @@ Use Python 3.11 and the committed uv.lock. nanochat: `uv sync --frozen --extra g
 
 Authentication is supplied externally through W&B's netrc or environment. Never put credentials in source, submission files or logs. All runs use project nanochat and entity yibozhong657-none.
 
+The first supervised runs used effective MSE/cosine coefficients 0.1/0.01. The requested stronger controls use `--aux-weight 1 --alpha 0.5 --beta 0.5` and `--aux-weight 1 --alpha 1 --beta 1`, so the actual coefficients in the total objective are 0.5/0.5 and 1/1; NTP retains coefficient 1. Keep other hyperparameters fixed and label these as separate experiments.
+
 ## Commands
 
 Run these inside an allocated HTCondor job/container. Set NANOCHAT_DTYPE=float32 for correctness checks and bfloat16 for CUDA training.
