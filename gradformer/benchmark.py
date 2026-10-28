@@ -92,6 +92,19 @@ def main():
                    peak_allocated_gb=peak[0].item() / 2**30, peak_reserved_gb=peak[1].item() / 2**30,
                    parameters=sum(p.numel() for p in model.parameters()),
                    final_ntp=ntp.item(), final_aux=aux.item(), timings=times)
+        if world > 1:
+            # Check synchronization after timing and peak-memory measurement.
+            error = torch.zeros((), device=device)
+            with torch.no_grad():
+                for parameter in model.parameters():
+                    reference = parameter.detach().clone()
+                    dist.broadcast(reference, src=0)
+                    error = torch.maximum(error, (reference - parameter).abs().max())
+                del reference
+            dist.all_reduce(error, op=dist.ReduceOp.MAX)
+            row["replica_max_abs_difference"] = error.item()
+            if error.item() != 0:
+                raise RuntimeError(f"Parameter replicas diverged: {error.item()}")
         results.append(row)
         if run:
             run.log({k: v for k, v in row.items() if k != "timings"})
