@@ -12,6 +12,8 @@ The reference backward first obtains targets with autograd.grad and then differe
 
 Hidden Adam uses beta1=0.9, beta2=0.999, eps=0.01, and initial eta=0.01. The initial derivative eta/eps=1 avoids amplifying nanochat's zero-initialized residual projections. The zero-variance sqrt branch uses a finite zero derivative, preserving the derivative of the composite first-step update at g=0; finite-difference checks cover it. These are architectural hyperparameters, not the parameter optimizer's Adam settings.
 
+Each layer has one scalar rho, shared across samples, tokens and hidden channels, with eta=softplus(rho). Eta has no direct training-step decay schedule; the parameter optimizer's learning rate for rho does. In the initial experiments, llama2.c puts rho in its no-weight-decay AdamW group (peak lr=5e-4), while nanochat puts it in the native smear/scalar AdamW group (peak lr=0.2, no weight decay). These are different cross-backend choices, not a tuned common step-size learning rate. The experiment runner initializes eta to 1 for hidden SGD and 0.01 for hidden Adam. Logged cosine compares raw G with its NTP target, before Adam moments, preconditioning or eta multiplication; it does not measure the actual hidden update direction.
+
 ## Environment
 
 Use Python 3.11 and the committed uv.lock. nanochat: `uv sync --frozen --extra gpu --group gradformer`; llama2.c: `uv sync --frozen --extra gpu --group dev`. For CPU correctness, replace gpu with cpu. Parameter optimizers follow their respective native baselines: nanochat MuonAdamW and llama2.c AdamW. Baseline and Gradformer share optimizer settings, initialization seeds, batches, tokenization, data order and training schedules within each backend.
