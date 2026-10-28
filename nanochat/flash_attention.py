@@ -22,6 +22,9 @@ import torch.nn.functional as F
 # =============================================================================
 def _load_flash_attention_3():
     """Try to load Flash Attention 3."""
+    import os
+    if os.environ.get("NANOCHAT_ATTENTION_BACKEND") == "sdpa":
+        return None
     if not torch.cuda.is_available():
         return None
     try:

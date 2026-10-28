@@ -11,3 +11,12 @@ eval_bundle/
 # Local setup
 CLAUDE.md
 wandb/
+
+# Gradformer runtime artifacts and local authentication
+.venv/
+wandb/
+results/
+outputs/
+.netrc
+*.token
+gradformer/source.json

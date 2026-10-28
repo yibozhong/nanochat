@@ -16,6 +16,7 @@ from functools import partial
 from dataclasses import dataclass
 
 import torch
+from gradformer.core import initialize_steps, reset_steps, hidden_step
 import torch.nn as nn
 import torch.nn.functional as F
 
@@ -37,6 +38,12 @@ class GPTConfig:
     # Characters: L=long (full context), S=short (quarter context)
     # Examples: "L"=all full context, "SL"=alternating, "SSL"=two short then one long
     window_pattern: str = "SSSL"
+    hidden_update: str = "baseline"
+    hidden_step_size: float = 0.01
+    hidden_beta1: float = 0.9
+    hidden_beta2: float = 0.999
+    hidden_eps: float = 0.01
+
 
 
 def norm(x):
@@ -147,10 +154,11 @@ class Block(nn.Module):
         self.attn = CausalSelfAttention(config, layer_idx)
         self.mlp = MLP(config)
 
-    def forward(self, x, ve, cos_sin, window_size, kv_cache):
-        x = x + self.attn(norm(x), ve, cos_sin, window_size, kv_cache)
-        x = x + self.mlp(norm(x))
-        return x
+    def forward(self, x, ve, cos_sin, window_size, kv_cache, return_delta=False):
+        attention = self.attn(norm(x), ve, cos_sin, window_size, kv_cache)
+        hidden = x + attention
+        mlp = self.mlp(norm(hidden))
+        return attention + mlp if return_delta else hidden + mlp
 
 
 class GPT(nn.Module):
@@ -162,6 +170,7 @@ class GPT(nn.Module):
         """
         super().__init__()
         self.config = config
+        initialize_steps(self, config, config.n_layer)
         # Compute per-layer window sizes for sliding window attention
         # window_size is (left, right) tuple: (-1, 0) for full context, (N, 0) for sliding window
         self.window_sizes = self._compute_window_sizes(config)
@@ -215,6 +224,8 @@ class GPT(nn.Module):
             mlp.c_fc:        uniform, std=1/sqrt(n_embd)
             mlp.c_proj:      zeros
         """
+
+        reset_steps(self, self.config)
 
         # Embedding and unembedding
         torch.nn.init.normal_(self.transformer.wte.weight, mean=0.0, std=0.8)
@@ -405,6 +416,7 @@ class GPT(nn.Module):
         lm_head = sum(p.numel() for p in self.lm_head.parameters())
         transformer_matrices = sum(p.numel() for p in self.transformer.h.parameters())
         scalars = self.resid_lambdas.numel() + self.x0_lambdas.numel() + self.smear_gate.weight.numel() + self.smear_lambda.numel() + self.backout_lambda.numel()
+        scalars += self.hidden_step_raw.numel() if hasattr(self, "hidden_step_raw") else 0
         total = wte + value_embeds + lm_head + transformer_matrices + scalars
         assert total == sum(p.numel() for p in self.parameters()), "Parameter count mismatch"
         return {
@@ -427,6 +439,8 @@ class GPT(nn.Module):
         resid_params = [self.resid_lambdas]
         x0_params = [self.x0_lambdas]
         smear_params = [self.smear_gate.weight, self.smear_lambda, self.backout_lambda]
+        if hasattr(self, "hidden_step_raw"):
+            smear_params.append(self.hidden_step_raw)
         assert len(list(self.parameters())) == len(matrix_params) + len(embedding_params) + len(lm_head_params) + len(value_embeds_params) + len(resid_params) + len(x0_params) + len(smear_params)
 
         # Scale the LR for the AdamW parameters by ∝1/√dmodel (tuned for 768 dim model)
@@ -456,7 +470,7 @@ class GPT(nn.Module):
             group["initial_lr"] = group["lr"]
         return optimizer
 
-    def forward(self, idx, targets=None, kv_cache=None, loss_reduction='mean'):
+    def forward(self, idx, targets=None, kv_cache=None, loss_reduction='mean', capture_gradients=False):
         B, T = idx.size()
 
         # Grab the rotary embeddings for the current sequence length (they are of shape (1, seq_len, 1, head_dim/2))
@@ -496,10 +510,18 @@ class GPT(nn.Module):
         n_layer = self.config.n_layer
         backout_layer = n_layer // 2  # cache at halfway point
         x_backout = None
+        h_inputs, predictions, adam_state = [], [], None
         for i, block in enumerate(self.transformer.h):
             x = self.resid_lambdas[i] * x + self.x0_lambdas[i] * x0
             ve = self.value_embeds[str(i)](idx).to(x.dtype) if str(i) in self.value_embeds else None
-            x = block(x, ve, cos_sin, self.window_sizes[i], kv_cache)
+            if self.config.hidden_update == "baseline":
+                x = block(x, ve, cos_sin, self.window_sizes[i], kv_cache)
+            else:
+                predicted = -block(x, ve, cos_sin, self.window_sizes[i], kv_cache, return_delta=True)
+                if capture_gradients:
+                    h_inputs.append(x)
+                    predictions.append(predicted)
+                x, adam_state = hidden_step(x, predicted, self.hidden_step_raw[i], adam_state, i, self.config)
             if i == backout_layer:
                 x_backout = x
         # Subtract mid-layer residual to remove low-level features before logit projection
@@ -518,10 +540,10 @@ class GPT(nn.Module):
             # training: given the targets, compute and return the loss
             # TODO experiment with chunked cross-entropy?
             loss = F.cross_entropy(logits.view(-1, logits.size(-1)), targets.view(-1), ignore_index=-1, reduction=loss_reduction)
-            return loss
+            return (loss, h_inputs, predictions) if capture_gradients else loss
         else:
             # inference: just return the logits directly
-            return logits
+            return (logits, h_inputs, predictions) if capture_gradients else logits
 
     @torch.inference_mode()
     def generate(self, tokens, max_tokens, temperature=1.0, top_k=None, seed=42):
