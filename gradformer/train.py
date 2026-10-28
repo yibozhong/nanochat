@@ -57,12 +57,19 @@ def main():
     p.add_argument("--save-every", type=int, default=250)
     p.add_argument("--compile", action="store_true")
     p.add_argument("--backward", choices=["reference", "reuse"], default="reference")
+    p.add_argument("--gradient-balance", choices=["none", "global"], default="none")
+    p.add_argument("--balance-ratio", type=float, default=1.)
     p.add_argument("--resume", action="store_true")
     p.add_argument("--stop-after-step", type=int, default=0, help="Controlled interruption; keep original schedule horizon")
     p.add_argument("--variant", default=None, help="Display label for architecture/supervision ablation")
     p.add_argument("--phase", choices=["smoke", "pretrain"], default="pretrain")
     args = p.parse_args()
     rank, world = int(os.environ.get("RANK", 0)), int(os.environ.get("WORLD_SIZE", 1))
+    if args.gradient_balance != "none":
+        if world != 1 or args.update == "baseline" or args.backward != "reuse" or args.aux_weight != 1:
+            p.error("Global balancing currently requires one GPU, a supervised update, --backward reuse and --aux-weight 1")
+        if not math.isfinite(args.balance_ratio) or args.balance_ratio <= 0:
+            p.error("--balance-ratio must be finite and positive")
     local = int(os.environ.get("LOCAL_RANK", 0))
     torch.cuda.set_device(local)
     device = torch.device("cuda", local)
@@ -81,6 +88,10 @@ def main():
                       vocab=manifest["vocab_size"], sequence=args.sequence,
                       step_size=1.0 if args.update == "sgd" else .01, device=device)
     optimizer = optimizer_for(model, args.backend, args.batch_tokens)
+    balancer = None
+    if args.gradient_balance == "global":
+        from gradformer.balance import for_model
+        balancer = for_model(model, args.backend)
     source_path = Path("gradformer/source.json")
     source = json.loads(source_path.read_text()) if source_path.exists() else {"status": "unversioned"}
     configuration = {**vars(args), "world_size": world, "accumulation": accumulation,
@@ -90,6 +101,7 @@ def main():
                      "gpu": torch.cuda.get_device_name(), "torch": torch.__version__,
                      "target": "unscaled per-microbatch mean NTP input gradient",
                      "backward": args.backward, "auxiliary_scope": "full connected graph",
+                     "balance_scope": "union of block parameters, before clipping/optimizer; scalar applied to all auxiliary gradients" if balancer else None,
                      "optimizer_groups": [{k: v for k, v in g.items() if k != "params"}
                                           for g in optimizer.param_groups]}
     start_step, training_seconds, best = 0, 0., float("inf")
@@ -194,6 +206,8 @@ def main():
                 group["momentum"] = .85 + .12 * min(1., step / 400)
                 group["weight_decay"] = .28 * .5 * (1 + math.cos(math.pi * step / steps))
         optimizer.zero_grad(set_to_none=True)
+        if balancer:
+            balancer.reset()
         torch.cuda.synchronize(); begin = time.perf_counter()
         micro_losses, micro_aux = [], []
         metrics = None
@@ -201,18 +215,25 @@ def main():
             x, y = batch(train, rng, args.batch, args.sequence, device)
             with context():
                 ntp, states, preds = loss_forward(live, args.backend, x, y, args.update != "baseline")
-            aux, metrics = joint_backward(ntp, states, preds, weight=args.aux_weight,
-                                          alpha=args.alpha, beta=args.beta, accumulation=accumulation,
-                                          implementation=args.backward)
+            if balancer:
+                aux, metrics = balancer.backward(ntp, states, preds, alpha=args.alpha,
+                                                beta=args.beta, accumulation=accumulation)
+            else:
+                aux, metrics = joint_backward(ntp, states, preds, weight=args.aux_weight,
+                                              alpha=args.alpha, beta=args.beta, accumulation=accumulation,
+                                              implementation=args.backward)
             if not torch.isfinite(aux).item():
                 raise RuntimeError(f"Nonfinite auxiliary loss at step {step}")
             micro_losses.append(ntp.detach()); micro_aux.append(aux)
+        should_log = (step + 1) % 10 == 0 or step == start_step
+        balance_metrics = balancer.finish(ratio=args.balance_ratio, accumulation=accumulation,
+                                          diagnostics=should_log) if balancer else {}
         if args.backend == "llama2":
             if world > 1:
                 for parameter in model.parameters():
                     if parameter.grad is not None:
                         dist.all_reduce(parameter.grad, op=dist.ReduceOp.AVG)
-            torch.nn.utils.clip_grad_norm_(model.parameters(), 1.)
+            torch.nn.utils.clip_grad_norm_(model.parameters(), 1., error_if_nonfinite=bool(balancer))
         optimizer.step()
         torch.cuda.synchronize()
         duration = time.perf_counter() - begin
@@ -220,7 +241,7 @@ def main():
         loss = torch.stack(micro_losses).mean()
         if not torch.isfinite(loss).item():
             raise RuntimeError(f"Nonfinite loss at step {step}")
-        if (step + 1) % 10 == 0 or step == start_step:
+        if should_log:
             values = torch.stack((loss, torch.stack(micro_aux).mean()))
             if world > 1:
                 dist.all_reduce(values, op=dist.ReduceOp.AVG)
@@ -229,6 +250,10 @@ def main():
                           step_seconds=duration, tokens_per_second=args.batch_tokens / duration,
                           training_seconds=training_seconds,
                           peak_memory_gb=torch.cuda.max_memory_allocated() / 2**30)
+            record.update(balance_metrics)
+            if balancer:
+                record["balance/effective_mse_weight"] = balance_metrics["balance/weight"] * args.alpha
+                record["balance/effective_cosine_weight"] = balance_metrics["balance/weight"] * args.beta
             if metrics is not None:
                 if world > 1:
                     dist.all_reduce(metrics, op=dist.ReduceOp.AVG)
@@ -238,7 +263,7 @@ def main():
                 for layer, value in enumerate(torch.nn.functional.softplus(model.hidden_step_raw).detach().cpu().tolist()):
                     record[f"layer/{layer}/step_size"] = value
             emit(record)
-        if (step + 1) % args.eval_every == 0 or step + 1 == steps:
+        if (step + 1) % args.eval_every == 0 or step + 1 == steps or step + 1 == args.stop_after_step:
             value = evaluate()
             if value < best:
                 best = value

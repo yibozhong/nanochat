@@ -23,6 +23,8 @@ def main():
     parser.add_argument("--vocab", type=int, default=32000)
     parser.add_argument("--sequence", type=int, default=256)
     parser.add_argument("--batch", type=int, default=16)
+    parser.add_argument("--accumulation", type=int, default=1)
+    parser.add_argument("--include-balance", action="store_true")
     parser.add_argument("--steps", type=int, default=20)
     parser.add_argument("--warmup", type=int, default=5)
     parser.add_argument("--compile", action="store_true")
@@ -31,6 +33,8 @@ def main():
     args = parser.parse_args()
     rank, world = int(os.environ.get("RANK", 0)), int(os.environ.get("WORLD_SIZE", 1))
     local = int(os.environ.get("LOCAL_RANK", 0))
+    if args.accumulation < 1 or (args.include_balance and world != 1):
+        parser.error("Positive accumulation required; balanced benchmark supports one GPU")
     torch.cuda.set_device(local)
     if world > 1:
         dist.init_process_group("nccl", device_id=torch.device("cuda", local))
@@ -45,12 +49,18 @@ def main():
                              "gpu": torch.cuda.get_device_name(local)}) if rank == 0 else None
     results = []
     cases = [("baseline", "reuse"), ("sgd", "reuse"), ("adam", "reference"), ("adam", "reuse")]
+    if args.include_balance:
+        cases.append(("adam", "balanced-reuse"))
     for update, implementation in cases:
         torch.manual_seed(1337)
         model = construct(args.backend, update, depth=args.depth, width=args.width, heads=args.heads,
                           vocab=args.vocab, sequence=args.sequence, step_size=1.0 if update == "sgd" else .01,
                           device=device)
-        optimizer = optimizer_for(model, args.backend, args.batch * args.sequence * world)
+        optimizer = optimizer_for(model, args.backend, args.batch * args.sequence * world * args.accumulation)
+        balancer = None
+        if implementation == "balanced-reuse":
+            from gradformer.balance import for_model
+            balancer = for_model(model, args.backend)
         live = compile_model(model, args.backend, update, args.compile, compile_head=not args.no_compile_head)
         rng = torch.Generator(device=device).manual_seed(42 + rank)
         x = torch.randint(args.vocab, (args.batch, args.sequence), device=device, generator=rng)
@@ -60,14 +70,22 @@ def main():
             dist.barrier()
         for step in range(args.warmup + args.steps):
             optimizer.zero_grad(set_to_none=True)
+            if balancer:
+                balancer.reset()
             if step == args.warmup:
                 torch.cuda.reset_peak_memory_stats()
             torch.cuda.synchronize()
             start = time.perf_counter()
             ctx = torch.autocast("cuda", dtype=torch.bfloat16) if args.backend == "llama2" else nullcontext()
-            with ctx:
-                ntp, states, preds = loss_forward(live, args.backend, x, y, update != "baseline")
-            aux, metrics = joint_backward(ntp, states, preds, weight=.1, implementation=implementation)
+            for _ in range(args.accumulation):
+                with ctx:
+                    ntp, states, preds = loss_forward(live, args.backend, x, y, update != "baseline")
+                if balancer:
+                    aux, metrics = balancer.backward(ntp, states, preds, accumulation=args.accumulation)
+                else:
+                    aux, metrics = joint_backward(ntp, states, preds, weight=.1, implementation=implementation,
+                                                  accumulation=args.accumulation)
+            balance_metrics = balancer.finish(accumulation=args.accumulation) if balancer else {}
             if args.backend == "llama2" and world > 1:
                 for p in model.parameters():
                     if p.grad is not None:
@@ -88,10 +106,11 @@ def main():
             dist.all_reduce(peak, op=dist.ReduceOp.MAX)
         row = dict(update=update, backward=implementation, compiled=args.compile,
                    step_seconds=peak[2].item(),
-                   tokens_per_second=args.batch * args.sequence * world / peak[2].item(),
+                   tokens_per_second=args.batch * args.sequence * world * args.accumulation / peak[2].item(),
                    peak_allocated_gb=peak[0].item() / 2**30, peak_reserved_gb=peak[1].item() / 2**30,
                    parameters=sum(p.numel() for p in model.parameters()),
                    final_ntp=ntp.item(), final_aux=aux.item(), timings=times)
+        row.update(balance_metrics)
         if world > 1:
             # Check synchronization after timing and peak-memory measurement.
             error = torch.zeros((), device=device)
@@ -109,7 +128,7 @@ def main():
         if run:
             run.log({k: v for k, v in row.items() if k != "timings"})
             print(json.dumps(row), flush=True)
-        del live, model, optimizer, ntp, states, preds, aux, metrics
+        del live, model, optimizer, ntp, states, preds, aux, metrics, balancer
         gc.collect()
         torch.cuda.empty_cache()
     if rank == 0:
