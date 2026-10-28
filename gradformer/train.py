@@ -117,6 +117,10 @@ def main():
                          group=f"gradformer-{args.backend}-{args.tokens}tokens",
                          tags=[args.backend, args.update, "joint-ntp-raw-gradient"],
                          job_type=args.phase, config=configuration)
+        # W&B's internal history index must advance even when resume re-evaluates
+        # the same optimizer step. Keep the actual step as the chart coordinate.
+        run.define_metric("step")
+        run.define_metric("*", step_metric="step")
         (out / "config.json").write_text(json.dumps(configuration, indent=2))
     log_file = open(out / "metrics.jsonl", "a") if rank == 0 else None
 
@@ -124,7 +128,7 @@ def main():
         if rank == 0:
             record["wall_seconds"] = wall_before + time.perf_counter() - run_started
             log_file.write(json.dumps(record) + "\n"); log_file.flush()
-            run.log(record, step=record["step"])
+            run.log(record)
             print(json.dumps(record), flush=True)
 
     def context():
