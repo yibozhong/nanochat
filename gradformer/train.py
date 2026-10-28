@@ -57,6 +57,7 @@ def main():
     p.add_argument("--backward", choices=["reference", "reuse"], default="reference")
     p.add_argument("--resume", action="store_true")
     p.add_argument("--stop-after-step", type=int, default=0, help="Controlled interruption; keep original schedule horizon")
+    p.add_argument("--variant", default=None, help="Display label for architecture/supervision ablation")
     p.add_argument("--phase", choices=["smoke", "pretrain"], default="pretrain")
     args = p.parse_args()
     rank, world = int(os.environ.get("RANK", 0)), int(os.environ.get("WORLD_SIZE", 1))
@@ -109,7 +110,7 @@ def main():
         run_id = id_path.read_text().strip() if args.resume and id_path.exists() else wandb.util.generate_id()
         id_path.write_text(run_id)
         run = wandb.init(project="nanochat", entity="yibozhong657-none", id=run_id, resume="allow",
-                         name=f"gradformer-{args.backend}-{args.update}-seed{args.seed}-{args.phase}",
+                         name=f"gradformer-{args.backend}-{args.variant or args.update}-seed{args.seed}-{args.phase}",
                          group=f"gradformer-{args.backend}-{args.tokens}tokens",
                          tags=[args.backend, args.update, "joint-ntp-raw-gradient"],
                          job_type=args.phase, config=configuration)
@@ -240,14 +241,14 @@ def main():
             save(step + 1)
         if step + 1 == args.stop_after_step and step + 1 < steps:
             if rank == 0:
-                run.summary.update(completed=False, stopped_for_resume=True, last_step=step + 1)
+                run.summary.update(dict(completed=False, stopped_for_resume=True, last_step=step + 1))
                 run.finish(); log_file.close()
             if world > 1:
                 dist.destroy_process_group()
             return
     if rank == 0:
-        run.summary.update(best_val_ce=best, final_val_ce=value, training_seconds=training_seconds,
-                           tokens=steps * args.batch_tokens, completed=True)
+        run.summary.update(dict(best_val_ce=best, final_val_ce=value, training_seconds=training_seconds,
+                                tokens=steps * args.batch_tokens, completed=True))
         (out / "completed.json").write_text(json.dumps(dict(best_val_ce=best, final_val_ce=value,
                                                            training_seconds=training_seconds,
                                                            tokens=steps * args.batch_tokens)))
