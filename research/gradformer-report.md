@@ -92,4 +92,13 @@ nanochat 单卡200M-token对照：8层D512、约123.47M参数，同一 RTX PRO60
 
 工作区reports目录中的主要材料：report-initial-2026-10-28.md（初轮原始报告）、gradient-balance.md、ema-pilot.md、local-ce-pilot.md、local-lr-sweep.md、cosine-head-sweep.md、local-gradient-cancellation.json、layer-energy.md、energy-final-audit.json、baseline-lr.md、baseline-lr-audit.json。每份详细报告保留其配置、commit、指标和对应W&B链接。
 
-回退验证结果将在完成原生代码比对、uv锁文件检查及分配节点上的原生forward/backward/attention测试后补入。当前文档不预先声称这些检查已经通过。
+## 回退验证
+
+恢复实现的commit：llama2.c为0d597a6220d521bab41f35292e6b29c7f7490d24，nanochat为008b6b6051eddecc96782d93ef1fa0908d54c344。之后仅补充本报告，不改变已验证的代码。
+
+- 静态核对：除明确保留的通用环境文件外，两个仓库的上游文件与实验前基点逐字一致；活动Python代码及依赖定义无Gradformer引用。Python语法解析、git diff --check、两个uv.lock的离线一致性检查通过。
+- GPU验证：作业7337307.0在NVIDIA L40、Python3.11/Torch2.9.1+cu128的固定uv-v4容器中正常退出，exit 0。两个原生模型均通过BF16 forward/backward、有限梯度、固定batch四步loss下降、因果前缀和checkpoint恢复后logits完全一致检查；llama2.c原生模型导出正常。
+- nanochat原有测试：SDPA fallback、engine/KV cache及optimizer选取测试共15项，全部通过（0失败、0错误、0跳过）。没有运行八卡或长程预训练验证。
+- [W&B恢复验证 nrh0qrrd](https://wandb.ai/yibozhong657-none/nanochat/runs/nrh0qrrd)为finished；服务端summary与传回结果一致。报告、恢复清单和验证JSON/XML已随该run归档。此run仅用于代码恢复检查，不作为新架构实验结果。
+
+验证细节保存在archive/closeout-2026-10-28中的static-verification.json、rollback-verification.json、native-pytest.xml和wandb-verification.json；完整返回文件为results/restoration-check-7337307.0.tar。
