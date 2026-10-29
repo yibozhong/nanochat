@@ -12,11 +12,9 @@ eval_bundle/
 CLAUDE.md
 wandb/
 
-# Gradformer runtime artifacts and local authentication
-.venv/
-wandb/
+# Local environments, research outputs, and authentication
+*.py[cod]
 results/
 outputs/
 .netrc
 *.token
-gradformer/source.json
