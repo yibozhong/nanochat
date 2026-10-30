@@ -1,0 +1,85 @@
+{
+  "passed": true,
+  "source": {
+    "commit": "6d4eae606d458b8c4c73d9a47c03363338b7365d",
+    "official_tilekernels": "36d9e45d38e204ebb87e6f6e833821eee0482fe5",
+    "native_base": "145da40cdd37b9522aa53d26c0c356e9126458bb",
+    "hashes": {
+      "source.tar": "fec77d33c4858d9e0f5fdd6a39758a47505d7c3bbaf19b63fd7d206391adec0e",
+      "legacy-baseline.tar": "5f92ef457c61e8b4ab7d145873857b4772f4668b69c1236a9e93562283e67c24",
+      "mhc-official-runtime-7546767.tar.gz": "6b927f93021961293e12452b4001a479ff1b54cbc1aae0355e73e75a393d4dc0",
+      "cuda-compat-13-1_590.48.01-1_amd64.deb": "066f24c715f5f8f31bb7e8bd0f9ddc93fe78a82d3be55c6f3e9bbe26fa4fd7be"
+    }
+  },
+  "run_id": "19d45f79",
+  "checks": {
+    "tests": 24,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 10
+  },
+  "smokes": {
+    "baseline": {
+      "complete": true,
+      "variant": "baseline",
+      "run_id": "12c1457a",
+      "steps": 50,
+      "training_tokens": 1638400,
+      "initial_dev_ce": 10.398012638092041,
+      "final_dev_ce": 6.4961875677108765,
+      "best_dev_ce": 6.4961875677108765,
+      "dev_tokens": 131072,
+      "training_seconds": 22.171178285963833,
+      "elapsed_seconds": 32.24814626108855,
+      "steady_step_seconds": 0.0808389236452058,
+      "gpu": "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+      "peak_allocated_bytes": 5770930688,
+      "peak_reserved_bytes": 5786042368,
+      "source": {
+        "commit": "6d4eae606d458b8c4c73d9a47c03363338b7365d",
+        "official_tilekernels": "36d9e45d38e204ebb87e6f6e833821eee0482fe5",
+        "native_base": "145da40cdd37b9522aa53d26c0c356e9126458bb",
+        "hashes": {
+          "source.tar": "fec77d33c4858d9e0f5fdd6a39758a47505d7c3bbaf19b63fd7d206391adec0e",
+          "legacy-baseline.tar": "5f92ef457c61e8b4ab7d145873857b4772f4668b69c1236a9e93562283e67c24",
+          "mhc-official-runtime-7546767.tar.gz": "6b927f93021961293e12452b4001a479ff1b54cbc1aae0355e73e75a393d4dc0",
+          "cuda-compat-13-1_590.48.01-1_amd64.deb": "066f24c715f5f8f31bb7e8bd0f9ddc93fe78a82d3be55c6f3e9bbe26fa4fd7be"
+        }
+      },
+      "test_evaluated": false
+    },
+    "mhc": {
+      "complete": true,
+      "variant": "mhc",
+      "run_id": "2a00a93e",
+      "steps": 50,
+      "training_tokens": 1638400,
+      "initial_dev_ce": 10.398012638092041,
+      "final_dev_ce": 6.498858332633972,
+      "best_dev_ce": 6.498858332633972,
+      "dev_tokens": 131072,
+      "training_seconds": 21.11960158869624,
+      "elapsed_seconds": 32.203990415204316,
+      "steady_step_seconds": 0.15246066527906804,
+      "gpu": "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+      "peak_allocated_bytes": 8890972160,
+      "peak_reserved_bytes": 9099542528,
+      "source": {
+        "commit": "6d4eae606d458b8c4c73d9a47c03363338b7365d",
+        "official_tilekernels": "36d9e45d38e204ebb87e6f6e833821eee0482fe5",
+        "native_base": "145da40cdd37b9522aa53d26c0c356e9126458bb",
+        "hashes": {
+          "source.tar": "fec77d33c4858d9e0f5fdd6a39758a47505d7c3bbaf19b63fd7d206391adec0e",
+          "legacy-baseline.tar": "5f92ef457c61e8b4ab7d145873857b4772f4668b69c1236a9e93562283e67c24",
+          "mhc-official-runtime-7546767.tar.gz": "6b927f93021961293e12452b4001a479ff1b54cbc1aae0355e73e75a393d4dc0",
+          "cuda-compat-13-1_590.48.01-1_amd64.deb": "066f24c715f5f8f31bb7e8bd0f9ddc93fe78a82d3be55c6f3e9bbe26fa4fd7be"
+        }
+      },
+      "test_evaluated": false
+    }
+  },
+  "elapsed_seconds": 214.94722056388855,
+  "pretraining_launched": false,
+  "wandb_verified": true,
+  "job": "7546888.0"
+}

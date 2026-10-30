@@ -36,7 +36,7 @@ choices; upstream kernel and autograd source files are unchanged.
 
 An actual SM120 run exposed a launch-size limit: the official Sinkhorn backward
 wrapper requests a 32-token tile, using 100 KiB of shared memory at 20 iterations;
-SM120 allows only 99 KiB per block. On portability-test architectures, a thin
+SM120 allows only 99 KiB per block. On locally validated SM120 and other explicit portability-test architectures, a thin
 autograd adapter calls the **same unmodified official forward/backward kernels**
 with the backward `token_block_size=16` argument (50 KiB). SM90/SM100 retain the
 official wrapper's 32-token tile. This changes scheduling only: stream count,
@@ -54,7 +54,8 @@ our single-GPU setup. We do not claim to reproduce the paper's 6.7% overhead.
 ## Environment and hardware
 
 The official kernels target **SM90/SM100** and require the CUDA 13.1 toolchain.
-Normal training rejects other architectures until validated. The bounded gate
+Normal training also permits **locally validated SM120** with the tile-size
+adaptation above. Other architectures require validation. The bounded gate
 sets an explicit portability flag and may test SM80+ using the same unmodified
 kernel code, because this version disables WGMMA and TMA in its mHC paths.
 Passing such a gate establishes our tested configuration only, not upstream
@@ -95,11 +96,43 @@ W&B is always `yibozhong657-none/nanochat`, group
 `mhc-official-kernels-20261030`. This change authorizes implementation and bounded
 validation only; no full 1B training is automatically submitted.
 
-## Validation status
+## Validation results — 2026-10-30
 
-GPU validation is pending. The new gate compares official kernel outputs and
-all input/parameter gradients to the official PyTorch reference, checks both
-D128 and D512, tests the final stream head and Sinkhorn, validates real 2K
-causality/cache/CCE/model state, and verifies old baseline equivalence. It then
-runs baseline and mHC for 50 updates each on the same GPU and environment.
-The old reference implementation's passed tests do not certify this new path.
+Job `7546888.0` exited successfully, one execution, source `6d4eae6`.
+The official source hashes matched. **14 tests passed**, zero failures/errors;
+10 native FA3 comparison tests were skipped because SM120 uses the SDPA path.
+Checks cover D128/D512 official-reference output and all input/parameter gradients,
+head gradients, Sinkhorn constraints/gradients, real 2K causality, KV cache,
+CCE/dense CE, model state and exact legacy baseline equivalence. Maximum pipeline
+relative-L2 output error was 0.000546, activation-gradient error 0.002667 and
+parameter-gradient error 0.000022. See [kernel-errors.json](kernel-errors.json).
+These checks do not claim full optimizer/RNG interrupted-training equivalence.
+
+Both smokes finished on the same RTX PRO 6000 Blackwell Server Edition (SM120),
+PyTorch 2.10.0, microbatch 16, accumulation 1, no activation checkpointing,
+50 steps / 1,638,400 tokens per variant. Native driver 13.1 was used; the NVIDIA
+forward-compatibility path was not exercised. All three W&B runs were verified
+through the API. No 1B pretraining or independent test-set evaluation was launched.
+
+| Variant | Initial dev CE | Step-50 dev CE | Steady seconds/step | Peak PyTorch reserved GiB |
+| --- | ---: | ---: | ---: | ---: |
+| baseline | 10.398013 | 6.496188 | 0.080839 | 5.389 |
+| mHC | 10.398013 | 6.498858 | 0.152461 | 8.475 |
+
+Steady timings average steps 11–50, excluding initial compilation. mHC is
+**88.6% slower** in this small-model setup. This is not the paper's large-model
+optimized execution setup, and does not reproduce its 6.7% overhead. Reserved
+memory excludes some non-PyTorch/device allocations and is not an actual 24GB-GPU
+validation. Short-run loss reduction establishes trainability, not a quality win.
+
+- [Correctness gate](https://wandb.ai/yibozhong657-none/nanochat/runs/19d45f79)
+- [Baseline smoke](https://wandb.ai/yibozhong657-none/nanochat/runs/12c1457a)
+- [mHC smoke](https://wandb.ai/yibozhong657-none/nanochat/runs/2a00a93e)
+- [Audited validation](validation.json), [runtime packages](environment.txt),
+  [toolchain packages](toolchain-environment.txt)
+
+Earlier gates were retained: 7546808 failed during test collection due to missing
+RustBPE; 7546843 exposed mixed CUDA compiler/runtime headers; 7546850 compiled
+successfully but hit the SM120 shared-memory limit in the official Sinkhorn
+backward wrapper. None of those runs started training. The final successful
+kernel files are still byte-for-byte official; the launch adapter is local.

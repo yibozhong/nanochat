@@ -27,8 +27,8 @@ def check_official_device(device):
     if torch.device(device).type != 'cuda':
         raise RuntimeError('Official TileKernels mHC requires CUDA')
     major, minor = torch.cuda.get_device_capability(device)
-    if major not in (9,10) and os.environ.get('NANOCHAT_MHC_TEST_PORTABILITY') != '1':
-        raise RuntimeError('Upstream documents SM90/SM100. Other GPUs require an explicit portability gate; no reference fallback is enabled')
+    if major not in (9,10) and (major, minor) != (12,0) and os.environ.get('NANOCHAT_MHC_TEST_PORTABILITY') != '1':
+        raise RuntimeError('Supported: upstream SM90/SM100 and locally validated SM120. Other GPUs require an explicit portability gate; no reference fallback is enabled')
     if major < 8:
         raise RuntimeError('This CUDA 13.1 validation environment requires SM80 or later')
 

@@ -9,10 +9,11 @@
     "fuse_grad_acc=False for normal PyTorch gradient accumulation",
     "n_splits=1 matches the official TileLang prenorm implementation",
     "contiguous head slice before kernel call",
-    "same documented local initialization and nanochat optimizer"
+    "same documented local initialization and nanochat optimizer",
+    "On locally validated SM120, use official Sinkhorn backward token_block_size=16 via a thin autograd adapter; official SM90/SM100 wrapper retains tile32"
   ],
-  "runtime": "runtime/pyproject.toml + runtime/uv.lock",
-  "hardware": "SM90/SM100; CUDA 13.1 toolchain; no A30/L40/SM120 fallback",
+  "runtime": "runtime/pyproject.toml + uv.lock; independent CUDA 13.1 compiler/headers in toolchain/pyproject.toml + uv.lock",
+  "hardware": "Upstream documents SM90/SM100. Local full gate and two 50-step smokes passed on SM120 RTX PRO 6000, tile16/repeat20; other GPU architectures unvalidated.",
   "paper": "https://arxiv.org/html/2512.24880v2",
   "cuda_forward_compatibility": {
     "package": "cuda-compat-13-1_590.48.01-1_amd64.deb",
@@ -22,5 +23,6 @@
       570,
       580
     ]
-  }
+  },
+  "sm120_shared_memory_source": "https://docs.nvidia.com/cuda/blackwell-tuning-guide/index.html"
 }
