@@ -6,6 +6,7 @@ Parameter initialization is a documented local choice, not an official recipe.
 """
 from functools import lru_cache
 import math
+import os
 
 import torch
 from torch import nn
@@ -23,8 +24,13 @@ def official_ops():
 
 
 def check_official_device(device):
-    if torch.device(device).type != 'cuda' or torch.cuda.get_device_capability(device)[0] not in (9, 10):
-        raise RuntimeError('Official TileKernels mHC requires SM90/SM100; no reference fallback is enabled')
+    if torch.device(device).type != 'cuda':
+        raise RuntimeError('Official TileKernels mHC requires CUDA')
+    major, minor = torch.cuda.get_device_capability(device)
+    if major not in (9,10) and os.environ.get('NANOCHAT_MHC_TEST_PORTABILITY') != '1':
+        raise RuntimeError('Upstream documents SM90/SM100. Other GPUs require an explicit portability gate; no reference fallback is enabled')
+    if major < 8:
+        raise RuntimeError('This CUDA 13.1 validation environment requires SM80 or later')
 
 
 def expand_streams(x, streams):

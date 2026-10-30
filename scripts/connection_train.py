@@ -76,6 +76,8 @@ def main():
         restore_rng(state['rng']);del state
     config=dict(model=asdict(c),protocol=protocol,data_manifest=data.manifest,source=source,
         gpu=torch.cuda.get_device_name(),torch=torch.__version__,cuda=torch.version.cuda,
+        gpu_capability=list(torch.cuda.get_device_capability()),
+        explicit_portability_gate=os.environ.get('NANOCHAT_MHC_TEST_PORTABILITY')=='1',
         parameters=sum(p.numel() for p in model.parameters()),
         optimizer='native MuonAdamW; connector AdamW at native unembedding LR, no decay',
         optimizer_groups=[{k:v for k,v in g.items() if k!='params'} for g in opt.param_groups],

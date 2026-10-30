@@ -19,6 +19,7 @@ export PATH="$CUDA_HOME/bin:$PATH"
 export LD_LIBRARY_PATH="$CUDA_HOME/lib:${LD_LIBRARY_PATH:-}"
 export NETRC="$PWD/.netrc" WANDB_DIR="$PWD/results"
 export WANDB_PROJECT=nanochat WANDB_ENTITY=yibozhong657-none
+export NANOCHAT_MHC_TEST_PORTABILITY=1
 export NANOCHAT_DTYPE=bfloat16 HF_HUB_OFFLINE=1 PYTHONUNBUFFERED=1
 export NANOCHAT_BASE_DIR="$PWD/cache"
 export OMP_NUM_THREADS=2 RAYON_NUM_THREADS=4 TORCHINDUCTOR_COMPILE_THREADS=2
@@ -53,7 +54,7 @@ python - <<'PYCHECK'
 import torch,tilelang,cut_cross_entropy
 assert torch.cuda.is_available() and torch.cuda.device_count()==1
 assert torch.__version__.startswith('2.10.0') and tilelang.__version__=='0.1.9'
-assert torch.cuda.get_device_capability()[0] in (9,10)
+assert torch.cuda.get_device_capability()[0] >= 8
 assert cut_cross_entropy.__version__=='25.9.3'
 print('GPU:',torch.cuda.get_device_name(),torch.__version__,torch.version.cuda,flush=True)
 PYCHECK

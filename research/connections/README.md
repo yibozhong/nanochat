@@ -45,8 +45,11 @@ our single-GPU setup. We do not claim to reproduce the paper's 6.7% overhead.
 ## Environment and hardware
 
 The official kernels target **SM90/SM100** and require the CUDA 13.1 toolchain.
-A30 (SM80), L40 (SM89), and RTX PRO 6000 Blackwell (SM120) are not accepted by
-this entry. The existing baseline environment remains available; the official
+Normal training rejects other architectures until validated. The bounded gate
+sets an explicit portability flag and may test SM80+ using the same unmodified
+kernel code, because this version disables WGMMA and TMA in its mHC paths.
+Passing such a gate establishes our tested configuration only, not upstream
+support for all shapes or hardware. The existing baseline environment remains available; the official
 mHC environment is independently locked under `runtime/` (Python 3.11,
 PyTorch 2.10.0, TileLang 0.1.9, TVM-FFI 0.1.9, pinned TileKernels, CUDA nvcc 13.1.115 and the same
 CCE source revision). Native CUDA 13.1+ drivers are used directly. On NVIDIA's supported 570/580
