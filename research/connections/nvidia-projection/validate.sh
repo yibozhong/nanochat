@@ -20,6 +20,8 @@ export CUDA_HOME="$PWD/toolchain/.venv/lib/python3.11/site-packages/nvidia/cu13"
 export PATH="$CUDA_HOME/bin:$PATH"
 export LD_LIBRARY_PATH="$PWD/runtime/.venv/lib/python3.11/site-packages/nvidia/cu13/lib:${LD_LIBRARY_PATH:-}"
 export MAX_JOBS=2 NVTE_BUILD_THREADS_PER_JOB=1 NVTE_WITH_NCCL_EP=0
+# Torch ships library headers separately from the isolated nvcc toolchain.
+export CPATH="$CUDA_HOME/include:$PWD/runtime/.venv/lib/python3.11/site-packages/nvidia/cu13/include:$PWD/runtime/.venv/lib/python3.11/site-packages/nvidia/nccl/include:$PWD/runtime/.venv/lib/python3.11/site-packages/nvidia/cudnn/include"
 cp nanochat-src/research/connections/nvidia-projection/runtime/{pyproject.toml,uv.lock} runtime/
 uv sync --frozen --project runtime --python /opt/project/.venv/bin/python 2>&1 | tee results/nvidia-install.log
 export NETRC="$PWD/.netrc" WANDB_DIR="$PWD/results"

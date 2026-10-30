@@ -1,0 +1,62 @@
+{
+  "goal": "Evaluate unmodified NVIDIA TE 2.20.2 projection forward/backward in current nanochat mHC",
+  "variants": [
+    "baseline",
+    "mhc_official",
+    "mhc_torch_compile",
+    "mhc_nvidia",
+    "mhc_nvidia_precise"
+  ],
+  "gate": "26 tests: existing official/PyTorch checks plus independent FP64 oracle, gradients, 2K causality/cache/CCE/model gradients for both NVIDIA precisions",
+  "model": {
+    "depth": 8,
+    "width": 512,
+    "heads": 4,
+    "sequence_length": 2048,
+    "vocab_size": 32768,
+    "streams": 4
+  },
+  "training": {
+    "seed": 42,
+    "microbatch": 16,
+    "grad_accum": 1,
+    "batch_tokens": 32768,
+    "optimizer": "native MuonAdamW",
+    "lr": "unchanged native defaults and scaling",
+    "updates_per_variant": 66
+  },
+  "timing": {
+    "warmup": 20,
+    "normal": 20,
+    "no_finite_check_diagnostic": 20,
+    "phase_events": 4,
+    "profiled": 2
+  },
+  "projection_microbenchmark": {
+    "shape": [
+      16,
+      2048,
+      4,
+      512
+    ],
+    "weight_shape": [
+      24,
+      2048
+    ],
+    "warmup": 10,
+    "samples": 30
+  },
+  "wandb": {
+    "project": "nanochat",
+    "entity": "yibozhong657-none",
+    "group": "mhc-nvidia-projection-20261030"
+  },
+  "limits": [
+    "No new 1B pretraining or checkpoints",
+    "TE original kernels/wrapper only; all other mHC operations unchanged",
+    "Arithmetic precision differs across explicit backend selections",
+    "All five runs use the same physical GPU and environment; prior measurements are context only",
+    "Autotune/compilation startup excluded from ordinary step timing; no claims about training quality"
+  ],
+  "status": "submitted_awaiting_gpu_gate"
+}
