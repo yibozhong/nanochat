@@ -10,6 +10,15 @@ The baseline has 58,720,256 parameters; mHC has 59,515,317. The default is
 microbatch 16, accumulation 1, no whole-block activation checkpointing and
 32,768 tokens/update. Native nanochat GPT/SSSL remains unchanged.
 
+An explicit [ordinary PyTorch projection option](torch-projection/README.md)
+has also been validated: `--projection-backend torch` or `torch_compile`.
+Only projection/RMS and its automatic backward change; other mHC operators
+remain official. Same-GPU step time was 152.17 ms for official, 169.97 ms for
+eager and 129.41 ms for compiled PyTorch. Compiled saves 14.96% step time but
+uses 12.84 vs 8.47 GiB reserved and remains 60.58% slower than vanilla.
+The default remains `official`; these FP32 alternatives do not reproduce
+the official projection's explicit TF32 rounding.
+
 ## Removing the manifold constraint
 
 `mhc_no_manifold` is the requested unconstrained hyper-connection ablation.
@@ -79,7 +88,7 @@ locked runtime/toolchain described below. No full 1B training was submitted.
 
 ## Official code used directly
 
-All mHC computation calls the unmodified functions in
+With the default `official` projection backend, mHC computation calls the unmodified functions in
 [DeepSeek TileKernels at 36d9e45](https://github.com/deepseek-ai/TileKernels/tree/36d9e45d38e204ebb87e6f6e833821eee0482fe5).
 This pinned official release retains the complete prenorm forward/backward and
 PyTorch autograd wrappers. Later v2 releases removed those modeling wrappers

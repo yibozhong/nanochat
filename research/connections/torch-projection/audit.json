@@ -1,0 +1,107 @@
+{
+  "job": "7547170.0",
+  "source": {
+    "commit": "ab693dc39574950e929c3ea4dbed8505b8fef69c",
+    "official_tilekernels": "36d9e45d38e204ebb87e6f6e833821eee0482fe5",
+    "native_base": "145da40cdd37b9522aa53d26c0c356e9126458bb",
+    "hashes": {
+      "source.tar": "3c58c79d2c6167fc658b8bb9bd9f551ed69757dd5a82cc5b772daffcca911ee1",
+      "legacy-baseline.tar": "5f92ef457c61e8b4ab7d145873857b4772f4668b69c1236a9e93562283e67c24",
+      "mhc-official-runtime-7546767.tar.gz": "6b927f93021961293e12452b4001a479ff1b54cbc1aae0355e73e75a393d4dc0",
+      "cuda-compat-13-1_590.48.01-1_amd64.deb": "066f24c715f5f8f31bb7e8bd0f9ddc93fe78a82d3be55c6f3e9bbe26fa4fd7be"
+    },
+    "purpose": "Ordinary PyTorch eager/compiled projection vs official: correctness and same-GPU bounded profiling; no 1B training"
+  },
+  "wandb_verified": true,
+  "checks": {
+    "tests": 20,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "numerical_errors": {
+    "torch_compile-d128": {
+      "fp64_output": 1.6186842423654537e-07,
+      "fp64_input_grad": 3.96660094980248e-05,
+      "fp64_weight_grad": 1.610203323491295e-07,
+      "official_output": 0.00020795866448763368,
+      "official_gradients": [
+        0.0010378254654078197,
+        0.0002017760926477208
+      ]
+    },
+    "torch_compile-d512": {
+      "fp64_output": 2.0267560563845916e-07,
+      "fp64_input_grad": 2.1006915433503502e-05,
+      "fp64_weight_grad": 1.634515100056212e-07,
+      "official_output": 0.00020617383662380897,
+      "official_gradients": [
+        0.0010456862123608955,
+        0.00020595354781264056
+      ]
+    },
+    "torch-d128": {
+      "fp64_output": 1.6243803239760497e-07,
+      "fp64_input_grad": 3.9639869842684045e-05,
+      "fp64_weight_grad": 1.6127831731876355e-07,
+      "official_output": 0.00020795887875403328,
+      "official_gradients": [
+        0.0010378244677428517,
+        0.00020177440942634558
+      ]
+    },
+    "torch-d512": {
+      "fp64_output": 2.0337061534659112e-07,
+      "fp64_input_grad": 1.9039944288723195e-05,
+      "fp64_weight_grad": 1.6394528476531987e-07,
+      "official_output": 0.00020617302178883138,
+      "official_gradients": [
+        0.0010456824625194963,
+        0.00020595410832308108
+      ]
+    }
+  },
+  "archive_sha256": "8e3874fb5bf1acc28a3ee97d5ef77c8e6033369a46e82425fcf799d711b94031",
+  "compressed_trace_sha256": {
+    "baseline": "2421fd037d45f9986de9fb7e6290bbedc5d258a9fc42b18a4205655f2b5b2c4f",
+    "mhc_official": "4a705df956649b0f6383b438592d3ae0cd54aaa65ef79a66d60f84134b5912f3",
+    "mhc_torch": "876c7d84893d9b9d9b6adc7ce46c79eefcec9bbecaf307f0199f87dd4f073bde",
+    "mhc_torch_compile": "946811ac44526cc59e0e627172c6c9472ef579161b6085896bf1b0978478ab00"
+  },
+  "summaries": {
+    "baseline": {
+      "step_ms": 80.58801391161978,
+      "step_stdev_ms": 0.8586452082416757,
+      "change_vs_official_percent": -47.04076433608342,
+      "overhead_vs_baseline_percent": 0.0,
+      "peak_allocated_gib": 5.374598026275635,
+      "peak_reserved_gib": 5.388671875
+    },
+    "mhc_official": {
+      "step_ms": 152.16989615000784,
+      "step_stdev_ms": 0.43412442336322266,
+      "change_vs_official_percent": 0.0,
+      "overhead_vs_baseline_percent": 88.8244774426273,
+      "peak_allocated_gib": 8.280363082885742,
+      "peak_reserved_gib": 8.474609375
+    },
+    "mhc_torch": {
+      "step_ms": 169.97000749688596,
+      "step_stdev_ms": 0.4087800097825087,
+      "change_vs_official_percent": 11.69752480433508,
+      "overhead_vs_baseline_percent": 110.91226752813475,
+      "peak_allocated_gib": 13.247709274291992,
+      "peak_reserved_gib": 13.419921875
+    },
+    "mhc_torch_compile": {
+      "step_ms": 129.41048976499587,
+      "step_stdev_ms": 0.31888351359176326,
+      "change_vs_official_percent": -14.9565761434022,
+      "overhead_vs_baseline_percent": 60.58280069653943,
+      "peak_allocated_gib": 12.628812789916992,
+      "peak_reserved_gib": 12.8359375
+    }
+  },
+  "torch_traces_contain_no_official_projection_kernel": true,
+  "note": "Forward/backward microbenchmark intervals include launch gaps and a scalar probe. Full-model timing is unprofiled; raw traces use two instrumented steps. Precision differs: FP32 Torch versus explicit TF32 official."
+}
