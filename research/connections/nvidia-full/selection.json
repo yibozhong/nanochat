@@ -1,0 +1,20 @@
+{
+  "connection_backend": "nvidia",
+  "projection_backend": "official",
+  "fused_connection_grad": false,
+  "selected_from_job": "7547667.0",
+  "selected_run": "ab4d9b27",
+  "reason": "Ordinary accumulation measured faster and uses4GiB less peak allocated memory; both paths passedGPU validation",
+  "model": {
+    "depth": 8,
+    "width": 512,
+    "heads": 4,
+    "sequence_length": 2048,
+    "vocab_size": 32768,
+    "microbatch": 16,
+    "grad_accum": 1
+  },
+  "scope": "Default fusion setting only; full NVIDIA backend is explicitly selected. No new pretraining authorized.",
+  "gpu": "NVIDIA H200",
+  "benchmark_source": "210b79b6e9fc8c198e0897424671eacb2506e345"
+}

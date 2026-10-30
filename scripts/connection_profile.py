@@ -120,7 +120,7 @@ def main():
     p.add_argument('--output-dir',required=True)
     p.add_argument('--projection-backend',choices=['official','torch','torch_compile','nvidia','nvidia_precise'],default='official')
     p.add_argument('--connection-backend',choices=['deepseek','nvidia','nvidia_precise'],default='deepseek')
-    p.add_argument('--fused-connection-grad',action=argparse.BooleanOptionalAction,default=True)
+    p.add_argument('--fused-connection-grad',action=argparse.BooleanOptionalAction,default=False)
     p.add_argument('--wandb-group',default='mhc-profiling-20261030')
     p.add_argument('--timed-steps',type=int,default=20)
     p.add_argument('--collect-after-warmup',action='store_true')

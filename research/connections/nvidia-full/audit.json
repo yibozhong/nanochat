@@ -1,0 +1,359 @@
+{
+  "job": "7547667.0",
+  "source": {
+    "commit": "210b79b6e9fc8c198e0897424671eacb2506e345",
+    "official_tilekernels": "36d9e45d38e204ebb87e6f6e833821eee0482fe5",
+    "native_base": "145da40cdd37b9522aa53d26c0c356e9126458bb",
+    "transformer_engine": "2.20.2",
+    "hashes": {
+      "source.tar": "79148323c593bb547b612b9e3204890832d0e4b33eb973cbc2e4f8d10fd7a308",
+      "legacy-baseline.tar": "5f92ef457c61e8b4ab7d145873857b4772f4668b69c1236a9e93562283e67c24",
+      "mhc-official-runtime-7546767.tar.gz": "6b927f93021961293e12452b4001a479ff1b54cbc1aae0355e73e75a393d4dc0",
+      "cuda-compat-13-1_590.48.01-1_amd64.deb": "066f24c715f5f8f31bb7e8bd0f9ddc93fe78a82d3be55c6f3e9bbe26fa4fd7be",
+      "transformer_engine_torch-2.20.2-cp311-cp311-linux_x86_64.whl": "9b69f40b34570e3073171dcb231d6dd038092d20a277e501e7da01e6475920de"
+    },
+    "purpose": "Complete NVIDIA mHC operators, not projection-only: independent correctness, fused gradient accumulation, same-GPU bounded comparison; no 1B training",
+    "extension_cache": {
+      "wheel": "transformer_engine_torch-2.20.2-cp311-cp311-linux_x86_64.whl",
+      "sha256": "9b69f40b34570e3073171dcb231d6dd038092d20a277e501e7da01e6475920de",
+      "torch": "2.10.0+cu130",
+      "cuda": "13.0",
+      "cxx11_abi": true,
+      "source": "Unmodified PyPI transformer-engine-torch 2.20.2 sdist, repacked installed extension; retained to avoid repeated C++ builds",
+      "files": [
+        "transformer_engine/wheel_lib/transformer_engine_torch.cpython-311-x86_64-linux-gnu.so",
+        "transformer_engine_torch-2.20.2.dist-info/METADATA",
+        "transformer_engine_torch-2.20.2.dist-info/WHEEL",
+        "transformer_engine_torch-2.20.2.dist-info/licenses/LICENSE",
+        "transformer_engine_torch-2.20.2.dist-info/top_level.txt",
+        "transformer_engine_torch-2.20.2.dist-info/uv_build.json",
+        "transformer_engine_torch-2.20.2.dist-info/RECORD"
+      ]
+    },
+    "regression_gate": "7547609.0: 26 unchanged legacy regressions and 8/9 full tests passed; only finite-iteration convergence assertion corrected; no model/kernel changes",
+    "allocator_repair": "Register public Triton allocator only in empty ContextVar; no upstream kernel changes. Validate on Hopper and rerun6 projection+10 full controlled+6 native checks."
+  },
+  "checks": {
+    "tests": 22,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "timings": {
+    "baseline": {
+      "mean_ms": 60.22931430488825,
+      "median_ms": 60.16603484749794,
+      "stdev_ms": 0.2559711296775812,
+      "overhead_vs_baseline_pct": 0.0,
+      "reduction_vs_projection_only_pct": 29.649781509244878,
+      "reduction_vs_deepseek_pct": 53.60129572047347,
+      "memory_gib": {
+        "peak_allocated_bytes": 5.374598026275635,
+        "peak_reserved_bytes": 5.509765625
+      },
+      "nvidia_kernel_counts": {},
+      "phase_means": {
+        "cpu_wall_ms": {
+          "zero_grad": 0.08279085159301758,
+          "data": 0.11315196752548218,
+          "forward": 6.054574158042669,
+          "backward": 6.337203085422516,
+          "finite_check": 44.792111963033676,
+          "optimizer": 2.6393472217023373,
+          "loss_item": 0.018376857042312622
+        },
+        "stream_elapsed_ms": {
+          "zero_grad": 0.09232799895107746,
+          "data": 0.12200799956917763,
+          "forward": 15.183655977249146,
+          "backward": 41.026424407958984,
+          "finite_check": 1.0813679993152618,
+          "optimizer": 2.659000039100647,
+          "loss_item": 0.02572000026702881
+        }
+      },
+      "run_id": "2764d49c"
+    },
+    "mhc_deepseek": {
+      "mean_ms": 129.8081815863649,
+      "median_ms": 128.94289661198854,
+      "stdev_ms": 2.4160433402842707,
+      "overhead_vs_baseline_pct": 115.52325986854144,
+      "reduction_vs_projection_only_pct": -51.621084215916845,
+      "reduction_vs_deepseek_pct": 0.0,
+      "memory_gib": {
+        "peak_allocated_bytes": 8.281339645385742,
+        "peak_reserved_bytes": 8.501953125
+      },
+      "nvidia_kernel_counts": {},
+      "phase_means": {
+        "cpu_wall_ms": {
+          "zero_grad": 0.12727687135338783,
+          "data": 0.13375328853726387,
+          "forward": 11.087632738053799,
+          "backward": 16.021812334656715,
+          "finite_check": 96.60837985575199,
+          "optimizer": 4.519379232078791,
+          "loss_item": 0.01840200275182724
+        },
+        "stream_elapsed_ms": {
+          "zero_grad": 0.1374959982931614,
+          "data": 0.1433119997382164,
+          "forward": 20.218024253845215,
+          "backward": 101.90752983093262,
+          "finite_check": 1.6952720284461975,
+          "optimizer": 4.540503978729248,
+          "loss_item": 0.025583999697118998
+        }
+      },
+      "run_id": "9d5602cf"
+    },
+    "mhc_nvidia_projection_only": {
+      "mean_ms": 85.61354263996084,
+      "median_ms": 84.19797755777836,
+      "stdev_ms": 3.010286026381066,
+      "overhead_vs_baseline_pct": 42.14596933077219,
+      "reduction_vs_projection_only_pct": 0.0,
+      "reduction_vs_deepseek_pct": 34.04611204494854,
+      "memory_gib": {
+        "peak_allocated_bytes": 8.552886009216309,
+        "peak_reserved_bytes": 8.794921875
+      },
+      "nvidia_kernel_counts": {},
+      "phase_means": {
+        "cpu_wall_ms": {
+          "zero_grad": 0.1314985565841198,
+          "data": 0.15464704483747482,
+          "forward": 11.023400351405144,
+          "backward": 19.412382505834103,
+          "finite_check": 48.663195222616196,
+          "optimizer": 4.668178036808968,
+          "loss_item": 0.018303282558918
+        },
+        "stream_elapsed_ms": {
+          "zero_grad": 0.1414719969034195,
+          "data": 0.16453600116074085,
+          "forward": 20.17687225341797,
+          "backward": 57.25771236419678,
+          "finite_check": 1.7689439952373505,
+          "optimizer": 4.689487934112549,
+          "loss_item": 0.025544000323861837
+        }
+      },
+      "run_id": "ef76fb00"
+    },
+    "mhc_nvidia_full_unfused": {
+      "mean_ms": 83.34756375600894,
+      "median_ms": 82.80638325959444,
+      "stdev_ms": 1.2751387692767917,
+      "overhead_vs_baseline_pct": 38.383716829471524,
+      "reduction_vs_projection_only_pct": 2.6467528548389185,
+      "reduction_vs_deepseek_pct": 35.79174845727613,
+      "memory_gib": {
+        "peak_allocated_bytes": 8.561675071716309,
+        "peak_reserved_bytes": 8.802734375
+      },
+      "nvidia_kernel_counts": {
+        "_mhc_projection_fwd_fused": 34,
+        "_mhc_projection_bwd_fused_dx": 34,
+        "_mhc_scale_fwd_fused": 34,
+        "_mhc_scale_bwd_fused": 34,
+        "_mhc_aggregate_fwd": 34,
+        "_mhc_aggregate_bwd": 34,
+        "_mhc_expand_combine_fwd": 32,
+        "_mhc_expand_combine_bwd": 32,
+        "_mhc_sinkhorn_fwd_fused": 32,
+        "_mhc_sinkhorn_bwd_fused": 32
+      },
+      "phase_means": {
+        "cpu_wall_ms": {
+          "zero_grad": 0.12713484466075897,
+          "data": 0.15994347631931305,
+          "forward": 11.460225097835064,
+          "backward": 17.013506963849068,
+          "finite_check": 49.12306694313884,
+          "optimizer": 4.69390070065856,
+          "loss_item": 0.01925695687532425
+        },
+        "stream_elapsed_ms": {
+          "zero_grad": 0.13683200255036354,
+          "data": 0.16955199465155602,
+          "forward": 20.61568784713745,
+          "backward": 55.32983207702637,
+          "finite_check": 1.7523039877414703,
+          "optimizer": 4.714576005935669,
+          "loss_item": 0.026512000244110823
+        }
+      },
+      "run_id": "ab4d9b27"
+    },
+    "mhc_nvidia_full_fused": {
+      "mean_ms": 84.83410275851686,
+      "median_ms": 84.52710509300232,
+      "stdev_ms": 0.9251126187930223,
+      "overhead_vs_baseline_pct": 40.85184886727438,
+      "reduction_vs_projection_only_pct": 0.9104165736042891,
+      "reduction_vs_deepseek_pct": 34.64656717182773,
+      "memory_gib": {
+        "peak_allocated_bytes": 12.561675071716309,
+        "peak_reserved_bytes": 12.791015625
+      },
+      "nvidia_kernel_counts": {
+        "_mhc_projection_fwd_fused": 34,
+        "_mhc_projection_bwd_fused_dx": 34,
+        "_mhc_scale_fwd_fused": 34,
+        "_mhc_scale_bwd_fused": 34,
+        "_mhc_aggregate_fwd": 34,
+        "_mhc_aggregate_bwd": 34,
+        "_mhc_expand_combine_fwd": 32,
+        "_mhc_expand_combine_bwd": 32,
+        "_mhc_sinkhorn_fwd_fused": 32,
+        "_mhc_sinkhorn_bwd_fused": 32
+      },
+      "phase_means": {
+        "cpu_wall_ms": {
+          "zero_grad": 0.14953548088669777,
+          "data": 0.181637704372406,
+          "forward": 11.976965237408876,
+          "backward": 16.882709693163633,
+          "finite_check": 50.97946664318442,
+          "optimizer": 4.9526141956448555,
+          "loss_item": 0.018987804651260376
+        },
+        "stream_elapsed_ms": {
+          "zero_grad": 0.1603199988603592,
+          "data": 0.1927119977772236,
+          "forward": 21.116960048675537,
+          "backward": 57.12274360656738,
+          "finite_check": 1.722927987575531,
+          "optimizer": 4.974231958389282,
+          "loss_item": 0.02619200013577938
+        }
+      },
+      "run_id": "01897627"
+    }
+  },
+  "gpu": "NVIDIA H200",
+  "gpu_uuid": "5cdb85f0-5737-043f-3398-ed859ad2fafe",
+  "all_nvidia_mhc_trace_verified": true,
+  "numerical_errors": {
+    "results/oracle-controlled/pipeline-d512-fused0.json": {
+      "output": 0.0018833649248830003,
+      "branch": 0.0016592236455023348,
+      "gradients": [
+        0.0032338171021005927,
+        0.0018116057719842625,
+        0.0018550035532466152,
+        0.0029766940544860374
+      ]
+    },
+    "results/oracle-controlled/fused-vs-unfused.json": [
+      0.0032157712775976286,
+      0.0,
+      0.0,
+      0.0
+    ],
+    "results/oracle-controlled/scale-sinkhorn.json": {
+      "output": [
+        4.8020574551156914e-08,
+        4.395628423270198e-08,
+        9.324478261323926e-08
+      ],
+      "gradients": [
+        1.7268592921008616e-07,
+        1.2621957272071237e-07,
+        9.597059307686228e-08,
+        2.796655072071287e-07
+      ],
+      "row_residual_20": 0.0005983114242553711,
+      "fp64_row_residual_20": 0.0005983545454621986
+    },
+    "results/oracle-controlled/head.json": {
+      "output": 0.0016560098516971555,
+      "gradients": [
+        0.0023226804378306356,
+        5.233012129203572e-07,
+        2.6678798878999004e-06,
+        5.051029110699931e-07
+      ]
+    },
+    "results/oracle-controlled/pipeline-d512-fused1.json": {
+      "output": 0.0018833649248830003,
+      "branch": 0.0016592236455023348,
+      "gradients": [
+        0.0022724373268064547,
+        0.0018116057719842625,
+        0.0018550035532466152,
+        0.0029766940544860374
+      ]
+    },
+    "results/oracle-controlled/pipeline-d128-fused0.json": {
+      "output": 0.001872075939317659,
+      "branch": 0.0016733216647501527,
+      "gradients": [
+        0.003223548142013215,
+        0.0018113439191961818,
+        0.0015521074683090908,
+        0.0019375745133760533
+      ]
+    },
+    "results/oracle-controlled/pipeline-d128-fused1.json": {
+      "output": 0.001872075939317659,
+      "branch": 0.0016733216647501527,
+      "gradients": [
+        0.002277982678792918,
+        0.0018113439191961818,
+        0.0015521074683090908,
+        0.0019375745133760533
+      ]
+    },
+    "results/oracle-native/pipeline-d512-fused0.json": {
+      "output": 0.0018833649248830003,
+      "branch": 0.0016592236455023348,
+      "gradients": [
+        0.0032338171021005927,
+        0.0018228816607582922,
+        0.0018550035532466152,
+        0.0029766940544860374
+      ]
+    },
+    "results/oracle-native/pipeline-d512-fused1.json": {
+      "output": 0.0018833649248830003,
+      "branch": 0.0016592236455023348,
+      "gradients": [
+        0.0022724373268064547,
+        0.0018228816607582922,
+        0.0018550035532466152,
+        0.0029766940544860374
+      ]
+    },
+    "results/oracle-native/pipeline-d128-fused0.json": {
+      "output": 0.001872075939317659,
+      "branch": 0.0016733216647501527,
+      "gradients": [
+        0.003223548142013215,
+        0.001808297383061278,
+        0.0015521074683090908,
+        0.0019375745133760533
+      ]
+    },
+    "results/oracle-native/pipeline-d128-fused1.json": {
+      "output": 0.001872075939317659,
+      "branch": 0.0016733216647501527,
+      "gradients": [
+        0.002277982678792918,
+        0.001808297383061278,
+        0.0015521074683090908,
+        0.0019375745133760533
+      ]
+    }
+  },
+  "archive_sha256": "c614dcb9a32103362037f7fd51458f46cfdc0a9a8146ea1ab0fa0ae45189b2e7",
+  "limitations": [
+    "Short throughput diagnostics, not a quality comparison",
+    "NVIDIA uses its native RMS epsilon, sigmoid and log-space Sinkhorn arithmetic",
+    "Persistent interleaved stream layout requires permuting existing phi columns",
+    "Embedding stream replication is standard PyTorch; all five mHC operators and final head use NVIDIA APIs",
+    "Peak memory is PyTorch allocator, not total device usage"
+  ]
+}

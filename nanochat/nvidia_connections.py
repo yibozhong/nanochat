@@ -33,7 +33,7 @@ def check_precision(use_tf32):
 
 class NvidiaHyperConnection(ManifoldHyperConnection):
     def __init__(self, width, streams, branch_index, iterations=20, *,
-                 use_tf32=True, fused_grad_acc=True):
+                 use_tf32=True, fused_grad_acc=False):
         super().__init__(width, streams, branch_index, iterations)
         self.use_tf32, self.fused_grad_acc = use_tf32, fused_grad_acc
         if streams != 4 or iterations != 20:

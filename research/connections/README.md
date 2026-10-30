@@ -213,7 +213,7 @@ successfully but hit the SM120 shared-memory limit in the official Sinkhorn
 backward wrapper. None of those runs started training. The final successful
 kernel files are still byte-for-byte official; the launch adapter is local.
 
-## NVIDIA projection backend
+## Complete NVIDIA mHC backend
 
 Full-operator replacement is a separate, explicit `--connection-backend nvidia`
 option; `--projection-backend nvidia` is the older projection-only experiment.
@@ -226,10 +226,67 @@ columns are interleaved at initialization, preserving the effective seeded
 weights; DeepSeek checkpoints require the same column permutation on import.
 The full NVIDIA path retains upstream numerical conventions (FP32 machine
 epsilon, sigmoid without added epsilon, log-space Sinkhorn), not exact old
-DeepSeek arithmetic. `--no-fused-connection-grad` disables the optional official
-FP32 accumulation buffer. Full replacement is undergoing its own GPU gate and
-same-card five-way comparison; the projection-only results below do not measure
-it. [Full comparison protocol](nvidia-full/protocol.json).
+DeepSeek arithmetic. The optional official FP32 accumulation buffer is enabled
+with `--fused-connection-grad`; it now defaults off based on the completed
+comparison below. Both settings were tested. [Full comparison protocol](nvidia-full/protocol.json).
+
+Full replacement completed in job **7547667.0**, source `210b79b`, on one **H200**
+(UUID `5cdb85f0-5737-043f-3398-ed859ad2fafe`). All **22 checks passed**, with no
+failures or skips: six projection regressions, ten complete-pipeline tests and
+six full-model/native-precision checks. They include independent FP64 math,
+true 2K causality, KV cache, CCE, every model gradient, fused/unfused backward,
+repeated backward, activation checkpointing and a fresh TMA allocation context.
+The unchanged 26 legacy regressions also passed in the earlier 7547609 gate.
+The six successful W&B runs are finished and API-verified.
+
+Each configuration used the same 8-layer D512/4-head/2K/32K model, FineWeb data,
+seed42, native MuonAdamW/LR, microbatch16/accum1 and no activation checkpointing
+for timing. Each fresh model process ran 20 warmup +60 ordinary timed +26
+diagnostic updates: **106 updates /3,473,408 tokens per variant**. Native NVIDIA
+trials leave `NVIDIA_TF32_OVERRIDE` unset; baseline/DeepSeek use `0`. No 1B run or
+checkpoint was produced. Raw samples are retained, including longer steps.
+
+| H200 configuration | Mean ms/step | Median ms/step | Overhead vs vanilla | Peak reserved GiB |
+| --- | ---: | ---: | ---: | ---: |
+| Vanilla | 60.229 | 60.166 | — | 5.510 |
+| DeepSeek mHC | 129.808 | 128.943 | 115.5% | 8.502 |
+| NVIDIA projection only | 85.614 | 84.198 | 42.1% | 8.795 |
+| Full NVIDIA, ordinary gradient accumulation | **83.348** | **82.806** | **38.4%** | **8.803** |
+| Full NVIDIA, fused FP32 gradient accumulation | 84.834 | 84.527 | 40.9% | 12.791 |
+
+Full NVIDIA with ordinary accumulation reduces mean step time **35.8%** versus
+DeepSeek mHC and **2.65%** versus projection-only. The latter difference is small:
+the corresponding median reduction is 1.65%, and SDs are 1.275 and 3.010 ms.
+These are one short sequential trial per configuration, not a statistical claim
+of a universal 2.65% improvement. The remaining overhead against vanilla is
+substantial. This is a throughput result, not evidence of improved NTP quality.
+
+The fused path takes 1.49 ms longer in this trial and allocates exactly **4 GiB**
+more at peak, consistent with sixteen per-branch FP32 buffers. Consequently the
+full NVIDIA option defaults to the measured ordinary-accumulation setting;
+`--fused-connection-grad` remains available. This changes only the selection of
+an already tested path. The explicit legacy backend remains available.
+
+The CUDA traces contain **zero DeepSeek mHC kernels** in both full NVIDIA trials.
+Across two instrumented steps, NVIDIA projection/scale/aggregate forward and
+backward each appear 34 times, and Sinkhorn/expand-combine forward and backward
+each appear 32 times, accounting for all sixteen branches plus the final head.
+NVIDIA kernel files remain byte-for-byte SHA-verified against TE 2.20.2.
+
+Two failed gates are retained in [failed attempts](nvidia-full/failed-attempts.json).
+The first exposed an incorrect test assumption that 20 Sinkhorn iterations
+must converge arbitrary inputs to a preset row residual. Actual/FP64 20-step
+residuals are 0.000598311/0.000598355; same-iteration output/gradient checks and
+the separate 200-iteration convergence check pass. The second exposed a Hopper
+checkpoint integration issue: TE's global initialization guard outlived the
+allocator's [Triton 3.6 ContextVar](https://github.com/triton-lang/triton/blob/v3.6.0/python/triton/runtime/_allocation.py).
+The local adapter now registers the standard CUDA workspace allocator only in
+an empty context and preserves valid allocators. No NVIDIA kernel was edited.
+
+- [Full comparison results](nvidia-full/results.json), [trace/math audit](nvidia-full/audit.json).
+- [W&B audit](https://wandb.ai/yibozhong657-none/nanochat/runs/3cd1824a).
+
+## Earlier NVIDIA projection-only comparisons
 
 The NVIDIA author's [full-model comparison in TE PR 2790](https://github.com/NVIDIA/TransformerEngine/pull/2790#issuecomment-4208434892)
 reports a 2B Nemotron model on 16 nodes of 8 B200 GPUs, pure data parallelism,
@@ -238,8 +295,9 @@ were 960 ms without mHC, 1100 ms with the new Triton mHC implementation, and
 1160 ms with the then-current Megatron cuTile implementation. Thus Triton mHC
 added about 14.6% step time versus vanilla and reduced time about 5.2% versus
 cuTile in that configuration. These are author-reported log estimates from
-April 8, 2026, not measurements of our nanochat model or of TE 2.20.2. Our local
-experiment replaces only projection; the other mHC operators remain DeepSeek's.
+April 8, 2026, not measurements of our nanochat model or of TE 2.20.2. The historical
+experiments in this section replace only projection; the other mHC operators
+remain DeepSeek's. The completed full replacement is reported above.
 
 Explicit `--projection-backend nvidia` and `nvidia_precise` use unmodified
 NVIDIA Transformer Engine 2.20.2 projection forward/backward. The adapter only

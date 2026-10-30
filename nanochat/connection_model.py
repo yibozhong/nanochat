@@ -29,7 +29,7 @@ class ConnectionConfig:
     activation_checkpoint: bool = False
     projection_backend: str = 'official'
     connection_backend: str = 'deepseek'
-    fused_connection_grad: bool = True
+    fused_connection_grad: bool = False
 
     def __post_init__(self):
         if self.connection_backend not in ('deepseek', 'nvidia', 'nvidia_precise'):
