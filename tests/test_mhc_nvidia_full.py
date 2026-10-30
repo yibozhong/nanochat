@@ -176,3 +176,21 @@ def test_fused_buffer_matches_unfused_and_repeated_backward():
     torch.testing.assert_close(a,b,atol=0,rtol=0)
     errors=[relative(a,b) for a,b in zip(ga,gb)];record('fused-vs-unfused',errors)
     assert max(errors)<.01,errors
+
+
+def test_tma_allocator_in_fresh_context():
+    import contextvars
+    from triton.runtime import _allocation
+    # Initialize TE's process-global flag in the current context first.
+    m=NvidiaHyperConnection(128,4,0,use_tf32=False).cuda();m.reset_parameters()
+    x=torch.randn(1,32,128,4,device='cuda',dtype=torch.bfloat16,requires_grad=True)
+    br,res,mix=m.read(x);m.write(br,res,mix).float().mean().backward()
+    def fresh_context():
+        assert isinstance(_allocation._allocator.get(),_allocation.NullAllocator)
+        xi=x.detach().clone().requires_grad_()
+        branch,residual,mixes=m.read(xi)
+        assert not isinstance(_allocation._allocator.get(),_allocation.NullAllocator)
+        out=m.write(branch,residual,mixes)
+        grads=torch.autograd.grad(out.float().square().mean(),(xi,*m.parameters()))
+        assert all(torch.isfinite(g).all() for g in grads)
+    contextvars.Context().run(fresh_context)

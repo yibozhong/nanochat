@@ -11,7 +11,7 @@
   "layout": "Persistent B,T,D,4; phi columns interleaved once at initialization; same effective seed weights",
   "numerical_conventions": "TE uses float32 machine epsilon for RMS, no extra pre-gate epsilon, and log-space Sinkhorn; unmodified upstream sources checked by SHA",
   "fusion": "Test native per-invocation FP32 gradient buffer against unfused path, repeated backward, and activation checkpointing; enable only after gate",
-  "tests": "Retry: 9 full controlled +6 native =15 checks; unchanged 26 legacy regressions already passed in 7547609.0. Full model/kernel code unchanged.",
+  "tests": "16 controlled checks (6 NVIDIA projection +10 complete-pipeline) plus6 native full checks =22. Includes explicit fresh-context allocator and checkpoint regressions.",
   "trials": [
     "baseline",
     "mhc_deepseek",
@@ -23,5 +23,7 @@
   "training_budget_tokens": 17367040,
   "pretraining": false,
   "limitations": "Embedding replication uses standard PyTorch because TE has no standalone expand-to-streams API; parameter containers/init/optimizer remain local nanochat choices",
-  "first_gate": "7547609.0: 34/35 passed; retained failed attempt records the corrected finite-iteration Sinkhorn assertion"
+  "first_gate": "7547609.0: 34/35 passed; retained failed attempt records the corrected finite-iteration Sinkhorn assertion",
+  "tma_allocator_adapter": "TE process-global init guard conflicts with Triton 3.6 ContextVar allocator during autograd checkpoint recompute. Install the same torch.empty CUDA allocator only when current context has NullAllocator; preserve existing allocators.",
+  "allocator_source": "https://github.com/triton-lang/triton/blob/v3.6.0/python/triton/runtime/_allocation.py"
 }

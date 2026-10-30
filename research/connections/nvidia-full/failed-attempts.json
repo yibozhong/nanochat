@@ -12,5 +12,18 @@
     "full_tests_passed": 8,
     "profiling_started": false,
     "archive_sha256": "7b74ce4d7d11a79de21ad57fdd6c5091deda3a39a6f3ea05d2798b235e20e98d"
+  },
+  {
+    "job": "7547641.0",
+    "source": "a81612f45deecf211f480ff3af737a5be80caf58",
+    "wandb_run": "cfd8d7f7",
+    "gpu": "NVIDIA H200",
+    "tests": 9,
+    "passed": 7,
+    "failed": 2,
+    "reason": "Full-model tests passed causal/cache/CCE/ordinary backward, then checkpoint backward failed: Triton NullAllocator in an autograd recompute context. TE initializer uses a process-global bool; Triton 3.6 uses ContextVar allocator.",
+    "correction": "Local adapter preserves valid allocators and calls public triton.set_allocator in an empty context; upstream NVIDIA kernel files remain unchanged. Add explicit fresh-context regression and rerun projection/full tests.",
+    "profiling_started": false,
+    "archive_sha256": "19d49de0172469efaa7616c33af0a90c3142c7c695bf89082ebfac7d4eed69e0"
   }
 ]
