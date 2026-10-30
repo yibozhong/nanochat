@@ -1,6 +1,7 @@
 """Official mHC kernel forward/backward and nanochat integration checks."""
 import copy
 import importlib.util
+import hashlib
 import json
 import os
 from pathlib import Path
@@ -24,6 +25,15 @@ def load(path,name):
 def relative_error(actual, expected):
     delta=(actual.float()-expected.float()).norm()
     return (delta/(expected.float().norm()+1e-12)).item()
+
+
+
+def test_installed_official_sources_are_unmodified():
+    import tile_kernels
+    manifest=json.loads((Path(__file__).parents[1]/'research/connections/official-files.json').read_text())
+    root=Path(tile_kernels.__file__).parent
+    for name,digest in manifest['sha256'].items():
+        assert hashlib.sha256((root/name).read_bytes()).hexdigest()==digest,name
 
 
 def reference_read(m, x):
