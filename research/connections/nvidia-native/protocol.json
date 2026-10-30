@@ -13,5 +13,6 @@
   "tests": "26 full gates with cuBLAS TF32 off plus 3 NVIDIA native gates in a fresh process with override absent",
   "timing": "Each backend microbenchmark gets a fresh process; full models use 20 warmup, gc.collect once after warmup with automatic GC left enabled, 60 normal timed steps plus existing 26 diagnostics = 106 updates; mean/median/all samples retained",
   "cache": "Repacked unmodified official TE C++ extension from 7547306.0; same torch/CUDA/ABI; SHA checked before installation",
-  "pretraining": false
+  "pretraining": false,
+  "setup_repair": "7547373.0 attempt 1 was preempted on H200 during dependency installation, before GPU checks or W&B init. The cached wheel source had not applied to the transitive-only dependency. Make transformer-engine-torch a direct pinned dependency and forbid source builds for that package; package versions, model and measurement protocol unchanged."
 }

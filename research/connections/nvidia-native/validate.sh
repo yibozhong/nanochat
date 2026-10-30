@@ -24,7 +24,7 @@ export MAX_JOBS=2 NVTE_BUILD_THREADS_PER_JOB=1 NVTE_WITH_NCCL_EP=0
 # Torch ships library headers separately from the isolated nvcc toolchain.
 export CPATH="$CUDA_HOME/include:$PWD/runtime/.venv/lib/python3.11/site-packages/nvidia/cu13/include:$PWD/runtime/.venv/lib/python3.11/site-packages/nvidia/nccl/include:$PWD/runtime/.venv/lib/python3.11/site-packages/nvidia/cudnn/include"
 cp nanochat-src/research/connections/nvidia-native/runtime/{pyproject.toml,uv.lock} runtime/
-uv sync --frozen --project runtime --python /opt/project/.venv/bin/python 2>&1 | tee results/nvidia-install.log
+uv sync --frozen --no-build-package transformer-engine-torch --project runtime --python /opt/project/.venv/bin/python 2>&1 | tee results/nvidia-install.log
 export NETRC="$PWD/.netrc" WANDB_DIR="$PWD/results"
 export WANDB_PROJECT=nanochat WANDB_ENTITY=yibozhong657-none
 export NANOCHAT_MHC_TEST_PORTABILITY=1

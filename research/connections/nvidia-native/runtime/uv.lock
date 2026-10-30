@@ -337,6 +337,7 @@ dependencies = [
     { name = "tilelang" },
     { name = "torch" },
     { name = "transformer-engine", extra = ["core-cu13", "pytorch"] },
+    { name = "transformer-engine-torch" },
     { name = "wandb" },
 ]
 
@@ -356,6 +357,7 @@ requires-dist = [
     { name = "tilelang", specifier = "==0.1.9" },
     { name = "torch", specifier = "==2.10.0", index = "https://download.pytorch.org/whl/cu130" },
     { name = "transformer-engine", extras = ["pytorch", "core-cu13"], specifier = "==2.20.2" },
+    { name = "transformer-engine-torch", path = "../transformer_engine_torch-2.20.2-cp311-cp311-linux_x86_64.whl" },
     { name = "wandb", specifier = "==0.26.1" },
 ]
 
@@ -981,7 +983,7 @@ wheels = [
 [[package]]
 name = "transformer-engine-torch"
 version = "2.20.2"
-source = { registry = "https://pypi.org/simple" }
+source = { path = "../transformer_engine_torch-2.20.2-cp311-cp311-linux_x86_64.whl" }
 dependencies = [
     { name = "einops" },
     { name = "nvdlfw-inspect" },
@@ -993,7 +995,22 @@ dependencies = [
     { name = "torch" },
     { name = "transformer-engine-cu13" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/3d/fb/c9ce298a38c22ed1059923a01cac7e1f4e4f7281d39a8679c8118febe079/transformer_engine_torch-2.20.2.tar.gz", hash = "sha256:4c40ced8a6261649e689076f198d4feaf02277b1ba18931a66eccdaceb33c43e", size = 498055, upload-time = "2026-10-05T22:11:32.972Z" }
+wheels = [
+    { filename = "transformer_engine_torch-2.20.2-cp311-cp311-linux_x86_64.whl", hash = "sha256:9b69f40b34570e3073171dcb231d6dd038092d20a277e501e7da01e6475920de" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "einops" },
+    { name = "nvdlfw-inspect" },
+    { name = "nvidia-cudnn-frontend", specifier = ">=1.29.0" },
+    { name = "onnx" },
+    { name = "onnxscript" },
+    { name = "packaging" },
+    { name = "pydantic" },
+    { name = "torch", specifier = ">=2.1" },
+    { name = "transformer-engine-cu13", specifier = "==2.20.2" },
+]
 
 [[package]]
 name = "triton"
