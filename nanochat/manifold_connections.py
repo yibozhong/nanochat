@@ -51,7 +51,9 @@ def torch_projection(x, phi):
 
 @lru_cache(maxsize=1)
 def compiled_torch_projection():
-    return torch.compile(torch_projection, dynamic=False, fullgraph=True)
+    # Token count varies between training, prefix prefill and cached decoding.
+    # A shared static graph reaches Dynamo's per-code recompilation limit.
+    return torch.compile(torch_projection, dynamic=True, fullgraph=True)
 
 
 def projection(x, phi, backend='official'):

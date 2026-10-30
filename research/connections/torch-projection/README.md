@@ -10,7 +10,7 @@ out = F.linear(flat, phi) * torch.rsqrt(flat.square().mean(-1, keepdim=True) + 1
 ```
 
 Both alternatives use PyTorch autograd; neither defines a custom backward.
-The compiled option applies `torch.compile(fullgraph=True, dynamic=False)` to
+The compiled option applies `torch.compile(fullgraph=True, dynamic=True)` to
 these same operations. Input activations remain BF16 and projection weights
 and intermediates FP32. The diagnostic disables TF32 for PyTorch matmuls;
 the official kernel retains its own explicit TF32 rounding. Consequently this
@@ -32,6 +32,12 @@ official mHC, eager PyTorch mHC and compiled PyTorch mHC in separate processes
 on the same GPU, using the existing 66-update profiling protocol. Every run
 records to `nanochat`, group `mhc-torch-projection-20261030`. No checkpoint or
 1B pretraining is created. Results are pending.
+
+First attempt `7547152.0`, source `bbc1da3`, passed 19 checks and failed the
+compiled model's variable-length cache check: static shape compilation hit
+Dynamo's eight-version recompilation limit. It never reached timing. The
+retry uses dynamic shape compilation with unchanged projection mathematics;
+the failure archive remains in the workflow results directory.
 
 After validation, an explicit training selection is available as
 `--projection-backend torch` or `--projection-backend torch_compile` in
