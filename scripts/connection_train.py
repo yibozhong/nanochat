@@ -26,6 +26,7 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument('--variant', choices=('baseline','mhc','mhc_no_manifold'), required=True)
     p.add_argument('--wandb-group', default='mhc-official-kernels-20261030')
+    p.add_argument('--projection-backend', choices=('official','torch','torch_compile'), default='official')
     p.add_argument('--steps', type=int, required=True)
     p.add_argument('--schedule-steps', type=int, default=30518)
     p.add_argument('--microbatch', type=int, default=16)
@@ -47,7 +48,7 @@ def main():
     torch.set_num_threads(2);torch.backends.cuda.matmul.allow_tf32=False
     seed_all(a.seed)
     c=ConnectionConfig(variant=a.variant,streams=a.streams,sinkhorn_iterations=a.sinkhorn_iterations,
-                       activation_checkpoint=a.activation_checkpoint)
+                       activation_checkpoint=a.activation_checkpoint, projection_backend=a.projection_backend)
     data=PackedData(a.data_dir)
     assert data.manifest['sequence_length']==c.sequence_length
     assert a.steps*16<=len(data.arrays['train'])

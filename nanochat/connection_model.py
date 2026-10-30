@@ -27,10 +27,15 @@ class ConnectionConfig:
     streams: int = 4
     sinkhorn_iterations: int = 20
     activation_checkpoint: bool = False
+    projection_backend: str = 'official'
 
     def __post_init__(self):
         if self.variant not in ('baseline', 'mhc', 'mhc_no_manifold'):
             raise ValueError(f'Unknown connection variant: {self.variant}')
+        if self.projection_backend not in ('official', 'torch', 'torch_compile'):
+            raise ValueError(f'Unknown projection backend: {self.projection_backend}')
+        if self.variant == 'baseline' and self.projection_backend != 'official':
+            raise ValueError('Baseline has no connection projection to replace')
         if min(self.depth, self.width, self.heads, self.sequence_length, self.vocab_size, self.streams) < 1:
             raise ValueError('Model dimensions must be positive')
         if self.width % self.heads or (self.width // self.heads) % 2:
@@ -49,9 +54,9 @@ class ConnectionBlock(Block):
         self.compiled_attention = self.compiled_mlp = None
         if self.variant != 'baseline':
             self.attn_connection = ManifoldHyperConnection(config.width, config.streams, 2*index,
-                config.sinkhorn_iterations, manifold=config.variant == 'mhc')
+                config.sinkhorn_iterations, manifold=config.variant == 'mhc', projection_backend=config.projection_backend)
             self.mlp_connection = ManifoldHyperConnection(config.width, config.streams, 2*index+1,
-                config.sinkhorn_iterations, manifold=config.variant == 'mhc')
+                config.sinkhorn_iterations, manifold=config.variant == 'mhc', projection_backend=config.projection_backend)
 
     def attention_branch(self, h, cos, sin, kv_cache=None):
         return self.attn(norm(h), None, (cos, sin), (-1, 0), kv_cache)
@@ -92,7 +97,8 @@ class ConnectionModel(nn.Module):
         if config.variant != 'baseline':
             for b in self.blocks:
                 b.attn_connection.reset_parameters(); b.mlp_connection.reset_parameters()
-        self.stream_head = ManifoldHyperHead(config.width, config.streams) if config.variant != 'baseline' else None
+        self.stream_head = ManifoldHyperHead(config.width, config.streams,
+            projection_backend=config.projection_backend) if config.variant != 'baseline' else None
         if self.stream_head is not None:
             self.stream_head.reset_parameters()
         d = config.width // config.heads

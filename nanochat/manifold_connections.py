@@ -1,8 +1,10 @@
-"""nanochat parameter containers around unmodified DeepSeek TileKernels ops.
+"""nanochat containers around official ops, with an explicit PyTorch projection option.
 
 Pinned official release: 36d9e45d38e204ebb87e6f6e833821eee0482fe5.
 No locally implemented mHC forward/backward kernel, and no automatic fallback.
 Parameter initialization is a documented local choice, not an official recipe.
+The default remains official. The optional projection uses ordinary FP32
+PyTorch operations/autograd; it does not reproduce official TF32 rounding.
 """
 from functools import lru_cache
 import math
@@ -37,7 +39,28 @@ def expand_streams(x, streams):
     return official_ops().expand_to_mhc(x.contiguous(), streams)
 
 
-def projection(x, phi):
+def torch_projection(x, phi):
+    """Linear projection and per-token RMS; automatic PyTorch backward.
+
+    FP32 intermediates preserve small connection coefficients. With TF32
+    disabled this is an accuracy control, not bitwise official-kernel parity.
+    """
+    flat = x.flatten(-2).float()
+    return F.linear(flat, phi) * torch.rsqrt(flat.square().mean(-1, keepdim=True) + 1e-6)
+
+
+@lru_cache(maxsize=1)
+def compiled_torch_projection():
+    return torch.compile(torch_projection, dynamic=False, fullgraph=True)
+
+
+def projection(x, phi, backend='official'):
+    if backend == 'torch':
+        return torch_projection(x, phi)
+    if backend == 'torch_compile':
+        return compiled_torch_projection()(x, phi)
+    if backend != 'official':
+        raise ValueError(f'Unknown projection backend: {backend}')
     # Official default fused accumulation assumes an externally attached storage
     # gradient buffer. nanochat uses ordinary autograd accumulation instead.
     return official_ops().mhc_pre_norm_fn(x, phi, None, 1e-6, fuse_grad_acc=False, n_splits=1)
@@ -73,10 +96,11 @@ def sinkhorn_normalize(x, repeat=20, eps=1e-6):
 
 
 class ManifoldHyperConnection(nn.Module):
-    def __init__(self, width, streams, branch_index, iterations=20, *, manifold=True):
+    def __init__(self, width, streams, branch_index, iterations=20, *, manifold=True, projection_backend='official'):
         super().__init__()
         self.width, self.streams, self.iterations = width, streams, iterations
         self.manifold = manifold
+        self.projection_backend = projection_backend
         self.phi = nn.Parameter(torch.empty(2*streams+streams*streams, streams*width))
         self.bias = nn.Parameter(torch.empty(2*streams+streams*streams))
         self.scales = nn.Parameter(torch.empty(3))
@@ -95,13 +119,13 @@ class ManifoldHyperConnection(nn.Module):
         x = x.contiguous()
         # The fused inference operation includes Sinkhorn internally. The
         # unconstrained ablation must use the unfused path even in no_grad.
-        if self.manifold and not torch.is_grad_enabled():
+        if self.manifold and self.projection_backend == 'official' and not torch.is_grad_enabled():
             post, comb, branch = ops.mhc_pre_big_fuse(
                 x, self.phi, self.scales, self.bias, rms_eps=1e-6,
                 mhc_pre_eps=1e-6, mhc_sinkhorn_eps=1e-6,
                 mhc_post_mult_value=2., sinkhorn_repeat=self.iterations, n_splits=1)
         else:
-            mixes = projection(x, self.phi)
+            mixes = projection(x, self.phi, self.projection_backend)
             pre, post, comb = ops.mhc_pre_split_mixes(mixes, self.scales, self.bias, self.streams, 2., 1e-6)
             if self.manifold:
                 comb = sinkhorn_normalize(comb, repeat=self.iterations, eps=1e-6)
@@ -114,9 +138,10 @@ class ManifoldHyperConnection(nn.Module):
 
 
 class ManifoldHyperHead(nn.Module):
-    def __init__(self, width, streams):
+    def __init__(self, width, streams, *, projection_backend='official'):
         super().__init__()
         self.width, self.streams = width, streams
+        self.projection_backend = projection_backend
         self.phi = nn.Parameter(torch.empty(streams, streams*width))
         self.scale = nn.Parameter(torch.empty(1))
         self.bias = nn.Parameter(torch.empty(streams))
@@ -133,6 +158,6 @@ class ManifoldHyperHead(nn.Module):
         # Same 24-row padding as the official mhc_head; materialize the 4-row
         # slice because the kernel interface requires contiguous tensors.
         phi = F.pad(self.phi, (0,0,0,n*(n+2)-n))
-        raw = projection(x.contiguous(), phi)[..., :n].contiguous()
+        raw = projection(x.contiguous(), phi, self.projection_backend)[..., :n].contiguous()
         pre = ops.mhc_head_compute_mix(raw, self.scale, self.bias, 1e-6)
         return ops.mhc_pre_apply_mix(x.contiguous(), pre.unsqueeze(-1))

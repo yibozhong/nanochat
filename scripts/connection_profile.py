@@ -116,9 +116,11 @@ def main():
     p.add_argument('--variant',required=True,choices=['baseline','mhc','mhc_no_manifold'])
     p.add_argument('--data-dir',default='../data')
     p.add_argument('--output-dir',required=True)
+    p.add_argument('--projection-backend',choices=['official','torch','torch_compile'],default='official')
+    p.add_argument('--wandb-group',default='mhc-profiling-20261030')
     a=p.parse_args();out=Path(a.output_dir);out.mkdir(parents=True,exist_ok=True)
     torch.set_num_threads(2);torch.backends.cuda.matmul.allow_tf32=False;seed_all(42)
-    config=ConnectionConfig(variant=a.variant)
+    config=ConnectionConfig(variant=a.variant,projection_backend=a.projection_backend)
     model=ConnectionModel(config).prepare(compile_blocks=True);opt,wd=optimizer_for(model)
     data=PackedData(a.data_dir);source=json.loads(Path('source.json').read_text())
     props=torch.cuda.get_device_properties(0)
@@ -129,8 +131,8 @@ def main():
         optimizer='native MuonAdamW',warmup_steps=20,normal_timed_steps=20,no_finite_check_timed_steps=20,
         event_instrumented_steps=4,profiler_steps=2,torch=torch.__version__,cuda=torch.version.cuda,
         note='66 temporary diagnostic optimizer steps, no checkpoint/pretraining promotion; finite-check-off is diagnostic only')
-    kwargs=dict(project='nanochat',entity='yibozhong657-none',group='mhc-profiling-20261030',
-                name='profile-'+a.variant,job_type='profiling',id=run_id,config=settings)
+    kwargs=dict(project='nanochat',entity='yibozhong657-none',group=a.wandb_group,
+                name='profile-'+a.variant+'-'+a.projection_backend,job_type='profiling',id=run_id,config=settings)
     try:run=wandb.init(**kwargs,settings=wandb.Settings(init_timeout=60))
     except wandb.errors.CommError:run=wandb.init(**kwargs,mode='offline')
     json_write(out/'config.json',settings)
@@ -144,6 +146,7 @@ def main():
     try:
         print('Warmup '+a.variant,flush=True)
         for _ in range(20):perform(train_step)
+        torch.cuda.synchronize();torch.cuda.reset_peak_memory_stats()
         times=[]
         for _ in range(20):
             schedule(opt,step,30518,wd)
@@ -151,6 +154,8 @@ def main():
             loss=perform(train_step,scheduled=True);torch.cuda.synchronize()
             times.append((time.perf_counter()-tick)*1000)
         normal=summarize(times)
+        memory=dict(peak_allocated_bytes=torch.cuda.max_memory_allocated(),
+                    peak_reserved_bytes=torch.cuda.max_memory_reserved())
         print('Normal step ms '+str(normal['mean']),flush=True)
         times=[]
         for _ in range(20):
@@ -187,7 +192,8 @@ def main():
         result=dict(complete=True,variant=a.variant,run_id=run_id,source=source,config=settings,
             optimizer_updates=step,training_tokens=step*32768,elapsed_seconds=time.perf_counter()-started,
             normal_ms=normal,no_finite_check_ms=no_check,phase_means=phase_means,phase_samples=events,
-            cuda_profile=attribution,last_train_ce=loss,pretraining_launched=False)
+            cuda_profile=attribution,last_train_ce=loss,pretraining_launched=False,
+            normal_timing_memory=memory,projection_backend=a.projection_backend)
         assert step==66
         json_write(out/'summary.json',result)
         run.summary.update(dict(complete=True,optimizer_updates=step,training_tokens=step*32768,
