@@ -39,18 +39,32 @@ def main():
     except wandb.errors.CommError:run=wandb.init(**kwargs,mode='offline')
     try:
         suites=[]
-        gates=[('controlled',['tests/test_mhc.py','tests/test_mhc_torch_projection.py',
-                             'tests/test_mhc_nvidia_projection.py','tests/test_mhc_nvidia_full.py'],'0'),
+        # The unchanged 26 legacy tests passed in gate 7547609.0. This retry
+        # reruns all nine full-pipeline tests after correcting the finite-
+        # iteration Sinkhorn assertion, plus six tests at native precision.
+        gates=[('controlled',['tests/test_mhc_nvidia_full.py'],'0'),
                ('native',['tests/test_mhc_nvidia_full.py','-k','pipeline or model_no'],None)]
         for label,tests,override in gates:
             print('Checks '+label,flush=True)
             with (out/f'pytest-{label}.log').open('w') as log:
-                subprocess.run([sys.executable,'-m','pytest',*tests,'-q',f'--junitxml=results/tests-{label}.xml'],
-                    env=environment(override),stdout=log,stderr=subprocess.STDOUT,check=True,timeout=2400)
+                proc=subprocess.Popen([sys.executable,'-m','pytest',*tests,'-v',f'--junitxml=results/tests-{label}.xml'],
+                    env=environment(override),stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,bufsize=1)
+                # Retain the detailed log and expose progress to condor's
+                # streamed stdout, so a long autotune is not a silent wait.
+                import threading
+                def copy_output():
+                    for line in proc.stdout:
+                        log.write(line);log.flush();print(line,end='',flush=True)
+                reader=threading.Thread(target=copy_output,daemon=True);reader.start()
+                try:code=proc.wait(timeout=2400)
+                except subprocess.TimeoutExpired:
+                    proc.kill();proc.wait();reader.join();raise
+                reader.join()
+                if code:raise subprocess.CalledProcessError(code,proc.args)
             suites+=ET.parse(out/f'tests-{label}.xml').getroot().findall('testsuite')
             shutil.copytree(out/'nvidia-full-checks',out/f'oracle-{label}')
         checks={k:sum(int(s.attrib.get(k,0)) for s in suites) for k in ('tests','failures','errors','skipped')}
-        assert checks==dict(tests=41,failures=0,errors=0,skipped=0),checks
+        assert checks==dict(tests=15,failures=0,errors=0,skipped=0),checks
         print('Checks passed '+json.dumps(checks),flush=True)
         manifest=json.loads(Path('../data/manifest.json').read_text())
         for name,info in manifest['files'].items():

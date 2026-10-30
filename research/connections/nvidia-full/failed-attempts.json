@@ -1,0 +1,16 @@
+[
+  {
+    "job": "7547609.0",
+    "source": "9a0742904e729d12ee06076b2cb993ff1b01fa6d",
+    "wandb_run": "95dba177",
+    "tests": 35,
+    "passed": 34,
+    "failed": 1,
+    "reason": "Finite 20-step Sinkhorn row residual (~0.0006) exceeded an unjustified 0.0001 convergence assertion. FP64 same-iteration output/gradient checks passed, as did all full-model/fused tests.",
+    "correction": "Compare 20-step row residual with same-iteration FP64 and separately test 200-step convergence. No model or NVIDIA kernel changes.",
+    "legacy_regression_tests_passed": 26,
+    "full_tests_passed": 8,
+    "profiling_started": false,
+    "archive_sha256": "7b74ce4d7d11a79de21ad57fdd6c5091deda3a39a6f3ea05d2798b235e20e98d"
+  }
+]

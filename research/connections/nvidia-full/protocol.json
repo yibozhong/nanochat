@@ -11,7 +11,7 @@
   "layout": "Persistent B,T,D,4; phi columns interleaved once at initialization; same effective seed weights",
   "numerical_conventions": "TE uses float32 machine epsilon for RMS, no extra pre-gate epsilon, and log-space Sinkhorn; unmodified upstream sources checked by SHA",
   "fusion": "Test native per-invocation FP32 gradient buffer against unfused path, repeated backward, and activation checkpointing; enable only after gate",
-  "tests": "35 controlled checks + 6 native cuBLAS checks, independently compare FP64 math, true2K causality, cache, CCE, and every gradient",
+  "tests": "Retry: 9 full controlled +6 native =15 checks; unchanged 26 legacy regressions already passed in 7547609.0. Full model/kernel code unchanged.",
   "trials": [
     "baseline",
     "mhc_deepseek",
@@ -22,5 +22,6 @@
   "timing": "Same GPU, same 8-layer D512/4-head/2K/32K/FineWeb/seed42/native MuonAdamW, micro16 accum1; 20 warmup +60 normal timed +26 diagnostic updates each; fresh process per model",
   "training_budget_tokens": 17367040,
   "pretraining": false,
-  "limitations": "Embedding replication uses standard PyTorch because TE has no standalone expand-to-streams API; parameter containers/init/optimizer remain local nanochat choices"
+  "limitations": "Embedding replication uses standard PyTorch because TE has no standalone expand-to-streams API; parameter containers/init/optimizer remain local nanochat choices",
+  "first_gate": "7547609.0: 34/35 passed; retained failed attempt records the corrected finite-iteration Sinkhorn assertion"
 }

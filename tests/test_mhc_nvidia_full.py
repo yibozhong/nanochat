@@ -83,11 +83,18 @@ def test_nvidia_scale_sinkhorn_fp64_and_extreme_logits():
     ga=torch.autograd.grad(sum((v*p).sum() for v,p in zip((pre,post,comb),probes)),(h,a,b,ms))
     gr=torch.autograd.grad(sum((v*p.double()).sum() for v,p in zip((pr,po,cr),probes)),(hr,ar,br,mr))
     errors=dict(output=[relative(x,y) for x,y in zip((pre,post,comb),(pr,po,cr))],
-                gradients=[relative(x,y) for x,y in zip(ga,gr)])
+                gradients=[relative(x,y) for x,y in zip(ga,gr)],
+                row_residual_20=(comb.sum(-1)-1).abs().max().item(),
+                fp64_row_residual_20=(cr.sum(-1)-1).abs().max().item())
     record('scale-sinkhorn',errors)
     assert max(errors['output'])<2e-5 and max(errors['gradients'])<1e-4,errors
-    assert (comb.sum(-1)-1).abs().max()<1e-4
+    # A finite 20-iteration algorithm is not an exact doubly-stochastic solve.
+    # Check its row residual against the same-iteration FP64 reference instead
+    # of assuming arbitrary logits converge to a preset residual in 20 steps.
+    torch.testing.assert_close(comb.sum(-1).double(),cr.sum(-1),atol=2e-6,rtol=2e-5)
     assert (comb.sum(-2)-1).abs().max()<1e-5
+    converged=ops.mhc_fused_sinkhorn(res.detach().reshape(1,128,4,4),4,iters=200)
+    assert (converged.sum(-1)-1).abs().max()<1e-5
     z=(torch.randn(2,64,4,4,device='cuda')*100).requires_grad_()
     out=ops.mhc_fused_sinkhorn(z,4,iters=20)
     grad=torch.autograd.grad((out*torch.randn_like(out)).sum(),z)[0]
