@@ -1,4 +1,4 @@
-"""Full-attention vanilla/mHC on the existing nanochat attention and MLP.
+"""Full-attention vanilla/mHC and no-manifold on nanochat attention and MLP.
 
 This research model keeps native GPT and its SSSL/extras path unchanged.
 The residual option matches the audited 58.72M full-attention vanilla baseline.

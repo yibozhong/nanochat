@@ -33,8 +33,44 @@ The bounded comparison runs vanilla, mHC and no-manifold for 50 updates each on
 one physical GPU, at the existing 32,768-token batch and seed42. Steady steps
 11–50, dev loss and peak memory will be reported together. W&B remains project
 `nanochat`, group `mhc-manifold-ablation-20261030`. This does not launch a 1B run.
-Results for this new ablation are pending; the completed mHC results below are
-the earlier two-variant validation.
+The ablation completed successfully in job `7547005.0`, one execution, source
+`7812450`. **18 tests passed**, zero failures/errors; 10 native FA3
+comparison tests were skipped on SM120. All four W&B runs were verified through
+the API. The collector checked identical data, seed, batch/LR protocol and mHC /
+no-manifold parameter counts (59,515,317). The official source-file hashes
+matched; GPU used the native CUDA 13.1 driver on RTX PRO 6000 Blackwell.
+
+| Variant | Step-50 dev CE | Steady seconds/step | Peak PyTorch reserved GiB |
+| --- | ---: | ---: | ---: |
+| Vanilla | 6.496122 | 0.080279 | 5.389 |
+| mHC | 6.498739 | 0.152356 | 8.475 |
+| No manifold | 6.536396 | 0.148973 | 8.443 |
+
+Removing Sinkhorn reduced steady step time by **2.22%**, leaving the
+no-manifold variant **85.57% slower than vanilla**. Its reserved memory was
+only 32 MiB lower. Thus most of the measured overhead remains without the
+manifold projection in this implementation and model size. This ablation does
+not identify which remaining operator or host-side dispatch is responsible.
+No-manifold dev CE was 0.037657 higher than mHC after 50 steps;
+this is a single short run, not a long-run quality conclusion.
+
+Timings average steps 11–50; no steps within that range were filtered. Per-step
+standard deviations were 0.208/0.296/0.285 ms respectively. Trials run
+sequentially and can reuse compilation caches, so their total startup-inclusive
+wall times must not be interpreted as steady training speedups. Memory refers
+to PyTorch reserved memory rather than all GPU allocations. Each variant saw
+1,638,400 training tokens and the same 131,072-token dev set; test was not used.
+
+- [Audited results](no-manifold/validation.json), [kernel errors](no-manifold/kernel-errors.json),
+  [all measured step times](no-manifold/timings.json)
+- [Correctness run](https://wandb.ai/yibozhong657-none/nanochat/runs/3e3e6eea),
+  [vanilla](https://wandb.ai/yibozhong657-none/nanochat/runs/91c75be2),
+  [mHC](https://wandb.ai/yibozhong657-none/nanochat/runs/32cc59fd),
+  [no manifold](https://wandb.ai/yibozhong657-none/nanochat/runs/7f4ce283)
+
+Run this variant with `python -m scripts.connection_train --variant mhc_no_manifold
+--steps 50 --data-dir data --output-dir outputs/no-manifold` after activating the
+locked runtime/toolchain described below. No full 1B training was submitted.
 
 ## Official code used directly
 

@@ -1,4 +1,4 @@
-"""Single-GPU packed FineWeb-Edu training: baseline or official TileKernels mHC.
+"""Single-GPU FineWeb-Edu training: vanilla, mHC, or no-manifold ablation.
 
 Example: python -m scripts.connection_train --variant mhc --steps 50 --data-dir data
 Steps are required deliberately; implementation checks do not launch a 1B run.

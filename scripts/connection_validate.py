@@ -1,4 +1,4 @@
-"""Compute-node correctness and two 50-step integration smokes; no promotion."""
+"""Compute-node correctness and selected 50-step integration smokes; no promotion."""
 import argparse
 import json
 import math
