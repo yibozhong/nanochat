@@ -17,6 +17,9 @@ dependencies = [
 ]
 
 [dependency-groups]
+research = [
+    "cut-cross-entropy @ git+https://github.com/apple/ml-cross-entropy.git@3de376c106a1916bc5e1b619f9c77c87a461ee1c",
+]
 dev = [
     "ipykernel>=7.1.0",
     "matplotlib>=3.10.8",

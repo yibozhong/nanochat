@@ -1,0 +1,54 @@
+{
+  "status": "verified",
+  "variant": "baseline",
+  "model": {
+    "depth": 8,
+    "width": 512,
+    "heads": 4,
+    "sequence_length": 2048,
+    "vocab_size": 32768
+  },
+  "batch_tokens": 32768,
+  "microbatch": 16,
+  "grad_accum": 1,
+  "activation_checkpoint": false,
+  "compile_blocks": true,
+  "dtype": "bfloat16",
+  "optimizer_and_lr": "unchanged native defaults",
+  "gpu": "NVIDIA A30",
+  "gpus_minimum_memory_mb": 7168,
+  "gpus_minimum_capability": 8.0,
+  "exclude_mig": true,
+  "smallest_compatible_gpu_class": "A30 24GB",
+  "steady_tokens_per_second": 134084.70305835624,
+  "peak_allocated_bytes": 5770930688,
+  "peak_reserved_bytes": 5790236672,
+  "conservative_peak_bytes": 6151798784,
+  "source": {
+    "commit": "ca6db4213b60beaf82879ff5aae320b36b52691b",
+    "model_commit": "6fbdaac32758daeda142e95a3958cbc0f136425e",
+    "native_commit": "145da40cdd37b9522aa53d26c0c356e9126458bb",
+    "hashes": {
+      "tuning-source.tar": "71248d1e54a29f887bb0bcf7cc628ea0f3f62f3314f99f3948f003be6e916551",
+      "model-source.tar": "e343d3041a406d1ad652bbd51c638c7a8018ec282c012259831c9c02cecfff2c",
+      "nanochat-145da40.tar": "9a39516fc52effabe6bf9b87fc5fc67f7026a95060861be560d3525257bfb3e6",
+      "cce-3de376c.tar.gz": "efe1a0f10675822ee8daef868fdd1655355c76268767a1584596c3dffb002a7a"
+    }
+  },
+  "run_id": "e9c97bc6",
+  "wandb_url": "https://wandb.ai/yibozhong657-none/nanochat/runs/e9c97bc6",
+  "selection_scope": "User selected the measured microbatch16 candidate within the 24GB-compatible memory budget; retune for changed architecture/context/dtype.",
+  "wandb_verified": true,
+  "job": "7541604.0",
+  "audited_at": 1793368162.1722884,
+  "selection_policy": "user_requested_no_gradient_accumulation",
+  "measurement": {
+    "candidate_label": "mb16-cp0",
+    "warmup_steps": 10,
+    "measured_steps": 60,
+    "dev_tokens": 131072,
+    "checkpoint_save_passed": true,
+    "additional_retest_steps": 0,
+    "note": "The 180-step retest and original W&B selected_microbatch=8 remain historical; this later user decision uses the passed mb16-cp0 candidate."
+  }
+}

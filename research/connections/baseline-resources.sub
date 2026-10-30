@@ -1,0 +1,6 @@
+# User-selected measured default; full-attention vanilla, microbatch16/accum1.
+# 7168MiB includes headroom over the measured 5.73GiB device peak.
+request_gpus = 1
+gpus_minimum_memory = 7168M
+gpus_minimum_capability = 8.0
+require_gpus = (Capability >= 8.0) && (GlobalMemoryMb >= 7168) && !regexp("MIG",DeviceName)
