@@ -260,6 +260,56 @@ fresh processes per microbenchmark, 60 ordinary timing samples after warmup and
 one GC collection (automatic GC remains enabled), and adds native TE/cuBLAS
 precision. [Follow-up protocol](nvidia-native/protocol.json).
 
+The follow-up **completed successfully** as `7547373.0`, source `558dbbc`, on one
+H100 80GB (UUID `fff6db8e-df5b-6a7f-c506-eb78b2f0c043`). All **29 tests passed**,
+none failed or skipped, and all seven W&B runs were verified. Each model used
+106 temporary optimizer updates, including 20 warmup and 60 ordinary timed
+steps, with the same D512/8-layer/2K, micro16/accum1, FineWeb data, seed and
+optimizer. These H100 timings form their own comparison; do not mix them with
+the earlier RTX PRO 6000 numbers.
+
+| H100 configuration | Mean ms/step | Median ms/step | Overhead vs vanilla | Peak reserved GiB |
+| --- | ---: | ---: | ---: | ---: |
+| Vanilla | 64.933 | 64.677 | — | 5.471 |
+| DeepSeek projection | 137.967 | 137.721 | 112.5% | 8.480 |
+| Compiled PyTorch projection | 97.021 | 97.013 | 49.4% | 12.789 |
+| NVIDIA native precision | 95.306 | 95.356 | 46.8% | 8.795 |
+| NVIDIA TF32, FP32 weight gradient | 95.599 | 95.355 | 47.2% | 8.795 |
+| NVIDIA TF32x3, FP32 weight gradient | 98.545 | 98.350 | 51.8% | 8.795 |
+
+NVIDIA native precision reduces full-step time **30.9%** versus the original
+DeepSeek projection, and **1.8%** versus compiled PyTorch in this short trial.
+It still takes **46.8% longer than vanilla**. Its 60-step mean/median agree and
+SD is 0.714 ms; there is no pause comparable to the first trial's 377 ms outlier.
+Native versus FP32 weight-gradient timing differs by only 0.293 ms, so this
+single short trial does not establish a meaningful advantage from relaxing
+that GEMM's precision. NVIDIA's allocator footprint is lower than compiled
+PyTorch's, but higher than vanilla's. All mHC variants still use DeepSeek's
+remaining operators, so this is not a full NVIDIA mHC implementation benchmark.
+
+Independent-process projection microbenchmarks (forward/backward ms) were:
+DeepSeek 0.179/3.132; compiled PyTorch 0.387/0.594; NVIDIA native 0.272/0.597;
+NVIDIA FP32 weight-gradient 0.227/0.629; NVIDIA precise 0.489/0.525. These include
+launch gaps and a scalar probe; they are not isolated device-kernel times. The
+earlier 5.206 ms precise-forward result must not be interpreted as intrinsic
+TF32x3 cost. The H100 run uses independent tuning and different hardware, so it
+does not alone prove the cause of the earlier anomaly.
+
+Native NVIDIA projection's maximum relative FP64 errors over D128/D512 were
+4.172e-4 (output), 1.997e-3 (input gradient), and 2.040e-4 (weight gradient).
+The precise setting gave 5.607e-7, 2.235e-5 and 1.633e-7 respectively. Both passed
+their declared precision-specific thresholds. Kernel traces verify the NVIDIA
+forward and backward paths replaced all old projection calls. This is a
+correctness/throughput result, with **no long-run quality comparison or 1B run**.
+
+- [Completed follow-up results](nvidia-native/results.json),
+  [numerical and trace audit](nvidia-native/audit.json),
+  [W&B audit](https://wandb.ai/yibozhong657-none/nanochat/runs/5fb502fa).
+- The initial H200 attempt was preempted during setup. The cached extension
+  source was then fixed by declaring it as a direct dependency; the successful
+  H100 attempt installed the SHA-verified wheel without rebuilding it. Package
+  versions and numerical/measurement protocols were unchanged.
+
 - [Controlled results](nvidia-projection/results.json),
   [numeric/trace audit](nvidia-projection/audit.json),
   [retained failed attempts](nvidia-projection/failed-attempts.json).

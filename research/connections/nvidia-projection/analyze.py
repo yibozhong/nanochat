@@ -46,7 +46,14 @@ def main():
                   if p.name.startswith('results/torch-projection-checks/') and p.name.endswith('.json')}
         assert len(errors) == 8, errors.keys()
         separate = {p.name: json.load(tar.extractfile(p)) for p in tar.getmembers()
-                    if p.isfile() and p.name.startswith('results/oracle-') and p.name.endswith('.json')}
+                    if p.isfile() and p.name.startswith('results/oracle-') and p.name.endswith('.json')
+                    # The native suite reruns only nvidia, leaving the other
+                    # oracle files from the controlled suite in its directory.
+                    and (not p.name.startswith('results/oracle-native/')
+                         or Path(p.name).name.startswith('nvidia-d'))}
+        if separate:
+            assert sum(p.startswith('results/oracle-controlled/') for p in separate) == 8
+            assert sum(p.startswith('results/oracle-native/') for p in separate) == 2
     audit = dict(job=state['job'], source=result['source'], checks=result['checks'],
         gpu=trials['baseline']['config']['gpu'], gpu_uuid=trials['baseline']['config']['gpu_uuid'],
         same_gpu=True, upstream_kernel_trace_verified=True, numerical_errors=separate or errors,

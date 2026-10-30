@@ -1,0 +1,1387 @@
+{
+  "job": "7547373.0",
+  "source": {
+    "commit": "558dbbcb15f960f5bb4487b2a6420e88c3def190",
+    "official_tilekernels": "36d9e45d38e204ebb87e6f6e833821eee0482fe5",
+    "native_base": "145da40cdd37b9522aa53d26c0c356e9126458bb",
+    "transformer_engine": "2.20.2",
+    "hashes": {
+      "source.tar": "b1532c734aaa1a91db2424b14a5fd1c293b9a36628a5deb6b8b44f0101bd5a8b",
+      "legacy-baseline.tar": "5f92ef457c61e8b4ab7d145873857b4772f4668b69c1236a9e93562283e67c24",
+      "mhc-official-runtime-7546767.tar.gz": "6b927f93021961293e12452b4001a479ff1b54cbc1aae0355e73e75a393d4dc0",
+      "cuda-compat-13-1_590.48.01-1_amd64.deb": "066f24c715f5f8f31bb7e8bd0f9ddc93fe78a82d3be55c6f3e9bbe26fa4fd7be",
+      "transformer_engine_torch-2.20.2-cp311-cp311-linux_x86_64.whl": "9b69f40b34570e3073171dcb231d6dd038092d20a277e501e7da01e6475920de"
+    },
+    "purpose": "Isolated-process native NVIDIA precision and steady timing follow-up; no 1B training",
+    "extension_cache": {
+      "wheel": "transformer_engine_torch-2.20.2-cp311-cp311-linux_x86_64.whl",
+      "sha256": "9b69f40b34570e3073171dcb231d6dd038092d20a277e501e7da01e6475920de",
+      "torch": "2.10.0+cu130",
+      "cuda": "13.0",
+      "cxx11_abi": true,
+      "source": "Unmodified PyPI transformer-engine-torch 2.20.2 sdist, repacked installed extension; retained to avoid repeated C++ builds",
+      "files": [
+        "transformer_engine/wheel_lib/transformer_engine_torch.cpython-311-x86_64-linux-gnu.so",
+        "transformer_engine_torch-2.20.2.dist-info/METADATA",
+        "transformer_engine_torch-2.20.2.dist-info/WHEEL",
+        "transformer_engine_torch-2.20.2.dist-info/licenses/LICENSE",
+        "transformer_engine_torch-2.20.2.dist-info/top_level.txt",
+        "transformer_engine_torch-2.20.2.dist-info/uv_build.json",
+        "transformer_engine_torch-2.20.2.dist-info/RECORD"
+      ]
+    },
+    "setup_repair": "Direct wheel dependency and no-build-package guard; no model, numerical or timing changes."
+  },
+  "checks": {
+    "tests": 29,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "gpu": "NVIDIA H100 80GB HBM3",
+  "gpu_uuid": "fff6db8e-df5b-6a7f-c506-eb78b2f0c043",
+  "same_gpu": true,
+  "upstream_kernel_trace_verified": true,
+  "numerical_errors": {
+    "results/oracle-controlled/torch_compile-d512.json": {
+      "fp64_output": 2.2251749510987746e-07,
+      "fp64_input_grad": 2.2092665217193414e-05,
+      "fp64_weight_grad": 1.6281834731984868e-07,
+      "official_output": 0.00020617208467231578,
+      "official_gradients": [
+        0.0010368399334143936,
+        0.00020402485907316785
+      ]
+    },
+    "results/oracle-controlled/nvidia-d128.json": {
+      "fp64_output": 0.0004171139447081054,
+      "fp64_input_grad": 0.0019971104563183445,
+      "fp64_weight_grad": 1.6111429974907382e-07,
+      "official_output": 0.0005113812126895699,
+      "official_gradients": [
+        0.002045456839414671,
+        0.00020177743319978297
+      ]
+    },
+    "results/oracle-controlled/torch_compile-d128.json": {
+      "fp64_output": 1.618684242477891e-07,
+      "fp64_input_grad": 3.96660094980248e-05,
+      "fp64_weight_grad": 1.610203323491295e-07,
+      "official_output": 0.00020795866448763368,
+      "official_gradients": [
+        0.0010378254654078197,
+        0.0002017760926477208
+      ]
+    },
+    "results/oracle-controlled/nvidia_precise-d512.json": {
+      "fp64_output": 5.606578165815364e-07,
+      "fp64_input_grad": 2.2350091467712952e-05,
+      "fp64_weight_grad": 1.6326213871202502e-07,
+      "official_output": 0.00020613764091226375,
+      "official_gradients": [
+        0.00103669871675853,
+        0.00020402447464421222
+      ]
+    },
+    "results/oracle-controlled/torch-d512.json": {
+      "fp64_output": 2.219261589375473e-07,
+      "fp64_input_grad": 2.5698029532208517e-05,
+      "fp64_weight_grad": 1.6322652872157119e-07,
+      "official_output": 0.00020617130156691407,
+      "official_gradients": [
+        0.001036923033337052,
+        0.00020402495933073982
+      ]
+    },
+    "results/oracle-controlled/nvidia-d512.json": {
+      "fp64_output": 0.0004141280710281956,
+      "fp64_input_grad": 0.001996597653479294,
+      "fp64_weight_grad": 1.6326213871202502e-07,
+      "official_output": 0.000503942615583385,
+      "official_gradients": [
+        0.0020412494429797464,
+        0.00020402447464421222
+      ]
+    },
+    "results/oracle-controlled/nvidia_precise-d128.json": {
+      "fp64_output": 5.577772677346162e-07,
+      "fp64_input_grad": 1.9155598796992732e-05,
+      "fp64_weight_grad": 1.6111429974907382e-07,
+      "official_output": 0.00020792742904418985,
+      "official_gradients": [
+        0.0010368974113493723,
+        0.00020177743319978297
+      ]
+    },
+    "results/oracle-controlled/torch-d128.json": {
+      "fp64_output": 1.6243803241017417e-07,
+      "fp64_input_grad": 3.9639869842684045e-05,
+      "fp64_weight_grad": 1.6127831731876355e-07,
+      "official_output": 0.00020795887875403328,
+      "official_gradients": [
+        0.0010378244677428517,
+        0.00020177440942634558
+      ]
+    },
+    "results/oracle-native/nvidia-d128.json": {
+      "fp64_output": 0.0004171139447081054,
+      "fp64_input_grad": 0.0019971104563183445,
+      "fp64_weight_grad": 0.00020178556096488542,
+      "official_output": 0.0005113812126895699,
+      "official_gradients": [
+        0.002045456839414671,
+        1.0447689734483703e-06
+      ]
+    },
+    "results/oracle-native/nvidia-d512.json": {
+      "fp64_output": 0.0004141280710281956,
+      "fp64_input_grad": 0.001996597653479294,
+      "fp64_weight_grad": 0.00020395458362406773,
+      "official_output": 0.000503942615583385,
+      "official_gradients": [
+        0.0020412494429797464,
+        1.4563072028512106e-05
+      ]
+    }
+  },
+  "timings": {
+    "baseline": {
+      "mean_ms": 64.93331162879865,
+      "stdev_ms": 0.8698137405786341,
+      "median_ms": 64.67724405229092,
+      "max_ms": 70.3086256980896,
+      "overhead_vs_baseline_pct": 0.0,
+      "reduction_vs_official_pct": 52.93558535453291,
+      "reduction_vs_compiled_pct": 33.07271711046182,
+      "memory_gib": {
+        "peak_allocated_bytes": 5.374598026275635,
+        "peak_reserved_bytes": 5.470703125
+      },
+      "phase_means": {
+        "cpu_wall_ms": {
+          "zero_grad": 0.12809690088033676,
+          "data": 0.17218710854649544,
+          "forward": 6.935850717127323,
+          "backward": 8.858072571456432,
+          "finite_check": 44.60181714966893,
+          "optimizer": 3.6480301059782505,
+          "loss_item": 0.023478176444768906
+        },
+        "stream_elapsed_ms": {
+          "zero_grad": 0.14140800014138222,
+          "data": 0.1836800016462803,
+          "forward": 16.51585626602173,
+          "backward": 42.773048400878906,
+          "finite_check": 1.2609359920024872,
+          "optimizer": 3.6771759390830994,
+          "loss_item": 0.03317599929869175
+        }
+      },
+      "run_id": "d4e1d1ca",
+      "projection_kernels": []
+    },
+    "mhc_official": {
+      "mean_ms": 137.96689519658685,
+      "stdev_ms": 0.9072115249515973,
+      "median_ms": 137.72085774689913,
+      "max_ms": 141.35021157562733,
+      "overhead_vs_baseline_pct": 112.47475561587868,
+      "reduction_vs_official_pct": 0.0,
+      "reduction_vs_compiled_pct": -42.20358075989403,
+      "memory_gib": {
+        "peak_allocated_bytes": 8.280363082885742,
+        "peak_reserved_bytes": 8.48046875
+      },
+      "phase_means": {
+        "cpu_wall_ms": {
+          "zero_grad": 0.18644239753484726,
+          "data": 0.21857256069779396,
+          "forward": 12.947443407028913,
+          "backward": 22.757560946047306,
+          "finite_check": 94.03730416670442,
+          "optimizer": 6.177333183586597,
+          "loss_item": 0.02441834658384323
+        },
+        "stream_elapsed_ms": {
+          "zero_grad": 0.20000800117850304,
+          "data": 0.2332479991018772,
+          "forward": 22.481224060058594,
+          "backward": 105.49271011352539,
+          "finite_check": 1.923911988735199,
+          "optimizer": 6.209272027015686,
+          "loss_item": 0.034047999419271946
+        }
+      },
+      "run_id": "88d9eaff",
+      "projection_kernels": [
+        {
+          "name": "_mhc_pre_norm_fn_bwd_mul_kernel_kernel",
+          "count": 34,
+          "total_us": 101272.219,
+          "grids": [
+            [
+              1,
+              16,
+              1
+            ]
+          ],
+          "ms_per_step": 50.636109499999996
+        },
+        {
+          "name": "_mhc_pre_norm_fn_fwd_mul_kernel_kernel",
+          "count": 34,
+          "total_us": 2719.2950000000005,
+          "grids": [
+            [
+              1024,
+              1,
+              1
+            ]
+          ],
+          "ms_per_step": 1.3596475000000003
+        },
+        {
+          "name": "_mhc_pre_norm_fn_bwd_norm_kernel_kernel",
+          "count": 34,
+          "total_us": 728.2240000000003,
+          "grids": [
+            [
+              32768,
+              1,
+              1
+            ]
+          ],
+          "ms_per_step": 0.36411200000000016
+        },
+        {
+          "name": "_mhc_pre_norm_fn_fwd_norm_kernel_kernel",
+          "count": 34,
+          "total_us": 723.361,
+          "grids": [
+            [
+              32768,
+              1,
+              1
+            ]
+          ],
+          "ms_per_step": 0.3616805
+        }
+      ]
+    },
+    "mhc_torch_compile": {
+      "mean_ms": 97.02068995684385,
+      "stdev_ms": 0.4992129386362739,
+      "median_ms": 97.01321553438902,
+      "max_ms": 98.53794984519482,
+      "overhead_vs_baseline_pct": 49.41589689969561,
+      "reduction_vs_official_pct": 29.678282736883656,
+      "reduction_vs_compiled_pct": 0.0,
+      "memory_gib": {
+        "peak_allocated_bytes": 12.628812789916992,
+        "peak_reserved_bytes": 12.7890625
+      },
+      "phase_means": {
+        "cpu_wall_ms": {
+          "zero_grad": 0.18576718866825104,
+          "data": 0.20314520224928856,
+          "forward": 15.830941963940859,
+          "backward": 24.317345581948757,
+          "finite_check": 49.80668006464839,
+          "optimizer": 6.2099844217300415,
+          "loss_item": 0.02437504008412361
+        },
+        "stream_elapsed_ms": {
+          "zero_grad": 0.19948800280690193,
+          "data": 0.21639199927449226,
+          "forward": 25.400760173797607,
+          "backward": 62.778000831604004,
+          "finite_check": 1.9332800209522247,
+          "optimizer": 6.241207957267761,
+          "loss_item": 0.03400799911469221
+        }
+      },
+      "run_id": "739ef3ad",
+      "projection_kernels": []
+    },
+    "mhc_nvidia_native": {
+      "mean_ms": 95.30600709840655,
+      "stdev_ms": 0.7137728237930108,
+      "median_ms": 95.35552933812141,
+      "max_ms": 97.3188504576683,
+      "overhead_vs_baseline_pct": 46.77521399684361,
+      "reduction_vs_official_pct": 30.921104687753875,
+      "reduction_vs_compiled_pct": 1.7673373166074313,
+      "memory_gib": {
+        "peak_allocated_bytes": 8.552886009216309,
+        "peak_reserved_bytes": 8.794921875
+      },
+      "phase_means": {
+        "cpu_wall_ms": {
+          "zero_grad": 0.17808005213737488,
+          "data": 0.20077219232916832,
+          "forward": 14.875221066176891,
+          "backward": 27.252531144768,
+          "finite_check": 45.46855576336384,
+          "optimizer": 6.148635875433683,
+          "loss_item": 0.024037901312112808
+        },
+        "stream_elapsed_ms": {
+          "zero_grad": 0.19219199940562248,
+          "data": 0.21402399986982346,
+          "forward": 24.394512176513672,
+          "backward": 61.347662925720215,
+          "finite_check": 2.0028800070285797,
+          "optimizer": 6.179128050804138,
+          "loss_item": 0.03312800033017993
+        }
+      },
+      "run_id": "bcaa4ce2",
+      "projection_kernels": [
+        {
+          "name": "_mhc_projection_fwd_fused",
+          "count": 34,
+          "total_us": 2475.5180000000005,
+          "grids": [
+            [
+              256,
+              1,
+              1
+            ]
+          ],
+          "ms_per_step": 1.2377590000000003
+        },
+        {
+          "name": "_mhc_projection_bwd_fused_dx",
+          "count": 34,
+          "total_us": 3538.463000000001,
+          "grids": [
+            [
+              1024,
+              16,
+              1
+            ]
+          ],
+          "ms_per_step": 1.7692315000000005
+        }
+      ]
+    },
+    "mhc_nvidia_fp32_dw": {
+      "mean_ms": 95.59925769766171,
+      "stdev_ms": 0.9077030200696186,
+      "median_ms": 95.35450767725706,
+      "max_ms": 98.96515123546124,
+      "overhead_vs_baseline_pct": 47.22683211379963,
+      "reduction_vs_official_pct": 30.708553264575645,
+      "reduction_vs_compiled_pct": 1.4650815818918805,
+      "memory_gib": {
+        "peak_allocated_bytes": 8.552886009216309,
+        "peak_reserved_bytes": 8.794921875
+      },
+      "phase_means": {
+        "cpu_wall_ms": {
+          "zero_grad": 0.1907176338136196,
+          "data": 0.20744698122143745,
+          "forward": 15.381137374788523,
+          "backward": 27.033334597945213,
+          "finite_check": 46.23248614370823,
+          "optimizer": 6.133364979177713,
+          "loss_item": 0.025735236704349518
+        },
+        "stream_elapsed_ms": {
+          "zero_grad": 0.20768800005316734,
+          "data": 0.22084800153970718,
+          "forward": 24.93940782546997,
+          "backward": 61.94867134094238,
+          "finite_check": 1.9010480046272278,
+          "optimizer": 6.163104057312012,
+          "loss_item": 0.035559999756515026
+        }
+      },
+      "run_id": "6717b502",
+      "projection_kernels": [
+        {
+          "name": "_mhc_projection_fwd_fused",
+          "count": 34,
+          "total_us": 2476.223,
+          "grids": [
+            [
+              256,
+              1,
+              1
+            ]
+          ],
+          "ms_per_step": 1.2381115
+        },
+        {
+          "name": "_mhc_projection_bwd_fused_dx",
+          "count": 34,
+          "total_us": 3532.3230000000003,
+          "grids": [
+            [
+              1024,
+              16,
+              1
+            ]
+          ],
+          "ms_per_step": 1.7661615000000002
+        }
+      ]
+    },
+    "mhc_nvidia_precise": {
+      "mean_ms": 98.54515626405676,
+      "stdev_ms": 0.5657809015442471,
+      "median_ms": 98.34969602525234,
+      "max_ms": 101.40680521726608,
+      "overhead_vs_baseline_pct": 51.76363840397582,
+      "reduction_vs_official_pct": 28.573331940505497,
+      "reduction_vs_compiled_pct": -1.571279598084696,
+      "memory_gib": {
+        "peak_allocated_bytes": 8.552886009216309,
+        "peak_reserved_bytes": 8.794921875
+      },
+      "phase_means": {
+        "cpu_wall_ms": {
+          "zero_grad": 0.18387055024504662,
+          "data": 0.21048495545983315,
+          "forward": 17.21383584663272,
+          "backward": 27.53522526472807,
+          "finite_check": 46.56240716576576,
+          "optimizer": 6.190701853483915,
+          "loss_item": 0.024973880499601364
+        },
+        "stream_elapsed_ms": {
+          "zero_grad": 0.19754400104284286,
+          "data": 0.22416000068187714,
+          "forward": 26.73861598968506,
+          "backward": 62.78806400299072,
+          "finite_check": 1.9305439889431,
+          "optimizer": 6.221400022506714,
+          "loss_item": 0.034648001194000244
+        }
+      },
+      "run_id": "1d991111",
+      "projection_kernels": [
+        {
+          "name": "_mhc_projection_fwd_fused",
+          "count": 34,
+          "total_us": 11973.353999999996,
+          "grids": [
+            [
+              512,
+              1,
+              1
+            ]
+          ],
+          "ms_per_step": 5.986676999999998
+        },
+        {
+          "name": "_mhc_projection_bwd_fused_dx",
+          "count": 34,
+          "total_us": 4861.857000000002,
+          "grids": [
+            [
+              1024,
+              16,
+              1
+            ]
+          ],
+          "ms_per_step": 2.4309285000000007
+        }
+      ]
+    }
+  },
+  "microbenchmark": {
+    "mhc_official": {
+      "shape": [
+        16,
+        2048,
+        4,
+        512
+      ],
+      "weight_shape": [
+        24,
+        2048
+      ],
+      "backends": {
+        "official": {
+          "samples": [
+            {
+              "forward_ms": 0.21427200734615326,
+              "backward_ms": 3.337984085083008,
+              "total_ms": 3.5522561073303223
+            },
+            {
+              "forward_ms": 0.20720000565052032,
+              "backward_ms": 3.1614720821380615,
+              "total_ms": 3.3686718940734863
+            },
+            {
+              "forward_ms": 0.1820800006389618,
+              "backward_ms": 3.138047933578491,
+              "total_ms": 3.3201279640197754
+            },
+            {
+              "forward_ms": 0.17830400168895721,
+              "backward_ms": 3.131135940551758,
+              "total_ms": 3.3094398975372314
+            },
+            {
+              "forward_ms": 0.1753920018672943,
+              "backward_ms": 3.123584032058716,
+              "total_ms": 3.298975944519043
+            },
+            {
+              "forward_ms": 0.17324799299240112,
+              "backward_ms": 3.1146559715270996,
+              "total_ms": 3.2879040241241455
+            },
+            {
+              "forward_ms": 0.17609600722789764,
+              "backward_ms": 3.135296106338501,
+              "total_ms": 3.311392068862915
+            },
+            {
+              "forward_ms": 0.17584000527858734,
+              "backward_ms": 3.1257920265197754,
+              "total_ms": 3.3016319274902344
+            },
+            {
+              "forward_ms": 0.17846399545669556,
+              "backward_ms": 3.1230080127716064,
+              "total_ms": 3.3014719486236572
+            },
+            {
+              "forward_ms": 0.1789119988679886,
+              "backward_ms": 3.1187520027160645,
+              "total_ms": 3.297663927078247
+            },
+            {
+              "forward_ms": 0.17696000635623932,
+              "backward_ms": 3.1171839237213135,
+              "total_ms": 3.2941439151763916
+            },
+            {
+              "forward_ms": 0.1724800020456314,
+              "backward_ms": 3.109663963317871,
+              "total_ms": 3.282144069671631
+            },
+            {
+              "forward_ms": 0.17347200214862823,
+              "backward_ms": 3.1235198974609375,
+              "total_ms": 3.296992063522339
+            },
+            {
+              "forward_ms": 0.17180800437927246,
+              "backward_ms": 3.1150400638580322,
+              "total_ms": 3.2868480682373047
+            },
+            {
+              "forward_ms": 0.17440000176429749,
+              "backward_ms": 3.121151924133301,
+              "total_ms": 3.2955520153045654
+            },
+            {
+              "forward_ms": 0.1892160028219223,
+              "backward_ms": 3.1638400554656982,
+              "total_ms": 3.353055953979492
+            },
+            {
+              "forward_ms": 0.1807360053062439,
+              "backward_ms": 3.132607936859131,
+              "total_ms": 3.3133440017700195
+            },
+            {
+              "forward_ms": 0.17635199427604675,
+              "backward_ms": 3.130687952041626,
+              "total_ms": 3.307039976119995
+            },
+            {
+              "forward_ms": 0.1815679967403412,
+              "backward_ms": 3.1229119300842285,
+              "total_ms": 3.3044800758361816
+            },
+            {
+              "forward_ms": 0.17520000040531158,
+              "backward_ms": 3.1222400665283203,
+              "total_ms": 3.2974400520324707
+            },
+            {
+              "forward_ms": 0.17126399278640747,
+              "backward_ms": 3.11843204498291,
+              "total_ms": 3.289695978164673
+            },
+            {
+              "forward_ms": 0.17737600207328796,
+              "backward_ms": 3.1236159801483154,
+              "total_ms": 3.300992012023926
+            },
+            {
+              "forward_ms": 0.17475199699401855,
+              "backward_ms": 3.110208034515381,
+              "total_ms": 3.2849600315093994
+            },
+            {
+              "forward_ms": 0.1761920005083084,
+              "backward_ms": 3.119136095046997,
+              "total_ms": 3.29532790184021
+            },
+            {
+              "forward_ms": 0.17871999740600586,
+              "backward_ms": 3.1287360191345215,
+              "total_ms": 3.3074560165405273
+            },
+            {
+              "forward_ms": 0.17148800194263458,
+              "backward_ms": 3.114784002304077,
+              "total_ms": 3.2862720489501953
+            },
+            {
+              "forward_ms": 0.17270399630069733,
+              "backward_ms": 3.119647979736328,
+              "total_ms": 3.2923519611358643
+            },
+            {
+              "forward_ms": 0.18095999956130981,
+              "backward_ms": 3.1155519485473633,
+              "total_ms": 3.2965118885040283
+            },
+            {
+              "forward_ms": 0.1712000072002411,
+              "backward_ms": 3.1182401180267334,
+              "total_ms": 3.2894399166107178
+            },
+            {
+              "forward_ms": 0.1703680008649826,
+              "backward_ms": 3.1131839752197266,
+              "total_ms": 3.2835519313812256
+            }
+          ],
+          "means": {
+            "forward_ms": 0.17856746762990952,
+            "backward_ms": 3.1316704034805296,
+            "total_ms": 3.3102378527323406
+          },
+          "peak_allocated_bytes": 610664960,
+          "peak_reserved_bytes": 629145600
+        }
+      },
+      "note": "Fresh process for this backend; independent Triton autotuning; CUDA events include launch gaps and scalar probe. Precision is specified by backend and nvidia_tf32_override.",
+      "nvidia_tf32_override": "0"
+    },
+    "mhc_torch_compile": {
+      "shape": [
+        16,
+        2048,
+        4,
+        512
+      ],
+      "weight_shape": [
+        24,
+        2048
+      ],
+      "backends": {
+        "torch_compile": {
+          "samples": [
+            {
+              "forward_ms": 0.3969919979572296,
+              "backward_ms": 0.6113920211791992,
+              "total_ms": 1.0083839893341064
+            },
+            {
+              "forward_ms": 0.3967359960079193,
+              "backward_ms": 0.6133760213851929,
+              "total_ms": 1.0101120471954346
+            },
+            {
+              "forward_ms": 0.3916800022125244,
+              "backward_ms": 0.6040639877319336,
+              "total_ms": 0.995743989944458
+            },
+            {
+              "forward_ms": 0.39081600308418274,
+              "backward_ms": 0.6148160099983215,
+              "total_ms": 1.0056320428848267
+            },
+            {
+              "forward_ms": 0.3903360068798065,
+              "backward_ms": 0.6033920049667358,
+              "total_ms": 0.99372798204422
+            },
+            {
+              "forward_ms": 0.38867199420928955,
+              "backward_ms": 0.6041600108146667,
+              "total_ms": 0.9928320050239563
+            },
+            {
+              "forward_ms": 0.3856000006198883,
+              "backward_ms": 0.5918400287628174,
+              "total_ms": 0.9774399995803833
+            },
+            {
+              "forward_ms": 0.3819519877433777,
+              "backward_ms": 0.5865600109100342,
+              "total_ms": 0.9685119986534119
+            },
+            {
+              "forward_ms": 0.38361600041389465,
+              "backward_ms": 0.6033279895782471,
+              "total_ms": 0.9869440197944641
+            },
+            {
+              "forward_ms": 0.3892480134963989,
+              "backward_ms": 0.605023980140686,
+              "total_ms": 0.994271993637085
+            },
+            {
+              "forward_ms": 0.38729599118232727,
+              "backward_ms": 0.6000319719314575,
+              "total_ms": 0.9873279929161072
+            },
+            {
+              "forward_ms": 0.3866559863090515,
+              "backward_ms": 0.5947200059890747,
+              "total_ms": 0.9813759922981262
+            },
+            {
+              "forward_ms": 0.38550400733947754,
+              "backward_ms": 0.592736005783081,
+              "total_ms": 0.9782400131225586
+            },
+            {
+              "forward_ms": 0.3883199989795685,
+              "backward_ms": 0.5906239748001099,
+              "total_ms": 0.9789440035820007
+            },
+            {
+              "forward_ms": 0.38547199964523315,
+              "backward_ms": 0.6137920022010803,
+              "total_ms": 0.9992640018463135
+            },
+            {
+              "forward_ms": 0.3871360123157501,
+              "backward_ms": 0.5957760214805603,
+              "total_ms": 0.982912003993988
+            },
+            {
+              "forward_ms": 0.3826879858970642,
+              "backward_ms": 0.585856020450592,
+              "total_ms": 0.9685440063476562
+            },
+            {
+              "forward_ms": 0.38278400897979736,
+              "backward_ms": 0.5810880064964294,
+              "total_ms": 0.9638720154762268
+            },
+            {
+              "forward_ms": 0.38438400626182556,
+              "backward_ms": 0.5903360247612,
+              "total_ms": 0.9747200012207031
+            },
+            {
+              "forward_ms": 0.38627201318740845,
+              "backward_ms": 0.5837119817733765,
+              "total_ms": 0.9699839949607849
+            },
+            {
+              "forward_ms": 0.3862079977989197,
+              "backward_ms": 0.5837759971618652,
+              "total_ms": 0.9699839949607849
+            },
+            {
+              "forward_ms": 0.38121598958969116,
+              "backward_ms": 0.5830720067024231,
+              "total_ms": 0.9642879962921143
+            },
+            {
+              "forward_ms": 0.38700801134109497,
+              "backward_ms": 0.5862079858779907,
+              "total_ms": 0.9732159972190857
+            },
+            {
+              "forward_ms": 0.3859519958496094,
+              "backward_ms": 0.5863040089607239,
+              "total_ms": 0.9722560048103333
+            },
+            {
+              "forward_ms": 0.38310399651527405,
+              "backward_ms": 0.572160005569458,
+              "total_ms": 0.9552639722824097
+            },
+            {
+              "forward_ms": 0.3813759982585907,
+              "backward_ms": 0.5672320127487183,
+              "total_ms": 0.9486079812049866
+            },
+            {
+              "forward_ms": 0.382176011800766,
+              "backward_ms": 0.5746560096740723,
+              "total_ms": 0.9568319916725159
+            },
+            {
+              "forward_ms": 0.38960000872612,
+              "backward_ms": 0.5983039736747742,
+              "total_ms": 0.9879040122032166
+            },
+            {
+              "forward_ms": 0.38655999302864075,
+              "backward_ms": 0.5994560122489929,
+              "total_ms": 0.9860159754753113
+            },
+            {
+              "forward_ms": 0.3864000141620636,
+              "backward_ms": 0.5962880253791809,
+              "total_ms": 0.9826880097389221
+            }
+          ],
+          "means": {
+            "forward_ms": 0.3867253343264262,
+            "backward_ms": 0.5938026706377665,
+            "total_ms": 0.9805280009905497
+          },
+          "peak_allocated_bytes": 882508800,
+          "peak_reserved_bytes": 987758592
+        }
+      },
+      "note": "Fresh process for this backend; independent Triton autotuning; CUDA events include launch gaps and scalar probe. Precision is specified by backend and nvidia_tf32_override.",
+      "nvidia_tf32_override": "0"
+    },
+    "mhc_nvidia_native": {
+      "shape": [
+        16,
+        2048,
+        4,
+        512
+      ],
+      "weight_shape": [
+        24,
+        2048
+      ],
+      "backends": {
+        "nvidia": {
+          "samples": [
+            {
+              "forward_ms": 0.27878400683403015,
+              "backward_ms": 0.601248025894165,
+              "total_ms": 0.8800320029258728
+            },
+            {
+              "forward_ms": 0.28911998867988586,
+              "backward_ms": 0.6017600297927856,
+              "total_ms": 0.8908799886703491
+            },
+            {
+              "forward_ms": 0.2595840096473694,
+              "backward_ms": 0.5953599810600281,
+              "total_ms": 0.8549439907073975
+            },
+            {
+              "forward_ms": 0.2723200023174286,
+              "backward_ms": 0.5986559987068176,
+              "total_ms": 0.8709759712219238
+            },
+            {
+              "forward_ms": 0.2740800082683563,
+              "backward_ms": 0.5960639715194702,
+              "total_ms": 0.8701440095901489
+            },
+            {
+              "forward_ms": 0.25804799795150757,
+              "backward_ms": 0.5976960062980652,
+              "total_ms": 0.8557440042495728
+            },
+            {
+              "forward_ms": 0.2479040026664734,
+              "backward_ms": 0.5964800119400024,
+              "total_ms": 0.8443840146064758
+            },
+            {
+              "forward_ms": 0.29023998975753784,
+              "backward_ms": 0.6053119897842407,
+              "total_ms": 0.8955519795417786
+            },
+            {
+              "forward_ms": 0.32371199131011963,
+              "backward_ms": 0.6026880145072937,
+              "total_ms": 0.9264000058174133
+            },
+            {
+              "forward_ms": 0.2973119914531708,
+              "backward_ms": 0.594976007938385,
+              "total_ms": 0.8922880291938782
+            },
+            {
+              "forward_ms": 0.2948479950428009,
+              "backward_ms": 0.594976007938385,
+              "total_ms": 0.8898239731788635
+            },
+            {
+              "forward_ms": 0.2932479977607727,
+              "backward_ms": 0.6060799956321716,
+              "total_ms": 0.8993279933929443
+            },
+            {
+              "forward_ms": 0.2873600125312805,
+              "backward_ms": 0.5934079885482788,
+              "total_ms": 0.8807680010795593
+            },
+            {
+              "forward_ms": 0.2604160010814667,
+              "backward_ms": 0.5888000130653381,
+              "total_ms": 0.8492159843444824
+            },
+            {
+              "forward_ms": 0.24262399971485138,
+              "backward_ms": 0.5953599810600281,
+              "total_ms": 0.837984025478363
+            },
+            {
+              "forward_ms": 0.23420800268650055,
+              "backward_ms": 0.5883839726448059,
+              "total_ms": 0.82259202003479
+            },
+            {
+              "forward_ms": 0.2720319926738739,
+              "backward_ms": 0.5962560176849365,
+              "total_ms": 0.868287980556488
+            },
+            {
+              "forward_ms": 0.27529600262641907,
+              "backward_ms": 0.5983039736747742,
+              "total_ms": 0.8736000061035156
+            },
+            {
+              "forward_ms": 0.27715200185775757,
+              "backward_ms": 0.5995839834213257,
+              "total_ms": 0.8767359852790833
+            },
+            {
+              "forward_ms": 0.2730560004711151,
+              "backward_ms": 0.5963199734687805,
+              "total_ms": 0.869376003742218
+            },
+            {
+              "forward_ms": 0.26892799139022827,
+              "backward_ms": 0.5933759808540344,
+              "total_ms": 0.8623039722442627
+            },
+            {
+              "forward_ms": 0.2837759852409363,
+              "backward_ms": 0.6061440110206604,
+              "total_ms": 0.8899199962615967
+            },
+            {
+              "forward_ms": 0.3052479922771454,
+              "backward_ms": 0.6042879819869995,
+              "total_ms": 0.9095360040664673
+            },
+            {
+              "forward_ms": 0.2648960053920746,
+              "backward_ms": 0.5973759889602661,
+              "total_ms": 0.8622720241546631
+            },
+            {
+              "forward_ms": 0.24003200232982635,
+              "backward_ms": 0.5839040279388428,
+              "total_ms": 0.8239359855651855
+            },
+            {
+              "forward_ms": 0.26019200682640076,
+              "backward_ms": 0.6017280220985413,
+              "total_ms": 0.8619199991226196
+            },
+            {
+              "forward_ms": 0.2739199995994568,
+              "backward_ms": 0.5974720120429993,
+              "total_ms": 0.871392011642456
+            },
+            {
+              "forward_ms": 0.25916799902915955,
+              "backward_ms": 0.5928320288658142,
+              "total_ms": 0.8519999980926514
+            },
+            {
+              "forward_ms": 0.23510399460792542,
+              "backward_ms": 0.5911039710044861,
+              "total_ms": 0.8262079954147339
+            },
+            {
+              "forward_ms": 0.2752319872379303,
+              "backward_ms": 0.6002560257911682,
+              "total_ms": 0.8754879832267761
+            }
+          ],
+          "means": {
+            "forward_ms": 0.27226133197546004,
+            "backward_ms": 0.5972063998381297,
+            "total_ms": 0.8694677313168844
+          },
+          "peak_allocated_bytes": 644285952,
+          "peak_reserved_bytes": 830472192
+        }
+      },
+      "note": "Fresh process for this backend; independent Triton autotuning; CUDA events include launch gaps and scalar probe. Precision is specified by backend and nvidia_tf32_override.",
+      "nvidia_tf32_override": null
+    },
+    "mhc_nvidia_fp32_dw": {
+      "shape": [
+        16,
+        2048,
+        4,
+        512
+      ],
+      "weight_shape": [
+        24,
+        2048
+      ],
+      "backends": {
+        "nvidia": {
+          "samples": [
+            {
+              "forward_ms": 0.2279359996318817,
+              "backward_ms": 0.628000020980835,
+              "total_ms": 0.8559359908103943
+            },
+            {
+              "forward_ms": 0.234592005610466,
+              "backward_ms": 0.6312000155448914,
+              "total_ms": 0.8657919764518738
+            },
+            {
+              "forward_ms": 0.24320000410079956,
+              "backward_ms": 0.6329920291900635,
+              "total_ms": 0.8761919736862183
+            },
+            {
+              "forward_ms": 0.23401600122451782,
+              "backward_ms": 0.6241599917411804,
+              "total_ms": 0.8581759929656982
+            },
+            {
+              "forward_ms": 0.2282560020685196,
+              "backward_ms": 0.6276159882545471,
+              "total_ms": 0.8558719754219055
+            },
+            {
+              "forward_ms": 0.21753600239753723,
+              "backward_ms": 0.6259520053863525,
+              "total_ms": 0.8434879779815674
+            },
+            {
+              "forward_ms": 0.21769599616527557,
+              "backward_ms": 0.624064028263092,
+              "total_ms": 0.841759979724884
+            },
+            {
+              "forward_ms": 0.2377920001745224,
+              "backward_ms": 0.6294080018997192,
+              "total_ms": 0.8672000169754028
+            },
+            {
+              "forward_ms": 0.22815999388694763,
+              "backward_ms": 0.6289920210838318,
+              "total_ms": 0.857151985168457
+            },
+            {
+              "forward_ms": 0.22339199483394623,
+              "backward_ms": 0.6319680213928223,
+              "total_ms": 0.8553599715232849
+            },
+            {
+              "forward_ms": 0.22406400740146637,
+              "backward_ms": 0.6349760293960571,
+              "total_ms": 0.8590400218963623
+            },
+            {
+              "forward_ms": 0.23372800648212433,
+              "backward_ms": 0.6347200274467468,
+              "total_ms": 0.86844801902771
+            },
+            {
+              "forward_ms": 0.2454719990491867,
+              "backward_ms": 0.6273279786109924,
+              "total_ms": 0.8727999925613403
+            },
+            {
+              "forward_ms": 0.22918400168418884,
+              "backward_ms": 0.628000020980835,
+              "total_ms": 0.8571839928627014
+            },
+            {
+              "forward_ms": 0.22575999796390533,
+              "backward_ms": 0.6299840211868286,
+              "total_ms": 0.8557440042495728
+            },
+            {
+              "forward_ms": 0.2171200066804886,
+              "backward_ms": 0.6267520189285278,
+              "total_ms": 0.8438720107078552
+            },
+            {
+              "forward_ms": 0.23260800540447235,
+              "backward_ms": 0.6345279812812805,
+              "total_ms": 0.8671360015869141
+            },
+            {
+              "forward_ms": 0.23798400163650513,
+              "backward_ms": 0.6297919750213623,
+              "total_ms": 0.8677759766578674
+            },
+            {
+              "forward_ms": 0.22208000719547272,
+              "backward_ms": 0.6326720118522644,
+              "total_ms": 0.8547520041465759
+            },
+            {
+              "forward_ms": 0.21635200083255768,
+              "backward_ms": 0.6290559768676758,
+              "total_ms": 0.845408022403717
+            },
+            {
+              "forward_ms": 0.22444799542427063,
+              "backward_ms": 0.6359999775886536,
+              "total_ms": 0.8604480028152466
+            },
+            {
+              "forward_ms": 0.23907199501991272,
+              "backward_ms": 0.6352319717407227,
+              "total_ms": 0.8743039965629578
+            },
+            {
+              "forward_ms": 0.23100799322128296,
+              "backward_ms": 0.6369280219078064,
+              "total_ms": 0.8679360151290894
+            },
+            {
+              "forward_ms": 0.22409600019454956,
+              "backward_ms": 0.6274880170822144,
+              "total_ms": 0.8515840172767639
+            },
+            {
+              "forward_ms": 0.22246399521827698,
+              "backward_ms": 0.6224319934844971,
+              "total_ms": 0.8448960185050964
+            },
+            {
+              "forward_ms": 0.2285120040178299,
+              "backward_ms": 0.6259520053863525,
+              "total_ms": 0.8544639945030212
+            },
+            {
+              "forward_ms": 0.2229440063238144,
+              "backward_ms": 0.6224319934844971,
+              "total_ms": 0.8453760147094727
+            },
+            {
+              "forward_ms": 0.21094399690628052,
+              "backward_ms": 0.6225280165672302,
+              "total_ms": 0.8334720134735107
+            },
+            {
+              "forward_ms": 0.2035519927740097,
+              "backward_ms": 0.6201919913291931,
+              "total_ms": 0.823743999004364
+            },
+            {
+              "forward_ms": 0.2269439995288849,
+              "backward_ms": 0.6277120113372803,
+              "total_ms": 0.8546559810638428
+            }
+          ],
+          "means": {
+            "forward_ms": 0.22703040043512981,
+            "backward_ms": 0.6289685388406118,
+            "total_ms": 0.8559989313284556
+          },
+          "peak_allocated_bytes": 644285952,
+          "peak_reserved_bytes": 830472192
+        }
+      },
+      "note": "Fresh process for this backend; independent Triton autotuning; CUDA events include launch gaps and scalar probe. Precision is specified by backend and nvidia_tf32_override.",
+      "nvidia_tf32_override": "0"
+    },
+    "mhc_nvidia_precise": {
+      "shape": [
+        16,
+        2048,
+        4,
+        512
+      ],
+      "weight_shape": [
+        24,
+        2048
+      ],
+      "backends": {
+        "nvidia_precise": {
+          "samples": [
+            {
+              "forward_ms": 0.506879985332489,
+              "backward_ms": 0.5214080214500427,
+              "total_ms": 1.0282880067825317
+            },
+            {
+              "forward_ms": 0.4910399913787842,
+              "backward_ms": 0.5544639825820923,
+              "total_ms": 1.0455039739608765
+            },
+            {
+              "forward_ms": 0.4933440089225769,
+              "backward_ms": 0.5229439735412598,
+              "total_ms": 1.0162880420684814
+            },
+            {
+              "forward_ms": 0.49296000599861145,
+              "backward_ms": 0.5214080214500427,
+              "total_ms": 1.0143680572509766
+            },
+            {
+              "forward_ms": 0.4846400022506714,
+              "backward_ms": 0.5234559774398804,
+              "total_ms": 1.0080959796905518
+            },
+            {
+              "forward_ms": 0.49215999245643616,
+              "backward_ms": 0.5236160159111023,
+              "total_ms": 1.0157760381698608
+            },
+            {
+              "forward_ms": 0.48895999789237976,
+              "backward_ms": 0.5254719853401184,
+              "total_ms": 1.0144319534301758
+            },
+            {
+              "forward_ms": 0.4830400049686432,
+              "backward_ms": 0.5232319831848145,
+              "total_ms": 1.0062719583511353
+            },
+            {
+              "forward_ms": 0.4827199876308441,
+              "backward_ms": 0.5242879986763,
+              "total_ms": 1.0070079565048218
+            },
+            {
+              "forward_ms": 0.4922559857368469,
+              "backward_ms": 0.5242879986763,
+              "total_ms": 1.016543984413147
+            },
+            {
+              "forward_ms": 0.47628799080848694,
+              "backward_ms": 0.524511992931366,
+              "total_ms": 1.0008000135421753
+            },
+            {
+              "forward_ms": 0.47648000717163086,
+              "backward_ms": 0.5238720178604126,
+              "total_ms": 1.0003520250320435
+            },
+            {
+              "forward_ms": 0.47046399116516113,
+              "backward_ms": 0.5217919945716858,
+              "total_ms": 0.9922559857368469
+            },
+            {
+              "forward_ms": 0.47999998927116394,
+              "backward_ms": 0.5244479775428772,
+              "total_ms": 1.0044480562210083
+            },
+            {
+              "forward_ms": 0.4803839921951294,
+              "backward_ms": 0.5229439735412598,
+              "total_ms": 1.0033279657363892
+            },
+            {
+              "forward_ms": 0.4866879880428314,
+              "backward_ms": 0.525056004524231,
+              "total_ms": 1.0117440223693848
+            },
+            {
+              "forward_ms": 0.4996800124645233,
+              "backward_ms": 0.5231999754905701,
+              "total_ms": 1.022879958152771
+            },
+            {
+              "forward_ms": 0.49692800641059875,
+              "backward_ms": 0.5256320238113403,
+              "total_ms": 1.0225600004196167
+            },
+            {
+              "forward_ms": 0.4891520142555237,
+              "backward_ms": 0.5220159888267517,
+              "total_ms": 1.0111680030822754
+            },
+            {
+              "forward_ms": 0.4956800043582916,
+              "backward_ms": 0.5241919755935669,
+              "total_ms": 1.0198719501495361
+            },
+            {
+              "forward_ms": 0.4944320023059845,
+              "backward_ms": 0.5241280198097229,
+              "total_ms": 1.0185600519180298
+            },
+            {
+              "forward_ms": 0.49347200989723206,
+              "backward_ms": 0.5240640044212341,
+              "total_ms": 1.0175360441207886
+            },
+            {
+              "forward_ms": 0.50108802318573,
+              "backward_ms": 0.5244479775428772,
+              "total_ms": 1.0255359411239624
+            },
+            {
+              "forward_ms": 0.5021119713783264,
+              "backward_ms": 0.5235199928283691,
+              "total_ms": 1.0256320238113403
+            },
+            {
+              "forward_ms": 0.49270400404930115,
+              "backward_ms": 0.523967981338501,
+              "total_ms": 1.0166720151901245
+            },
+            {
+              "forward_ms": 0.4833599925041199,
+              "backward_ms": 0.5244479775428772,
+              "total_ms": 1.007807970046997
+            },
+            {
+              "forward_ms": 0.48339200019836426,
+              "backward_ms": 0.5263680219650269,
+              "total_ms": 1.0097600221633911
+            },
+            {
+              "forward_ms": 0.4780159890651703,
+              "backward_ms": 0.5228800177574158,
+              "total_ms": 1.0008959770202637
+            },
+            {
+              "forward_ms": 0.4978559911251068,
+              "backward_ms": 0.5246400237083435,
+              "total_ms": 1.022495985031128
+            },
+            {
+              "forward_ms": 0.48425599932670593,
+              "backward_ms": 0.5252799987792969,
+              "total_ms": 1.0095360279083252
+            }
+          ],
+          "means": {
+            "forward_ms": 0.48901439805825553,
+            "backward_ms": 0.524866129954656,
+            "total_ms": 1.0138805329799652
+          },
+          "peak_allocated_bytes": 644285952,
+          "peak_reserved_bytes": 830472192
+        }
+      },
+      "note": "Fresh process for this backend; independent Triton autotuning; CUDA events include launch gaps and scalar probe. Precision is specified by backend and nvidia_tf32_override.",
+      "nvidia_tf32_override": "0"
+    }
+  },
+  "archive_sha256": "cb26f5d5d49d5970a70c2342a6a28d27d6a622c85ee3e66a59d82f880f3c3eea",
+  "limitations": [
+    "Short diagnostics only, no long-run quality result",
+    "Explicit precision variants are not bitwise-equivalent",
+    "Timing includes ordinary gradient-finiteness checking",
+    "Memory is PyTorch allocator peak, not whole-device use"
+  ]
+}
