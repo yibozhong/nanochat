@@ -49,8 +49,13 @@ matched; GPU used the native CUDA 13.1 driver on RTX PRO 6000 Blackwell.
 Removing Sinkhorn reduced steady step time by **2.22%**, leaving the
 no-manifold variant **85.57% slower than vanilla**. Its reserved memory was
 only 32 MiB lower. Thus most of the measured overhead remains without the
-manifold projection in this implementation and model size. This ablation does
-not identify which remaining operator or host-side dispatch is responsible.
+manifold projection in this implementation and model size. The subsequent
+[same-GPU operator profile](profile/README.md) identifies the main cost:
+42.55 ms/update in the official projection backward with only 16 CUDA blocks,
+plus 14.53 ms for stream read/write and 4.53 ms for separate gradient merges.
+Sinkhorn itself costs 3.35 ms. The projection backward accounts for about 62%
+of added GPU kernel time; current official-operator integration does not
+reproduce the paper's optimized training path or its reported 6.7% overhead.
 No-manifold dev CE was 0.037657 higher than mHC after 50 steps;
 this is a single short run, not a long-run quality conclusion.
 
