@@ -1044,5 +1044,7 @@
     "Explicit precision variants are not bitwise-equivalent",
     "Timing includes ordinary gradient-finiteness checking",
     "Memory is PyTorch allocator peak, not whole-device use"
-  ]
+  ],
+  "timing_caveat": "NVIDIA TF32/FP32-dphi trial has one 376.9769ms outlier among twenty measured steps; mean133.0035 and median120.1043 are both retained. Follow-up uses 60 samples and a one-time GC collection after compilation/warmup.",
+  "micro_caveat": "Same-process nvidia_precise forward5.206ms disagrees with its fresh-process full-model kernel profile (~0.302ms per invocation). Upstream forward autotune key omits precision; next job isolates each backend in a fresh process. Do not interpret5.206ms as intrinsic TF32x3 cost."
 }

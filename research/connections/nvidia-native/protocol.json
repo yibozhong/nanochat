@@ -1,0 +1,17 @@
+{
+  "reason": "First passing audit had a 376.98ms step outlier and shared-process projection autotune caching across precisions; also evaluate NVIDIA default cuBLAS TF32 dphi.",
+  "first_successful_job": "7547306.0",
+  "precision_controls": "nvidia_native unsets NVIDIA_TF32_OVERRIDE; all other variants set 0. All torch matmul flags remain false. TE Triton TF32/TF32x3 choices are explicit.",
+  "trials": [
+    "baseline",
+    "mhc_official",
+    "mhc_torch_compile",
+    "mhc_nvidia_native",
+    "mhc_nvidia_fp32_dw",
+    "mhc_nvidia_precise"
+  ],
+  "tests": "26 full gates with cuBLAS TF32 off plus 3 NVIDIA native gates in a fresh process with override absent",
+  "timing": "Each backend microbenchmark gets a fresh process; full models use 20 warmup, gc.collect once after warmup with automatic GC left enabled, 60 normal timed steps plus existing 26 diagnostics = 106 updates; mean/median/all samples retained",
+  "cache": "Repacked unmodified official TE C++ extension from 7547306.0; same torch/CUDA/ABI; SHA checked before installation",
+  "pretraining": false
+}

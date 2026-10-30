@@ -212,3 +212,60 @@ RustBPE; 7546843 exposed mixed CUDA compiler/runtime headers; 7546850 compiled
 successfully but hit the SM120 shared-memory limit in the official Sinkhorn
 backward wrapper. None of those runs started training. The final successful
 kernel files are still byte-for-byte official; the launch adapter is local.
+
+## NVIDIA projection backend
+
+The NVIDIA author's [full-model comparison in TE PR 2790](https://github.com/NVIDIA/TransformerEngine/pull/2790#issuecomment-4208434892)
+reports a 2B Nemotron model on 16 nodes of 8 B200 GPUs, pure data parallelism,
+global batch 768, microbatch 3 and accumulation 2. Approximate iteration times
+were 960 ms without mHC, 1100 ms with the new Triton mHC implementation, and
+1160 ms with the then-current Megatron cuTile implementation. Thus Triton mHC
+added about 14.6% step time versus vanilla and reduced time about 5.2% versus
+cuTile in that configuration. These are author-reported log estimates from
+April 8, 2026, not measurements of our nanochat model or of TE 2.20.2. Our local
+experiment replaces only projection; the other mHC operators remain DeepSeek's.
+
+Explicit `--projection-backend nvidia` and `nvidia_precise` use unmodified
+NVIDIA Transformer Engine 2.20.2 projection forward/backward. The adapter only
+flattens/reshapes tensors, slices the padded output and applies our RMS epsilon.
+The final stream head retains its existing zero padding to 24 projection rows.
+All other connections remain DeepSeek operators. Default selection is unchanged.
+`nvidia_precise` requires `NVIDIA_TF32_OVERRIDE=0` at process startup: TE's
+`use_tf32=False` argument controls Triton but does not disable TF32 in its
+separate cuBLAS weight-gradient call. Two upstream source files are SHA-checked.
+
+Controlled gate `7547306.0`, source `f531f54`, passed all 26 checks with no skips:
+FP64 outputs/input/weight gradients, official comparisons, unchanged initial
+weights, true 2K causality, cache, CCE, model gradients and baseline regression.
+The six W&B runs were verified. It used one RTX PRO 6000 (SM120), the same
+FineWeb data/seed/model/batch/optimizer as earlier profiling, and **disabled
+cuBLAS TF32 for every trial**. It therefore does not measure fully default TE
+arithmetic. The isolated newer environment requires TVM-FFI 0.1.11; the original
+runtime remains pinned separately. No upstream kernel was patched.
+
+| Controlled configuration | Mean ms/step | Median ms/step | Peak reserved GiB |
+| --- | ---: | ---: | ---: |
+| Vanilla | 80.569 | 80.498 | 5.389 |
+| DeepSeek projection | 152.210 | 152.073 | 8.475 |
+| Compiled PyTorch projection | 129.707 | 129.620 | 12.836 |
+| NVIDIA Triton TF32, FP32 weight gradient | 133.004 | 120.104 | 8.795 |
+| NVIDIA Triton TF32x3, FP32 weight gradient | 123.168 | 123.149 | 8.795 |
+
+The NVIDIA TF32 trial includes one **376.977 ms** pause among twenty measured
+steps (SD 57.426 ms). All samples are retained; its mean must not be presented as
+stable throughput or silently replaced by a filtered mean. The same-process
+TF32x3 microbenchmark also disagrees with the separately tuned full-model trace;
+upstream's forward autotune cache key omits precision. A bounded follow-up uses
+fresh processes per microbenchmark, 60 ordinary timing samples after warmup and
+one GC collection (automatic GC remains enabled), and adds native TE/cuBLAS
+precision. [Follow-up protocol](nvidia-native/protocol.json).
+
+- [Controlled results](nvidia-projection/results.json),
+  [numeric/trace audit](nvidia-projection/audit.json),
+  [retained failed attempts](nvidia-projection/failed-attempts.json).
+- [Controlled W&B audit](https://wandb.ai/yibozhong657-none/nanochat/runs/2a39d0e3).
+- SM89 failed the unchanged DeepSeek residual kernel's PDL requirement; do not
+  treat standalone NVIDIA projection success there as full-model support.
+- The first dependency build lacked NCCL/cuSPARSE headers; explicit compiler
+  include paths fixed it. The compiled official extension is retained in the
+  successful archive for retries, with its Torch/CUDA/ABI and SHA-256 metadata.

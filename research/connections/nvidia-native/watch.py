@@ -49,6 +49,9 @@ def collect(s):
     result.update(wandb_verified=True,job=s['job'])
     for p in [ROOT/'comparison.json',REPO/'research/connections/nvidia-native/results.json']:
         p.write_text(json.dumps(result,indent=2)+'\n')
+    analysis=command([sys.executable,str(REPO/'research/connections/nvidia-projection/analyze.py'),
+                      str(ROOT),str(REPO/'research/connections/nvidia-native')])
+    (ROOT/'analysis-summary.json').write_text(analysis+'\n')
     s.update(status='complete',push_status='pending_analysis_and_push');save(s)
 def main():
     with (ROOT/'monitor.lock').open('w') as lock:
