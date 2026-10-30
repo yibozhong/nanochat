@@ -52,6 +52,7 @@ ln -s ../results results
 cp ../source.json source.json
 python - <<'PYCHECK'
 import torch,tilelang,cut_cross_entropy
+from nanochat.engine import KVCache
 assert torch.cuda.is_available() and torch.cuda.device_count()==1
 assert torch.__version__.startswith('2.10.0') and tilelang.__version__=='0.1.9'
 assert torch.cuda.get_device_capability()[0] >= 8

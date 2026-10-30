@@ -11,6 +11,7 @@ dependencies = [
     "cut-cross-entropy @ git+https://github.com/apple/ml-cross-entropy.git@3de376c106a1916bc5e1b619f9c77c87a461ee1c",
     "numpy==2.2.6", "wandb==0.26.1", "pytest==9.0.2",
     "kernels==0.11.7", "psutil==7.2.1", "filelock==3.20.3",
+    "rustbpe==0.1.0", "tiktoken==0.11.0", "pyarrow==21.0.0",
 ]
 
 [tool.uv]
