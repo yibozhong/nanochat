@@ -1,0 +1,19 @@
+universe = vanilla
+container_image = file:///staging/y/yzhong239/gradformer/nanochat-uv-v4.sif
+executable = prepare-runtime.sh
+request_cpus = 4
+request_memory = 8GB
+request_disk = 30GB
+requirements = (HasCHTCStaging == true)
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+stream_output = True
+stream_error = True
+transfer_input_files = bundles/pyproject.toml,bundles/uv.lock
+transfer_output_files = runtime.tar.gz,preparation-results.tar
+transfer_output_remaps = "runtime.tar.gz=osdf:///chtc/staging/y/yzhong239/mhc-official-runtime-$(Cluster).tar.gz;preparation-results.tar=results/runtime-$(Cluster).tar"
+output = logs/runtime.$(Cluster).out
+error = logs/runtime.$(Cluster).err
+log = logs/runtime.$(Cluster).log
++JobBatchName = "mhc-official-runtime"
+queue 1

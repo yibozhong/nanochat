@@ -1,6 +1,6 @@
-"""Single-GPU packed FineWeb-Edu training: baseline, HC or official-reference mHC.
+"""Single-GPU packed FineWeb-Edu training: baseline or official TileKernels mHC.
 
-Example: python -m scripts.connection_train --variant hc --steps 50 --data-dir data
+Example: python -m scripts.connection_train --variant mhc --steps 50 --data-dir data
 Steps are required deliberately; implementation checks do not launch a 1B run.
 """
 import argparse
@@ -24,7 +24,7 @@ from nanochat.packed_training import PackedData, seed_all, evaluate, train_step,
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument('--variant', choices=('baseline','hc','mhc'), required=True)
+    p.add_argument('--variant', choices=('baseline','mhc'), required=True)
     p.add_argument('--steps', type=int, required=True)
     p.add_argument('--schedule-steps', type=int, default=30518)
     p.add_argument('--microbatch', type=int, default=16)
@@ -81,7 +81,7 @@ def main():
         optimizer_groups=[{k:v for k,v in g.items() if k!='params'} for g in opt.param_groups],
         loss='full-token full-vocabulary CCE; no gradient filtering',
         references='research/connections/references.json')
-    kwargs=dict(project='nanochat',entity='yibozhong657-none',group='hc-mhc-implementation-20261030',
+    kwargs=dict(project='nanochat',entity='yibozhong657-none',group='mhc-official-kernels-20261030',
                 job_type='implementation-smoke' if a.steps<=50 else 'pretrain',
                 name=f'{a.variant}-{a.steps}steps',id=run_id,resume='allow',config=config)
     try:run=wandb.init(**kwargs,settings=wandb.Settings(init_timeout=60))

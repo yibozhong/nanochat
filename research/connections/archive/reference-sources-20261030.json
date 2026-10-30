@@ -1,0 +1,35 @@
+{
+  "hc": {
+    "paper": "https://arxiv.org/html/2409.19606v3#A10",
+    "official_github": "not found after author and organization searches",
+    "primary": "Author Appendix J PyTorch pseudocode",
+    "cross_check": {
+      "repo": "https://github.com/lucidrains/hyper-connections",
+      "commit": "e89e30357d1f79945b0d3558e6721451ff68789a",
+      "official": false
+    }
+  },
+  "mhc": {
+    "repo": "https://github.com/deepseek-ai/DeepGEMM",
+    "commit": "5081f8513af57e61696de4f4f04b0e707ffb503e",
+    "pytorch_reference": "tests/test_mega_mhc.py",
+    "model": "https://huggingface.co/deepseek-ai/DeepSeek-V4-Pro",
+    "model_revision": "292e68aa01e9d6089f015fdfd876e5178ebbacf2",
+    "model_files": [
+      "inference/model.py",
+      "inference/kernel.py"
+    ],
+    "initialization": "explicit local choice; public inference code loads weights and does not specify a training initializer"
+  },
+  "downloaded_reference_sha256": {
+    "deepseek-v4-kernel.py": "c4dc859a2208f9182ae00f6267cf8655deba51dcd92dfd14d0e65401658593e4",
+    "lucidrains-commit.txt": "ecb42b763759beb0dd30aa4e15fb6159c753bd22d1d5086c55ab62fb546d8f5b",
+    "lucidrains-hyper_connections-hyper_connections.py": "d85fb5d3870613cd8a08ad0a782d3b35238934f4fed0f0adbd7df12b3005e341",
+    "deepgemm-tests-test_hyperconnection.py": "f0757cec23a9e55e0ffeaf6a7c6280f141602aec4d57add6c6b9ab57ff97cd4a",
+    "deepgemm-tests-test_mega_mhc.py": "fd578a6f7bc32c8c8a91bae4b0dd4636eff56167521815af4bcd6811354abab8",
+    "deepseek-v4-model.py": "6380e70f3690227155ae17fa40b99c8e6900623d00925fd8a8ccc9588e02e818",
+    "deepgemm-LICENSE": "6c73a30c14a2938abaa6afe98ebb19e6d81dac5bd4ace0cb05c61c20afa37b85",
+    "lucidrains-LICENSE": "13b4464bb9292484ad939cdaffee0356158401a99feb9114d0234c2f6e66ab87",
+    "deepgemm-csrc-apis-hyperconnection.hpp": "0c73a4ad3f96d7ce59b8801aee423b715629b856e3845f87602e631fd3248dae"
+  }
+}

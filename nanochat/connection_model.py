@@ -1,4 +1,4 @@
-"""Full-attention vanilla/HC/mHC on the existing nanochat attention and MLP.
+"""Full-attention vanilla/mHC on the existing nanochat attention and MLP.
 
 This research model keeps native GPT and its SSSL/extras path unchanged.
 The residual option matches the audited 58.72M full-attention vanilla baseline.
@@ -12,7 +12,7 @@ from torch.nn import functional as F
 from torch.utils.checkpoint import checkpoint
 
 from nanochat.gpt import Block, GPTConfig, Linear, norm
-from nanochat.hyper_connections import HyperConnection, ManifoldHyperConnection, ManifoldHyperHead
+from nanochat.manifold_connections import ManifoldHyperConnection, ManifoldHyperHead, expand_streams, check_official_device
 from nanochat.optim import MuonAdamW
 
 
@@ -29,7 +29,7 @@ class ConnectionConfig:
     activation_checkpoint: bool = False
 
     def __post_init__(self):
-        if self.variant not in ('baseline', 'hc', 'mhc'):
+        if self.variant not in ('baseline', 'mhc'):
             raise ValueError(f'Unknown connection variant: {self.variant}')
         if min(self.depth, self.width, self.heads, self.sequence_length, self.vocab_size, self.streams) < 1:
             raise ValueError('Model dimensions must be positive')
@@ -37,6 +37,8 @@ class ConnectionConfig:
             raise ValueError('RoPE requires an even integral head dimension')
         if self.sinkhorn_iterations < 1:
             raise ValueError('Sinkhorn needs at least one iteration')
+        if self.variant == 'mhc' and (self.streams != 4 or self.width % 128):
+            raise ValueError('Official mHC kernels require four streams and width divisible by 128')
 
 
 class ConnectionBlock(Block):
@@ -44,20 +46,25 @@ class ConnectionBlock(Block):
         super().__init__(native, index)
         self.attn.ve_gate = None
         self.variant = config.variant
+        self.compiled_attention = self.compiled_mlp = None
         if self.variant != 'baseline':
-            cls = HyperConnection if self.variant == 'hc' else ManifoldHyperConnection
-            kwargs = {} if self.variant == 'hc' else dict(iterations=config.sinkhorn_iterations)
-            self.attn_connection = cls(config.width, config.streams, 2*index, **kwargs)
-            self.mlp_connection = cls(config.width, config.streams, 2*index+1, **kwargs)
+            self.attn_connection = ManifoldHyperConnection(config.width, config.streams, 2*index, config.sinkhorn_iterations)
+            self.mlp_connection = ManifoldHyperConnection(config.width, config.streams, 2*index+1, config.sinkhorn_iterations)
+
+    def attention_branch(self, h, cos, sin, kv_cache=None):
+        return self.attn(norm(h), None, (cos, sin), (-1, 0), kv_cache)
+
+    def mlp_branch(self, h):
+        return self.mlp(norm(h))
 
     def forward(self, x, cos, sin, kv_cache=None):
         if self.variant == 'baseline':
             return super().forward(x, None, (cos, sin), (-1, 0), kv_cache)
         h, skip, post = self.attn_connection.read(x)
-        y = self.attn(norm(h), None, (cos, sin), (-1, 0), kv_cache)
+        y = (self.compiled_attention or self.attention_branch)(h, cos, sin, kv_cache)
         x = self.attn_connection.write(y, skip, post)
         h, skip, post = self.mlp_connection.read(x)
-        y = self.mlp(norm(h))
+        y = (self.compiled_mlp or self.mlp_branch)(h)
         return self.mlp_connection.write(y, skip, post)
 
 
@@ -94,11 +101,21 @@ class ConnectionModel(nn.Module):
         self.compiled_steps = None
 
     def prepare(self, device='cuda', dtype=torch.bfloat16, compile_blocks=False):
+        if self.config.variant == 'mhc':
+            check_official_device(device)
+            if dtype != torch.bfloat16:
+                raise ValueError('Official mHC kernels require BF16 activations')
         self.to(device)
         self.wte.to(dtype=dtype)
         self.cos = self.cos.to(dtype); self.sin = self.sin.to(dtype)
-        if compile_blocks:
+        if compile_blocks and self.config.variant == 'baseline':
             self.compiled_steps = [torch.compile(b.forward, dynamic=False, fullgraph=True) for b in self.blocks]
+        elif compile_blocks:
+            # TileKernels supplies its own compiled kernels and custom backward.
+            # Compile only the unchanged attention/MLP branches with Inductor.
+            for b in self.blocks:
+                b.compiled_attention = torch.compile(b.attention_branch, dynamic=False, fullgraph=True)
+                b.compiled_mlp = torch.compile(b.mlp_branch, dynamic=False, fullgraph=True)
         return self
 
     def hidden(self, idx, kv_cache=None):
@@ -107,7 +124,7 @@ class ConnectionModel(nn.Module):
             raise ValueError('Input exceeds configured context length')
         x = norm(self.wte(idx))
         if self.config.variant != 'baseline':
-            x = x.unsqueeze(-2).expand(*x.shape[:-1], self.config.streams, x.shape[-1])
+            x = expand_streams(x, self.config.streams)
         cos, sin = self.cos[:, start:start+idx.shape[1]], self.sin[:, start:start+idx.shape[1]]
         for i, b in enumerate(self.blocks):
             fn = self.compiled_steps[i] if self.compiled_steps is not None else b.forward
@@ -119,8 +136,6 @@ class ConnectionModel(nn.Module):
                 x = fn(x, cos, sin, kv_cache)
         if self.stream_head is not None:
             x = self.stream_head(x)
-        elif self.config.variant == 'hc':
-            x = x.sum(dim=-2)  # Original HC readout convention, then final native RMSNorm.
         return norm(x)
 
     def forward(self, idx, targets=None, dense=False, kv_cache=None):

@@ -231,6 +231,6 @@ MIT
 
 ## Full-attention connection experiments
 
-The full-attention vanilla, HC and mHC research models and training entry are
+The full-attention vanilla and official-kernel mHC research models and training entry are
 documented in [research/connections/README.md](research/connections/README.md).
 The native GPT path remains available unchanged. EBT experiments have ended.
