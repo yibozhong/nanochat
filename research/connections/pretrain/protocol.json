@@ -1,0 +1,50 @@
+{
+  "purpose": "Matched approximately59M vanilla/full-NVIDIA-mHC FineWeb pretraining after completed width audit",
+  "scale_job": "7547870.0",
+  "scale_audit": "research/connections/scale/audit.json",
+  "model": {
+    "depth": 8,
+    "width": 512,
+    "heads": 4,
+    "sequence_length": 2048,
+    "vocab_size": 32768,
+    "baseline_parameters": 58720256,
+    "mhc_parameters": 59515317
+  },
+  "variants": [
+    "baseline",
+    "mhc"
+  ],
+  "connection_backend": "nvidia for mhc; ordinary gradient accumulation, no FP32 fusion buffers",
+  "initialization": "Same seeded vanilla backbone weights copied into mHC; connector initialization unchanged",
+  "seed": 42,
+  "microbatch": 16,
+  "grad_accum": 1,
+  "batch_tokens": 32768,
+  "activation_checkpoint": false,
+  "attention_backend": "sdpa_cudnn",
+  "optimizer": "Native MuonAdamW/default LR and native batch-width scaling",
+  "dataset": "FineWeb-Edu official sample-10BT revision87f09149; train000..012 heldout013",
+  "tokenizer": "Existing RustBPE32K pilot tokenizer; unchanged",
+  "training_token_budget": null,
+  "budget_status": "Waiting for user clarification: sample-10BT dataset with previous1B/run, or10B/run",
+  "data_uri_1b": "osdf:///chtc/staging/y/yzhong239/nanochat-ebt-20261029/data-7444406.tar",
+  "validation": {
+    "dev_tokens": 131072,
+    "test_tokens": 2097152,
+    "dev_every_steps": 250,
+    "save_every_steps": 500,
+    "final_test": "Final checkpoint and dev-selected checkpoint; test never used for selection"
+  },
+  "checkpoint": {
+    "latest": "model/optimizer/RNG/step/data manifest/source/protocol",
+    "best": "dev-selected model",
+    "segment_seconds": 14400,
+    "resume_wandb_id": true
+  },
+  "gate": "3 new matched-init/optimizer-RNG checks plus each variant step25 exit85 and fresh-process resume through50",
+  "wandb_project": "yibozhong657-none/nanochat",
+  "wandb_group": "mhc-pretrain-20261030",
+  "submission": "Two independent single-GPU jobs in parallel after scale audit, GPU restart gate, budget clarification and packed-data readiness",
+  "status": "preparing_gate"
+}
