@@ -1,0 +1,588 @@
+{
+  "complete": true,
+  "job": "7547870.0",
+  "source": {
+    "commit": "b01d554c3edfe630b8e4b59b6bf719273ec211f8",
+    "official_tilekernels": "36d9e45d38e204ebb87e6f6e833821eee0482fe5",
+    "native_base": "145da40cdd37b9522aa53d26c0c356e9126458bb",
+    "transformer_engine": "2.20.2",
+    "hashes": {
+      "source.tar": "5a706836e1019d3791233b6be1f64c9a9b25d78d0ec9e119369e37f1dadf06bb",
+      "legacy-baseline.tar": "5f92ef457c61e8b4ab7d145873857b4772f4668b69c1236a9e93562283e67c24",
+      "mhc-official-runtime-7546767.tar.gz": "6b927f93021961293e12452b4001a479ff1b54cbc1aae0355e73e75a393d4dc0",
+      "cuda-compat-13-1_590.48.01-1_amd64.deb": "066f24c715f5f8f31bb7e8bd0f9ddc93fe78a82d3be55c6f3e9bbe26fa4fd7be",
+      "transformer_engine_torch-2.20.2-cp311-cp311-linux_x86_64.whl": "9b69f40b34570e3073171dcb231d6dd038092d20a277e501e7da01e6475920de"
+    },
+    "purpose": "Single-GPU width scaling at 0.94B/1.43B/2.01B; complete NVIDIA mHC versus vanilla, two repeats, no quality pretraining or checkpoints",
+    "extension_cache": {
+      "wheel": "transformer_engine_torch-2.20.2-cp311-cp311-linux_x86_64.whl",
+      "sha256": "9b69f40b34570e3073171dcb231d6dd038092d20a277e501e7da01e6475920de",
+      "torch": "2.10.0+cu130",
+      "cuda": "13.0",
+      "cxx11_abi": true,
+      "source": "Unmodified PyPI transformer-engine-torch 2.20.2 sdist, repacked installed extension; retained to avoid repeated C++ builds",
+      "files": [
+        "transformer_engine/wheel_lib/transformer_engine_torch.cpython-311-x86_64-linux-gnu.so",
+        "transformer_engine_torch-2.20.2.dist-info/METADATA",
+        "transformer_engine_torch-2.20.2.dist-info/WHEEL",
+        "transformer_engine_torch-2.20.2.dist-info/licenses/LICENSE",
+        "transformer_engine_torch-2.20.2.dist-info/top_level.txt",
+        "transformer_engine_torch-2.20.2.dist-info/uv_build.json",
+        "transformer_engine_torch-2.20.2.dist-info/RECORD"
+      ]
+    },
+    "regression_gate": "Full NVIDIA 22/22 passed in 7547667.0; new widths receive 9 additional math and causal checks before this sweep"
+  },
+  "checks": {
+    "tests": 9,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "gpu": "NVIDIA H200 NVL",
+  "gpu_uuid": "54b74e88-800c-8d12-9f05-875222a2297b",
+  "common_microbatch": 8,
+  "grad_accum": 2,
+  "rows": [
+    {
+      "width": 2048,
+      "depth": 16,
+      "heads": 16,
+      "baseline": {
+        "parameters": 939524096,
+        "mean_ms": 563.9477929100394,
+        "median_ms": 564.4136257469654,
+        "repeat_mean_ms": [
+          563.737380101035,
+          564.1582057190438
+        ],
+        "tokens_per_second": 58104.66928314963,
+        "forward_backward_event_ms": 467.2808871269226,
+        "optimizer_event_ms": 89.31268787384033,
+        "reserved_gib": 41.056640625,
+        "run_ids": [
+          "857b6026",
+          "99e78a6f"
+        ]
+      },
+      "mhc": {
+        "parameters": 945849189,
+        "mean_ms": 688.6562660181274,
+        "median_ms": 689.1480032354593,
+        "repeat_mean_ms": [
+          688.5145718542238,
+          688.797960182031
+        ],
+        "tokens_per_second": 47582.519199988594,
+        "forward_backward_event_ms": 589.5089254379272,
+        "optimizer_event_ms": 89.43085479736328,
+        "reserved_gib": 51.5390625,
+        "run_ids": [
+          "c7df5b44",
+          "c8228300"
+        ]
+      },
+      "extra_step_ms": 124.70847310808801,
+      "overhead_pct": 22.11347835312505,
+      "paired_overhead_pct": [
+        22.133921956856195,
+        22.0930499990031
+      ],
+      "forward_backward_event_overhead_pct": 26.15729461192473
+    },
+    {
+      "width": 2560,
+      "depth": 16,
+      "heads": 20,
+      "baseline": {
+        "parameters": 1426063360,
+        "mean_ms": 844.4351538705329,
+        "median_ms": 844.872304238379,
+        "repeat_mean_ms": [
+          842.7736908507844,
+          846.0966168902814
+        ],
+        "tokens_per_second": 38804.6374547594,
+        "forward_backward_event_ms": 666.5040063858032,
+        "optimizer_event_ms": 164.57533073425293,
+        "reserved_gib": 59.4765625,
+        "run_ids": [
+          "9e7f123a",
+          "9bf800d3"
+        ]
+      },
+      "mhc": {
+        "parameters": 1433969509,
+        "mean_ms": 996.8887197164198,
+        "median_ms": 997.6253602653742,
+        "repeat_mean_ms": [
+          998.299938843896,
+          995.4775005889436
+        ],
+        "tokens_per_second": 32870.26861866925,
+        "forward_backward_event_ms": 816.5533723831177,
+        "optimizer_event_ms": 164.68186569213867,
+        "reserved_gib": 72.98046875,
+        "run_ids": [
+          "aa09f41a",
+          "fc1317f1"
+        ]
+      },
+      "extra_step_ms": 152.45356584588694,
+      "overhead_pct": 18.053910373946948,
+      "paired_overhead_pct": [
+        18.45409386665915,
+        17.65529854589092
+      ],
+      "forward_backward_event_overhead_pct": 22.512897831023526
+    },
+    {
+      "width": 3072,
+      "depth": 16,
+      "heads": 24,
+      "baseline": {
+        "parameters": 2013265920,
+        "mean_ms": 1177.622101145486,
+        "median_ms": 1178.1383072957397,
+        "repeat_mean_ms": [
+          1175.5851200781763,
+          1179.6590822127957
+        ],
+        "tokens_per_second": 27825.56472753543,
+        "forward_backward_event_ms": 886.6824493408203,
+        "optimizer_event_ms": 273.3289260864258,
+        "reserved_gib": 78.970703125,
+        "run_ids": [
+          "36874765",
+          "f85d3171"
+        ]
+      },
+      "mhc": {
+        "parameters": 2022753125,
+        "mean_ms": 1356.2560760571312,
+        "median_ms": 1357.5933873653412,
+        "repeat_mean_ms": [
+          1355.6584744093318,
+          1356.8536777049303
+        ],
+        "tokens_per_second": 24160.629086552883,
+        "forward_backward_event_ms": 1061.572675704956,
+        "optimizer_event_ms": 271.33827209472656,
+        "reserved_gib": 95.388671875,
+        "run_ids": [
+          "8ad7d359",
+          "120efb58"
+        ]
+      },
+      "extra_step_ms": 178.63397491164505,
+      "overhead_pct": 15.169040623293828,
+      "paired_overhead_pct": [
+        15.31776400157061,
+        15.020830862400869
+      ],
+      "forward_backward_event_overhead_pct": 19.724110530681305
+    }
+  ],
+  "trial_details": [
+    {
+      "width": 2048,
+      "variant": "baseline",
+      "repetition": 0,
+      "run_id": "857b6026",
+      "mean_ms": 563.737380101035,
+      "median_ms": 564.1994569450617,
+      "stdev_ms": 2.9046389861730995,
+      "forward_backward_event_ms": 467.2315330505371,
+      "optimizer_event_ms": 89.11987113952637,
+      "finite_check_event_ms": 7.525943994522095,
+      "allocated_gib": 30.92627191543579,
+      "reserved_gib": 41.056640625,
+      "nvidia_kernel_counts": {},
+      "attention_kernels": [
+        {
+          "name": "cudnn_generated_fort_native_sdpa_sm90_flash_bprop_wgmma_f16_knob_26_64x64x128_1x4x1_cga1x1x1_kernel0_0",
+          "ms_per_step": 28.96001700000001,
+          "count": 64
+        },
+        {
+          "name": "cudnn_generated_fort_native_sdpa_sm90_flash_fprop_wgmma_f16_knob_7_64x128x128_4x1x1_cga1x1x1_kernel0_0",
+          "ms_per_step": 10.632331500000003,
+          "count": 64
+        }
+      ]
+    },
+    {
+      "width": 2048,
+      "variant": "mhc",
+      "repetition": 0,
+      "run_id": "c7df5b44",
+      "mean_ms": 688.5145718542238,
+      "median_ms": 689.1388026997447,
+      "stdev_ms": 2.4605194979759717,
+      "forward_backward_event_ms": 590.5133113861084,
+      "optimizer_event_ms": 89.45702362060547,
+      "finite_check_event_ms": 8.732048273086548,
+      "allocated_gib": 41.768394470214844,
+      "reserved_gib": 51.5390625,
+      "nvidia_kernel_counts": {
+        "_mhc_projection_fwd_fused": 132,
+        "_mhc_projection_bwd_fused_dx": 132,
+        "_mhc_scale_fwd_fused": 132,
+        "_mhc_scale_bwd_fused": 132,
+        "_mhc_aggregate_fwd": 132,
+        "_mhc_aggregate_bwd": 132,
+        "_mhc_expand_combine_fwd": 128,
+        "_mhc_expand_combine_bwd": 128,
+        "_mhc_sinkhorn_fwd_fused": 128,
+        "_mhc_sinkhorn_bwd_fused": 128
+      },
+      "attention_kernels": [
+        {
+          "name": "cudnn_generated_fort_native_sdpa_sm90_flash_bprop_wgmma_f16_knob_26_64x64x128_1x4x1_cga1x1x1_kernel0_0",
+          "ms_per_step": 27.751026499999995,
+          "count": 64
+        },
+        {
+          "name": "cudnn_generated_fort_native_sdpa_sm90_flash_fprop_wgmma_f16_knob_7_64x128x128_4x1x1_cga1x1x1_kernel0_0",
+          "ms_per_step": 10.2427335,
+          "count": 64
+        }
+      ]
+    },
+    {
+      "width": 2560,
+      "variant": "baseline",
+      "repetition": 0,
+      "run_id": "9e7f123a",
+      "mean_ms": 842.7736908507844,
+      "median_ms": 842.1108778566122,
+      "stdev_ms": 3.9883051198428126,
+      "forward_backward_event_ms": 663.6054859161377,
+      "optimizer_event_ms": 163.4868049621582,
+      "finite_check_event_ms": 10.433704137802124,
+      "allocated_gib": 41.99696207046509,
+      "reserved_gib": 58.56640625,
+      "nvidia_kernel_counts": {},
+      "attention_kernels": [
+        {
+          "name": "cudnn_generated_fort_native_sdpa_sm90_flash_bprop_wgmma_f16_knob_26_64x64x128_1x4x1_cga1x1x1_kernel0_0",
+          "ms_per_step": 35.9336345,
+          "count": 64
+        },
+        {
+          "name": "cudnn_generated_fort_native_sdpa_sm90_flash_fprop_wgmma_f16_knob_7_64x128x128_4x1x1_cga1x1x1_kernel0_0",
+          "ms_per_step": 13.031048499999999,
+          "count": 64
+        }
+      ]
+    },
+    {
+      "width": 2560,
+      "variant": "mhc",
+      "repetition": 0,
+      "run_id": "aa09f41a",
+      "mean_ms": 998.299938843896,
+      "median_ms": 998.7554308027029,
+      "stdev_ms": 3.100047692603793,
+      "forward_backward_event_ms": 818.7186050415039,
+      "optimizer_event_ms": 165.2194938659668,
+      "finite_check_event_ms": 11.920040130615234,
+      "allocated_gib": 55.50002193450928,
+      "reserved_gib": 72.880859375,
+      "nvidia_kernel_counts": {
+        "_mhc_projection_fwd_fused": 132,
+        "_mhc_projection_bwd_fused_dx": 132,
+        "_mhc_scale_fwd_fused": 132,
+        "_mhc_scale_bwd_fused": 132,
+        "_mhc_aggregate_fwd": 132,
+        "_mhc_aggregate_bwd": 132,
+        "_mhc_expand_combine_fwd": 128,
+        "_mhc_expand_combine_bwd": 128,
+        "_mhc_sinkhorn_fwd_fused": 128,
+        "_mhc_sinkhorn_bwd_fused": 128
+      },
+      "attention_kernels": [
+        {
+          "name": "cudnn_generated_fort_native_sdpa_sm90_flash_bprop_wgmma_f16_knob_26_64x64x128_1x4x1_cga1x1x1_kernel0_0",
+          "ms_per_step": 35.0935985,
+          "count": 64
+        },
+        {
+          "name": "cudnn_generated_fort_native_sdpa_sm90_flash_fprop_wgmma_f16_knob_7_64x128x128_4x1x1_cga1x1x1_kernel0_0",
+          "ms_per_step": 12.956508500000002,
+          "count": 64
+        }
+      ]
+    },
+    {
+      "width": 3072,
+      "variant": "baseline",
+      "repetition": 0,
+      "run_id": "36874765",
+      "mean_ms": 1175.5851200781763,
+      "median_ms": 1176.097814925015,
+      "stdev_ms": 5.885466113553829,
+      "forward_backward_event_ms": 881.9395332336426,
+      "optimizer_event_ms": 271.42604064941406,
+      "finite_check_event_ms": 13.849000215530396,
+      "allocated_gib": 54.235132694244385,
+      "reserved_gib": 78.970703125,
+      "nvidia_kernel_counts": {},
+      "attention_kernels": [
+        {
+          "name": "cudnn_generated_fort_native_sdpa_sm90_flash_bprop_wgmma_f16_knob_26_64x64x128_1x4x1_cga1x1x1_kernel0_0",
+          "ms_per_step": 44.577672,
+          "count": 64
+        },
+        {
+          "name": "cudnn_generated_fort_native_sdpa_sm90_flash_fprop_wgmma_f16_knob_7_64x128x128_4x1x1_cga1x1x1_kernel0_0",
+          "ms_per_step": 16.044027,
+          "count": 64
+        }
+      ]
+    },
+    {
+      "width": 3072,
+      "variant": "mhc",
+      "repetition": 0,
+      "run_id": "8ad7d359",
+      "mean_ms": 1355.6584744093318,
+      "median_ms": 1357.6265424489975,
+      "stdev_ms": 4.922754292947615,
+      "forward_backward_event_ms": 1061.3704223632812,
+      "optimizer_event_ms": 272.03504943847656,
+      "finite_check_event_ms": 15.078143835067749,
+      "allocated_gib": 70.40242767333984,
+      "reserved_gib": 95.388671875,
+      "nvidia_kernel_counts": {
+        "_mhc_projection_fwd_fused": 132,
+        "_mhc_projection_bwd_fused_dx": 132,
+        "_mhc_scale_fwd_fused": 132,
+        "_mhc_scale_bwd_fused": 132,
+        "_mhc_aggregate_fwd": 132,
+        "_mhc_aggregate_bwd": 132,
+        "_mhc_expand_combine_fwd": 128,
+        "_mhc_expand_combine_bwd": 128,
+        "_mhc_sinkhorn_fwd_fused": 128,
+        "_mhc_sinkhorn_bwd_fused": 128
+      },
+      "attention_kernels": [
+        {
+          "name": "cudnn_generated_fort_native_sdpa_sm90_flash_bprop_wgmma_f16_knob_26_64x64x128_1x4x1_cga1x1x1_kernel0_0",
+          "ms_per_step": 42.691017,
+          "count": 64
+        },
+        {
+          "name": "cudnn_generated_fort_native_sdpa_sm90_flash_fprop_wgmma_f16_knob_7_64x128x128_4x1x1_cga1x1x1_kernel0_0",
+          "ms_per_step": 15.461604,
+          "count": 64
+        }
+      ]
+    },
+    {
+      "width": 3072,
+      "variant": "mhc",
+      "repetition": 1,
+      "run_id": "120efb58",
+      "mean_ms": 1356.8536777049303,
+      "median_ms": 1357.5933873653412,
+      "stdev_ms": 4.335905703902332,
+      "forward_backward_event_ms": 1061.7749290466309,
+      "optimizer_event_ms": 270.64149475097656,
+      "finite_check_event_ms": 15.112616062164307,
+      "allocated_gib": 70.40242767333984,
+      "reserved_gib": 95.388671875,
+      "nvidia_kernel_counts": {
+        "_mhc_projection_fwd_fused": 132,
+        "_mhc_projection_bwd_fused_dx": 132,
+        "_mhc_scale_fwd_fused": 132,
+        "_mhc_scale_bwd_fused": 132,
+        "_mhc_aggregate_fwd": 132,
+        "_mhc_aggregate_bwd": 132,
+        "_mhc_expand_combine_fwd": 128,
+        "_mhc_expand_combine_bwd": 128,
+        "_mhc_sinkhorn_fwd_fused": 128,
+        "_mhc_sinkhorn_bwd_fused": 128
+      },
+      "attention_kernels": [
+        {
+          "name": "cudnn_generated_fort_native_sdpa_sm90_flash_bprop_wgmma_f16_knob_26_64x64x128_1x4x1_cga1x1x1_kernel0_0",
+          "ms_per_step": 42.739368500000005,
+          "count": 64
+        },
+        {
+          "name": "cudnn_generated_fort_native_sdpa_sm90_flash_fprop_wgmma_f16_knob_7_64x128x128_4x1x1_cga1x1x1_kernel0_0",
+          "ms_per_step": 15.6072525,
+          "count": 64
+        }
+      ]
+    },
+    {
+      "width": 3072,
+      "variant": "baseline",
+      "repetition": 1,
+      "run_id": "f85d3171",
+      "mean_ms": 1179.6590822127957,
+      "median_ms": 1179.5246861875057,
+      "stdev_ms": 3.5926911420538756,
+      "forward_backward_event_ms": 891.425365447998,
+      "optimizer_event_ms": 275.2318115234375,
+      "finite_check_event_ms": 13.93130373954773,
+      "allocated_gib": 54.235132694244385,
+      "reserved_gib": 78.970703125,
+      "nvidia_kernel_counts": {},
+      "attention_kernels": [
+        {
+          "name": "cudnn_generated_fort_native_sdpa_sm90_flash_bprop_wgmma_f16_knob_26_64x64x128_1x4x1_cga1x1x1_kernel0_0",
+          "ms_per_step": 45.2108465,
+          "count": 64
+        },
+        {
+          "name": "cudnn_generated_fort_native_sdpa_sm90_flash_fprop_wgmma_f16_knob_7_64x128x128_4x1x1_cga1x1x1_kernel0_0",
+          "ms_per_step": 16.203592000000004,
+          "count": 64
+        }
+      ]
+    },
+    {
+      "width": 2560,
+      "variant": "mhc",
+      "repetition": 1,
+      "run_id": "fc1317f1",
+      "mean_ms": 995.4775005889436,
+      "median_ms": 996.032259427011,
+      "stdev_ms": 4.170057718292489,
+      "forward_backward_event_ms": 814.3881397247314,
+      "optimizer_event_ms": 164.14423751831055,
+      "finite_check_event_ms": 11.726391792297363,
+      "allocated_gib": 55.50417232513428,
+      "reserved_gib": 72.98046875,
+      "nvidia_kernel_counts": {
+        "_mhc_projection_fwd_fused": 132,
+        "_mhc_projection_bwd_fused_dx": 132,
+        "_mhc_scale_fwd_fused": 132,
+        "_mhc_scale_bwd_fused": 132,
+        "_mhc_aggregate_fwd": 132,
+        "_mhc_aggregate_bwd": 132,
+        "_mhc_expand_combine_fwd": 128,
+        "_mhc_expand_combine_bwd": 128,
+        "_mhc_sinkhorn_fwd_fused": 128,
+        "_mhc_sinkhorn_bwd_fused": 128
+      },
+      "attention_kernels": [
+        {
+          "name": "cudnn_generated_fort_native_sdpa_sm90_flash_bprop_wgmma_f16_knob_26_64x64x128_1x4x1_cga1x1x1_kernel0_0",
+          "ms_per_step": 34.50064950000001,
+          "count": 64
+        },
+        {
+          "name": "cudnn_generated_fort_native_sdpa_sm90_flash_fprop_wgmma_f16_knob_7_64x128x128_4x1x1_cga1x1x1_kernel0_0",
+          "ms_per_step": 12.718888999999997,
+          "count": 64
+        }
+      ]
+    },
+    {
+      "width": 2560,
+      "variant": "baseline",
+      "repetition": 1,
+      "run_id": "9bf800d3",
+      "mean_ms": 846.0966168902814,
+      "median_ms": 846.1826853454113,
+      "stdev_ms": 3.6284833636451745,
+      "forward_backward_event_ms": 669.4025268554688,
+      "optimizer_event_ms": 165.66385650634766,
+      "finite_check_event_ms": 10.406672239303589,
+      "allocated_gib": 41.99696207046509,
+      "reserved_gib": 59.4765625,
+      "nvidia_kernel_counts": {},
+      "attention_kernels": [
+        {
+          "name": "cudnn_generated_fort_native_sdpa_sm90_flash_bprop_wgmma_f16_knob_26_64x64x128_1x4x1_cga1x1x1_kernel0_0",
+          "ms_per_step": 36.433432499999995,
+          "count": 64
+        },
+        {
+          "name": "cudnn_generated_fort_native_sdpa_sm90_flash_fprop_wgmma_f16_knob_7_64x128x128_4x1x1_cga1x1x1_kernel0_0",
+          "ms_per_step": 13.310719999999996,
+          "count": 64
+        }
+      ]
+    },
+    {
+      "width": 2048,
+      "variant": "mhc",
+      "repetition": 1,
+      "run_id": "c8228300",
+      "mean_ms": 688.797960182031,
+      "median_ms": 689.1480032354593,
+      "stdev_ms": 2.157111388779884,
+      "forward_backward_event_ms": 588.5045394897461,
+      "optimizer_event_ms": 89.4046859741211,
+      "finite_check_event_ms": 8.756655931472778,
+      "allocated_gib": 41.768394470214844,
+      "reserved_gib": 51.5390625,
+      "nvidia_kernel_counts": {
+        "_mhc_projection_fwd_fused": 132,
+        "_mhc_projection_bwd_fused_dx": 132,
+        "_mhc_scale_fwd_fused": 132,
+        "_mhc_scale_bwd_fused": 132,
+        "_mhc_aggregate_fwd": 132,
+        "_mhc_aggregate_bwd": 132,
+        "_mhc_expand_combine_fwd": 128,
+        "_mhc_expand_combine_bwd": 128,
+        "_mhc_sinkhorn_fwd_fused": 128,
+        "_mhc_sinkhorn_bwd_fused": 128
+      },
+      "attention_kernels": [
+        {
+          "name": "cudnn_generated_fort_native_sdpa_sm90_flash_bprop_wgmma_f16_knob_26_64x64x128_1x4x1_cga1x1x1_kernel0_0",
+          "ms_per_step": 27.719603000000003,
+          "count": 64
+        },
+        {
+          "name": "cudnn_generated_fort_native_sdpa_sm90_flash_fprop_wgmma_f16_knob_7_64x128x128_4x1x1_cga1x1x1_kernel0_0",
+          "ms_per_step": 10.260207500000002,
+          "count": 64
+        }
+      ]
+    },
+    {
+      "width": 2048,
+      "variant": "baseline",
+      "repetition": 1,
+      "run_id": "99e78a6f",
+      "mean_ms": 564.1582057190438,
+      "median_ms": 564.7101243957877,
+      "stdev_ms": 3.0012073631662957,
+      "forward_backward_event_ms": 467.3302412033081,
+      "optimizer_event_ms": 89.5055046081543,
+      "finite_check_event_ms": 7.552359938621521,
+      "allocated_gib": 30.92627191543579,
+      "reserved_gib": 41.052734375,
+      "nvidia_kernel_counts": {},
+      "attention_kernels": [
+        {
+          "name": "cudnn_generated_fort_native_sdpa_sm90_flash_bprop_wgmma_f16_knob_26_64x64x128_1x4x1_cga1x1x1_kernel0_0",
+          "ms_per_step": 28.967100500000004,
+          "count": 64
+        },
+        {
+          "name": "cudnn_generated_fort_native_sdpa_sm90_flash_fprop_wgmma_f16_knob_7_64x128x128_4x1x1_cga1x1x1_kernel0_0",
+          "ms_per_step": 10.829892499999998,
+          "count": 64
+        }
+      ]
+    }
+  ],
+  "all_nvidia_trace_verified": true,
+  "matched_attention_verified": true,
+  "total_completed_optimizer_tokens": 34209792,
+  "limitations": [
+    "Throughput diagnostics, not a quality comparison",
+    "Width scaling at fixed depth; does not separately test depth scaling",
+    "Previous 59M result has a different depth and potentially different GPU/microbatch; do not treat it as a matched point",
+    "No statistical population claim from two repeats on one GPU"
+  ],
+  "archive_sha256": "62d8242cccfcfe48c9b38d8590987aea365223558079d045b922c485bf4bac94"
+}

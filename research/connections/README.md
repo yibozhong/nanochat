@@ -394,7 +394,7 @@ correctness/throughput result, with **no long-run quality comparison or 1B run**
   include paths fixed it. The compiled official extension is retained in the
   successful archive for retries, with its Torch/CUDA/ABI and SHA-256 metadata.
 
-## Authorized 1B--2B width comparison
+## Completed 1B--2B width comparison
 
 The user requested a larger-model throughput comparison, narrowed explicitly
 to start at 1B and end at 2B. The [protocol](scale/protocol.json) fixes 16 layers,
@@ -412,5 +412,40 @@ MuonAdamW and its batch/width scaling are unchanged. Forward/backward and
 optimizer costs are reported separately to distinguish mHC amortization from
 a growing optimizer-time denominator. New-width math and causality gates
 precede measurement. No quality/pretraining run or checkpoint is authorized
-by this bounded experiment. Results are pending; the earlier 59M timings are
-not a matched point in this width sweep.
+by this bounded experiment. The earlier 59M timings are not a matched point
+in this width sweep.
+
+Job **7547870.0** completed with exit0, one start, on one **H200 NVL**
+(UUID `54b74e88-800c-8d12-9f05-875222a2297b`). All nine new-width checks
+passed. Twelve timing trials, three capacity probes, and the parent W&B run
+were verified. The two repetitions use identical training seeds/data and
+measure timing repeatability, not variation across independent training seeds.
+
+| Vanilla parameters | Vanilla ms/step | Full NVIDIA mHC ms/step | Total overhead | Forward+backward event overhead | Reserved GiB vanilla/mHC |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| 0.940B | 563.948 | 688.656 | 22.11% | 26.16% | 41.06/51.54 |
+| 1.426B | 844.435 | 996.889 | 18.05% | 22.51% | 59.48/72.98 |
+| 2.013B | 1177.622 | 1356.256 | 15.17% | 19.72% | 78.97/95.39 |
+
+The paired overhead percentages for repetitions 1/2 are 22.13/22.09%,
+18.45/17.66%, and 15.32/15.02%, respectively. Increasing width at fixed
+depth reduces relative mHC cost in this setup, even when optimizer time is
+excluded. Absolute extra time still increases from 124.71 to 178.63 ms/update.
+CUDA-event intervals include host gaps; they are not isolated kernel time.
+
+The 2B mHC micro16 capacity probe completed four updates but reserved
+130.03 GiB, exceeding the predeclared 90%-of-device memory criterion. The
+selected common setting is **micro8/accum2**, no checkpointing, for all trials.
+It is a capacity selection, not a throughput-tuning claim. All twelve traces
+passed NVIDIA-operator count checks and paired cuDNN attention-name checks;
+full mHC traces contain no DeepSeek mHC kernels. Both model families use
+unchanged kernels and the same pinned runtime.
+
+This result is consistent in magnitude with the NVIDIA author's approximately
+14.6% complete-step overhead on 2B Nemotron/B200, but is not that training
+recipe or hardware reproduction. It establishes no language-model quality
+benefit. Total completed diagnostic updates consumed **34,209,792 tokens**,
+including the capacity probes; no checkpoint or long pretraining was produced.
+
+- [Audited scaling results](scale/audit.json), [raw summaries](scale/results.json).
+- [W&B scaling experiment](https://wandb.ai/yibozhong657-none/nanochat/runs/ecc79ff9).
