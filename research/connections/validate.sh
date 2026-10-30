@@ -63,4 +63,4 @@ assert torch.cuda.get_device_capability()[0] >= 8
 assert cut_cross_entropy.__version__=='25.9.3'
 print('GPU:',torch.cuda.get_device_name(),torch.__version__,torch.version.cuda,flush=True)
 PYCHECK
-python -m scripts.connection_validate "$@"
+python -m "${NANOCHAT_CONNECTION_ENTRYPOINT:-scripts.connection_validate}" "$@"
