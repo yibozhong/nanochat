@@ -1,0 +1,160 @@
+{
+  "passed": true,
+  "source": {
+    "commit": "8320fc6f7fd1606805569b2cd17e928bb7f3a8af",
+    "native_base": "145da40cdd37b9522aa53d26c0c356e9126458bb",
+    "hashes": {
+      "source.tar": "f97e8f661909b44f6b77125c3eb54565dc112f359b19d1684be0ab00ea15108f",
+      "legacy-baseline.tar": "5f92ef457c61e8b4ab7d145873857b4772f4668b69c1236a9e93562283e67c24",
+      "cce-3de376c.tar.gz": "efe1a0f10675822ee8daef868fdd1655355c76268767a1584596c3dffb002a7a"
+    }
+  },
+  "run_id": "da3193bb",
+  "checks": {
+    "tests": 25,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 10,
+    "passed": 15
+  },
+  "smokes": {
+    "baseline": {
+      "complete": true,
+      "variant": "baseline",
+      "run_id": "80f9ee54",
+      "steps": 50,
+      "training_tokens": 1638400,
+      "initial_dev_ce": 10.398012638092041,
+      "final_dev_ce": 6.496223449707031,
+      "best_dev_ce": 6.496223449707031,
+      "dev_tokens": 131072,
+      "training_seconds": 20.86126089701429,
+      "elapsed_seconds": 28.73091023694724,
+      "steady_step_seconds": 0.08237164380261675,
+      "gpu": "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+      "peak_allocated_bytes": 5770930688,
+      "peak_reserved_bytes": 5786042368,
+      "source": {
+        "commit": "8320fc6f7fd1606805569b2cd17e928bb7f3a8af",
+        "native_base": "145da40cdd37b9522aa53d26c0c356e9126458bb",
+        "hashes": {
+          "source.tar": "f97e8f661909b44f6b77125c3eb54565dc112f359b19d1684be0ab00ea15108f",
+          "legacy-baseline.tar": "5f92ef457c61e8b4ab7d145873857b4772f4668b69c1236a9e93562283e67c24",
+          "cce-3de376c.tar.gz": "efe1a0f10675822ee8daef868fdd1655355c76268767a1584596c3dffb002a7a"
+        }
+      },
+      "test_evaluated": false
+    },
+    "hc": {
+      "complete": true,
+      "variant": "hc",
+      "run_id": "e07c7554",
+      "steps": 50,
+      "training_tokens": 1638400,
+      "initial_dev_ce": 10.398012638092041,
+      "final_dev_ce": 6.5411906242370605,
+      "best_dev_ce": 6.5411906242370605,
+      "dev_tokens": 131072,
+      "training_seconds": 25.78336433786899,
+      "elapsed_seconds": 38.90032024635002,
+      "steady_step_seconds": 0.1894198197638616,
+      "gpu": "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+      "peak_allocated_bytes": 15410454528,
+      "peak_reserved_bytes": 15672016896,
+      "source": {
+        "commit": "8320fc6f7fd1606805569b2cd17e928bb7f3a8af",
+        "native_base": "145da40cdd37b9522aa53d26c0c356e9126458bb",
+        "hashes": {
+          "source.tar": "f97e8f661909b44f6b77125c3eb54565dc112f359b19d1684be0ab00ea15108f",
+          "legacy-baseline.tar": "5f92ef457c61e8b4ab7d145873857b4772f4668b69c1236a9e93562283e67c24",
+          "cce-3de376c.tar.gz": "efe1a0f10675822ee8daef868fdd1655355c76268767a1584596c3dffb002a7a"
+        }
+      },
+      "test_evaluated": false
+    },
+    "mhc": {
+      "complete": true,
+      "variant": "mhc",
+      "run_id": "5006cbcc",
+      "steps": 50,
+      "training_tokens": 1638400,
+      "initial_dev_ce": 10.398012638092041,
+      "final_dev_ce": 6.498917818069458,
+      "best_dev_ce": 6.498917818069458,
+      "dev_tokens": 131072,
+      "training_seconds": 46.175246756058186,
+      "elapsed_seconds": 63.344415016938,
+      "steady_step_seconds": 0.1837308613350615,
+      "gpu": "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+      "peak_allocated_bytes": 12118358016,
+      "peak_reserved_bytes": 12316573696,
+      "source": {
+        "commit": "8320fc6f7fd1606805569b2cd17e928bb7f3a8af",
+        "native_base": "145da40cdd37b9522aa53d26c0c356e9126458bb",
+        "hashes": {
+          "source.tar": "f97e8f661909b44f6b77125c3eb54565dc112f359b19d1684be0ab00ea15108f",
+          "legacy-baseline.tar": "5f92ef457c61e8b4ab7d145873857b4772f4668b69c1236a9e93562283e67c24",
+          "cce-3de376c.tar.gz": "efe1a0f10675822ee8daef868fdd1655355c76268767a1584596c3dffb002a7a"
+        }
+      },
+      "test_evaluated": false
+    }
+  },
+  "elapsed_seconds": 181.50156497955322,
+  "pretraining_launched": false,
+  "wandb_verified": true,
+  "job": "7546699.0",
+  "skipped_tests": [
+    {
+      "test": "test_basic_causal",
+      "reason": "FA3 required to compare implementations"
+    },
+    {
+      "test": "test_full_context",
+      "reason": "FA3 required to compare implementations"
+    },
+    {
+      "test": "test_sliding_window",
+      "reason": "FA3 required to compare implementations"
+    },
+    {
+      "test": "test_gqa",
+      "reason": "FA3 required to compare implementations"
+    },
+    {
+      "test": "test_larger_model",
+      "reason": "FA3 required to compare implementations"
+    },
+    {
+      "test": "test_kvcache_prefill",
+      "reason": "FA3 required to compare implementations"
+    },
+    {
+      "test": "test_kvcache_single_token",
+      "reason": "FA3 required to compare implementations"
+    },
+    {
+      "test": "test_kvcache_single_token_sliding_window",
+      "reason": "FA3 required to compare implementations"
+    },
+    {
+      "test": "test_backward_gradients_match",
+      "reason": "FA3 required to compare implementations"
+    },
+    {
+      "test": "test_override_fa3",
+      "reason": "FA3 required"
+    }
+  ],
+  "parameter_counts": {
+    "baseline": 58720256,
+    "hc": 58786208,
+    "mhc": 59515317
+  },
+  "limitations": [
+    "FA3 comparison tests skipped on this Blackwell GPU; native SDPA path exercised.",
+    "50-step smokes verify integration, not convergence or a quality advantage.",
+    "Memory figures are PyTorch allocator peaks, not complete device memory; 24GB hardware not tested in this gate.",
+    "Model state restore tested; full interrupted optimizer/RNG continuation not separately exercised for this new entry."
+  ]
+}
