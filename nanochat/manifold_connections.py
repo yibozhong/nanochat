@@ -57,6 +57,9 @@ def compiled_torch_projection():
 
 
 def projection(x, phi, backend='official'):
+    if backend in ('nvidia', 'nvidia_precise'):
+        from nanochat.nvidia_projection import nvidia_projection
+        return nvidia_projection(x, phi, use_tf32=backend == 'nvidia')
     if backend == 'torch':
         return torch_projection(x, phi)
     if backend == 'torch_compile':

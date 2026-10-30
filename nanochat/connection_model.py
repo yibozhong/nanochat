@@ -32,7 +32,7 @@ class ConnectionConfig:
     def __post_init__(self):
         if self.variant not in ('baseline', 'mhc', 'mhc_no_manifold'):
             raise ValueError(f'Unknown connection variant: {self.variant}')
-        if self.projection_backend not in ('official', 'torch', 'torch_compile'):
+        if self.projection_backend not in ('official', 'torch', 'torch_compile', 'nvidia', 'nvidia_precise'):
             raise ValueError(f'Unknown projection backend: {self.projection_backend}')
         if self.variant == 'baseline' and self.projection_backend != 'official':
             raise ValueError('Baseline has no connection projection to replace')

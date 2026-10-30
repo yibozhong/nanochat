@@ -1,0 +1,29 @@
+[project]
+name = "nanochat-mhc-nvidia-runtime"
+version = "0.1.0"
+requires-python = ">=3.11,<3.12"
+dependencies = [
+    "transformer-engine[pytorch,core-cu13]==2.20.2",
+    "torch==2.10.0",
+    "tilelang==0.1.9",
+    "apache-tvm-ffi==0.1.11",
+    "tile-kernels @ git+https://github.com/deepseek-ai/TileKernels.git@36d9e45d38e204ebb87e6f6e833821eee0482fe5",
+    "cut-cross-entropy @ git+https://github.com/apple/ml-cross-entropy.git@3de376c106a1916bc5e1b619f9c77c87a461ee1c",
+    "numpy==2.2.6", "wandb==0.26.1", "pytest==9.0.2",
+    "kernels==0.11.7", "psutil==7.2.1", "filelock==3.20.3",
+    "rustbpe==0.1.0", "tiktoken==0.11.0", "pyarrow==21.0.0",
+]
+
+[tool.uv]
+environments = ["sys_platform == 'linux' and platform_machine == 'x86_64'"]
+
+[tool.uv.sources]
+torch = { index = "pytorch-cu130" }
+
+[[tool.uv.index]]
+name = "pytorch-cu130"
+url = "https://download.pytorch.org/whl/cu130"
+explicit = true
+
+[tool.uv.extra-build-dependencies]
+transformer-engine-torch = [{ requirement = "torch", match-runtime = true }, "wheel", "ninja", "packaging"]

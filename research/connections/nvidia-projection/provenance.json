@@ -1,0 +1,17 @@
+{
+  "transformer_engine": "2.20.2",
+  "upstream": "https://github.com/NVIDIA/TransformerEngine/tree/v2.20.2",
+  "files": {
+    "transformer_engine/pytorch/triton/mhc.py": "4e71eff5d727625ef188e5ec86c2f91b25baf3742b7798313372b2a022e886da",
+    "transformer_engine/common/triton/mhc.py": "0045990824e46034a2d3162a4690fec1fa87f880dbbab0f43c546ba29d62ff7f"
+  },
+  "local_changes_to_upstream": false,
+  "adapter": "flatten/reshape + slice 32 to 24 + FP32 RMS eps 1e-6; final head uses existing zero padding to 24",
+  "precision": {
+    "nvidia": "TE default explicit TF32; common PyTorch matmul TF32 disabled",
+    "nvidia_precise": "TE use_tf32=False (TF32x3 for BF16 x FP32)"
+  },
+  "fused_grad_acc": false,
+  "split_k": false,
+  "environment_change": "apache-tvm-ffi 0.1.9 -> 0.1.11 required by TE cudnn frontend; all comparisons share new environment"
+}

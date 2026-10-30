@@ -116,7 +116,7 @@ def main():
     p.add_argument('--variant',required=True,choices=['baseline','mhc','mhc_no_manifold'])
     p.add_argument('--data-dir',default='../data')
     p.add_argument('--output-dir',required=True)
-    p.add_argument('--projection-backend',choices=['official','torch','torch_compile'],default='official')
+    p.add_argument('--projection-backend',choices=['official','torch','torch_compile','nvidia','nvidia_precise'],default='official')
     p.add_argument('--wandb-group',default='mhc-profiling-20261030')
     a=p.parse_args();out=Path(a.output_dir);out.mkdir(parents=True,exist_ok=True)
     torch.set_num_threads(2);torch.backends.cuda.matmul.allow_tf32=False;seed_all(42)
@@ -126,7 +126,7 @@ def main():
     props=torch.cuda.get_device_properties(0)
     run_id=uuid.uuid4().hex[:8]
     settings=dict(source=source,model=asdict(config),seed=42,microbatch=16,grad_accum=1,batch_tokens=32768,
-        gpu=props.name,gpu_capability=list(torch.cuda.get_device_capability()),sm_count=props.multi_processor_count,
+        gpu=props.name,gpu_uuid=str(props.uuid),gpu_capability=list(torch.cuda.get_device_capability()),sm_count=props.multi_processor_count,
         parameters=sum(p.numel() for p in model.parameters()),parameter_tensors=len(list(model.parameters())),
         optimizer='native MuonAdamW',warmup_steps=20,normal_timed_steps=20,no_finite_check_timed_steps=20,
         event_instrumented_steps=4,profiler_steps=2,torch=torch.__version__,cuda=torch.version.cuda,
