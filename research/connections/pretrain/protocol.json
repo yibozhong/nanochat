@@ -40,7 +40,8 @@
     "latest": "model/optimizer/RNG/step/data manifest/source/protocol",
     "best": "dev-selected model",
     "segment_seconds": 14400,
-    "resume_wandb_id": true
+    "resume_wandb_id": true,
+    "transfer": "HTCondor checkpoint exit85/spool; final latest+best archives returned to dedicated home paths (budget <3GiB for both runs) to avoid remote-object collision retraining; retain for audited archival"
   },
   "gate": "3 new matched-init/optimizer-RNG checks plus each variant step25 exit85 and fresh-process resume through50",
   "wandb_project": "yibozhong657-none/nanochat",

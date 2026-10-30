@@ -176,13 +176,19 @@ def main():
             assert best_test_tokens==test_tokens
             test_result=dict(final_test_ce=final_test,best_selected_test_ce=best_test,
                 best_dev_step=selected['step'],test_tokens=test_tokens)
+        checkpoint_files={}
+        for name in ('latest.pt','best.pt'):
+            path=ckpt/name;digest=hashlib.sha256()
+            with path.open('rb') as handle:
+                while chunk:=handle.read(8*1024*1024):digest.update(chunk)
+            checkpoint_files[name]=dict(bytes=path.stat().st_size,sha256=digest.hexdigest())
         result=dict(complete=True,variant=a.variant,run_id=run_id,steps=step,training_tokens=step*32768,
             initial_dev_ce=initial_dev,final_dev_ce=dev,best_dev_ce=best,dev_tokens=dev_tokens,
             training_seconds=training_seconds,elapsed_seconds=prior_elapsed+time.perf_counter()-begin,
             steady_step_seconds=sum(durations[10:])/len(durations[10:]) if len(durations)>10 else None,
             gpu=torch.cuda.get_device_name(),peak_allocated_bytes=torch.cuda.max_memory_allocated(),
             peak_reserved_bytes=torch.cuda.max_memory_reserved(),source=source,
-            test_evaluated=a.evaluate_test,**test_result)
+            test_evaluated=a.evaluate_test,checkpoint_files=checkpoint_files,**test_result)
         json_write(out/'summary.json',result);run.summary.update(result);run.finish()
         print(json.dumps(result),flush=True);return 0
     except BaseException:
