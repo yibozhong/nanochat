@@ -19,6 +19,7 @@ export PATH="$PWD/runtime/.venv/bin:$PATH"
 export CUDA_HOME="$PWD/toolchain/.venv/lib/python3.11/site-packages/nvidia/cu13"
 export PATH="$CUDA_HOME/bin:$PATH"
 export LD_LIBRARY_PATH="$PWD/runtime/.venv/lib/python3.11/site-packages/nvidia/cu13/lib:${LD_LIBRARY_PATH:-}"
+export NVIDIA_TF32_OVERRIDE=0
 export MAX_JOBS=2 NVTE_BUILD_THREADS_PER_JOB=1 NVTE_WITH_NCCL_EP=0
 # Torch ships library headers separately from the isolated nvcc toolchain.
 export CPATH="$CUDA_HOME/include:$PWD/runtime/.venv/lib/python3.11/site-packages/nvidia/cu13/include:$PWD/runtime/.venv/lib/python3.11/site-packages/nvidia/nccl/include:$PWD/runtime/.venv/lib/python3.11/site-packages/nvidia/cudnn/include"
@@ -38,6 +39,7 @@ cp source.json results/source.json
 cp inputs.sha256 results/inputs.sha256
 cp runtime/uv.lock results/runtime-uv.lock
 cp toolchain/uv.lock results/toolchain-uv.lock
+python nanochat-src/scripts/cache_te_extension.py
 uv pip freeze --python "$PWD/runtime/.venv/bin/python" > results/environment.txt
 uv pip freeze --python "$PWD/toolchain/.venv/bin/python" > results/toolchain-environment.txt
 nvcc --version > results/nvcc.txt

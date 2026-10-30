@@ -45,7 +45,7 @@ def projection_benchmark():
         result[backend]=dict(samples=samples,means={k:statistics.mean(s[k] for s in samples) for k in samples[0]},
             peak_allocated_bytes=torch.cuda.max_memory_allocated(),peak_reserved_bytes=torch.cuda.max_memory_reserved())
     return dict(shape=list(x.shape),weight_shape=list(w.shape),backends=result,
-                note='CUDA event intervals include launch gaps and scalar probe. PyTorch matmul TF32 disabled; nvidia uses TE explicit TF32 and nvidia_precise uses TE TF32x3 for BF16 x FP32. Other mHC ops unchanged.')
+        note='CUDA event intervals include launch gaps and scalar probe. PyTorch matmul TF32 disabled; NVIDIA_TF32_OVERRIDE=0 disables cuBLAS TF32 in all trials. nvidia uses TE explicit Triton TF32 and nvidia_precise uses TF32x3 for BF16 x FP32. Other mHC ops unchanged.')
 
 
 def main():

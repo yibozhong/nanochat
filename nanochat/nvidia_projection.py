@@ -6,6 +6,7 @@ operations remain the existing DeepSeek implementation. No silent fallback.
 """
 from functools import lru_cache
 import hashlib
+import os
 from importlib.metadata import version
 from pathlib import Path
 
@@ -28,6 +29,10 @@ def nvidia_ops():
 
 
 def nvidia_projection(x, phi, *, use_tf32=True):
+    # TE's use_tf32 argument controls Triton, not its separate cuBLAS dphi.
+    # This must be configured before CUDA/library initialization by the caller.
+    if not use_tf32 and os.environ.get('NVIDIA_TF32_OVERRIDE') != '0':
+        raise RuntimeError('nvidia_precise requires NVIDIA_TF32_OVERRIDE=0 at process startup for the cuBLAS weight gradient')
     if x.shape[-2] != 4 or phi.shape != (24, x.shape[-2]*x.shape[-1]):
         raise ValueError('NVIDIA projection requires four streams and 24 output rows')
     shape = x.shape[:-2]

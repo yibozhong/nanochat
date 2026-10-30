@@ -43,7 +43,7 @@ def test_projection_against_fp64_and_official(backend, width):
                   official_gradients=[relative(a,b) for a,b in zip(grads,official_grads)])
     assert errors['fp64_output'] < (.003 if backend == 'nvidia' else 2e-5), errors
     assert errors['fp64_weight_grad'] < (.003 if backend == 'nvidia' else 3e-5), errors
-    assert errors['fp64_input_grad'] < .005, errors
+    assert errors['fp64_input_grad'] < (.005 if backend == 'nvidia' else .004), errors
     assert errors['official_output'] < .003 and max(errors['official_gradients']) < .02, errors
     out=Path('results/torch-projection-checks');out.mkdir(parents=True,exist_ok=True)
     (out/f'{backend}-d{width}.json').write_text(json.dumps(errors,indent=2)+'\n')

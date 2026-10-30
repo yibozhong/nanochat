@@ -5,6 +5,7 @@ from contextlib import contextmanager, nullcontext
 from dataclasses import asdict
 import gzip
 import json
+import os
 from pathlib import Path
 import statistics
 import time
@@ -127,6 +128,7 @@ def main():
     run_id=uuid.uuid4().hex[:8]
     settings=dict(source=source,model=asdict(config),seed=42,microbatch=16,grad_accum=1,batch_tokens=32768,
         gpu=props.name,gpu_uuid=str(props.uuid),gpu_capability=list(torch.cuda.get_device_capability()),sm_count=props.multi_processor_count,
+        nvidia_tf32_override=os.environ.get('NVIDIA_TF32_OVERRIDE'),
         parameters=sum(p.numel() for p in model.parameters()),parameter_tensors=len(list(model.parameters())),
         optimizer='native MuonAdamW',warmup_steps=20,normal_timed_steps=20,no_finite_check_timed_steps=20,
         event_instrumented_steps=4,profiler_steps=2,torch=torch.__version__,cuda=torch.version.cuda,

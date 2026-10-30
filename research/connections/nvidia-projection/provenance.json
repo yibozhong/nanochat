@@ -13,5 +13,7 @@
   },
   "fused_grad_acc": false,
   "split_k": false,
-  "environment_change": "apache-tvm-ffi 0.1.9 -> 0.1.11 required by TE cudnn frontend; all comparisons share new environment"
+  "environment_change": "apache-tvm-ffi 0.1.9 -> 0.1.11 required by TE cudnn frontend; all comparisons share new environment",
+  "nvidia_tf32_override": "0 for cuBLAS in all five comparisons; Triton TF32 remains controlled by use_tf32",
+  "hardware_limit": "Retain SM90/100/120: SM89 exposed unsupported PDL in unchanged DeepSeek mhc_post kernel"
 }
