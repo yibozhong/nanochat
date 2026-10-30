@@ -18,14 +18,18 @@ def main():
     parser=argparse.ArgumentParser()
     parser.add_argument('--data-dir',default='../data')
     parser.add_argument('--work-dir',default='../work')
+    parser.add_argument('--variants',nargs='+',choices=('baseline','mhc','mhc_no_manifold'),default=['baseline','mhc'])
+    parser.add_argument('--wandb-group',default='mhc-official-kernels-20261030')
     a=parser.parse_args()
     out=Path('results');out.mkdir(exist_ok=True)
     work=Path(a.work_dir);work.mkdir(exist_ok=True)
     run_id=uuid.uuid4().hex[:8]
     source=json.loads(Path('source.json').read_text())
-    kwargs=dict(project='nanochat',entity='yibozhong657-none',group='mhc-official-kernels-20261030',
+    assert len(set(a.variants))==len(a.variants)
+    kwargs=dict(project='nanochat',entity='yibozhong657-none',group=a.wandb_group,
                 job_type='correctness-gate',name='mhc-official-kernel-integration',id=run_id,
-                config=dict(source=source,microbatch=16,batch_tokens=32768,smoke_steps_per_variant=50))
+                config=dict(source=source,microbatch=16,batch_tokens=32768,smoke_steps_per_variant=50,
+                            variants=a.variants))
     try:run=wandb.init(**kwargs,settings=wandb.Settings(init_timeout=60))
     except wandb.errors.CommError:run=wandb.init(**kwargs,mode='offline')
     started=time.time()
@@ -41,11 +45,12 @@ def main():
         print('Checks passed: '+json.dumps(checks), flush=True)
         run.log(checks)
         trials={}
-        for variant in ('baseline','mhc'):
+        for variant in a.variants:
             print('Starting 50-step smoke: '+variant, flush=True)
             path=work/variant
             with (out/(variant+'.log')).open('w') as log:
                 subprocess.run([sys.executable,'-m','scripts.connection_train','--variant',variant,
+                    '--wandb-group',a.wandb_group,
                     '--steps','50','--data-dir',a.data_dir,'--output-dir',str(path)],
                     stdout=log,stderr=subprocess.STDOUT,check=True,timeout=2400)
             summary=json.loads((path/'summary.json').read_text())
@@ -58,8 +63,8 @@ def main():
         result=dict(passed=True,source=source,run_id=run_id,checks=checks,smokes=trials,
                     elapsed_seconds=time.time()-started,pretraining_launched=False)
         (out/'gate.json').write_text(json.dumps(result,indent=2)+'\n')
-        run.summary.update(dict(passed=True,checks_passed=True,smoke_variants=2,
-                                total_smoke_tokens=2*1638400))
+        run.summary.update(dict(passed=True,checks_passed=True,smoke_variants=len(a.variants),
+                                total_smoke_tokens=len(a.variants)*1638400))
         run.save('results/*.json',base_path='.',policy='now');run.finish()
         print(json.dumps(result),flush=True)
     except BaseException:

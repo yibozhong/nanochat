@@ -1,5 +1,5 @@
 {
-  "active_method": "mHC only; HC removed by user request",
+  "active_method": "mHC and its no-manifold ablation; original LayerNorm/tanh HC remains archived",
   "official_kernel_repo": "https://github.com/deepseek-ai/TileKernels",
   "official_kernel_commit": "36d9e45d38e204ebb87e6f6e833821eee0482fe5",
   "version_reason": "This official release includes the complete prenorm forward/backward and autograd wrappers. v2 moved prenorm GEMM to DeepGEMM and removed mHC modeling wrappers.",
@@ -24,5 +24,6 @@
       580
     ]
   },
-  "sm120_shared_memory_source": "https://docs.nvidia.com/cuda/blackwell-tuning-guide/index.html"
+  "sm120_shared_memory_source": "https://docs.nvidia.com/cuda/blackwell-tuning-guide/index.html",
+  "no_manifold_ablation": "Bypass Sinkhorn only; retain identical parameters, initialization, pre/post gating, final head and optimizer. Use official individual operations for inference to avoid fused Sinkhorn."
 }

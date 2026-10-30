@@ -73,9 +73,10 @@ def sinkhorn_normalize(x, repeat=20, eps=1e-6):
 
 
 class ManifoldHyperConnection(nn.Module):
-    def __init__(self, width, streams, branch_index, iterations=20):
+    def __init__(self, width, streams, branch_index, iterations=20, *, manifold=True):
         super().__init__()
         self.width, self.streams, self.iterations = width, streams, iterations
+        self.manifold = manifold
         self.phi = nn.Parameter(torch.empty(2*streams+streams*streams, streams*width))
         self.bias = nn.Parameter(torch.empty(2*streams+streams*streams))
         self.scales = nn.Parameter(torch.empty(3))
@@ -92,7 +93,9 @@ class ManifoldHyperConnection(nn.Module):
     def read(self, x):
         ops = official_ops()
         x = x.contiguous()
-        if not torch.is_grad_enabled():
+        # The fused inference operation includes Sinkhorn internally. The
+        # unconstrained ablation must use the unfused path even in no_grad.
+        if self.manifold and not torch.is_grad_enabled():
             post, comb, branch = ops.mhc_pre_big_fuse(
                 x, self.phi, self.scales, self.bias, rms_eps=1e-6,
                 mhc_pre_eps=1e-6, mhc_sinkhorn_eps=1e-6,
@@ -100,7 +103,8 @@ class ManifoldHyperConnection(nn.Module):
         else:
             mixes = projection(x, self.phi)
             pre, post, comb = ops.mhc_pre_split_mixes(mixes, self.scales, self.bias, self.streams, 2., 1e-6)
-            comb = sinkhorn_normalize(comb, repeat=self.iterations, eps=1e-6)
+            if self.manifold:
+                comb = sinkhorn_normalize(comb, repeat=self.iterations, eps=1e-6)
             branch = ops.mhc_pre_apply_mix(x, pre)
         return branch, x, (post, comb)
 

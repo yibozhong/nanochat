@@ -4,11 +4,37 @@ HC was removed at the user's request on 2026-10-30. Its code remains in Git tag
 `hc-archive-2026-10-30`; the old measurements under `archive/` describe the
 retired PyTorch reference implementation, not this kernel implementation.
 
-The active variants are `baseline` and `mhc`. Both retain the existing full
+The active variants are `baseline`, `mhc` and `mhc_no_manifold`. They retain the existing full
 attention backbone: eight layers, D512, four heads, 2K context and 32K vocabulary.
 The baseline has 58,720,256 parameters; mHC has 59,515,317. The default is
 microbatch 16, accumulation 1, no whole-block activation checkpointing and
 32,768 tokens/update. Native nanochat GPT/SSSL remains unchanged.
+
+## Removing the manifold constraint
+
+`mhc_no_manifold` is the requested unconstrained hyper-connection ablation.
+Its only architectural change from current mHC is to bypass Sinkhorn and feed
+the raw residual mixing coefficients directly to the official `mhc_post` kernel.
+Coefficients can be negative and their row/column sums are not constrained.
+Projection, pre/post sigmoid gating, final head, four streams, all parameter
+initial values, optimizer and LR settings remain identical to mHC. In particular,
+the identity residual bias becomes a raw identity bias rather than Sinkhorn logits.
+This is not the previously archived LayerNorm/tanh HC parameterization.
+
+Both training and inference bypass Sinkhorn. The fused mHC inference operation
+contains Sinkhorn internally, so this ablation uses the official individual
+projection/split/read/write kernels during inference as well. No kernel source
+is modified. Tests compare outputs and every input/parameter gradient to the
+official PyTorch reference with its Sinkhorn operation omitted; they also
+exercise signed mixing, 2K causality, cache/CCE, identical mHC parameter seeds,
+and ensure neither the explicit nor fused Sinkhorn path is called.
+
+The bounded comparison runs vanilla, mHC and no-manifold for 50 updates each on
+one physical GPU, at the existing 32,768-token batch and seed42. Steady steps
+11–50, dev loss and peak memory will be reported together. W&B remains project
+`nanochat`, group `mhc-manifold-ablation-20261030`. This does not launch a 1B run.
+Results for this new ablation are pending; the completed mHC results below are
+the earlier two-variant validation.
 
 ## Official code used directly
 

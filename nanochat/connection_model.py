@@ -29,7 +29,7 @@ class ConnectionConfig:
     activation_checkpoint: bool = False
 
     def __post_init__(self):
-        if self.variant not in ('baseline', 'mhc'):
+        if self.variant not in ('baseline', 'mhc', 'mhc_no_manifold'):
             raise ValueError(f'Unknown connection variant: {self.variant}')
         if min(self.depth, self.width, self.heads, self.sequence_length, self.vocab_size, self.streams) < 1:
             raise ValueError('Model dimensions must be positive')
@@ -37,7 +37,7 @@ class ConnectionConfig:
             raise ValueError('RoPE requires an even integral head dimension')
         if self.sinkhorn_iterations < 1:
             raise ValueError('Sinkhorn needs at least one iteration')
-        if self.variant == 'mhc' and (self.streams != 4 or self.width % 128):
+        if self.variant != 'baseline' and (self.streams != 4 or self.width % 128):
             raise ValueError('Official mHC kernels require four streams and width divisible by 128')
 
 
@@ -48,8 +48,10 @@ class ConnectionBlock(Block):
         self.variant = config.variant
         self.compiled_attention = self.compiled_mlp = None
         if self.variant != 'baseline':
-            self.attn_connection = ManifoldHyperConnection(config.width, config.streams, 2*index, config.sinkhorn_iterations)
-            self.mlp_connection = ManifoldHyperConnection(config.width, config.streams, 2*index+1, config.sinkhorn_iterations)
+            self.attn_connection = ManifoldHyperConnection(config.width, config.streams, 2*index,
+                config.sinkhorn_iterations, manifold=config.variant == 'mhc')
+            self.mlp_connection = ManifoldHyperConnection(config.width, config.streams, 2*index+1,
+                config.sinkhorn_iterations, manifold=config.variant == 'mhc')
 
     def attention_branch(self, h, cos, sin, kv_cache=None):
         return self.attn(norm(h), None, (cos, sin), (-1, 0), kv_cache)
@@ -90,7 +92,7 @@ class ConnectionModel(nn.Module):
         if config.variant != 'baseline':
             for b in self.blocks:
                 b.attn_connection.reset_parameters(); b.mlp_connection.reset_parameters()
-        self.stream_head = ManifoldHyperHead(config.width, config.streams) if config.variant == 'mhc' else None
+        self.stream_head = ManifoldHyperHead(config.width, config.streams) if config.variant != 'baseline' else None
         if self.stream_head is not None:
             self.stream_head.reset_parameters()
         d = config.width // config.heads
@@ -101,7 +103,7 @@ class ConnectionModel(nn.Module):
         self.compiled_steps = None
 
     def prepare(self, device='cuda', dtype=torch.bfloat16, compile_blocks=False):
-        if self.config.variant == 'mhc':
+        if self.config.variant != 'baseline':
             check_official_device(device)
             if dtype != torch.bfloat16:
                 raise ValueError('Official mHC kernels require BF16 activations')

@@ -24,7 +24,8 @@ from nanochat.packed_training import PackedData, seed_all, evaluate, train_step,
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument('--variant', choices=('baseline','mhc'), required=True)
+    p.add_argument('--variant', choices=('baseline','mhc','mhc_no_manifold'), required=True)
+    p.add_argument('--wandb-group', default='mhc-official-kernels-20261030')
     p.add_argument('--steps', type=int, required=True)
     p.add_argument('--schedule-steps', type=int, default=30518)
     p.add_argument('--microbatch', type=int, default=16)
@@ -79,11 +80,13 @@ def main():
         gpu_capability=list(torch.cuda.get_device_capability()),
         explicit_portability_gate=os.environ.get('NANOCHAT_MHC_TEST_PORTABILITY')=='1',
         parameters=sum(p.numel() for p in model.parameters()),
+        residual_mixing=('sinkhorn' if a.variant=='mhc' else
+                         'unconstrained' if a.variant=='mhc_no_manifold' else 'additive'),
         optimizer='native MuonAdamW; connector AdamW at native unembedding LR, no decay',
         optimizer_groups=[{k:v for k,v in g.items() if k!='params'} for g in opt.param_groups],
         loss='full-token full-vocabulary CCE; no gradient filtering',
         references='research/connections/references.json')
-    kwargs=dict(project='nanochat',entity='yibozhong657-none',group='mhc-official-kernels-20261030',
+    kwargs=dict(project='nanochat',entity='yibozhong657-none',group=a.wandb_group,
                 job_type='implementation-smoke' if a.steps<=50 else 'pretrain',
                 name=f'{a.variant}-{a.steps}steps',id=run_id,resume='allow',config=config)
     try:run=wandb.init(**kwargs,settings=wandb.Settings(init_timeout=60))

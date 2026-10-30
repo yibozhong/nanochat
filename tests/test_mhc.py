@@ -40,20 +40,25 @@ def reference_read(m, x):
     from tile_kernels.torch.mhc import mhc_pre_norm_fn_ref, mhc_pre_split_mixes_ref, sinkhorn_normalize_ref, mhc_pre_apply_mix_ref
     mixes=mhc_pre_norm_fn_ref(x,m.phi,None,1e-6)
     pre,post,comb=mhc_pre_split_mixes_ref(mixes,m.scales,m.bias,4,2.,1e-6)
-    comb=sinkhorn_normalize_ref(comb,repeat=20,eps=1e-6)
+    if m.manifold:
+        comb=sinkhorn_normalize_ref(comb,repeat=20,eps=1e-6)
     return mhc_pre_apply_mix_ref(x,pre),(post,comb)
 
 
 @pytest.mark.parametrize('width',[128,512])
-def test_official_pipeline_against_official_torch_reference(width):
+@pytest.mark.parametrize('manifold',[True,False])
+def test_official_pipeline_against_official_torch_reference(width,manifold):
     from tile_kernels.torch.mhc import mhc_post_ref
     torch.manual_seed(47)
-    m=ManifoldHyperConnection(width,4,0).cuda();m.reset_parameters()
+    m=ManifoldHyperConnection(width,4,0,manifold=manifold).cuda();m.reset_parameters()
     n=copy.deepcopy(m)
     x=torch.randn(1,256,4,width,device='cuda',dtype=torch.bfloat16,requires_grad=True)
     y=torch.randn(1,256,width,device='cuda',dtype=torch.bfloat16,requires_grad=True)
     xr=x.detach().clone().requires_grad_();yr=y.detach().clone().requires_grad_()
     branch,residual,mixes=m.read(x);actual=m.write(y,residual,mixes)
+    if not manifold:
+        assert mixes[1].min()<0  # Official post supports signed, unnormalized mixing.
+        assert (mixes[1].sum(-1)-1).abs().max()>.001
     old=torch.backends.cuda.matmul.allow_tf32;torch.backends.cuda.matmul.allow_tf32=True
     try:
         ref_branch,ref_mixes=reference_read(n,xr)
@@ -74,7 +79,23 @@ def test_official_pipeline_against_official_torch_reference(width):
         assert relative_error(ctx[0],mixes[0])<.01
         assert relative_error(ctx[1],mixes[1])<.01
     Path('results').mkdir(exist_ok=True)
-    Path(f'results/kernel-errors-d{width}.json').write_text(json.dumps(errors,indent=2))
+    suffix='' if manifold else '-no-manifold'
+    Path(f'results/kernel-errors-d{width}{suffix}.json').write_text(json.dumps(errors,indent=2))
+
+
+def test_no_manifold_never_calls_sinkhorn_in_training_or_inference():
+    from nanochat.manifold_connections import official_ops
+    m=ManifoldHyperConnection(128,4,0,manifold=False).cuda();m.reset_parameters()
+    x=torch.randn(1,32,4,128,device='cuda',dtype=torch.bfloat16,requires_grad=True)
+    with patch('nanochat.manifold_connections.sinkhorn_normalize',side_effect=AssertionError('Sinkhorn called')), \
+         patch.object(official_ops(),'mhc_pre_big_fuse',side_effect=AssertionError('Fused Sinkhorn called')):
+        branch,residual,mixes=m.read(x)
+        output=m.write(branch,residual,mixes)
+        output.float().square().mean().backward()
+        with torch.no_grad():
+            branch_eval,residual_eval,mixes_eval=m.read(x)
+            output_eval=m.write(branch_eval,residual_eval,mixes_eval)
+        torch.testing.assert_close(output,output_eval,atol=0,rtol=0)
 
 
 def test_official_head_gradients():
@@ -114,13 +135,18 @@ def test_official_sinkhorn_constraints_and_gradients():
 
 def test_backbone_seeds_and_optimizer_coverage():
     previous=None
-    for variant in ('baseline','mhc'):
+    connection_state=None
+    for variant in ('baseline','mhc','mhc_no_manifold'):
         torch.manual_seed(42)
         m=ConnectionModel(ConnectionConfig(variant=variant,width=128,heads=2,depth=2,vocab_size=64,sequence_length=16))
         backbone={k:p.detach().clone() for k,p in m.named_parameters() if '_connection.' not in k and not k.startswith('stream_head.')}
         if previous:
             for k,p in backbone.items():torch.testing.assert_close(p,previous[k],atol=0,rtol=0)
         previous=backbone
+        if variant=='mhc':connection_state=copy.deepcopy(m.state_dict())
+        if variant=='mhc_no_manifold':
+            for key,tensor in m.state_dict().items():
+                torch.testing.assert_close(tensor,connection_state[key],atol=0,rtol=0)
         opt,_=optimizer_for(m)
         ids=[id(p) for g in opt.param_groups for p in g['params']]
         assert len(ids)==len(set(ids))==len(list(m.parameters()))
@@ -130,7 +156,7 @@ def test_backbone_seeds_and_optimizer_coverage():
     with pytest.raises(ValueError):ConnectionConfig(variant='mhc',streams=2)
 
 
-@pytest.mark.parametrize('variant',['baseline','mhc'])
+@pytest.mark.parametrize('variant',['baseline','mhc','mhc_no_manifold'])
 def test_gpu_causality_cache_cce_and_gradients(variant):
     torch.manual_seed(33)
     c=ConnectionConfig(variant=variant,width=128,heads=2,depth=2,vocab_size=128,sequence_length=2048)
@@ -153,7 +179,7 @@ def test_gpu_causality_cache_cce_and_gradients(variant):
     torch.testing.assert_close(loss,dense,atol=2e-4,rtol=2e-4)
     loss.backward()
     assert all(p.grad is not None and torch.isfinite(p.grad).all() for p in m.parameters())
-    if variant=='mhc':
+    if variant!='baseline':
         assert sum(p.grad.float().square().sum().item() for n,p in m.named_parameters() if '_connection.' in n)>0
     a=copy.deepcopy(m.state_dict());n=ConnectionModel(c).prepare();n.load_state_dict(a)
     for key,tensor in n.state_dict().items():torch.testing.assert_close(tensor,a[key],atol=0,rtol=0)
