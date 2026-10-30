@@ -393,3 +393,24 @@ correctness/throughput result, with **no long-run quality comparison or 1B run**
 - The first dependency build lacked NCCL/cuSPARSE headers; explicit compiler
   include paths fixed it. The compiled official extension is retained in the
   successful archive for retries, with its Torch/CUDA/ABI and SHA-256 metadata.
+
+## Authorized 1B--2B width comparison
+
+The user requested a larger-model throughput comparison, narrowed explicitly
+to start at 1B and end at 2B. The [protocol](scale/protocol.json) fixes 16 layers,
+head dimension 128, full 2K attention and the existing 32K vocabulary while
+using widths 2048/2560/3072: 0.940B/1.426B/2.013B vanilla parameters. Each is
+compared with full NVIDIA mHC, ordinary gradient accumulation, on the same
+physical Hopper GPU. Two fresh-process repetitions reverse model and variant
+order. Every trial has 20 warmup, 60 normal timed and six diagnostic updates.
+
+The largest model first probes microbatch16/8/4/2/1, choosing one common value
+for all sizes and variants with memory headroom. Batch tokens remain 32768;
+checkpointing stays off. The attention backend is explicitly cuDNN SDPA,
+matching the actual earlier H200 trace (that run did not use FA3). Native
+MuonAdamW and its batch/width scaling are unchanged. Forward/backward and
+optimizer costs are reported separately to distinguish mHC amortization from
+a growing optimizer-time denominator. New-width math and causality gates
+precede measurement. No quality/pretraining run or checkpoint is authorized
+by this bounded experiment. Results are pending; the earlier 59M timings are
+not a matched point in this width sweep.

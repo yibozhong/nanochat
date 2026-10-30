@@ -1,0 +1,53 @@
+{
+  "purpose": "Test whether increasing hidden width reduces full NVIDIA mHC training-time overhead between approximately 1B and 2B parameters",
+  "authorization": "User requested larger-model measurement, then explicitly narrowed it to start at 1B and go to 2B",
+  "models": [
+    {"label": "1B", "depth": 16, "width": 2048, "heads": 16, "vanilla_parameters": 939524096},
+    {"label": "1.5B", "depth": 16, "width": 2560, "heads": 20, "vanilla_parameters": 1426063360},
+    {"label": "2B", "depth": 16, "width": 3072, "heads": 24, "vanilla_parameters": 2013265920}
+  ],
+  "variants": ["baseline", "full_nvidia_mhc_unfused"],
+  "fixed": {
+    "sequence_length": 2048, "vocabulary_size": 32768, "head_dimension": 128,
+    "streams": 4, "sinkhorn_iterations": 20, "seed": 42,
+    "batch_tokens": 32768, "activation_checkpoint": false,
+    "attention_backend": "SDPA_CUDNN_ATTENTION_only",
+    "dataset": "Existing frozen FineWeb-Edu sample-10BT packed rows, RustBPE32K",
+    "optimizer": "Unchanged native MuonAdamW with existing batch/width LR and weight-decay scaling",
+    "parameter_schedule_steps": 30518,
+    "arithmetic": "BF16 backbone; PyTorch TF32 disabled; NVIDIA custom operators keep native precision; baseline NVIDIA_TF32_OVERRIDE=0 and mHC unset, matching previous full comparison"
+  },
+  "capacity": {
+    "model": "Both variants at 2B",
+    "microbatch_candidates": [16, 8, 4, 2, 1],
+    "optimizer_updates_per_probe": 4,
+    "selection": "Largest common microbatch with peak reserved <=90% device total and >=4GiB free after updates; same selection for every size and variant",
+    "gradient_accumulation": "16 / selected microbatch",
+    "checkpoint_fallback": false
+  },
+  "measurement": {
+    "same_physical_gpu_for_every_trial": true,
+    "fresh_process_per_trial": true,
+    "repetitions": 2,
+    "order": "First ascending widths, baseline then mHC; second descending widths, mHC then baseline",
+    "warmup_updates": 20, "ordinary_timed_updates": 60,
+    "cuda_event_updates": 4, "cuda_trace_updates": 2,
+    "updates_per_trial": 86, "timing_trials": 12,
+    "timing_trial_tokens_total": 33816576,
+    "outlier_filtering": "None; retain every raw sample",
+    "primary": "Full optimizer-step wall time with original finite checks",
+    "secondary": "Forward/backward and optimizer event intervals, CUDA kernel attribution, PyTorch peak allocated/reserved memory",
+    "interpretation": "Events include host gaps; profiler kernel times are attribution, not production wall time. Report forward/backward overhead separately so Muon cost cannot silently dilute total overhead."
+  },
+  "gate": "9 new-width FP64 pipeline/head and real-2K causality/CCE/all-gradient checks; previously audited operators unchanged",
+  "wandb_project": "yibozhong657-none/nanochat",
+  "wandb_group": "mhc-scale-1b-2b-20261030",
+  "pretraining": false,
+  "checkpoints": false,
+  "limitations": [
+    "Throughput diagnostics, not a quality comparison",
+    "Width scaling at fixed depth; does not separately test depth scaling",
+    "Previous 59M result has a different depth and potentially different GPU/microbatch; do not treat it as a matched point",
+    "No statistical population claim from two repeats on one GPU"
+  ]
+}
