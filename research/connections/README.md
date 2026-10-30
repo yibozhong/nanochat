@@ -49,7 +49,13 @@ A30 (SM80), L40 (SM89), and RTX PRO 6000 Blackwell (SM120) are not accepted by
 this entry. The existing baseline environment remains available; the official
 mHC environment is independently locked under `runtime/` (Python 3.11,
 PyTorch 2.10.0, TileLang 0.1.9, TVM-FFI 0.1.9, pinned TileKernels, CUDA nvcc 13.1.115 and the same
-CCE source revision). GPU drivers must support the requested toolchain.
+CCE source revision). Native CUDA 13.1+ drivers are used directly. On NVIDIA's supported 570/580
+datacenter driver branches, the launcher extracts the official
+[cuda-compat-13-1 package](https://docs.nvidia.com/deploy/cuda-compatibility/forward-compatibility.html)
+into job scratch and selects its userspace libraries. It does not modify the
+host driver or require root. The package version, SHA256 and actual selected
+driver path are recorded. This broadens H100/H200 scheduling without accepting
+unsupported GPU architectures.
 
 On a compute node, install with `uv sync --frozen --project research/connections/runtime`.
 The cached base environment is synchronized with this lock before every gate;

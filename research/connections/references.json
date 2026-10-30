@@ -13,5 +13,14 @@
   ],
   "runtime": "runtime/pyproject.toml + runtime/uv.lock",
   "hardware": "SM90/SM100; CUDA 13.1 toolchain; no A30/L40/SM120 fallback",
-  "paper": "https://arxiv.org/html/2512.24880v2"
+  "paper": "https://arxiv.org/html/2512.24880v2",
+  "cuda_forward_compatibility": {
+    "package": "cuda-compat-13-1_590.48.01-1_amd64.deb",
+    "sha256": "066f24c715f5f8f31bb7e8bd0f9ddc93fe78a82d3be55c6f3e9bbe26fa4fd7be",
+    "url": "https://developer.download.nvidia.com/compute/cuda/repos/debian12/x86_64/cuda-compat-13-1_590.48.01-1_amd64.deb",
+    "supported_old_driver_branches": [
+      570,
+      580
+    ]
+  }
 }

@@ -31,6 +31,21 @@ cp inputs.sha256 results/inputs.sha256
 cp runtime/uv.lock results/runtime-uv.lock
 uv pip freeze --python "$PWD/runtime/.venv/bin/python" > results/environment.txt
 nvcc --version > results/nvcc.txt
+SYSTEM_CUDA_DRIVER=$(/opt/project/.venv/bin/python - <<'PYDRIVER'
+import ctypes
+v=ctypes.c_int()
+lib=ctypes.CDLL('libcuda.so.1')
+assert lib.cuDriverGetVersion(ctypes.byref(v))==0
+print(v.value)
+PYDRIVER
+)
+if [ "$SYSTEM_CUDA_DRIVER" -lt 13010 ]; then
+    dpkg-deb -x cuda-compat-13-1_590.48.01-1_amd64.deb cuda-compat
+    export LD_LIBRARY_PATH="$PWD/cuda-compat/usr/local/cuda-13.1/compat:$LD_LIBRARY_PATH"
+    echo "NVIDIA cuda-compat-13-1 for system CUDA driver $SYSTEM_CUDA_DRIVER" > results/compatibility.txt
+else
+    echo "Native system CUDA driver $SYSTEM_CUDA_DRIVER" > results/compatibility.txt
+fi
 cd nanochat-src
 ln -s ../results results
 cp ../source.json source.json
