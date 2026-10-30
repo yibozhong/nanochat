@@ -1,0 +1,1048 @@
+{
+  "job": "7547306.0",
+  "source": {
+    "commit": "f531f544dcc6bbddb4215cfea8b347402fbddd17",
+    "official_tilekernels": "36d9e45d38e204ebb87e6f6e833821eee0482fe5",
+    "native_base": "145da40cdd37b9522aa53d26c0c356e9126458bb",
+    "transformer_engine": "2.20.2",
+    "hashes": {
+      "source.tar": "90838f70f16506253d08b769c87775673207503d0f828d3695fb0d415c288f88",
+      "legacy-baseline.tar": "5f92ef457c61e8b4ab7d145873857b4772f4668b69c1236a9e93562283e67c24",
+      "mhc-official-runtime-7546767.tar.gz": "6b927f93021961293e12452b4001a479ff1b54cbc1aae0355e73e75a393d4dc0",
+      "cuda-compat-13-1_590.48.01-1_amd64.deb": "066f24c715f5f8f31bb7e8bd0f9ddc93fe78a82d3be55c6f3e9bbe26fa4fd7be"
+    },
+    "purpose": "NVIDIA TE projection forward/backward: correctness and same-GPU bounded comparison; no 1B training"
+  },
+  "checks": {
+    "tests": 26,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "gpu": "NVIDIA RTX PRO 6000 Blackwell Server Edition",
+  "gpu_uuid": "2d267517-6d7c-4363-94aa-6763ad08949d",
+  "same_gpu": true,
+  "upstream_kernel_trace_verified": true,
+  "numerical_errors": {
+    "results/torch-projection-checks/torch_compile-d128.json": {
+      "fp64_output": 1.6186842423654537e-07,
+      "fp64_input_grad": 3.96660094980248e-05,
+      "fp64_weight_grad": 1.610203323491295e-07,
+      "official_output": 0.00020795866448763368,
+      "official_gradients": [
+        0.0010378254654078197,
+        0.0002017760926477208
+      ]
+    },
+    "results/torch-projection-checks/nvidia-d512.json": {
+      "fp64_output": 0.000414085993533122,
+      "fp64_input_grad": 0.0019954384217575716,
+      "fp64_weight_grad": 1.6428655762798126e-07,
+      "official_output": 0.0005038800113490532,
+      "official_gradients": [
+        0.0020410992091574767,
+        0.0002059532848414719
+      ]
+    },
+    "results/torch-projection-checks/torch-d512.json": {
+      "fp64_output": 2.0337061534659112e-07,
+      "fp64_input_grad": 1.9039944288723195e-05,
+      "fp64_weight_grad": 1.6394528476531987e-07,
+      "official_output": 0.00020617302178883138,
+      "official_gradients": [
+        0.0010456824625194963,
+        0.00020595410832308108
+      ]
+    },
+    "results/torch-projection-checks/nvidia-d128.json": {
+      "fp64_output": 0.00041711394470810617,
+      "fp64_input_grad": 0.0019971104563183445,
+      "fp64_weight_grad": 1.6111429974907382e-07,
+      "official_output": 0.0005113812126895699,
+      "official_gradients": [
+        0.002045456839414671,
+        0.00020177743319978297
+      ]
+    },
+    "results/torch-projection-checks/torch_compile-d512.json": {
+      "fp64_output": 2.0267560563845916e-07,
+      "fp64_input_grad": 2.1006915433503502e-05,
+      "fp64_weight_grad": 1.634515100056212e-07,
+      "official_output": 0.00020617383662380897,
+      "official_gradients": [
+        0.0010456862123608955,
+        0.00020595354781264056
+      ]
+    },
+    "results/torch-projection-checks/nvidia_precise-d512.json": {
+      "fp64_output": 5.60042905628324e-07,
+      "fp64_input_grad": 1.0603796612613409e-05,
+      "fp64_weight_grad": 1.6428655762798126e-07,
+      "official_output": 0.00020613386971849294,
+      "official_gradients": [
+        0.00104558400530762,
+        0.0002059532848414719
+      ]
+    },
+    "results/torch-projection-checks/nvidia_precise-d128.json": {
+      "fp64_output": 5.577772677393186e-07,
+      "fp64_input_grad": 1.9155598796992732e-05,
+      "fp64_weight_grad": 1.6111429974907382e-07,
+      "official_output": 0.00020792742904418985,
+      "official_gradients": [
+        0.0010368974113493723,
+        0.00020177743319978297
+      ]
+    },
+    "results/torch-projection-checks/torch-d128.json": {
+      "fp64_output": 1.6243803239760497e-07,
+      "fp64_input_grad": 3.9639869842684045e-05,
+      "fp64_weight_grad": 1.6127831731876355e-07,
+      "official_output": 0.00020795887875403328,
+      "official_gradients": [
+        0.0010378244677428517,
+        0.00020177440942634558
+      ]
+    }
+  },
+  "timings": {
+    "baseline": {
+      "mean_ms": 80.5693848291412,
+      "stdev_ms": 0.2371199232396325,
+      "overhead_vs_baseline_pct": 0.0,
+      "reduction_vs_official_pct": 47.0669800874447,
+      "reduction_vs_compiled_pct": 37.88352657697713,
+      "memory_gib": {
+        "peak_allocated_bytes": 5.374598026275635,
+        "peak_reserved_bytes": 5.388671875
+      },
+      "phase_means": {
+        "cpu_wall_ms": {
+          "zero_grad": 0.1549335429444909,
+          "data": 0.22167526185512543,
+          "forward": 12.12737348396331,
+          "backward": 8.46972013823688,
+          "finite_check": 55.90777099132538,
+          "optimizer": 3.5756344441324472,
+          "loss_item": 0.0235650222748518
+        },
+        "stream_elapsed_ms": {
+          "zero_grad": 0.1688239984214306,
+          "data": 0.2391039989888668,
+          "forward": 18.991591453552246,
+          "backward": 56.31935977935791,
+          "finite_check": 1.361184000968933,
+          "optimizer": 3.6214240193367004,
+          "loss_item": 0.028927999548614025
+        }
+      },
+      "run_id": "5c3c62ec",
+      "projection_kernels": []
+    },
+    "mhc_official": {
+      "mean_ms": 152.21006653737277,
+      "stdev_ms": 0.30755199861260213,
+      "overhead_vs_baseline_pct": 88.91799516671969,
+      "reduction_vs_official_pct": 0.0,
+      "reduction_vs_compiled_pct": -17.349196259043076,
+      "memory_gib": {
+        "peak_allocated_bytes": 8.280363082885742,
+        "peak_reserved_bytes": 8.474609375
+      },
+      "phase_means": {
+        "cpu_wall_ms": {
+          "zero_grad": 0.21826045121997595,
+          "data": 0.23190793581306934,
+          "forward": 19.781321519985795,
+          "backward": 21.685132174752653,
+          "finite_check": 104.07067555934191,
+          "optimizer": 5.821558879688382,
+          "loss_item": 0.023754197172820568
+        },
+        "stream_elapsed_ms": {
+          "zero_grad": 0.23393600061535835,
+          "data": 0.24929600208997726,
+          "forward": 26.626463413238525,
+          "backward": 117.04997444152832,
+          "finite_check": 2.0675519704818726,
+          "optimizer": 5.8650959730148315,
+          "loss_item": 0.029871999751776457
+        }
+      },
+      "run_id": "c32b91bb",
+      "projection_kernels": [
+        {
+          "name": "_mhc_pre_norm_fn_bwd_mul_kernel_kernel",
+          "count": 34,
+          "total_us": 84648.31200000002,
+          "grids": [
+            [
+              1,
+              16,
+              1
+            ]
+          ],
+          "ms_per_step": 42.32415600000001
+        },
+        {
+          "name": "_mhc_pre_norm_fn_fwd_mul_kernel_kernel",
+          "count": 34,
+          "total_us": 3679.5660000000003,
+          "grids": [
+            [
+              1024,
+              1,
+              1
+            ]
+          ],
+          "ms_per_step": 1.8397830000000002
+        },
+        {
+          "name": "_mhc_pre_norm_fn_bwd_norm_kernel_kernel",
+          "count": 34,
+          "total_us": 666.4940000000001,
+          "grids": [
+            [
+              32768,
+              1,
+              1
+            ]
+          ],
+          "ms_per_step": 0.33324700000000007
+        },
+        {
+          "name": "_mhc_pre_norm_fn_fwd_norm_kernel_kernel",
+          "count": 34,
+          "total_us": 654.97,
+          "grids": [
+            [
+              32768,
+              1,
+              1
+            ]
+          ],
+          "ms_per_step": 0.327485
+        }
+      ]
+    },
+    "mhc_torch_compile": {
+      "mean_ms": 129.70695274416357,
+      "stdev_ms": 0.4271525902209154,
+      "overhead_vs_baseline_pct": 60.98789015111081,
+      "reduction_vs_official_pct": 14.784248049509863,
+      "reduction_vs_compiled_pct": 0.0,
+      "memory_gib": {
+        "peak_allocated_bytes": 12.628812789916992,
+        "peak_reserved_bytes": 12.8359375
+      },
+      "phase_means": {
+        "cpu_wall_ms": {
+          "zero_grad": 0.2852521138265729,
+          "data": 0.2811246085911989,
+          "forward": 26.102265575900674,
+          "backward": 21.944697480648756,
+          "finite_check": 74.88835614640266,
+          "optimizer": 5.697327549569309,
+          "loss_item": 0.022894470021128654
+        },
+        "stream_elapsed_ms": {
+          "zero_grad": 0.31351999193429947,
+          "data": 0.2985680066049099,
+          "forward": 32.95805549621582,
+          "backward": 88.12379264831543,
+          "finite_check": 2.0505760312080383,
+          "optimizer": 5.745112061500549,
+          "loss_item": 0.02509599970653653
+        }
+      },
+      "run_id": "07f2f50e",
+      "projection_kernels": []
+    },
+    "mhc_nvidia": {
+      "mean_ms": 133.00352843943983,
+      "stdev_ms": 57.42569808310017,
+      "overhead_vs_baseline_pct": 65.07948859420071,
+      "reduction_vs_official_pct": 12.618441430887273,
+      "reduction_vs_compiled_pct": -2.541556659478772,
+      "memory_gib": {
+        "peak_allocated_bytes": 8.552886009216309,
+        "peak_reserved_bytes": 8.794921875
+      },
+      "phase_means": {
+        "cpu_wall_ms": {
+          "zero_grad": 0.21189311519265175,
+          "data": 0.24542713072150946,
+          "forward": 19.953462528064847,
+          "backward": 22.52315660007298,
+          "finite_check": 70.99345105234534,
+          "optimizer": 5.7156350230798125,
+          "loss_item": 0.02293451689183712
+        },
+        "stream_elapsed_ms": {
+          "zero_grad": 0.22764800116419792,
+          "data": 0.26310399547219276,
+          "forward": 26.80516767501831,
+          "backward": 84.87200736999512,
+          "finite_check": 1.9762240052223206,
+          "optimizer": 5.757735967636108,
+          "loss_item": 0.031624000519514084
+        }
+      },
+      "run_id": "9dbed75a",
+      "projection_kernels": [
+        {
+          "name": "_mhc_projection_fwd_fused",
+          "count": 34,
+          "total_us": 4337.426,
+          "grids": [
+            [
+              512,
+              1,
+              1
+            ]
+          ],
+          "ms_per_step": 2.1687130000000003
+        },
+        {
+          "name": "_mhc_projection_bwd_fused_dx",
+          "count": 34,
+          "total_us": 4632.879999999999,
+          "grids": [
+            [
+              1024,
+              16,
+              1
+            ]
+          ],
+          "ms_per_step": 2.3164399999999996
+        }
+      ]
+    },
+    "mhc_nvidia_precise": {
+      "mean_ms": 123.16818572580814,
+      "stdev_ms": 0.11372561242444178,
+      "overhead_vs_baseline_pct": 52.872193311397055,
+      "reduction_vs_official_pct": 19.080131473718165,
+      "reduction_vs_compiled_pct": 5.041184670533905,
+      "memory_gib": {
+        "peak_allocated_bytes": 8.552886009216309,
+        "peak_reserved_bytes": 8.794921875
+      },
+      "phase_means": {
+        "cpu_wall_ms": {
+          "zero_grad": 0.230440404266119,
+          "data": 0.25034521240741014,
+          "forward": 22.760909516364336,
+          "backward": 24.19343253131956,
+          "finite_check": 69.29523113649338,
+          "optimizer": 5.81676175352186,
+          "loss_item": 0.023232540115714073
+        },
+        "stream_elapsed_ms": {
+          "zero_grad": 0.24540000036358833,
+          "data": 0.2682960033416748,
+          "forward": 29.62125587463379,
+          "backward": 84.90175247192383,
+          "finite_check": 1.9871360063552856,
+          "optimizer": 5.85861599445343,
+          "loss_item": 0.030104000587016344
+        }
+      },
+      "run_id": "5e74ffdc",
+      "projection_kernels": [
+        {
+          "name": "_mhc_projection_fwd_fused",
+          "count": 34,
+          "total_us": 10284.471000000001,
+          "grids": [
+            [
+              2048,
+              1,
+              1
+            ]
+          ],
+          "ms_per_step": 5.142235500000001
+        },
+        {
+          "name": "_mhc_projection_bwd_fused_dx",
+          "count": 34,
+          "total_us": 4952.6799999999985,
+          "grids": [
+            [
+              1024,
+              16,
+              1
+            ]
+          ],
+          "ms_per_step": 2.476339999999999
+        }
+      ]
+    }
+  },
+  "microbenchmark": {
+    "shape": [
+      16,
+      2048,
+      4,
+      512
+    ],
+    "weight_shape": [
+      24,
+      2048
+    ],
+    "backends": {
+      "official": {
+        "samples": [
+          {
+            "forward_ms": 0.2975679934024811,
+            "backward_ms": 2.6603519916534424,
+            "total_ms": 2.9579200744628906
+          },
+          {
+            "forward_ms": 0.24508799612522125,
+            "backward_ms": 2.6009600162506104,
+            "total_ms": 2.84604811668396
+          },
+          {
+            "forward_ms": 0.2407039999961853,
+            "backward_ms": 2.5825281143188477,
+            "total_ms": 2.8232319355010986
+          },
+          {
+            "forward_ms": 0.2409600019454956,
+            "backward_ms": 2.5876479148864746,
+            "total_ms": 2.8286080360412598
+          },
+          {
+            "forward_ms": 0.23731200397014618,
+            "backward_ms": 2.584575891494751,
+            "total_ms": 2.821887969970703
+          },
+          {
+            "forward_ms": 0.2372480034828186,
+            "backward_ms": 2.569216012954712,
+            "total_ms": 2.8064639568328857
+          },
+          {
+            "forward_ms": 0.24377599358558655,
+            "backward_ms": 2.5825281143188477,
+            "total_ms": 2.8263039588928223
+          },
+          {
+            "forward_ms": 0.2383359968662262,
+            "backward_ms": 2.6019840240478516,
+            "total_ms": 2.840320110321045
+          },
+          {
+            "forward_ms": 0.24403199553489685,
+            "backward_ms": 2.605056047439575,
+            "total_ms": 2.849087953567505
+          },
+          {
+            "forward_ms": 0.23657600581645966,
+            "backward_ms": 2.6122241020202637,
+            "total_ms": 2.84879994392395
+          },
+          {
+            "forward_ms": 0.23878400027751923,
+            "backward_ms": 2.6009600162506104,
+            "total_ms": 2.8397440910339355
+          },
+          {
+            "forward_ms": 0.23881599307060242,
+            "backward_ms": 2.605056047439575,
+            "total_ms": 2.8438720703125
+          },
+          {
+            "forward_ms": 0.23958399891853333,
+            "backward_ms": 2.578432083129883,
+            "total_ms": 2.8180160522460938
+          },
+          {
+            "forward_ms": 0.24185599386692047,
+            "backward_ms": 2.569216012954712,
+            "total_ms": 2.8110721111297607
+          },
+          {
+            "forward_ms": 0.23574399948120117,
+            "backward_ms": 2.5763840675354004,
+            "total_ms": 2.8121280670166016
+          },
+          {
+            "forward_ms": 0.23587200045585632,
+            "backward_ms": 2.596832036972046,
+            "total_ms": 2.8327040672302246
+          },
+          {
+            "forward_ms": 0.23999999463558197,
+            "backward_ms": 2.584575891494751,
+            "total_ms": 2.824575901031494
+          },
+          {
+            "forward_ms": 0.23468799889087677,
+            "backward_ms": 2.6019840240478516,
+            "total_ms": 2.836672067642212
+          },
+          {
+            "forward_ms": 0.23747199773788452,
+            "backward_ms": 2.589695930480957,
+            "total_ms": 2.8271679878234863
+          },
+          {
+            "forward_ms": 0.24076800048351288,
+            "backward_ms": 2.5815041065216064,
+            "total_ms": 2.8222720623016357
+          },
+          {
+            "forward_ms": 0.23638400435447693,
+            "backward_ms": 2.5866239070892334,
+            "total_ms": 2.8230080604553223
+          },
+          {
+            "forward_ms": 0.2353920042514801,
+            "backward_ms": 2.5978879928588867,
+            "total_ms": 2.833280086517334
+          },
+          {
+            "forward_ms": 0.23628799617290497,
+            "backward_ms": 2.6173439025878906,
+            "total_ms": 2.8536319732666016
+          },
+          {
+            "forward_ms": 0.2351360023021698,
+            "backward_ms": 2.6613759994506836,
+            "total_ms": 2.896512031555176
+          },
+          {
+            "forward_ms": 0.23708799481391907,
+            "backward_ms": 2.654207944869995,
+            "total_ms": 2.891295909881592
+          },
+          {
+            "forward_ms": 0.23257599771022797,
+            "backward_ms": 2.6265599727630615,
+            "total_ms": 2.8591361045837402
+          },
+          {
+            "forward_ms": 0.23625600337982178,
+            "backward_ms": 2.637824058532715,
+            "total_ms": 2.874079942703247
+          },
+          {
+            "forward_ms": 0.23571200668811798,
+            "backward_ms": 2.634752035140991,
+            "total_ms": 2.8704640865325928
+          },
+          {
+            "forward_ms": 0.23455999791622162,
+            "backward_ms": 2.641887903213501,
+            "total_ms": 2.876447916030884
+          },
+          {
+            "forward_ms": 0.23183999955654144,
+            "backward_ms": 2.637824058532715,
+            "total_ms": 2.869663953781128
+          }
+        ],
+        "means": {
+          "forward_ms": 0.23988053252299626,
+          "backward_ms": 2.6056000073750814,
+          "total_ms": 2.8454805533091228
+        },
+        "peak_allocated_bytes": 610664960,
+        "peak_reserved_bytes": 629145600
+      },
+      "torch_compile": {
+        "samples": [
+          {
+            "forward_ms": 0.6012160181999207,
+            "backward_ms": 0.8683840036392212,
+            "total_ms": 1.469599962234497
+          },
+          {
+            "forward_ms": 0.5984640121459961,
+            "backward_ms": 0.8703359961509705,
+            "total_ms": 1.4687999486923218
+          },
+          {
+            "forward_ms": 0.5847359895706177,
+            "backward_ms": 0.8703680038452148,
+            "total_ms": 1.4551039934158325
+          },
+          {
+            "forward_ms": 0.5888640284538269,
+            "backward_ms": 0.8683199882507324,
+            "total_ms": 1.4571839570999146
+          },
+          {
+            "forward_ms": 0.5816640257835388,
+            "backward_ms": 0.8724160194396973,
+            "total_ms": 1.4540799856185913
+          },
+          {
+            "forward_ms": 0.5793280005455017,
+            "backward_ms": 0.8683199882507324,
+            "total_ms": 1.447648048400879
+          },
+          {
+            "forward_ms": 0.5861120223999023,
+            "backward_ms": 0.8683199882507324,
+            "total_ms": 1.4544320106506348
+          },
+          {
+            "forward_ms": 0.5823360085487366,
+            "backward_ms": 0.8703680038452148,
+            "total_ms": 1.4527039527893066
+          },
+          {
+            "forward_ms": 0.5872640013694763,
+            "backward_ms": 0.8683199882507324,
+            "total_ms": 1.4555840492248535
+          },
+          {
+            "forward_ms": 0.5806080102920532,
+            "backward_ms": 0.8704000115394592,
+            "total_ms": 1.4510079622268677
+          },
+          {
+            "forward_ms": 0.5836160182952881,
+            "backward_ms": 0.8683199882507324,
+            "total_ms": 1.4519360065460205
+          },
+          {
+            "forward_ms": 0.5775359869003296,
+            "backward_ms": 0.8683199882507324,
+            "total_ms": 1.445855975151062
+          },
+          {
+            "forward_ms": 0.5805760025978088,
+            "backward_ms": 0.8704000115394592,
+            "total_ms": 1.450976014137268
+          },
+          {
+            "forward_ms": 0.5851200222969055,
+            "backward_ms": 0.8703680038452148,
+            "total_ms": 1.4554879665374756
+          },
+          {
+            "forward_ms": 0.5810880064964294,
+            "backward_ms": 0.8703680038452148,
+            "total_ms": 1.4514559507369995
+          },
+          {
+            "forward_ms": 0.579039990901947,
+            "backward_ms": 0.8724160194396973,
+            "total_ms": 1.4514559507369995
+          },
+          {
+            "forward_ms": 0.5810239911079407,
+            "backward_ms": 0.8683199882507324,
+            "total_ms": 1.4493440389633179
+          },
+          {
+            "forward_ms": 0.5798720121383667,
+            "backward_ms": 0.8724480271339417,
+            "total_ms": 1.4523199796676636
+          },
+          {
+            "forward_ms": 0.5798400044441223,
+            "backward_ms": 0.8703680038452148,
+            "total_ms": 1.4502079486846924
+          },
+          {
+            "forward_ms": 0.5781440138816833,
+            "backward_ms": 0.8704000115394592,
+            "total_ms": 1.4485440254211426
+          },
+          {
+            "forward_ms": 0.5776320099830627,
+            "backward_ms": 0.8703680038452148,
+            "total_ms": 1.4479999542236328
+          },
+          {
+            "forward_ms": 0.5792639851570129,
+            "backward_ms": 0.8703680038452148,
+            "total_ms": 1.4496320486068726
+          },
+          {
+            "forward_ms": 0.5804479718208313,
+            "backward_ms": 0.8703680038452148,
+            "total_ms": 1.450816035270691
+          },
+          {
+            "forward_ms": 0.5762879848480225,
+            "backward_ms": 0.8703680038452148,
+            "total_ms": 1.4466559886932373
+          },
+          {
+            "forward_ms": 0.590399980545044,
+            "backward_ms": 0.8683199882507324,
+            "total_ms": 1.4587199687957764
+          },
+          {
+            "forward_ms": 0.5824959874153137,
+            "backward_ms": 0.8703680038452148,
+            "total_ms": 1.4528640508651733
+          },
+          {
+            "forward_ms": 0.5929920077323914,
+            "backward_ms": 0.8704000115394592,
+            "total_ms": 1.4633920192718506
+          },
+          {
+            "forward_ms": 0.5791360139846802,
+            "backward_ms": 0.8724160194396973,
+            "total_ms": 1.4515520334243774
+          },
+          {
+            "forward_ms": 0.5890560150146484,
+            "backward_ms": 0.8703680038452148,
+            "total_ms": 1.4594240188598633
+          },
+          {
+            "forward_ms": 0.5802559852600098,
+            "backward_ms": 0.8724480271339417,
+            "total_ms": 1.4527039527893066
+          }
+        ],
+        "means": {
+          "forward_ms": 0.5834805369377136,
+          "backward_ms": 0.8701024035612742,
+          "total_ms": 1.4535829265912374
+        },
+        "peak_allocated_bytes": 882508800,
+        "peak_reserved_bytes": 1166016512
+      },
+      "nvidia": {
+        "samples": [
+          {
+            "forward_ms": 0.2916159927845001,
+            "backward_ms": 0.8120319843292236,
+            "total_ms": 1.1036479473114014
+          },
+          {
+            "forward_ms": 0.2791680097579956,
+            "backward_ms": 0.7946239709854126,
+            "total_ms": 1.0737919807434082
+          },
+          {
+            "forward_ms": 0.28201600909233093,
+            "backward_ms": 0.7853760123252869,
+            "total_ms": 1.0673919916152954
+          },
+          {
+            "forward_ms": 0.27267199754714966,
+            "backward_ms": 0.7997120022773743,
+            "total_ms": 1.072383999824524
+          },
+          {
+            "forward_ms": 0.27539199590682983,
+            "backward_ms": 0.7976959943771362,
+            "total_ms": 1.0730880498886108
+          },
+          {
+            "forward_ms": 0.2733120024204254,
+            "backward_ms": 0.7956159710884094,
+            "total_ms": 1.0689280033111572
+          },
+          {
+            "forward_ms": 0.2969920039176941,
+            "backward_ms": 0.794592022895813,
+            "total_ms": 1.0915839672088623
+          },
+          {
+            "forward_ms": 0.26684799790382385,
+            "backward_ms": 0.7874559760093689,
+            "total_ms": 1.0543040037155151
+          },
+          {
+            "forward_ms": 0.2691519856452942,
+            "backward_ms": 0.8058559894561768,
+            "total_ms": 1.0750080347061157
+          },
+          {
+            "forward_ms": 0.2712000012397766,
+            "backward_ms": 0.7894719839096069,
+            "total_ms": 1.0606720447540283
+          },
+          {
+            "forward_ms": 0.270112007856369,
+            "backward_ms": 0.7884799838066101,
+            "total_ms": 1.0585919618606567
+          },
+          {
+            "forward_ms": 0.27539199590682983,
+            "backward_ms": 0.7772160172462463,
+            "total_ms": 1.0526080131530762
+          },
+          {
+            "forward_ms": 0.2728320062160492,
+            "backward_ms": 0.7802879810333252,
+            "total_ms": 1.0531200170516968
+          },
+          {
+            "forward_ms": 0.2703999876976013,
+            "backward_ms": 0.7843520045280457,
+            "total_ms": 1.054751992225647
+          },
+          {
+            "forward_ms": 0.26396799087524414,
+            "backward_ms": 0.8007680177688599,
+            "total_ms": 1.064736008644104
+          },
+          {
+            "forward_ms": 0.27638399600982666,
+            "backward_ms": 0.7946239709854126,
+            "total_ms": 1.0710079669952393
+          },
+          {
+            "forward_ms": 0.27084800601005554,
+            "backward_ms": 0.794592022895813,
+            "total_ms": 1.065440058708191
+          },
+          {
+            "forward_ms": 0.27539199590682983,
+            "backward_ms": 0.7915520071983337,
+            "total_ms": 1.0669440031051636
+          },
+          {
+            "forward_ms": 0.27379199862480164,
+            "backward_ms": 0.7751359939575195,
+            "total_ms": 1.0489280223846436
+          },
+          {
+            "forward_ms": 0.27481600642204285,
+            "backward_ms": 0.7894719839096069,
+            "total_ms": 1.0642880201339722
+          },
+          {
+            "forward_ms": 0.27033600211143494,
+            "backward_ms": 0.7833600044250488,
+            "total_ms": 1.0536960363388062
+          },
+          {
+            "forward_ms": 0.27481600642204285,
+            "backward_ms": 0.7802879810333252,
+            "total_ms": 1.0551040172576904
+          },
+          {
+            "forward_ms": 0.26870399713516235,
+            "backward_ms": 0.7884479761123657,
+            "total_ms": 1.0571520328521729
+          },
+          {
+            "forward_ms": 0.26873600482940674,
+            "backward_ms": 0.7854080200195312,
+            "total_ms": 1.054144024848938
+          },
+          {
+            "forward_ms": 0.27158400416374207,
+            "backward_ms": 0.7802879810333252,
+            "total_ms": 1.0518720149993896
+          },
+          {
+            "forward_ms": 0.2704640030860901,
+            "backward_ms": 0.7833600044250488,
+            "total_ms": 1.0538239479064941
+          },
+          {
+            "forward_ms": 0.27347201108932495,
+            "backward_ms": 0.7823359966278076,
+            "total_ms": 1.0558079481124878
+          },
+          {
+            "forward_ms": 0.26899200677871704,
+            "backward_ms": 0.7874879837036133,
+            "total_ms": 1.056480050086975
+          },
+          {
+            "forward_ms": 0.2656959891319275,
+            "backward_ms": 0.792576014995575,
+            "total_ms": 1.0582720041275024
+          },
+          {
+            "forward_ms": 0.27673599123954773,
+            "backward_ms": 0.7772160172462463,
+            "total_ms": 1.0539519786834717
+          }
+        ],
+        "means": {
+          "forward_ms": 0.27372800012429555,
+          "backward_ms": 0.7893226623535157,
+          "total_ms": 1.063050671418508
+        },
+        "peak_allocated_bytes": 711394816,
+        "peak_reserved_bytes": 1166016512
+      },
+      "nvidia_precise": {
+        "samples": [
+          {
+            "forward_ms": 5.333407878875732,
+            "backward_ms": 0.7024959921836853,
+            "total_ms": 6.0359039306640625
+          },
+          {
+            "forward_ms": 5.2005438804626465,
+            "backward_ms": 0.7004160284996033,
+            "total_ms": 5.9009599685668945
+          },
+          {
+            "forward_ms": 5.179327964782715,
+            "backward_ms": 0.7024639844894409,
+            "total_ms": 5.881792068481445
+          },
+          {
+            "forward_ms": 5.209375858306885,
+            "backward_ms": 0.7045120000839233,
+            "total_ms": 5.913887977600098
+          },
+          {
+            "forward_ms": 5.167007923126221,
+            "backward_ms": 0.704479992389679,
+            "total_ms": 5.871488094329834
+          },
+          {
+            "forward_ms": 5.175680160522461,
+            "backward_ms": 0.7024959921836853,
+            "total_ms": 5.878176212310791
+          },
+          {
+            "forward_ms": 5.150496006011963,
+            "backward_ms": 0.704479992389679,
+            "total_ms": 5.854976177215576
+          },
+          {
+            "forward_ms": 5.186367988586426,
+            "backward_ms": 0.7024639844894409,
+            "total_ms": 5.888832092285156
+          },
+          {
+            "forward_ms": 5.178719997406006,
+            "backward_ms": 0.7004160284996033,
+            "total_ms": 5.879136085510254
+          },
+          {
+            "forward_ms": 5.1910080909729,
+            "backward_ms": 0.7024639844894409,
+            "total_ms": 5.893472194671631
+          },
+          {
+            "forward_ms": 5.191199779510498,
+            "backward_ms": 0.7106239795684814,
+            "total_ms": 5.901823997497559
+          },
+          {
+            "forward_ms": 5.213183879852295,
+            "backward_ms": 0.7004160284996033,
+            "total_ms": 5.913599967956543
+          },
+          {
+            "forward_ms": 5.240479946136475,
+            "backward_ms": 0.7024319767951965,
+            "total_ms": 5.9429121017456055
+          },
+          {
+            "forward_ms": 5.173855781555176,
+            "backward_ms": 0.7065600156784058,
+            "total_ms": 5.880415916442871
+          },
+          {
+            "forward_ms": 5.16918420791626,
+            "backward_ms": 0.7065280079841614,
+            "total_ms": 5.875711917877197
+          },
+          {
+            "forward_ms": 5.187295913696289,
+            "backward_ms": 0.7024639844894409,
+            "total_ms": 5.8897600173950195
+          },
+          {
+            "forward_ms": 5.384031772613525,
+            "backward_ms": 0.704479992389679,
+            "total_ms": 6.088511943817139
+          },
+          {
+            "forward_ms": 5.160319805145264,
+            "backward_ms": 0.7004160284996033,
+            "total_ms": 5.860735893249512
+          },
+          {
+            "forward_ms": 5.189184188842773,
+            "backward_ms": 0.7024639844894409,
+            "total_ms": 5.891647815704346
+          },
+          {
+            "forward_ms": 5.214144229888916,
+            "backward_ms": 0.704479992389679,
+            "total_ms": 5.918623924255371
+          },
+          {
+            "forward_ms": 5.218944072723389,
+            "backward_ms": 0.7065920233726501,
+            "total_ms": 5.925536155700684
+          },
+          {
+            "forward_ms": 5.241888046264648,
+            "backward_ms": 0.7024639844894409,
+            "total_ms": 5.944352149963379
+          },
+          {
+            "forward_ms": 5.1908159255981445,
+            "backward_ms": 0.7065600156784058,
+            "total_ms": 5.89737606048584
+          },
+          {
+            "forward_ms": 5.221375942230225,
+            "backward_ms": 0.7045120000839233,
+            "total_ms": 5.9258880615234375
+          },
+          {
+            "forward_ms": 5.358975887298584,
+            "backward_ms": 0.7004479765892029,
+            "total_ms": 6.059423923492432
+          },
+          {
+            "forward_ms": 5.188159942626953,
+            "backward_ms": 0.704479992389679,
+            "total_ms": 5.892640113830566
+          },
+          {
+            "forward_ms": 5.186528205871582,
+            "backward_ms": 0.7065280079841614,
+            "total_ms": 5.8930559158325195
+          },
+          {
+            "forward_ms": 5.1657280921936035,
+            "backward_ms": 0.7045120000839233,
+            "total_ms": 5.870240211486816
+          },
+          {
+            "forward_ms": 5.1511359214782715,
+            "backward_ms": 0.7024639844894409,
+            "total_ms": 5.853600025177002
+          },
+          {
+            "forward_ms": 5.1760640144348145,
+            "backward_ms": 0.7065600156784058,
+            "total_ms": 5.88262414932251
+          }
+        ],
+        "means": {
+          "forward_ms": 5.206481043497721,
+          "backward_ms": 0.7037557323773702,
+          "total_ms": 5.910236835479736
+        },
+        "peak_allocated_bytes": 711394816,
+        "peak_reserved_bytes": 1166016512
+      }
+    },
+    "note": "CUDA event intervals include launch gaps and scalar probe. PyTorch matmul TF32 disabled; NVIDIA_TF32_OVERRIDE=0 disables cuBLAS TF32 in all trials. nvidia uses TE explicit Triton TF32 and nvidia_precise uses TF32x3 for BF16 x FP32. Other mHC ops unchanged."
+  },
+  "archive_sha256": "8af7db7305eccf550fbfb3fd97962b8461693f3cdabf39708254d28be107d579",
+  "limitations": [
+    "Short diagnostics only, no long-run quality result",
+    "Explicit precision variants are not bitwise-equivalent",
+    "Timing includes ordinary gradient-finiteness checking",
+    "Memory is PyTorch allocator peak, not whole-device use"
+  ]
+}

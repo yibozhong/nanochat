@@ -20,14 +20,14 @@ TRIALS={'baseline':('baseline','official'),'mhc_official':('mhc','official'),
         'mhc_nvidia':('mhc','nvidia'),'mhc_nvidia_precise':('mhc','nvidia_precise')}
 
 
-def projection_benchmark():
+def projection_benchmark(backends=('official','torch_compile','nvidia','nvidia_precise')):
     torch.set_num_threads(2);torch.backends.cuda.matmul.allow_tf32=False
     torch.manual_seed(42)
     x=torch.randn(16,2048,4,512,device='cuda',dtype=torch.bfloat16,requires_grad=True)
     w=(torch.randn(24,2048,device='cuda')/2048**.5).requires_grad_()
     probe=torch.randn(16,2048,24,device='cuda')/32768
     result={}
-    for backend in ('official','torch_compile','nvidia','nvidia_precise'):
+    for backend in backends:
         print('Projection microbenchmark '+backend,flush=True)
         for _ in range(10):
             x.grad=None;w.grad=None

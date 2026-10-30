@@ -1,0 +1,101 @@
+[
+  {
+    "job": "7547224.0",
+    "run_id": "6zljiykb",
+    "reason": "Extension build lacked NCCL/cuSPARSE include paths",
+    "training_started": false,
+    "source": {
+      "commit": "b0a2eb9465ad7e74d6652727e9f04cbea5bc0fd0",
+      "official_tilekernels": "36d9e45d38e204ebb87e6f6e833821eee0482fe5",
+      "native_base": "145da40cdd37b9522aa53d26c0c356e9126458bb",
+      "transformer_engine": "2.20.2",
+      "hashes": {
+        "source.tar": "db8c5e80f69e37ed3ce8b84b40982143bc490590211ce4b8f24277a5225450f0",
+        "legacy-baseline.tar": "5f92ef457c61e8b4ab7d145873857b4772f4668b69c1236a9e93562283e67c24",
+        "mhc-official-runtime-7546767.tar.gz": "6b927f93021961293e12452b4001a479ff1b54cbc1aae0355e73e75a393d4dc0",
+        "cuda-compat-13-1_590.48.01-1_amd64.deb": "066f24c715f5f8f31bb7e8bd0f9ddc93fe78a82d3be55c6f3e9bbe26fa4fd7be"
+      },
+      "purpose": "NVIDIA TE projection forward/backward: correctness and same-GPU bounded comparison; no 1B training"
+    },
+    "wandb_state": "failed"
+  },
+  {
+    "job": "7547262.0",
+    "run_id": "9de615b1",
+    "reason": "SM89 lacks PDL used by unchanged DeepSeek residual kernel; TE cuBLAS dphi used TF32 despite torch matmul flag",
+    "training_started": false,
+    "source": {
+      "commit": "cfd55080587395b5b9cb194b24e2142509faefc0",
+      "official_tilekernels": "36d9e45d38e204ebb87e6f6e833821eee0482fe5",
+      "native_base": "145da40cdd37b9522aa53d26c0c356e9126458bb",
+      "transformer_engine": "2.20.2",
+      "hashes": {
+        "source.tar": "21c039128dbd2cb65820853846fd5c739c1ef59ab6b0eed11984509e4f321011",
+        "legacy-baseline.tar": "5f92ef457c61e8b4ab7d145873857b4772f4668b69c1236a9e93562283e67c24",
+        "mhc-official-runtime-7546767.tar.gz": "6b927f93021961293e12452b4001a479ff1b54cbc1aae0355e73e75a393d4dc0",
+        "cuda-compat-13-1_590.48.01-1_amd64.deb": "066f24c715f5f8f31bb7e8bd0f9ddc93fe78a82d3be55c6f3e9bbe26fa4fd7be"
+      },
+      "purpose": "NVIDIA TE projection forward/backward: correctness and same-GPU bounded comparison; no 1B training"
+    },
+    "checks": {
+      "tests": 26,
+      "failed": 13,
+      "passed": 13
+    },
+    "failures": [
+      {
+        "name": "test_official_pipeline_against_official_torch_reference[True-128]",
+        "message": "tvm.error.InternalError: Check failed: (!mutator.has_trigger_launch_ && !mutator.has_grid_sync_) is false: PDL is not supported"
+      },
+      {
+        "name": "test_official_pipeline_against_official_torch_reference[True-512]",
+        "message": "tvm.error.InternalError: Check failed: (!mutator.has_trigger_launch_ && !mutator.has_grid_sync_) is false: PDL is not supported"
+      },
+      {
+        "name": "test_official_pipeline_against_official_torch_reference[False-128]",
+        "message": "tvm.error.InternalError: Check failed: (!mutator.has_trigger_launch_ && !mutator.has_grid_sync_) is false: PDL is not supported"
+      },
+      {
+        "name": "test_official_pipeline_against_official_torch_reference[False-512]",
+        "message": "tvm.error.InternalError: Check failed: (!mutator.has_trigger_launch_ && !mutator.has_grid_sync_) is false: PDL is not supported"
+      },
+      {
+        "name": "test_no_manifold_never_calls_sinkhorn_in_training_or_inference",
+        "message": "tvm.error.InternalError: Check failed: (!mutator.has_trigger_launch_ && !mutator.has_grid_sync_) is false: PDL is not supported"
+      },
+      {
+        "name": "test_gpu_causality_cache_cce_and_gradients[mhc]",
+        "message": "tvm.error.InternalError: Check failed: (!mutator.has_trigger_launch_ && !mutator.has_grid_sync_) is false: PDL is not supported"
+      },
+      {
+        "name": "test_gpu_causality_cache_cce_and_gradients[mhc_no_manifold]",
+        "message": "tvm.error.InternalError: Check failed: (!mutator.has_trigger_launch_ && !mutator.has_grid_sync_) is false: PDL is not supported"
+      },
+      {
+        "name": "test_torch_projection_model_causality_cache_and_all_gradients[torch]",
+        "message": "tvm.error.InternalError: Check failed: (!mutator.has_trigger_launch_ && !mutator.has_grid_sync_) is false: PDL is not supported"
+      },
+      {
+        "name": "test_torch_projection_model_causality_cache_and_all_gradients[torch_compile]",
+        "message": "tvm.error.InternalError: Check failed: (!mutator.has_trigger_launch_ && !mutator.has_grid_sync_) is false: PDL is not supported"
+      },
+      {
+        "name": "test_nvidia_projection_against_fp64_and_official[128-nvidia_precise]",
+        "message": "AssertionError: {'fp64_input_grad': 3.2030668991509606e-05, 'fp64_output': 6.625707285565029e-07, 'fp64_weight_grad': 0.00020215612978364934, 'official_gradients': [0.0010374614035769027, 1.1516675636289722e-06], ...}\nassert 0.00020215612978364934 < 3e-05"
+      },
+      {
+        "name": "test_nvidia_projection_against_fp64_and_official[512-nvidia_precise]",
+        "message": "AssertionError: {'fp64_input_grad': 1.2613394929955122e-05, 'fp64_output': 6.736924626152834e-07, 'fp64_weight_grad': 0.00020973308336232928, 'official_gradients': [0.0010526625664722432, 1.532942185022873e-05], ...}\nassert 0.00020973308336232928 < 3e-05"
+      },
+      {
+        "name": "test_nvidia_model_causality_cache_and_all_gradients[nvidia]",
+        "message": "tvm.error.InternalError: Check failed: (!mutator.has_trigger_launch_ && !mutator.has_grid_sync_) is false: PDL is not supported"
+      },
+      {
+        "name": "test_nvidia_model_causality_cache_and_all_gradients[nvidia_precise]",
+        "message": "tvm.error.InternalError: Check failed: (!mutator.has_trigger_launch_ && !mutator.has_grid_sync_) is false: PDL is not supported"
+      }
+    ],
+    "wandb_state": "failed"
+  }
+]

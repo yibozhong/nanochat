@@ -4,6 +4,7 @@ from collections import defaultdict
 from contextlib import contextmanager, nullcontext
 from dataclasses import asdict
 import gzip
+import gc
 import json
 import os
 from pathlib import Path
@@ -119,6 +120,8 @@ def main():
     p.add_argument('--output-dir',required=True)
     p.add_argument('--projection-backend',choices=['official','torch','torch_compile','nvidia','nvidia_precise'],default='official')
     p.add_argument('--wandb-group',default='mhc-profiling-20261030')
+    p.add_argument('--timed-steps',type=int,default=20)
+    p.add_argument('--collect-after-warmup',action='store_true')
     a=p.parse_args();out=Path(a.output_dir);out.mkdir(parents=True,exist_ok=True)
     torch.set_num_threads(2);torch.backends.cuda.matmul.allow_tf32=False;seed_all(42)
     config=ConnectionConfig(variant=a.variant,projection_backend=a.projection_backend)
@@ -130,9 +133,10 @@ def main():
         gpu=props.name,gpu_uuid=str(props.uuid),gpu_capability=list(torch.cuda.get_device_capability()),sm_count=props.multi_processor_count,
         nvidia_tf32_override=os.environ.get('NVIDIA_TF32_OVERRIDE'),
         parameters=sum(p.numel() for p in model.parameters()),parameter_tensors=len(list(model.parameters())),
-        optimizer='native MuonAdamW',warmup_steps=20,normal_timed_steps=20,no_finite_check_timed_steps=20,
+        optimizer='native MuonAdamW',warmup_steps=20,normal_timed_steps=a.timed_steps,no_finite_check_timed_steps=20,
+        collect_after_warmup=a.collect_after_warmup,
         event_instrumented_steps=4,profiler_steps=2,torch=torch.__version__,cuda=torch.version.cuda,
-        note='66 temporary diagnostic optimizer steps, no checkpoint/pretraining promotion; finite-check-off is diagnostic only')
+        note=f'{46+a.timed_steps} temporary diagnostic optimizer steps, no checkpoint/pretraining promotion; finite-check-off is diagnostic only')
     kwargs=dict(project='nanochat',entity='yibozhong657-none',group=a.wandb_group,
                 name='profile-'+a.variant+'-'+a.projection_backend,job_type='profiling',id=run_id,config=settings)
     try:run=wandb.init(**kwargs,settings=wandb.Settings(init_timeout=60))
@@ -148,9 +152,10 @@ def main():
     try:
         print('Warmup '+a.variant,flush=True)
         for _ in range(20):perform(train_step)
+        if a.collect_after_warmup:gc.collect()
         torch.cuda.synchronize();torch.cuda.reset_peak_memory_stats()
         times=[]
-        for _ in range(20):
+        for _ in range(a.timed_steps):
             schedule(opt,step,30518,wd)
             torch.cuda.synchronize();tick=time.perf_counter()
             loss=perform(train_step,scheduled=True);torch.cuda.synchronize()
@@ -196,7 +201,7 @@ def main():
             normal_ms=normal,no_finite_check_ms=no_check,phase_means=phase_means,phase_samples=events,
             cuda_profile=attribution,last_train_ce=loss,pretraining_launched=False,
             normal_timing_memory=memory,projection_backend=a.projection_backend)
-        assert step==66
+        assert step==46+a.timed_steps
         json_write(out/'summary.json',result)
         run.summary.update(dict(complete=True,optimizer_updates=step,training_tokens=step*32768,
             normal_step_ms=normal['mean'],no_finite_check_step_ms=no_check['mean'],
