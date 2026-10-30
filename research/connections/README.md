@@ -215,6 +215,22 @@ kernel files are still byte-for-byte official; the launch adapter is local.
 
 ## NVIDIA projection backend
 
+Full-operator replacement is a separate, explicit `--connection-backend nvidia`
+option; `--projection-backend nvidia` is the older projection-only experiment.
+The complete path calls the released TE 2.20.2 projection, fused scale, log-space
+Sinkhorn, aggregate and expand/combine forward/backward APIs, including the
+final head via projection/scale/aggregate. Input replication uses ordinary
+PyTorch because TE has no standalone embedding expansion operation. The model
+keeps `[B,T,D,4]` throughout, avoiding per-layer stream-layout copies. Its phi
+columns are interleaved at initialization, preserving the effective seeded
+weights; DeepSeek checkpoints require the same column permutation on import.
+The full NVIDIA path retains upstream numerical conventions (FP32 machine
+epsilon, sigmoid without added epsilon, log-space Sinkhorn), not exact old
+DeepSeek arithmetic. `--no-fused-connection-grad` disables the optional official
+FP32 accumulation buffer. Full replacement is undergoing its own GPU gate and
+same-card five-way comparison; the projection-only results below do not measure
+it. [Full comparison protocol](nvidia-full/protocol.json).
+
 The NVIDIA author's [full-model comparison in TE PR 2790](https://github.com/NVIDIA/TransformerEngine/pull/2790#issuecomment-4208434892)
 reports a 2B Nemotron model on 16 nodes of 8 B200 GPUs, pure data parallelism,
 global batch 768, microbatch 3 and accumulation 2. Approximate iteration times

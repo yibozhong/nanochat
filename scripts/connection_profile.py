@@ -119,12 +119,15 @@ def main():
     p.add_argument('--data-dir',default='../data')
     p.add_argument('--output-dir',required=True)
     p.add_argument('--projection-backend',choices=['official','torch','torch_compile','nvidia','nvidia_precise'],default='official')
+    p.add_argument('--connection-backend',choices=['deepseek','nvidia','nvidia_precise'],default='deepseek')
+    p.add_argument('--fused-connection-grad',action=argparse.BooleanOptionalAction,default=True)
     p.add_argument('--wandb-group',default='mhc-profiling-20261030')
     p.add_argument('--timed-steps',type=int,default=20)
     p.add_argument('--collect-after-warmup',action='store_true')
     a=p.parse_args();out=Path(a.output_dir);out.mkdir(parents=True,exist_ok=True)
     torch.set_num_threads(2);torch.backends.cuda.matmul.allow_tf32=False;seed_all(42)
-    config=ConnectionConfig(variant=a.variant,projection_backend=a.projection_backend)
+    config=ConnectionConfig(variant=a.variant,projection_backend=a.projection_backend,
+        connection_backend=a.connection_backend,fused_connection_grad=a.fused_connection_grad)
     model=ConnectionModel(config).prepare(compile_blocks=True);opt,wd=optimizer_for(model)
     data=PackedData(a.data_dir);source=json.loads(Path('source.json').read_text())
     props=torch.cuda.get_device_properties(0)
@@ -138,7 +141,7 @@ def main():
         event_instrumented_steps=4,profiler_steps=2,torch=torch.__version__,cuda=torch.version.cuda,
         note=f'{46+a.timed_steps} temporary diagnostic optimizer steps, no checkpoint/pretraining promotion; finite-check-off is diagnostic only')
     kwargs=dict(project='nanochat',entity='yibozhong657-none',group=a.wandb_group,
-                name='profile-'+a.variant+'-'+a.projection_backend,job_type='profiling',id=run_id,config=settings)
+                name='profile-'+a.variant+'-'+a.connection_backend+'-'+a.projection_backend,job_type='profiling',id=run_id,config=settings)
     try:run=wandb.init(**kwargs,settings=wandb.Settings(init_timeout=60))
     except wandb.errors.CommError:run=wandb.init(**kwargs,mode='offline')
     json_write(out/'config.json',settings)

@@ -28,8 +28,15 @@ class ConnectionConfig:
     sinkhorn_iterations: int = 20
     activation_checkpoint: bool = False
     projection_backend: str = 'official'
+    connection_backend: str = 'deepseek'
+    fused_connection_grad: bool = True
 
     def __post_init__(self):
+        if self.connection_backend not in ('deepseek', 'nvidia', 'nvidia_precise'):
+            raise ValueError(f'Unknown full connection backend: {self.connection_backend}')
+        if self.connection_backend != 'deepseek':
+            if self.variant != 'mhc' or self.projection_backend != 'official' or self.sinkhorn_iterations != 20:
+                raise ValueError('Full NVIDIA backend requires mhc, 20 iterations, and no projection-only override')
         if self.variant not in ('baseline', 'mhc', 'mhc_no_manifold'):
             raise ValueError(f'Unknown connection variant: {self.variant}')
         if self.projection_backend not in ('official', 'torch', 'torch_compile', 'nvidia', 'nvidia_precise'):
@@ -53,10 +60,15 @@ class ConnectionBlock(Block):
         self.variant = config.variant
         self.compiled_attention = self.compiled_mlp = None
         if self.variant != 'baseline':
-            self.attn_connection = ManifoldHyperConnection(config.width, config.streams, 2*index,
-                config.sinkhorn_iterations, manifold=config.variant == 'mhc', projection_backend=config.projection_backend)
-            self.mlp_connection = ManifoldHyperConnection(config.width, config.streams, 2*index+1,
-                config.sinkhorn_iterations, manifold=config.variant == 'mhc', projection_backend=config.projection_backend)
+            if config.connection_backend == 'deepseek':
+                cls = ManifoldHyperConnection
+                kwargs = dict(manifold=config.variant == 'mhc', projection_backend=config.projection_backend)
+            else:
+                from nanochat.nvidia_connections import NvidiaHyperConnection
+                cls = NvidiaHyperConnection
+                kwargs = dict(use_tf32=config.connection_backend == 'nvidia', fused_grad_acc=config.fused_connection_grad)
+            self.attn_connection = cls(config.width, config.streams, 2*index, config.sinkhorn_iterations, **kwargs)
+            self.mlp_connection = cls(config.width, config.streams, 2*index+1, config.sinkhorn_iterations, **kwargs)
 
     def attention_branch(self, h, cos, sin, kv_cache=None):
         return self.attn(norm(h), None, (cos, sin), (-1, 0), kv_cache)
@@ -97,8 +109,13 @@ class ConnectionModel(nn.Module):
         if config.variant != 'baseline':
             for b in self.blocks:
                 b.attn_connection.reset_parameters(); b.mlp_connection.reset_parameters()
-        self.stream_head = ManifoldHyperHead(config.width, config.streams,
-            projection_backend=config.projection_backend) if config.variant != 'baseline' else None
+        if config.variant == 'baseline':
+            self.stream_head = None
+        elif config.connection_backend == 'deepseek':
+            self.stream_head = ManifoldHyperHead(config.width, config.streams, projection_backend=config.projection_backend)
+        else:
+            from nanochat.nvidia_connections import NvidiaHyperHead
+            self.stream_head = NvidiaHyperHead(config.width, config.streams, use_tf32=config.connection_backend == 'nvidia')
         if self.stream_head is not None:
             self.stream_head.reset_parameters()
         d = config.width // config.heads
@@ -132,7 +149,11 @@ class ConnectionModel(nn.Module):
             raise ValueError('Input exceeds configured context length')
         x = norm(self.wte(idx))
         if self.config.variant != 'baseline':
-            x = expand_streams(x, self.config.streams)
+            if self.config.connection_backend == 'deepseek':
+                x = expand_streams(x, self.config.streams)
+            else:
+                from nanochat.nvidia_connections import expand_streams as nvidia_expand
+                x = nvidia_expand(x, self.config.streams)
         cos, sin = self.cos[:, start:start+idx.shape[1]], self.sin[:, start:start+idx.shape[1]]
         for i, b in enumerate(self.blocks):
             fn = self.compiled_steps[i] if self.compiled_steps is not None else b.forward
