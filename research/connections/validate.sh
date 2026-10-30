@@ -13,10 +13,12 @@ export PATH="/opt/project/.venv/bin:$PATH"
 export UV_CACHE_DIR="$PWD/uv-cache" UV_LINK_MODE=copy
 cp nanochat-src/research/connections/runtime/{pyproject.toml,uv.lock} runtime/
 uv sync --frozen --project runtime --python /opt/project/.venv/bin/python
+cp -r nanochat-src/research/connections/toolchain toolchain
+uv sync --frozen --project toolchain --python /opt/project/.venv/bin/python
 export PATH="$PWD/runtime/.venv/bin:$PATH"
-export CUDA_HOME="$PWD/runtime/.venv/lib/python3.11/site-packages/nvidia/cu13"
+export CUDA_HOME="$PWD/toolchain/.venv/lib/python3.11/site-packages/nvidia/cu13"
 export PATH="$CUDA_HOME/bin:$PATH"
-export LD_LIBRARY_PATH="$CUDA_HOME/lib:${LD_LIBRARY_PATH:-}"
+export LD_LIBRARY_PATH="$PWD/runtime/.venv/lib/python3.11/site-packages/nvidia/cu13/lib:${LD_LIBRARY_PATH:-}"
 export NETRC="$PWD/.netrc" WANDB_DIR="$PWD/results"
 export WANDB_PROJECT=nanochat WANDB_ENTITY=yibozhong657-none
 export NANOCHAT_MHC_TEST_PORTABILITY=1
@@ -30,7 +32,9 @@ export LEGACY_BASELINE_SOURCE="$PWD/legacy-reference/experiment/model.py"
 cp source.json results/source.json
 cp inputs.sha256 results/inputs.sha256
 cp runtime/uv.lock results/runtime-uv.lock
+cp toolchain/uv.lock results/toolchain-uv.lock
 uv pip freeze --python "$PWD/runtime/.venv/bin/python" > results/environment.txt
+uv pip freeze --python "$PWD/toolchain/.venv/bin/python" > results/toolchain-environment.txt
 nvcc --version > results/nvcc.txt
 SYSTEM_CUDA_DRIVER=$(/opt/project/.venv/bin/python - <<'PYDRIVER'
 import ctypes

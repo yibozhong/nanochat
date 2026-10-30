@@ -7,7 +7,6 @@ dependencies = [
     "tilelang==0.1.9",
     "apache-tvm-ffi==0.1.9",
     "tile-kernels @ git+https://github.com/deepseek-ai/TileKernels.git@36d9e45d38e204ebb87e6f6e833821eee0482fe5",
-    "cuda-toolkit[nvcc,cccl,crt,nvvm]==13.1.1",
     "cut-cross-entropy @ git+https://github.com/apple/ml-cross-entropy.git@3de376c106a1916bc5e1b619f9c77c87a461ee1c",
     "numpy==2.2.6", "wandb==0.26.1", "pytest==9.0.2",
     "kernels==0.11.7", "psutil==7.2.1", "filelock==3.20.3",

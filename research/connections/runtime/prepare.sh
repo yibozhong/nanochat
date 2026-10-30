@@ -12,7 +12,7 @@ find runtime/.venv -name nvcc -o -name cuda_runtime.h > results/cuda-paths.txt
 runtime/.venv/bin/python - <<'PYINFO'
 import json,importlib.metadata as m
 from pathlib import Path
-info={p:m.version(p) for p in ['torch','tilelang','tile-kernels','nvidia-cuda-nvcc','cut-cross-entropy']}
+info={p:m.version(p) for p in ['torch','tilelang','tile-kernels','cut-cross-entropy']}
 Path('results/runtime.json').write_text(json.dumps(info,indent=2))
 print(info)
 PYINFO
