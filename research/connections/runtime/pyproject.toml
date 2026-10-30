@@ -5,6 +5,7 @@ requires-python = ">=3.11,<3.12"
 dependencies = [
     "torch==2.10.0",
     "tilelang==0.1.9",
+    "apache-tvm-ffi==0.1.9",
     "tile-kernels @ git+https://github.com/deepseek-ai/TileKernels.git@36d9e45d38e204ebb87e6f6e833821eee0482fe5",
     "cuda-toolkit[nvcc,cccl,crt,nvvm]==13.1.1",
     "cut-cross-entropy @ git+https://github.com/apple/ml-cross-entropy.git@3de376c106a1916bc5e1b619f9c77c87a461ee1c",

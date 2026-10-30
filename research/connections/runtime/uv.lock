@@ -32,14 +32,17 @@ wheels = [
 
 [[package]]
 name = "apache-tvm-ffi"
-version = "0.1.15.post2"
+version = "0.1.9"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/a8/8f/2fcd88ce2f43dd2c1945c6613356a9bc1f5fdbe6e37080d34d2b980ad9f6/apache_tvm_ffi-0.1.15.post2.tar.gz", hash = "sha256:909be9ef5af07726aa9afd38a3111abc4d86cfd5927ebedfa9166232ce7d287b", size = 3363431, upload-time = "2026-10-29T21:13:25.144Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/6f/60/1e787a0b5ebf318483235be2a689ee367173983067e441b8379564f667c0/apache_tvm_ffi-0.1.9.tar.gz", hash = "sha256:d2d402587e8906de0a07f4746aa78f3d452c7efe3625d4bb39ac2ad693bce530", size = 2513731, upload-time = "2026-02-27T19:28:06.602Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/d9/a5/a123483862e34e6b4dbc9f793f3bc780eb69ebcdf3d726b055af2d6e2b07/apache_tvm_ffi-0.1.15.post2-cp311-cp311-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:8ecebe749834f6ac0f2693d5964acf9ac75d0bc26e6ba64c46eb7ab00ea50fac", size = 3347285, upload-time = "2026-10-29T21:12:09.007Z" },
+    { url = "https://files.pythonhosted.org/packages/55/43/63faedea83494e99122466a993bcdccd31cf93c7e8a0d56731120e82e2b9/apache_tvm_ffi-0.1.9-cp311-cp311-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:6f16d73a82a9e68a439b7d233d48b1b929be17fe92df4bbf1ee2274e573144a3", size = 2323130, upload-time = "2026-02-27T19:27:17.259Z" },
+    { url = "https://files.pythonhosted.org/packages/e4/3b/6cfc82a3ab5d9e501bbcee5df36eebe09da1c384461d7a55e2a17776d117/apache_tvm_ffi-0.1.9-cp311-cp311-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:21365abd2a2a1a6d3b4e6e4f048309651125becfa795440c3607f3cc27d30ac7", size = 2307140, upload-time = "2026-02-27T19:27:20.222Z" },
+    { url = "https://files.pythonhosted.org/packages/c6/dd/2bab4c6cd86257dbf99e93452a1af833113f8dc3e25a25579f6e4e4c8a94/apache_tvm_ffi-0.1.9-cp312-abi3-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:28241371934ea8af10d5067087ba1229ebddded7b2c02d33a258ec2a96df8c46", size = 2299704, upload-time = "2026-02-27T19:27:27.477Z" },
+    { url = "https://files.pythonhosted.org/packages/70/ef/5402da5d37f5270fd88ea0348acca78dba9be8bdbf6c2bcae0935eb03ef1/apache_tvm_ffi-0.1.9-cp312-abi3-manylinux_2_24_x86_64.manylinux_2_28_x86_64.whl", hash = "sha256:f45eb43499acac45ff6c93564f0ff2d3ca27b69656d540fd56ce59d51c0b4c65", size = 2278991, upload-time = "2026-02-27T19:27:30.729Z" },
 ]
 
 [[package]]
@@ -321,6 +324,7 @@ name = "nanochat-mhc-runtime"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [
+    { name = "apache-tvm-ffi" },
     { name = "cuda-toolkit", extra = ["cccl", "crt", "nvcc", "nvvm"] },
     { name = "cut-cross-entropy" },
     { name = "filelock" },
@@ -336,6 +340,7 @@ dependencies = [
 
 [package.metadata]
 requires-dist = [
+    { name = "apache-tvm-ffi", specifier = "==0.1.9" },
     { name = "cuda-toolkit", extras = ["nvcc", "cccl", "crt", "nvvm"], specifier = "==13.1.1" },
     { name = "cut-cross-entropy", git = "https://github.com/apple/ml-cross-entropy.git?rev=3de376c106a1916bc5e1b619f9c77c87a461ee1c" },
     { name = "filelock", specifier = "==3.20.3" },

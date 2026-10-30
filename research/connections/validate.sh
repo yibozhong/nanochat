@@ -9,7 +9,11 @@ tar -xf source.tar
 tar -xf legacy-baseline.tar
 tar -xf data-7444406.tar
 tar -xzf mhc-official-runtime-7546767.tar.gz
-export PATH="$PWD/runtime/.venv/bin:/opt/project/.venv/bin:$PATH"
+export PATH="/opt/project/.venv/bin:$PATH"
+export UV_CACHE_DIR="$PWD/uv-cache" UV_LINK_MODE=copy
+cp nanochat-src/research/connections/runtime/{pyproject.toml,uv.lock} runtime/
+uv sync --frozen --project runtime --python /opt/project/.venv/bin/python
+export PATH="$PWD/runtime/.venv/bin:$PATH"
 export CUDA_HOME="$PWD/runtime/.venv/lib/python3.11/site-packages/nvidia/cu13"
 export PATH="$CUDA_HOME/bin:$PATH"
 export LD_LIBRARY_PATH="$CUDA_HOME/lib:${LD_LIBRARY_PATH:-}"

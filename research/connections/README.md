@@ -48,11 +48,13 @@ The official kernels target **SM90/SM100** and require the CUDA 13.1 toolchain.
 A30 (SM80), L40 (SM89), and RTX PRO 6000 Blackwell (SM120) are not accepted by
 this entry. The existing baseline environment remains available; the official
 mHC environment is independently locked under `runtime/` (Python 3.11,
-PyTorch 2.10.0, TileLang 0.1.9, pinned TileKernels, CUDA nvcc 13.1.115 and the same
+PyTorch 2.10.0, TileLang 0.1.9, TVM-FFI 0.1.9, pinned TileKernels, CUDA nvcc 13.1.115 and the same
 CCE source revision). GPU drivers must support the requested toolchain.
 
 On a compute node, install with `uv sync --frozen --project research/connections/runtime`.
-Use that environment's Python to run:
+The cached base environment is synchronized with this lock before every gate;
+the loose upstream TVM-FFI bound is pinned to 0.1.9 after an import failure with
+0.1.15.post2. Use that environment's Python to run:
 
 ```bash
 python -m scripts.connection_train --variant baseline --steps 50 --data-dir data --output-dir outputs/baseline
