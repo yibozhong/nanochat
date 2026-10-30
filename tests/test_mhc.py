@@ -12,7 +12,7 @@ import pytest
 import torch
 
 from nanochat.connection_model import ConnectionConfig, ConnectionModel, optimizer_for
-from nanochat.manifold_connections import ManifoldHyperConnection, ManifoldHyperHead, official_ops
+from nanochat.manifold_connections import ManifoldHyperConnection, ManifoldHyperHead, sinkhorn_normalize
 from nanochat.engine import KVCache
 
 
@@ -101,7 +101,7 @@ def test_official_sinkhorn_constraints_and_gradients():
     from tile_kernels.torch.mhc import sinkhorn_normalize_ref
     x=torch.randn(1,256,4,4,device='cuda',requires_grad=True)
     xr=x.detach().clone().requires_grad_()
-    actual=official_ops().sinkhorn_normalize(x,repeat=20,eps=1e-6)
+    actual=sinkhorn_normalize(x,repeat=20,eps=1e-6)
     expected=sinkhorn_normalize_ref(xr,repeat=20,eps=1e-6)
     torch.testing.assert_close(actual,expected,atol=2e-6,rtol=2e-5)
     assert actual.min()>0

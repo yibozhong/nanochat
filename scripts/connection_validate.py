@@ -30,6 +30,7 @@ def main():
     except wandb.errors.CommError:run=wandb.init(**kwargs,mode='offline')
     started=time.time()
     try:
+        print('Starting official-kernel and integration checks', flush=True)
         with (out/'pytest.log').open('w') as log:
             subprocess.run([sys.executable,'-m','pytest','tests/test_mhc.py',
                 'tests/test_attention_fallback.py','-q','--junitxml=results/tests.xml'],
@@ -37,9 +38,11 @@ def main():
         suites=ET.parse(out/'tests.xml').getroot().findall('testsuite')
         checks={k:sum(int(s.attrib.get(k,0)) for s in suites) for k in ['tests','failures','errors','skipped']}
         assert checks['failures']==checks['errors']==0
+        print('Checks passed: '+json.dumps(checks), flush=True)
         run.log(checks)
         trials={}
         for variant in ('baseline','mhc'):
+            print('Starting 50-step smoke: '+variant, flush=True)
             path=work/variant
             with (out/(variant+'.log')).open('w') as log:
                 subprocess.run([sys.executable,'-m','scripts.connection_train','--variant',variant,

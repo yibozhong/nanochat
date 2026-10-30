@@ -43,6 +43,35 @@ def projection(x, phi):
     return official_ops().mhc_pre_norm_fn(x, phi, None, 1e-6, fuse_grad_acc=False, n_splits=1)
 
 
+class _PortableSinkhorn(torch.autograd.Function):
+    """Only a launch adapter; both computations remain official kernels.
+
+    Upstream's 32-token backward tile uses 100 KiB at repeat=20. SM120
+    allows 99 KiB per block. A 16-token tile uses 50 KiB, with identical math.
+    """
+    @staticmethod
+    def forward(ctx, x, repeat, eps):
+        from tile_kernels.mhc.sinkhorn_kernel import _mhc_sinkhorn_fwd, _mhc_sinkhorn_bwd
+        output = torch.empty_like(x)
+        ctx.save_for_backward(x)
+        ctx.bwd_kernel = _mhc_sinkhorn_bwd(x.shape[1], 16, repeat, eps)
+        _mhc_sinkhorn_fwd(x.shape[1], 1, repeat, eps)(x, output)
+        return output
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        x, = ctx.saved_tensors
+        grad_input = torch.empty_like(x)
+        ctx.bwd_kernel(grad_output.contiguous(), x, grad_input)
+        return grad_input, None, None
+
+
+def sinkhorn_normalize(x, repeat=20, eps=1e-6):
+    if torch.cuda.get_device_capability(x.device)[0] in (9, 10):
+        return official_ops().sinkhorn_normalize(x, repeat=repeat, eps=eps)
+    return _PortableSinkhorn.apply(x.contiguous().view(-1, *x.shape[-2:]), repeat, eps).view_as(x)
+
+
 class ManifoldHyperConnection(nn.Module):
     def __init__(self, width, streams, branch_index, iterations=20):
         super().__init__()
@@ -71,7 +100,7 @@ class ManifoldHyperConnection(nn.Module):
         else:
             mixes = projection(x, self.phi)
             pre, post, comb = ops.mhc_pre_split_mixes(mixes, self.scales, self.bias, self.streams, 2., 1e-6)
-            comb = ops.sinkhorn_normalize(comb, repeat=self.iterations, eps=1e-6)
+            comb = sinkhorn_normalize(comb, repeat=self.iterations, eps=1e-6)
             branch = ops.mhc_pre_apply_mix(x, pre)
         return branch, x, (post, comb)
 

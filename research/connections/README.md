@@ -34,6 +34,15 @@ official head does, and uses `n_splits=1`, which is the actual split count
 supported by this release's TileLang projection kernel. These are integration
 choices; upstream kernel and autograd source files are unchanged.
 
+An actual SM120 run exposed a launch-size limit: the official Sinkhorn backward
+wrapper requests a 32-token tile, using 100 KiB of shared memory at 20 iterations;
+SM120 allows only 99 KiB per block. On portability-test architectures, a thin
+autograd adapter calls the **same unmodified official forward/backward kernels**
+with the backward `token_block_size=16` argument (50 KiB). SM90/SM100 retain the
+official wrapper's 32-token tile. This changes scheduling only: stream count,
+20 iterations, equations and differentiation are unchanged. It is an explicit
+local launch adaptation, not a claim that every official wrapper works unmodified.
+
 The official library supplies operations, not a complete nanochat training
 recipe. Our existing parameter initialization is still a local choice:
 Normal(0, 1/sqrt(nD)) projections, 0.01 dynamic scales, logit(1/n) pre bias,
