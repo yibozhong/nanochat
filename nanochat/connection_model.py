@@ -31,8 +31,17 @@ class ConnectionConfig:
     fused_connection_grad: bool = False
     architecture: str = 'vanilla'
     window_pattern: str = 'SSSL'  # native only; vanilla is always full attention
+    readout: str = 'collapse'
+    partition_seed: int = 20261031
 
     def __post_init__(self):
+        if self.readout not in ('collapse', 'vocab_partition'):
+            raise ValueError(f'Unknown readout: {self.readout}')
+        if self.readout == 'vocab_partition':
+            if self.architecture != 'vanilla' or self.variant == 'baseline':
+                raise ValueError('Partitioned readout currently requires vanilla multistream mHC')
+            if self.streams < 1 or self.vocab_size % self.streams:
+                raise ValueError('Vocabulary must divide evenly across streams')
         if self.architecture not in ('vanilla', 'native'):
             raise ValueError(f'Unknown backbone architecture: {self.architecture}')
         if not self.window_pattern or any(c not in 'SL' for c in self.window_pattern):
@@ -117,12 +126,17 @@ class ConnectionModel(nn.Module):
         if config.variant != 'baseline':
             for b in self.blocks:
                 b.attn_connection.reset_parameters(); b.mlp_connection.reset_parameters()
-        if config.variant == 'baseline':
+        if config.variant == 'baseline' or config.readout == 'vocab_partition':
             self.stream_head = None
         else:
             self.stream_head = NvidiaHyperHead(config.width, config.streams, use_tf32=config.connection_backend == 'nvidia')
         if self.stream_head is not None:
             self.stream_head.reset_parameters()
+        if config.readout == 'vocab_partition':
+            from nanochat.partitioned_readout import vocab_partition
+            ids, inverse = vocab_partition(config.vocab_size, config.streams, config.partition_seed)
+            self.register_buffer('partition_ids', ids)
+            self.register_buffer('partition_inverse', inverse)
         d = config.width // config.heads
         inv = 1 / (100000 ** (torch.arange(0, d, 2, dtype=torch.float32) / d))
         freq = torch.outer(torch.arange(config.sequence_length, dtype=torch.float32), inv)
@@ -166,11 +180,22 @@ class ConnectionModel(nn.Module):
                 x = fn(x, cos, sin, kv_cache)
         if self.stream_head is not None:
             x = self.stream_head(x)
+        if self.config.readout == 'vocab_partition':
+            # Normalize each D-dimensional stream, never the K stream axis.
+            x = x.transpose(-1, -2).contiguous()
         return norm(x)
 
     def forward(self, idx, targets=None, dense=False, kv_cache=None):
         h = self.hidden(idx, kv_cache)
         w = self.lm_head.weight.to(h.dtype)
+        if self.config.readout == 'vocab_partition':
+            from nanochat.partitioned_readout import partitioned_logits, partitioned_cross_entropy
+            if targets is None or dense:
+                logits = partitioned_logits(h, w, self.partition_ids, self.partition_inverse)
+                if targets is None:
+                    return logits
+                return F.cross_entropy(logits.flatten(0, 1), targets.flatten())
+            return partitioned_cross_entropy(h, w, targets, self.partition_ids, self.partition_inverse)
         if targets is None or dense:
             logits = 15 * torch.tanh(F.linear(h, w).float() / 15)
             if targets is None:
