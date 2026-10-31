@@ -29,6 +29,10 @@ def match_vanilla_initialization(model, seed):
     """
     if model.config.variant == 'baseline':
         return
+    if model.config.architecture == 'native':
+        # Native initialization finishes the entire backbone before drawing
+        # connector weights, so the same seed already matches all parameters.
+        return
     options = asdict(model.config)
     options.update(variant='baseline', fused_connection_grad=False)
     with torch.random.fork_rng(devices=list(range(torch.cuda.device_count()))):

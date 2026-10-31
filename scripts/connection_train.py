@@ -18,7 +18,7 @@ import uuid
 import torch
 from nanochat.experiment_logging import training_run
 
-from nanochat.connection_model import ConnectionConfig, ConnectionModel, optimizer_for, schedule
+from nanochat.connection_model import ConnectionConfig, build_connection_model, optimizer_for, schedule
 from nanochat.packed_training import PackedData, seed_all, evaluate, train_step, snapshot, atomic_save, restore_rng, json_write
 from nanochat.connection_experiment import configure_attention, match_vanilla_initialization
 
@@ -26,6 +26,8 @@ from nanochat.connection_experiment import configure_attention, match_vanilla_in
 def main():
     p = argparse.ArgumentParser()
     p.add_argument('--variant', choices=('baseline','mhc','mhc_no_sinkhorn'), required=True)
+    p.add_argument('--architecture', choices=('vanilla', 'native'), default='vanilla')
+    p.add_argument('--window-pattern', default='SSSL', help='Native backbone only; vanilla always uses full attention')
     p.add_argument('--formal-training', action='store_true', help='Explicitly enable W&B for a formal training run')
     p.add_argument('--wandb-group', default='mhc-official-kernels-20261030')
     p.add_argument('--connection-backend', choices=('nvidia','nvidia_precise'), default='nvidia')
@@ -60,6 +62,7 @@ def main():
     configure_attention(a.attention_backend)
     seed_all(a.seed)
     c=ConnectionConfig(variant=a.variant,streams=a.streams,sinkhorn_iterations=a.sinkhorn_iterations,
+                       architecture=a.architecture, window_pattern=a.window_pattern,
                        activation_checkpoint=a.activation_checkpoint,
                        connection_backend=a.connection_backend, fused_connection_grad=a.fused_connection_grad)
     data=PackedData(a.data_dir)
@@ -74,7 +77,7 @@ def main():
         source=json.loads(Path('source.json').read_text())
     else:
         source=dict(commit=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip())
-    model=ConnectionModel(c).prepare(compile_blocks=True)
+    model=build_connection_model(c).prepare(compile_blocks=True)
     if a.matched_backbone_init:
         match_vanilla_initialization(model,a.seed)
     opt,wd=optimizer_for(model)
@@ -116,7 +119,7 @@ def main():
         references='research/connections/references.json')
     kwargs=dict(project='nanochat',entity='yibozhong657-none',group=a.wandb_group,
                 job_type='pretrain' if a.formal_training else 'diagnostic',
-                name=f'{a.variant}-{a.steps}steps',id=run_id,resume='allow',config=config)
+                name=f'{a.architecture}-{a.variant}-{a.steps}steps',id=run_id,resume='allow',config=config)
     run=training_run(formal_training=a.formal_training, local_dir=out/"diagnostics", **kwargs)
     run.define_metric('tokens')
     for metric in ('train/*','dev/*','perf/*'):

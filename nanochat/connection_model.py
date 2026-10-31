@@ -29,8 +29,14 @@ class ConnectionConfig:
     activation_checkpoint: bool = False
     connection_backend: str = 'nvidia'
     fused_connection_grad: bool = False
+    architecture: str = 'vanilla'
+    window_pattern: str = 'SSSL'  # native only; vanilla is always full attention
 
     def __post_init__(self):
+        if self.architecture not in ('vanilla', 'native'):
+            raise ValueError(f'Unknown backbone architecture: {self.architecture}')
+        if not self.window_pattern or any(c not in 'SL' for c in self.window_pattern):
+            raise ValueError('window_pattern must contain S and/or L')
         if self.connection_backend not in ('nvidia', 'nvidia_precise'):
             raise ValueError('Only the full NVIDIA mHC implementation is supported')
         if self.variant not in ('baseline', 'mhc', 'mhc_no_sinkhorn'):
@@ -90,6 +96,8 @@ class ConnectionBlock(Block):
 class ConnectionModel(nn.Module):
     def __init__(self, config):
         super().__init__()
+        if config.architecture != 'vanilla':
+            raise ValueError('Use build_connection_model for native nanochat')
         self.config = config
         native = GPTConfig(sequence_len=config.sequence_length, vocab_size=config.vocab_size,
             n_layer=config.depth, n_head=config.heads, n_kv_head=config.heads,
@@ -176,6 +184,8 @@ class ConnectionModel(nn.Module):
 
 def optimizer_for(model, batch_tokens=32768):
     """Same backbone native LR rules; connector parameters get separate AdamW."""
+    if model.config.architecture == 'native':
+        return model.setup_optimizer(batch_tokens)
     c = model.config
     batch_scale = math.sqrt(batch_tokens / 2**19)
     width_scale = (c.width / 768) ** -.5
@@ -205,6 +215,13 @@ def optimizer_for(model, batch_tokens=32768):
     for g in opt.param_groups:
         g['initial_lr'] = g['lr']
     return opt, wd
+
+
+def build_connection_model(config):
+    if config.architecture == 'native':
+        from nanochat.native_connection_model import NativeConnectionModel
+        return NativeConnectionModel(config)
+    return ConnectionModel(config)
 
 
 def schedule(opt, step, total_steps, wd):

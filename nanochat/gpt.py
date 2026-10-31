@@ -37,6 +37,19 @@ class GPTConfig:
     # Characters: L=long (full context), S=short (quarter context)
     # Examples: "L"=all full context, "SL"=alternating, "SSL"=two short then one long
     window_pattern: str = "SSSL"
+    # Optional NVIDIA residual connections; baseline retains the original GPT.
+    connection_variant: str = "baseline"
+    connection_backend: str = "nvidia"
+    fused_connection_grad: bool = False
+    activation_checkpoint: bool = False
+
+    def __post_init__(self):
+        if self.connection_variant not in ("baseline", "mhc", "mhc_no_sinkhorn"):
+            raise ValueError(f"Unknown connection variant: {self.connection_variant}")
+        if self.connection_backend not in ("nvidia", "nvidia_precise"):
+            raise ValueError("Only the full NVIDIA connection backend is supported")
+        if self.connection_variant != "baseline" and self.n_embd % 128:
+            raise ValueError("NVIDIA connections require width divisible by 128")
 
 
 def norm(x):
@@ -146,8 +159,30 @@ class Block(nn.Module):
         super().__init__()
         self.attn = CausalSelfAttention(config, layer_idx)
         self.mlp = MLP(config)
+        self.attn_connection = self.mlp_connection = None
+        self.compiled_attention = self.compiled_mlp = None
+        if config.connection_variant != "baseline":
+            from nanochat.nvidia_connections import NvidiaHyperConnection
+            kwargs = dict(use_tf32=config.connection_backend == "nvidia",
+                          fused_grad_acc=config.fused_connection_grad,
+                          sinkhorn=config.connection_variant == "mhc")
+            self.attn_connection = NvidiaHyperConnection(config.n_embd, 4, 2 * layer_idx, **kwargs)
+            self.mlp_connection = NvidiaHyperConnection(config.n_embd, 4, 2 * layer_idx + 1, **kwargs)
+
+    def attention_branch(self, x, ve, cos_sin, window_size, kv_cache):
+        return self.attn(norm(x), ve, cos_sin, window_size, kv_cache)
+
+    def mlp_branch(self, x):
+        return self.mlp(norm(x))
 
     def forward(self, x, ve, cos_sin, window_size, kv_cache):
+        if self.attn_connection is not None:
+            h, residual, mixes = self.attn_connection.read(x)
+            y = (self.compiled_attention or self.attention_branch)(h, ve, cos_sin, window_size, kv_cache)
+            x = self.attn_connection.write(y, residual, mixes)
+            h, residual, mixes = self.mlp_connection.read(x)
+            y = (self.compiled_mlp or self.mlp_branch)(h)
+            return self.mlp_connection.write(y, residual, mixes)
         x = x + self.attn(norm(x), ve, cos_sin, window_size, kv_cache)
         x = x + self.mlp(norm(x))
         return x
@@ -199,6 +234,11 @@ class GPT(nn.Module):
         cos, sin = self._precompute_rotary_embeddings(self.rotary_seq_len, head_dim)
         self.register_buffer("cos", cos, persistent=False) # persistent=False means it's not saved to the checkpoint
         self.register_buffer("sin", sin, persistent=False)
+        self.stream_head = None
+        self.compiled_blocks = None
+        if config.connection_variant != "baseline":
+            from nanochat.nvidia_connections import NvidiaHyperHead
+            self.stream_head = NvidiaHyperHead(config.n_embd, 4, use_tf32=config.connection_backend == "nvidia")
 
     @torch.no_grad()
     def init_weights(self):
@@ -266,6 +306,32 @@ class GPT(nn.Module):
             self.transformer.wte.to(dtype=COMPUTE_DTYPE)
             for ve in self.value_embeds.values():
                 ve.to(dtype=COMPUTE_DTYPE)
+
+        # Initialize connectors last so the same seed gives exactly the same
+        # native backbone, including value embeddings and all scalar/gate params.
+        if self.stream_head is not None:
+            for block in self.transformer.h:
+                block.attn_connection.reset_parameters()
+                block.mlp_connection.reset_parameters()
+            self.stream_head.reset_parameters()
+
+    def compile_branches(self):
+        """Compile the native branches; TE custom autograd stays outside Inductor."""
+        if self.stream_head is None:
+            self.compiled_blocks = [torch.compile(b.forward, dynamic=False, fullgraph=True)
+                                    for b in self.transformer.h]
+        else:
+            for block in self.transformer.h:
+                block.compiled_attention = torch.compile(block.attention_branch, dynamic=False, fullgraph=True)
+                block.compiled_mlp = torch.compile(block.mlp_branch, dynamic=False, fullgraph=True)
+        return self
+
+    def connection_parameters(self):
+        if self.stream_head is not None:
+            for block in self.transformer.h:
+                yield from block.attn_connection.parameters()
+                yield from block.mlp_connection.parameters()
+            yield from self.stream_head.parameters()
 
     def _precompute_rotary_embeddings(self, seq_len, head_dim, base=100000, device=None):
         # TODO: bump base theta more? e.g. 100K is more common more recently
@@ -346,6 +412,12 @@ class GPT(nn.Module):
         (embeddings = lookups, per-layer scalars) are nn.Embedding or raw Parameters.
         """
         matmul_params = sum(m.weight.numel() for m in self.modules() if isinstance(m, Linear))
+        if self.stream_head is not None:
+            # Projection GEMMs only; mixing/normalization costs remain omitted
+            # from this approximate FLOP estimate, so use measured wall time.
+            matmul_params += self.stream_head.phi.numel()
+            matmul_params += sum(b.attn_connection.phi.numel() + b.mlp_connection.phi.numel()
+                                for b in self.transformer.h)
         return matmul_params
 
     def estimate_decode_flops(self, context_len):
@@ -404,10 +476,13 @@ class GPT(nn.Module):
         value_embeds = sum(p.numel() for p in self.value_embeds.parameters())
         lm_head = sum(p.numel() for p in self.lm_head.parameters())
         transformer_matrices = sum(p.numel() for p in self.transformer.h.parameters())
+        connections = sum(p.numel() for p in self.connection_parameters())
+        if self.stream_head is not None:
+            transformer_matrices -= connections - sum(p.numel() for p in self.stream_head.parameters())
         scalars = self.resid_lambdas.numel() + self.x0_lambdas.numel() + self.smear_gate.weight.numel() + self.smear_lambda.numel() + self.backout_lambda.numel()
-        total = wte + value_embeds + lm_head + transformer_matrices + scalars
+        total = wte + value_embeds + lm_head + transformer_matrices + scalars + connections
         assert total == sum(p.numel() for p in self.parameters()), "Parameter count mismatch"
-        return {
+        counts = {
             'wte': wte,
             'value_embeds': value_embeds,
             'lm_head': lm_head,
@@ -415,19 +490,24 @@ class GPT(nn.Module):
             'scalars': scalars,
             'total': total,
         }
+        if self.stream_head is not None:
+            counts['connections'] = connections
+        return counts
 
     def setup_optimizer(self, unembedding_lr=0.004, embedding_lr=0.2, matrix_lr=0.02, weight_decay=0.0, scalar_lr=0.5):
         model_dim = self.config.n_embd
 
         # Separate out all parameters into groups
-        matrix_params = list(self.transformer.h.parameters())
+        connection_params = list(self.connection_parameters())
+        connection_ids = {id(p) for p in connection_params}
+        matrix_params = [p for p in self.transformer.h.parameters() if id(p) not in connection_ids]
         value_embeds_params = list(self.value_embeds.parameters())
         embedding_params = list(self.transformer.wte.parameters())
         lm_head_params = list(self.lm_head.parameters())
         resid_params = [self.resid_lambdas]
         x0_params = [self.x0_lambdas]
         smear_params = [self.smear_gate.weight, self.smear_lambda, self.backout_lambda]
-        assert len(list(self.parameters())) == len(matrix_params) + len(embedding_params) + len(lm_head_params) + len(value_embeds_params) + len(resid_params) + len(x0_params) + len(smear_params)
+        assert len(list(self.parameters())) == len(matrix_params) + len(embedding_params) + len(lm_head_params) + len(value_embeds_params) + len(resid_params) + len(x0_params) + len(smear_params) + len(connection_params)
 
         # Scale the LR for the AdamW parameters by ∝1/√dmodel (tuned for 768 dim model)
         dmodel_lr_scale = (model_dim / 768) ** -0.5
@@ -443,6 +523,9 @@ class GPT(nn.Module):
             dict(kind='adamw', params=x0_params, lr=scalar_lr, betas=(0.96, 0.95), eps=1e-10, weight_decay=0.0),  # higher beta1 for x0
             dict(kind='adamw', params=smear_params, lr=0.2, betas=(0.8, 0.95), eps=1e-10, weight_decay=0.0),
         ]
+        if connection_params:
+            param_groups.append(dict(kind='adamw', params=connection_params,
+                lr=unembedding_lr * dmodel_lr_scale, betas=(0.8, 0.96), eps=1e-10, weight_decay=0.0))
         # Muon groups (matrix params, grouped by shape for stacking)
         for shape in sorted({p.shape for p in matrix_params}):
             group_params = [p for p in matrix_params if p.shape == shape]
@@ -456,8 +539,15 @@ class GPT(nn.Module):
             group["initial_lr"] = group["lr"]
         return optimizer
 
-    def forward(self, idx, targets=None, kv_cache=None, loss_reduction='mean'):
+    def hidden(self, idx, kv_cache=None):
         B, T = idx.size()
+        if self.stream_head is not None:
+            from nanochat.nvidia_connections import check_nvidia_device
+            check_nvidia_device(idx.device)
+            if COMPUTE_DTYPE != torch.bfloat16:
+                raise ValueError("NVIDIA connections require BF16 activations")
+        if kv_cache is not None and self.config.activation_checkpoint and self.training and torch.is_grad_enabled():
+            raise ValueError("Activation checkpointing cannot mutate a KV cache")
 
         # Grab the rotary embeddings for the current sequence length (they are of shape (1, seq_len, 1, head_dim/2))
         assert T <= self.cos.size(1), f"Sequence length grew beyond the rotary embeddings cache: {T} > {self.cos.size(1)}"
@@ -492,6 +582,9 @@ class GPT(nn.Module):
                 x = x + gate * x_pre_smear
 
         # Forward the trunk of the Transformer
+        if self.stream_head is not None:
+            from nanochat.nvidia_connections import expand_streams
+            x = expand_streams(x)
         x0 = x  # save initial normalized embedding for x0 residual
         n_layer = self.config.n_layer
         backout_layer = n_layer // 2  # cache at halfway point
@@ -499,13 +592,24 @@ class GPT(nn.Module):
         for i, block in enumerate(self.transformer.h):
             x = self.resid_lambdas[i] * x + self.x0_lambdas[i] * x0
             ve = self.value_embeds[str(i)](idx).to(x.dtype) if str(i) in self.value_embeds else None
-            x = block(x, ve, cos_sin, self.window_sizes[i], kv_cache)
+            fn = self.compiled_blocks[i] if self.compiled_blocks is not None else block
+            if self.config.activation_checkpoint and self.training and torch.is_grad_enabled():
+                from torch.utils.checkpoint import checkpoint
+                x = checkpoint(fn, x, ve, cos_sin, self.window_sizes[i], None, use_reentrant=False)
+            else:
+                x = fn(x, ve, cos_sin, self.window_sizes[i], kv_cache)
             if i == backout_layer:
                 x_backout = x
         # Subtract mid-layer residual to remove low-level features before logit projection
         if x_backout is not None:
             x = x - self.backout_lambda.to(x.dtype) * x_backout
+        if self.stream_head is not None:
+            x = self.stream_head(x)
         x = norm(x)
+        return x
+
+    def forward(self, idx, targets=None, kv_cache=None, loss_reduction='mean'):
+        x = self.hidden(idx, kv_cache)
 
         # Forward the lm_head (compute logits)
         softcap = 15 # smoothly cap the logits to the range [-softcap, softcap]
