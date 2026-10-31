@@ -1,0 +1,418 @@
+{
+  "complete": true,
+  "logging_backend": "local",
+  "source": {
+    "commit": "393ba60dd65b14227d825a2519a31f033c89fcb4",
+    "reference_training_commit": "699dcf27bdafc82b34e3ca9ef46cb62326447b69",
+    "purpose": "User-authorized NVIDIA mHC no-Sinkhorn10B ablation",
+    "hashes": {
+      "mhc-official-runtime-7546767.tar.gz": "6b927f93021961293e12452b4001a479ff1b54cbc1aae0355e73e75a393d4dc0",
+      "cuda-compat-13-1_590.48.01-1_amd64.deb": "066f24c715f5f8f31bb7e8bd0f9ddc93fe78a82d3be55c6f3e9bbe26fa4fd7be",
+      "transformer_engine_torch-2.20.2-cp311-cp311-linux_x86_64.whl": "9b69f40b34570e3073171dcb231d6dd038092d20a277e501e7da01e6475920de",
+      "source.tar": "f843ce653142c5f85d9f315dad679df6bd1694ee34a14b753483ea65c441ca38"
+    },
+    "variant": "mhc_no_sinkhorn",
+    "steps": 305176,
+    "training_tokens": 10000007168,
+    "data_uri": "osdf:///chtc/staging/y/yzhong239/nanochat-mhc-10b-data-7560536.tar",
+    "gate_data_uri": "osdf:///chtc/staging/y/yzhong239/nanochat-ebt-20261029/data-7444406.tar",
+    "reference_jobs": {
+      "baseline": {
+        "job": "7562105.0",
+        "run_id": "6a07f085"
+      },
+      "mhc": {
+        "job": "7562105.1",
+        "run_id": "048c708c"
+      }
+    },
+    "launcher_sha256": "7962440d52a2da9b1400d3bb0c96cccb1ec0c83f0b0fbd2fa74c0ce2001242d7",
+    "gate_launcher_sha256": "3ad2b1615ae286434812324f30380f91f268ad1f447e1325d2fe4edf7c88b36c"
+  },
+  "checks": {
+    "tests": 9,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "trial": {
+    "complete": true,
+    "variant": "mhc_no_sinkhorn",
+    "run_id": "b9c6da1b",
+    "steps": 50,
+    "training_tokens": 1638400,
+    "initial_dev_ce": 10.398010730743408,
+    "final_dev_ce": 6.549570322036743,
+    "best_dev_ce": 6.549570322036743,
+    "dev_tokens": 131072,
+    "training_seconds": 25.721705339848995,
+    "elapsed_seconds": 108.25852712616324,
+    "steady_step_seconds": 0.08595546943446,
+    "gpu": "NVIDIA H200",
+    "peak_allocated_bytes": 9260137472,
+    "peak_reserved_bytes": 9443475456,
+    "source": {
+      "commit": "393ba60dd65b14227d825a2519a31f033c89fcb4",
+      "reference_training_commit": "699dcf27bdafc82b34e3ca9ef46cb62326447b69",
+      "purpose": "User-authorized NVIDIA mHC no-Sinkhorn10B ablation",
+      "hashes": {
+        "mhc-official-runtime-7546767.tar.gz": "6b927f93021961293e12452b4001a479ff1b54cbc1aae0355e73e75a393d4dc0",
+        "cuda-compat-13-1_590.48.01-1_amd64.deb": "066f24c715f5f8f31bb7e8bd0f9ddc93fe78a82d3be55c6f3e9bbe26fa4fd7be",
+        "transformer_engine_torch-2.20.2-cp311-cp311-linux_x86_64.whl": "9b69f40b34570e3073171dcb231d6dd038092d20a277e501e7da01e6475920de",
+        "source.tar": "f843ce653142c5f85d9f315dad679df6bd1694ee34a14b753483ea65c441ca38"
+      },
+      "variant": "mhc_no_sinkhorn",
+      "steps": 305176,
+      "training_tokens": 10000007168,
+      "data_uri": "osdf:///chtc/staging/y/yzhong239/nanochat-mhc-10b-data-7560536.tar",
+      "gate_data_uri": "osdf:///chtc/staging/y/yzhong239/nanochat-ebt-20261029/data-7444406.tar",
+      "reference_jobs": {
+        "baseline": {
+          "job": "7562105.0",
+          "run_id": "6a07f085"
+        },
+        "mhc": {
+          "job": "7562105.1",
+          "run_id": "048c708c"
+        }
+      },
+      "launcher_sha256": "7962440d52a2da9b1400d3bb0c96cccb1ec0c83f0b0fbd2fa74c0ce2001242d7",
+      "gate_launcher_sha256": "3ad2b1615ae286434812324f30380f91f268ad1f447e1325d2fe4edf7c88b36c"
+    },
+    "test_evaluated": false,
+    "checkpoint_files": {
+      "latest.pt": {
+        "bytes": 513135604,
+        "sha256": "572f52e446d195ee6fb14715f673f0e2dfbb553171a33ffd1469265b94479c05"
+      },
+      "best.pt": {
+        "bytes": 204542388,
+        "sha256": "b5e946d6c0390f1c31e736d80975441d48b1c59e7d4a190b075950d104a306ac"
+      }
+    }
+  },
+  "config": {
+    "logging_backend": "local",
+    "model": {
+      "variant": "mhc_no_sinkhorn",
+      "depth": 8,
+      "width": 512,
+      "heads": 4,
+      "sequence_length": 2048,
+      "vocab_size": 32768,
+      "streams": 4,
+      "sinkhorn_iterations": 20,
+      "activation_checkpoint": false,
+      "connection_backend": "nvidia",
+      "fused_connection_grad": false
+    },
+    "protocol": {
+      "steps": 50,
+      "schedule_steps": 305176,
+      "batch_tokens": 32768,
+      "microbatch": 16,
+      "grad_accum": 1,
+      "seed": 42,
+      "attention_backend": "sdpa_cudnn",
+      "matched_backbone_init": true,
+      "evaluate_test": false
+    },
+    "data_manifest": {
+      "complete": true,
+      "run_id": "gy1xhvud",
+      "sequence_length": 2048,
+      "dtype": "uint16",
+      "layout": "rows of 2049 token ids; x=row[:-1], y=row[1:]",
+      "batch_tokens": 32768,
+      "training_steps": 30518,
+      "requested_tokens": 1000000000,
+      "training_tokens": 1000013824,
+      "files": {
+        "train": {
+          "rows": 488288,
+          "tokens": 1000013824,
+          "bytes": 2001004224,
+          "sha256": "614ef0ecce77ca839cb7650bfe7da9a8fbb92bbfc8efe461ded57a1f2af315c7",
+          "last_source_state": {
+            "pq_idx": 1,
+            "rg_idx": 630,
+            "epoch": 1
+          }
+        },
+        "dev": {
+          "rows": 64,
+          "tokens": 131072,
+          "bytes": 262272,
+          "sha256": "bd67b90b4386ba6428992864712f56eb10527678ed8b3664ed5f63c1643458a4",
+          "last_source_state": {
+            "pq_idx": 0,
+            "rg_idx": 1,
+            "epoch": 1
+          }
+        },
+        "test": {
+          "rows": 1024,
+          "tokens": 2097152,
+          "bytes": 4196352,
+          "sha256": "e7d24b6a89155ebc7123afe68bd2c58aeaf159b5087dbdf28e090ce09f293d09",
+          "last_source_state": {
+            "pq_idx": 0,
+            "rg_idx": 4,
+            "epoch": 1
+          }
+        }
+      },
+      "tokenizer": {
+        "dataset": "HuggingFaceFW/fineweb-edu",
+        "config": "sample-10BT",
+        "revision": "87f09149ef4734204d70ed1d046ddc9ca3f2b8f9",
+        "full_dataset_bytes": 28518193415,
+        "full_source_gpt2_tokens": 9972918177,
+        "nanochat_commit": "145da40cdd37b9522aa53d26c0c356e9126458bb",
+        "nanochat_source_sha256": "9a39516fc52effabe6bf9b87fc5fc67f7026a95060861be560d3525257bfb3e6",
+        "files": {
+          "token_bytes.pt": {
+            "bytes": 132649,
+            "sha256": "8e6ed9947610b8b329f0aed7e01bf332359331790e61fc6c0c95dc3cff29bdb4"
+          },
+          "tokenizer.pkl": {
+            "bytes": 412696,
+            "sha256": "8d1a5a03421ca24e7acafd1ef68fe8dbc6326dad903bc65cc726ec0601c577de"
+          }
+        },
+        "train_shards": [
+          "000_00000.parquet"
+        ],
+        "validation_shards": [
+          "013_00000.parquet"
+        ],
+        "tokenizer": "native RustBPE 32768 vocab, first 100M capped characters from training shard",
+        "benchmark": "native base_train d8/D512/2K/SSSL, 300 steps x 32768 model tokens; original source unmodified",
+        "vocab_size": 32768,
+        "max_chars": 100000000,
+        "doc_cap": 10000,
+        "purpose": "Throughput pilot tokenizer; native RustBPE; train shard only",
+        "elapsed_seconds": 5.633999116718769,
+        "run_id": "eqnd6jdz"
+      },
+      "dataset_revision": "87f09149ef4734204d70ed1d046ddc9ca3f2b8f9",
+      "train_shards": "000..012",
+      "heldout_shard": "013",
+      "seconds": 1009.9609482300002,
+      "validation": "dev first 64 rows, test next 1024 rows; no shared packed rows"
+    },
+    "source": {
+      "commit": "393ba60dd65b14227d825a2519a31f033c89fcb4",
+      "reference_training_commit": "699dcf27bdafc82b34e3ca9ef46cb62326447b69",
+      "purpose": "User-authorized NVIDIA mHC no-Sinkhorn10B ablation",
+      "hashes": {
+        "mhc-official-runtime-7546767.tar.gz": "6b927f93021961293e12452b4001a479ff1b54cbc1aae0355e73e75a393d4dc0",
+        "cuda-compat-13-1_590.48.01-1_amd64.deb": "066f24c715f5f8f31bb7e8bd0f9ddc93fe78a82d3be55c6f3e9bbe26fa4fd7be",
+        "transformer_engine_torch-2.20.2-cp311-cp311-linux_x86_64.whl": "9b69f40b34570e3073171dcb231d6dd038092d20a277e501e7da01e6475920de",
+        "source.tar": "f843ce653142c5f85d9f315dad679df6bd1694ee34a14b753483ea65c441ca38"
+      },
+      "variant": "mhc_no_sinkhorn",
+      "steps": 305176,
+      "training_tokens": 10000007168,
+      "data_uri": "osdf:///chtc/staging/y/yzhong239/nanochat-mhc-10b-data-7560536.tar",
+      "gate_data_uri": "osdf:///chtc/staging/y/yzhong239/nanochat-ebt-20261029/data-7444406.tar",
+      "reference_jobs": {
+        "baseline": {
+          "job": "7562105.0",
+          "run_id": "6a07f085"
+        },
+        "mhc": {
+          "job": "7562105.1",
+          "run_id": "048c708c"
+        }
+      },
+      "launcher_sha256": "7962440d52a2da9b1400d3bb0c96cccb1ec0c83f0b0fbd2fa74c0ce2001242d7",
+      "gate_launcher_sha256": "3ad2b1615ae286434812324f30380f91f268ad1f447e1325d2fe4edf7c88b36c"
+    },
+    "gpu": "NVIDIA H200",
+    "torch": "2.10.0+cu130",
+    "cuda": "13.0",
+    "gpu_capability": [
+      9,
+      0
+    ],
+    "explicit_portability_gate": false,
+    "parameters": 59515317,
+    "residual_mixing": "unconstrained_raw",
+    "applied_sinkhorn_iterations": 0,
+    "optimizer": "native MuonAdamW; connector AdamW at native unembedding LR, no decay",
+    "optimizer_groups": [
+      {
+        "kind": "adamw",
+        "lr": 0.0024494897427831783,
+        "betas": [
+          0.8,
+          0.96
+        ],
+        "eps": 1e-10,
+        "weight_decay": 0.01,
+        "initial_lr": 0.0024494897427831783
+      },
+      {
+        "kind": "adamw",
+        "lr": 0.09185586535436918,
+        "betas": [
+          0.8,
+          0.995
+        ],
+        "eps": 1e-10,
+        "weight_decay": 0.001,
+        "initial_lr": 0.09185586535436918
+      },
+      {
+        "kind": "adamw",
+        "lr": 0.0024494897427831783,
+        "betas": [
+          0.8,
+          0.96
+        ],
+        "eps": 1e-10,
+        "weight_decay": 0.0,
+        "initial_lr": 0.0024494897427831783
+      },
+      {
+        "kind": "muon",
+        "lr": 0.005,
+        "momentum": 0.95,
+        "ns_steps": 5,
+        "beta2": 0.9,
+        "weight_decay": 0.18375000000000002,
+        "initial_lr": 0.005
+      },
+      {
+        "kind": "muon",
+        "lr": 0.005,
+        "momentum": 0.95,
+        "ns_steps": 5,
+        "beta2": 0.9,
+        "weight_decay": 0.18375000000000002,
+        "initial_lr": 0.005
+      },
+      {
+        "kind": "muon",
+        "lr": 0.005,
+        "momentum": 0.95,
+        "ns_steps": 5,
+        "beta2": 0.9,
+        "weight_decay": 0.18375000000000002,
+        "initial_lr": 0.005
+      }
+    ],
+    "loss": "full-token full-vocabulary CCE; no gradient filtering",
+    "references": "research/connections/references.json"
+  },
+  "unique_training_steps": 50,
+  "restart": "Real exit85 at25, fresh process restores and completes50; exact optimizer/RNG unit check also passed",
+  "scope": "Diagnostic weights remain in worker scratch; formal run starts independently at step0",
+  "unit_results": {
+    "pipeline-d512-fused1.json": {
+      "output": 0.0017915027019943027,
+      "branch": 0.0016592236455023348,
+      "residual_matrix": 8.281860124844488e-06,
+      "gradients": [
+        0.0021278442580177606,
+        0.0007901571666308601,
+        0.0006397564513812455,
+        0.007260414150231473
+      ],
+      "minimum_residual_weight": -0.031249722465872765,
+      "row_sum_deviation": 0.06971824169158936,
+      "column_sum_deviation": 0.07596170902252197,
+      "sinkhorn_calls": 0
+    },
+    "pipeline-d512-fused0.json": {
+      "output": 0.0017915027019943027,
+      "branch": 0.0016592236455023348,
+      "residual_matrix": 8.281860124844488e-06,
+      "gradients": [
+        0.0031986239836894396,
+        0.0007901571666308601,
+        0.0006397564513812455,
+        0.007260414150231473
+      ],
+      "minimum_residual_weight": -0.031249722465872765,
+      "row_sum_deviation": 0.06971824169158936,
+      "column_sum_deviation": 0.07596170902252197,
+      "sinkhorn_calls": 0
+    },
+    "pipeline-d128-fused1.json": {
+      "output": 0.001790599199891898,
+      "branch": 0.0016733216647501527,
+      "residual_matrix": 8.150101693079789e-06,
+      "gradients": [
+        0.002129381115598581,
+        0.000776139718281032,
+        0.0005964822282581352,
+        0.0019787766084205295
+      ],
+      "minimum_residual_weight": -0.03917190432548523,
+      "row_sum_deviation": 0.07109940052032471,
+      "column_sum_deviation": 0.07262575626373291,
+      "sinkhorn_calls": 0
+    },
+    "model.json": {
+      "causal_tokens": 2048,
+      "sinkhorn_calls": 0,
+      "cce_loss": 4.851987838745117,
+      "dense_loss": 4.851987361907959,
+      "checkpoint_gradient_relative_errors": {
+        "wte.weight": 0.0,
+        "blocks.0.attn.c_q.weight": 0.0,
+        "blocks.0.attn.c_k.weight": 0.0,
+        "blocks.0.attn.c_v.weight": 0.0,
+        "blocks.0.attn.c_proj.weight": 0.0,
+        "blocks.0.mlp.c_fc.weight": 0.0,
+        "blocks.0.mlp.c_proj.weight": 0.0,
+        "blocks.0.attn_connection.phi": 0.0,
+        "blocks.0.attn_connection.bias": 0.0,
+        "blocks.0.attn_connection.scales": 0.0,
+        "blocks.0.mlp_connection.phi": 0.0,
+        "blocks.0.mlp_connection.bias": 0.0,
+        "blocks.0.mlp_connection.scales": 0.0,
+        "blocks.1.attn.c_q.weight": 0.0,
+        "blocks.1.attn.c_k.weight": 0.0,
+        "blocks.1.attn.c_v.weight": 0.0,
+        "blocks.1.attn.c_proj.weight": 0.0,
+        "blocks.1.mlp.c_fc.weight": 0.0,
+        "blocks.1.mlp.c_proj.weight": 0.0,
+        "blocks.1.attn_connection.phi": 0.0,
+        "blocks.1.attn_connection.bias": 0.0,
+        "blocks.1.attn_connection.scales": 0.0,
+        "blocks.1.mlp_connection.phi": 0.0,
+        "blocks.1.mlp_connection.bias": 0.0,
+        "blocks.1.mlp_connection.scales": 0.0,
+        "lm_head.weight": 0.0,
+        "stream_head.phi": 0.0,
+        "stream_head.scale": 0.0,
+        "stream_head.bias": 0.0
+      }
+    },
+    "initialization.json": {
+      "all_parameters_bitwise_equal": true,
+      "optimizer_groups_equal": true,
+      "parameters": 59515317
+    },
+    "pipeline-d128-fused0.json": {
+      "output": 0.001790599199891898,
+      "branch": 0.0016733216647501527,
+      "residual_matrix": 8.150101693079789e-06,
+      "gradients": [
+        0.003191575725892855,
+        0.000776139718281032,
+        0.0005964822282581352,
+        0.0019787766084205295
+      ],
+      "minimum_residual_weight": -0.03917190432548523,
+      "row_sum_deviation": 0.07109940052032471,
+      "column_sum_deviation": 0.07262575626373291,
+      "sinkhorn_calls": 0
+    }
+  },
+  "archive_sha256": "5fe9ad376c2627f05307c7c49d7e3ce21271b5e6b26b99f02428e9b24d029d54",
+  "gate_job": "7581137.0"
+}
