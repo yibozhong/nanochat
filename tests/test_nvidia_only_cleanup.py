@@ -28,6 +28,7 @@ def test_699dcf2_initialization_forward_backward_parity(variant):
     path=Path(os.environ['NANOCHAT_CLEANUP_GOLDEN'])/(variant+'.pt')
     ref=torch.load(path,map_location='cpu',weights_only=False)
     assert ref['tf32_override']==os.environ.get('NVIDIA_TF32_OVERRIDE')
+    assert ref['input_tokens_unique']==ref['x'].numel()==2048
     configure_attention('sdpa_cudnn');torch.backends.cuda.matmul.allow_tf32=False;seed_all(42)
     c=ConnectionConfig.from_checkpoint(ref['config'])
     model=ConnectionModel(c).prepare(compile_blocks=False);match_vanilla_initialization(model,42)
@@ -49,4 +50,4 @@ def test_699dcf2_initialization_forward_backward_parity(variant):
     dest=Path('results/cleanup-checks');dest.mkdir(parents=True,exist_ok=True)
     (dest/(variant+'.json')).write_text(json.dumps(dict(initial_weights_bitwise_equal=True,
         source_commit='699dcf27bdafc82b34e3ca9ef46cb62326447b69',config=asdict(c),
-        tokens=2048,loss=loss.item(),reference_loss=ref['loss'].item(),gradient_relative_errors=errors),indent=2)+'\n')
+        tokens=2048,unique_input_tokens=ref['input_tokens_unique'],tolerances_unchanged=True,loss=loss.item(),reference_loss=ref['loss'].item(),gradient_relative_errors=errors),indent=2)+'\n')

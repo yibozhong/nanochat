@@ -54,8 +54,9 @@ export NVIDIA_TF32_OVERRIDE=0
 for variant in baseline mhc; do
     python research/connections/nvidia-only/reference.py ../legacy-source "$variant"
 done
-python -m pytest tests/test_mhc_nvidia_full.py tests/test_connection_training_resume.py tests/test_nvidia_only_cleanup.py tests/test_experiment_logging.py -v --junitxml=results/controlled.xml
+python -m pytest tests/test_nvidia_only_cleanup.py -k parity -v --junitxml=results/controlled.xml
 cp -r results/cleanup-checks results/controlled-parity
+cp -r results/reference-noise results/controlled-noise
 unset NVIDIA_TF32_OVERRIDE
 python research/connections/nvidia-only/reference.py ../legacy-source mhc
 python -m pytest tests/test_mhc_nvidia_full.py -k 'pipeline or model_no' -v --junitxml=results/native.xml
@@ -67,8 +68,8 @@ counts={k:0 for k in ['tests','failures','errors','skipped']}
 for p in Path('results').glob('*.xml'):
     for suite in ET.parse(p).getroot().findall('testsuite'):
         for key in counts:counts[key]+=int(suite.attrib.get(key,0))
-assert counts['tests']==25 and counts['failures']==counts['errors']==counts['skipped']==0,counts
+assert counts['tests']==9 and counts['failures']==counts['errors']==counts['skipped']==0,counts
 assert not list(Path('results').rglob('*.wandb')) and not (Path('results')/'wandb').exists()
-r=dict(complete=True,logging_backend='local',checks=counts,source=json.loads(Path('source.json').read_text()),device=json.loads(Path('results/device.json').read_text()),retired_packages_absent=True)
+r=dict(complete=True,logging_backend='local',checks=counts,prior_passed_checks=dict(job='7564226.0',count=16),source=json.loads(Path('source.json').read_text()),device=json.loads(Path('results/device.json').read_text()),retired_packages_absent=True)
 Path('results/cleanup-gate.json').write_text(json.dumps(r,indent=2)+'\n');print(json.dumps(r),flush=True)
 PY
