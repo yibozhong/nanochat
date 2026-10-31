@@ -1,0 +1,189 @@
+{
+  "complete": true,
+  "wandb_verified": true,
+  "trials": {
+    "baseline": {
+      "complete": true,
+      "variant": "baseline",
+      "run_id": "6a07f085",
+      "steps": 305176,
+      "training_tokens": 10000007168,
+      "initial_dev_ce": 10.398012638092041,
+      "final_dev_ce": 3.181308090686798,
+      "best_dev_ce": 3.180561900138855,
+      "dev_tokens": 131072,
+      "training_seconds": 18725.072942128405,
+      "elapsed_seconds": 19599.871957177296,
+      "steady_step_seconds": 0.0614014891590083,
+      "gpu": "NVIDIA H200",
+      "peak_allocated_bytes": 5770930688,
+      "peak_reserved_bytes": 5916065792,
+      "source": {
+        "commit": "699dcf27bdafc82b34e3ca9ef46cb62326447b69",
+        "official_tilekernels": "36d9e45d38e204ebb87e6f6e833821eee0482fe5",
+        "native_base": "145da40cdd37b9522aa53d26c0c356e9126458bb",
+        "transformer_engine": "2.20.2",
+        "hashes": {
+          "source.tar": "f16a1f52f2a19184549ae8756c7cd2a60396553538b8befe5ce134ef331b0511",
+          "legacy-baseline.tar": "5f92ef457c61e8b4ab7d145873857b4772f4668b69c1236a9e93562283e67c24",
+          "mhc-official-runtime-7546767.tar.gz": "6b927f93021961293e12452b4001a479ff1b54cbc1aae0355e73e75a393d4dc0",
+          "cuda-compat-13-1_590.48.01-1_amd64.deb": "066f24c715f5f8f31bb7e8bd0f9ddc93fe78a82d3be55c6f3e9bbe26fa4fd7be",
+          "transformer_engine_torch-2.20.2-cp311-cp311-linux_x86_64.whl": "9b69f40b34570e3073171dcb231d6dd038092d20a277e501e7da01e6475920de"
+        },
+        "purpose": "Authorized matched vanilla/full-NVIDIA mHC pretraining",
+        "extension_cache": {
+          "wheel": "transformer_engine_torch-2.20.2-cp311-cp311-linux_x86_64.whl",
+          "sha256": "9b69f40b34570e3073171dcb231d6dd038092d20a277e501e7da01e6475920de",
+          "torch": "2.10.0+cu130",
+          "cuda": "13.0",
+          "cxx11_abi": true,
+          "source": "Unmodified PyPI transformer-engine-torch 2.20.2 sdist, repacked installed extension; retained to avoid repeated C++ builds",
+          "files": [
+            "transformer_engine/wheel_lib/transformer_engine_torch.cpython-311-x86_64-linux-gnu.so",
+            "transformer_engine_torch-2.20.2.dist-info/METADATA",
+            "transformer_engine_torch-2.20.2.dist-info/WHEEL",
+            "transformer_engine_torch-2.20.2.dist-info/licenses/LICENSE",
+            "transformer_engine_torch-2.20.2.dist-info/top_level.txt",
+            "transformer_engine_torch-2.20.2.dist-info/uv_build.json",
+            "transformer_engine_torch-2.20.2.dist-info/RECORD"
+          ]
+        },
+        "regression_gate": "7547609.0: 26 unchanged legacy regressions and 8/9 full tests passed; only finite-iteration convergence assertion corrected; no model/kernel changes",
+        "gate_commit": "d4f19d4b12c7c6358b5bcca359fe6d6582ffa532",
+        "requested_tokens": 10000000000,
+        "steps": 305176,
+        "training_tokens": 10000007168,
+        "data_uri": "osdf:///chtc/staging/y/yzhong239/nanochat-mhc-10b-data-7560536.tar",
+        "launcher_sha256": "0e99ab130a30fbfc2cd10b974d4b9c45e8a2a712326d3f9f479515b97029eca2"
+      },
+      "test_evaluated": true,
+      "checkpoint_files": {
+        "latest.pt": {
+          "bytes": 503552357,
+          "sha256": "246eff2c939f37617b57d5f54b34fbfeb67aa85e61c3f5a63ed1c044bca39ee4"
+        },
+        "best.pt": {
+          "bytes": 201348901,
+          "sha256": "5b9ee843e6ccc123844180bc7208c26300af84571b12fa72a21e3c393cfa8386"
+        }
+      },
+      "final_test_ce": 3.1600228808820248,
+      "best_selected_test_ce": 3.1601527258753777,
+      "best_dev_step": 305000,
+      "test_tokens": 2097152,
+      "checkpoint_archive": "/home/yzhong239/mhc-pretrain-20261030/results/baseline-7562105.0-checkpoints.tar"
+    },
+    "mhc": {
+      "complete": true,
+      "variant": "mhc",
+      "run_id": "048c708c",
+      "steps": 305176,
+      "training_tokens": 10000007168,
+      "initial_dev_ce": 10.39801287651062,
+      "final_dev_ce": 3.0828843116760254,
+      "best_dev_ce": 3.082490563392639,
+      "dev_tokens": 131072,
+      "training_seconds": 26895.020088847727,
+      "elapsed_seconds": 34466.10585108586,
+      "steady_step_seconds": 0.08382253614231101,
+      "gpu": "NVIDIA H200",
+      "peak_allocated_bytes": 9293691904,
+      "peak_reserved_bytes": 9472835584,
+      "source": {
+        "commit": "699dcf27bdafc82b34e3ca9ef46cb62326447b69",
+        "official_tilekernels": "36d9e45d38e204ebb87e6f6e833821eee0482fe5",
+        "native_base": "145da40cdd37b9522aa53d26c0c356e9126458bb",
+        "transformer_engine": "2.20.2",
+        "hashes": {
+          "source.tar": "f16a1f52f2a19184549ae8756c7cd2a60396553538b8befe5ce134ef331b0511",
+          "legacy-baseline.tar": "5f92ef457c61e8b4ab7d145873857b4772f4668b69c1236a9e93562283e67c24",
+          "mhc-official-runtime-7546767.tar.gz": "6b927f93021961293e12452b4001a479ff1b54cbc1aae0355e73e75a393d4dc0",
+          "cuda-compat-13-1_590.48.01-1_amd64.deb": "066f24c715f5f8f31bb7e8bd0f9ddc93fe78a82d3be55c6f3e9bbe26fa4fd7be",
+          "transformer_engine_torch-2.20.2-cp311-cp311-linux_x86_64.whl": "9b69f40b34570e3073171dcb231d6dd038092d20a277e501e7da01e6475920de"
+        },
+        "purpose": "Authorized matched vanilla/full-NVIDIA mHC pretraining",
+        "extension_cache": {
+          "wheel": "transformer_engine_torch-2.20.2-cp311-cp311-linux_x86_64.whl",
+          "sha256": "9b69f40b34570e3073171dcb231d6dd038092d20a277e501e7da01e6475920de",
+          "torch": "2.10.0+cu130",
+          "cuda": "13.0",
+          "cxx11_abi": true,
+          "source": "Unmodified PyPI transformer-engine-torch 2.20.2 sdist, repacked installed extension; retained to avoid repeated C++ builds",
+          "files": [
+            "transformer_engine/wheel_lib/transformer_engine_torch.cpython-311-x86_64-linux-gnu.so",
+            "transformer_engine_torch-2.20.2.dist-info/METADATA",
+            "transformer_engine_torch-2.20.2.dist-info/WHEEL",
+            "transformer_engine_torch-2.20.2.dist-info/licenses/LICENSE",
+            "transformer_engine_torch-2.20.2.dist-info/top_level.txt",
+            "transformer_engine_torch-2.20.2.dist-info/uv_build.json",
+            "transformer_engine_torch-2.20.2.dist-info/RECORD"
+          ]
+        },
+        "regression_gate": "7547609.0: 26 unchanged legacy regressions and 8/9 full tests passed; only finite-iteration convergence assertion corrected; no model/kernel changes",
+        "gate_commit": "d4f19d4b12c7c6358b5bcca359fe6d6582ffa532",
+        "requested_tokens": 10000000000,
+        "steps": 305176,
+        "training_tokens": 10000007168,
+        "data_uri": "osdf:///chtc/staging/y/yzhong239/nanochat-mhc-10b-data-7560536.tar",
+        "launcher_sha256": "0e99ab130a30fbfc2cd10b974d4b9c45e8a2a712326d3f9f479515b97029eca2"
+      },
+      "test_evaluated": true,
+      "checkpoint_files": {
+        "latest.pt": {
+          "bytes": 513137332,
+          "sha256": "6dc8e854e40a5c59844f5cd064bb963b59d6b185bd53adb5a41b3b2706bd4706"
+        },
+        "best.pt": {
+          "bytes": 204543988,
+          "sha256": "c60388ebaf79ad8a068cb815489a8bcfcd9e1e8d3be4811dbaa2bea4c1841cb8"
+        }
+      },
+      "final_test_ce": 3.063729949295521,
+      "best_selected_test_ce": 3.063719302415848,
+      "best_dev_step": 305000,
+      "test_tokens": 2097152,
+      "checkpoint_archive": "/home/yzhong239/mhc-pretrain-20261030/results/mhc-7562105.1-checkpoints.tar"
+    }
+  },
+  "requested_tokens": 10000000000,
+  "source": {
+    "commit": "699dcf27bdafc82b34e3ca9ef46cb62326447b69",
+    "official_tilekernels": "36d9e45d38e204ebb87e6f6e833821eee0482fe5",
+    "native_base": "145da40cdd37b9522aa53d26c0c356e9126458bb",
+    "transformer_engine": "2.20.2",
+    "hashes": {
+      "source.tar": "f16a1f52f2a19184549ae8756c7cd2a60396553538b8befe5ce134ef331b0511",
+      "legacy-baseline.tar": "5f92ef457c61e8b4ab7d145873857b4772f4668b69c1236a9e93562283e67c24",
+      "mhc-official-runtime-7546767.tar.gz": "6b927f93021961293e12452b4001a479ff1b54cbc1aae0355e73e75a393d4dc0",
+      "cuda-compat-13-1_590.48.01-1_amd64.deb": "066f24c715f5f8f31bb7e8bd0f9ddc93fe78a82d3be55c6f3e9bbe26fa4fd7be",
+      "transformer_engine_torch-2.20.2-cp311-cp311-linux_x86_64.whl": "9b69f40b34570e3073171dcb231d6dd038092d20a277e501e7da01e6475920de"
+    },
+    "purpose": "Authorized matched vanilla/full-NVIDIA mHC pretraining",
+    "extension_cache": {
+      "wheel": "transformer_engine_torch-2.20.2-cp311-cp311-linux_x86_64.whl",
+      "sha256": "9b69f40b34570e3073171dcb231d6dd038092d20a277e501e7da01e6475920de",
+      "torch": "2.10.0+cu130",
+      "cuda": "13.0",
+      "cxx11_abi": true,
+      "source": "Unmodified PyPI transformer-engine-torch 2.20.2 sdist, repacked installed extension; retained to avoid repeated C++ builds",
+      "files": [
+        "transformer_engine/wheel_lib/transformer_engine_torch.cpython-311-x86_64-linux-gnu.so",
+        "transformer_engine_torch-2.20.2.dist-info/METADATA",
+        "transformer_engine_torch-2.20.2.dist-info/WHEEL",
+        "transformer_engine_torch-2.20.2.dist-info/licenses/LICENSE",
+        "transformer_engine_torch-2.20.2.dist-info/top_level.txt",
+        "transformer_engine_torch-2.20.2.dist-info/uv_build.json",
+        "transformer_engine_torch-2.20.2.dist-info/RECORD"
+      ]
+    },
+    "regression_gate": "7547609.0: 26 unchanged legacy regressions and 8/9 full tests passed; only finite-iteration convergence assertion corrected; no model/kernel changes",
+    "gate_commit": "d4f19d4b12c7c6358b5bcca359fe6d6582ffa532",
+    "requested_tokens": 10000000000,
+    "steps": 305176,
+    "training_tokens": 10000007168,
+    "data_uri": "osdf:///chtc/staging/y/yzhong239/nanochat-mhc-10b-data-7560536.tar",
+    "launcher_sha256": "0e99ab130a30fbfc2cd10b974d4b9c45e8a2a712326d3f9f479515b97029eca2"
+  },
+  "test_ce_delta_mhc_minus_baseline": -0.09629293158650398,
+  "note": "Training may use different GPUs; raw training wall times are not a matched throughput comparison"
+}
