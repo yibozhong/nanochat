@@ -1,51 +1,44 @@
 """Generate ephemeral tensors using an immutable pre-cleanup source checkout."""
-import os
 import json
+import os
 from pathlib import Path
 import sys
-sys.path.insert(0,str(Path(sys.argv[1]).resolve()))
-import torch
 from dataclasses import asdict
-from nanochat.connection_model import ConnectionConfig,ConnectionModel
-from nanochat.connection_experiment import configure_attention,match_vanilla_initialization
+
+from parity_helpers import METHOD, compare, evaluate
+
+sys.path.insert(0, str(Path(sys.argv[1]).resolve()))
+import torch
+from nanochat.connection_model import ConnectionConfig, ConnectionModel
+from nanochat.connection_experiment import configure_attention, match_vanilla_initialization
 from nanochat.packed_training import seed_all
 
-variant=sys.argv[2]
-configure_attention('sdpa_cudnn');torch.backends.cuda.matmul.allow_tf32=False;seed_all(42)
-c=ConnectionConfig(variant=variant,connection_backend='nvidia' if variant=='mhc' else 'deepseek')
-m=ConnectionModel(c).prepare(compile_blocks=False);match_vanilla_initialization(m,42)
-# Preserve the realistic initialization while exercise nonzero residual branches.
+variant = sys.argv[2]
+configure_attention('sdpa_cudnn')
+torch.backends.cuda.matmul.allow_tf32 = False
+seed_all(42)
+c = ConnectionConfig(variant=variant, connection_backend='nvidia' if variant == 'mhc' else 'deepseek')
+m = ConnectionModel(c).prepare(compile_blocks=False)
+match_vanilla_initialization(m, 42)
 with torch.no_grad():
     for b in m.blocks:
-        b.attn.c_proj.weight.normal_(std=.01);b.mlp.c_proj.weight.normal_(std=.01)
-# Measure the unchanged model's repeated-index BF16 accumulation noise first.
-random_x=torch.randint(0,c.vocab_size,(1,2048),device='cuda');random_y=(random_x+1)%c.vocab_size
-loss_a=m(random_x,random_y);loss_a.backward()
-grad_a={k:p.grad.detach().cpu().clone() for k,p in m.named_parameters()}
-m.zero_grad(set_to_none=True)
-loss_b=m(random_x,random_y);loss_b.backward()
-noise={}
-for name,p in m.named_parameters():
-    left=grad_a[name].float();right=p.grad.detach().float().cpu()
-    delta=left-right
-    noise[name]=dict(dtype=str(p.grad.dtype),max_abs=delta.abs().max().item(),
-        relative_l2=delta.norm().item()/max(left.norm().item(),1e-12),
-        changed_elements=int(torch.count_nonzero(delta)),elements=delta.numel())
-noise_path=Path('results/reference-noise');noise_path.mkdir(parents=True,exist_ok=True)
-(noise_path/(variant+'.json')).write_text(json.dumps(dict(source='699dcf2',
-    input_unique_tokens=random_x.unique().numel(),input_tokens=random_x.numel(),
-    loss_difference=abs(loss_a.item()-loss_b.item()),parameters=noise),indent=2)+'\n')
-del grad_a,noise
-m.zero_grad(set_to_none=True)
-# No repeated embedding indices: strict parity keeps its original tolerances
-# without comparing a nondeterministic BF16 scatter reduction element-by-element.
-x=torch.randperm(c.vocab_size,device='cuda')[:2048].reshape(1,-1);y=(x+1)%c.vocab_size
-assert x.unique().numel()==x.numel()
-loss=m(x,y);loss.backward()
-value=dict(config=asdict(c),model={k:v.detach().cpu() for k,v in m.state_dict().items()},
-    x=x.cpu(),y=y.cpu(),loss=loss.detach().cpu(),
-    grads={k:p.grad.cpu() for k,p in m.named_parameters()},
-    tf32_override=os.environ.get('NVIDIA_TF32_OVERRIDE'),input_tokens_unique=x.unique().numel())
+        b.attn.c_proj.weight.normal_(std=.01)
+        b.mlp.c_proj.weight.normal_(std=.01)
+x = torch.randperm(c.vocab_size, device='cuda')[:2048].reshape(1, -1)
+y = (x + 1) % c.vocab_size
+samples, repeat = {}, {}
+for objective in ('dense_fp32', 'production_cce'):
+    samples[objective] = evaluate(m, x, y, objective)
+    again = evaluate(m, x, y, objective)
+    repeat[objective] = compare(again, samples[objective], objective)
+    del again
+noise_path = Path('results/reference-noise')
+noise_path.mkdir(parents=True, exist_ok=True)
+(noise_path / (variant + '.json')).write_text(json.dumps(dict(source='699dcf2', method=METHOD,
+    input_unique_tokens=x.unique().numel(), input_tokens=x.numel(), comparisons=repeat), indent=2) + '\n')
+value = dict(config=asdict(c), model={k: v.detach().cpu() for k, v in m.state_dict().items()},
+    x=x.cpu(), y=y.cpu(), samples=samples, repeat_control=repeat, method=METHOD,
+    tf32_override=os.environ.get('NVIDIA_TF32_OVERRIDE'), input_tokens_unique=x.unique().numel())
 Path('../golden').mkdir(exist_ok=True)
-torch.save(value,Path('../golden')/(variant+'.pt'))
-print('Pinned 699dcf2 reference saved for '+variant,flush=True)
+torch.save(value, Path('../golden') / (variant + '.pt'))
+print('Pinned 699dcf2 reference saved for ' + variant, flush=True)

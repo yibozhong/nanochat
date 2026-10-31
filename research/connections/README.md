@@ -21,6 +21,15 @@ to that commit for reproducibility. Do not replace those job inputs during a res
 Old code remains in Git history. Sections and JSON reports below are historical;
 commands selecting retired backends should be reproduced from their recorded commit.
 
+The cleanup gate compares exact initialization with `699dcf2` at D512/8 layers/2K.
+It checks every architecture gradient with a test-only FP32 dense CE readout, and
+separately compares production CCE loss and the global gradient norm. Both use
+unchanged-code repeated backward controls. The first two gates incorrectly used
+sub-BF16 elementwise tolerance for CCE and pure relative error for near-zero
+gradients: even unchanged code violated those criteria. Details and preserved
+failure evidence are in `nvidia-only/retry-protocol.json`. Production model,
+optimizer and CCE code are unchanged by this validation adjustment.
+
 Skipping Sinkhorn in the NVIDIA composite requires composing its individual
 projection/scale/aggregate/expand-combine APIs. That gives an unconstrained
 residual-mixing ablation with mHC's sigmoid gates, not an exact reproduction of

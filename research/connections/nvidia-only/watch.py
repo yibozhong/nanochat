@@ -72,7 +72,18 @@ def collect(s):
         assert not any('wandb' in Path(m.name).parts or m.name.endswith('.wandb') for m in tar)
         parity={name:json.load(tar.extractfile(name)) for name in (
             'results/controlled-parity/baseline.json','results/controlled-parity/mhc.json','results/cleanup-checks/mhc.json')}
-        assert all(v['initial_weights_bitwise_equal'] and v['unique_input_tokens']==2048 and v['tolerances_unchanged'] and max(v['gradient_relative_errors'].values())<3e-4 for v in parity.values())
+        for v in parity.values():
+            assert v['initial_weights_bitwise_equal'] and v['unique_input_tokens']==2048
+            assert v['method']=='fp32-dense-parity-and-cce-repeat-control-v2'
+            for comparisons in (v['comparisons'],v['reference_repeat_control']):
+                assert set(comparisons)=={'dense_fp32','production_cce'}
+                for objective,result in comparisons.items():
+                    assert result['passed'] and result['loss_difference']<=2e-6
+                    assert all(p['finite'] for p in result['parameters'].values())
+                    if objective=='dense_fp32':
+                        assert all(p['elementwise_violations']==0 and p['mixed_l2_ratio']<=1 for p in result['parameters'].values())
+                    else:
+                        assert result['global_relative_l2']<=3e-4
         noise={name:json.load(tar.extractfile(name)) for name in ('results/controlled-noise/baseline.json','results/controlled-noise/mhc.json','results/reference-noise/mhc.json')}
     value.update(reference_repeat_noise=noise,combined_passed_checks=25,job=s['job'],parity=parity,archive_sha256=hashlib.sha256(archive.read_bytes()).hexdigest())
     (ROOT/'validation.json').write_text(json.dumps(value,indent=2)+'\n')
@@ -88,7 +99,7 @@ def collect(s):
     with agents.open('r+') as f:
         fcntl.flock(f,fcntl.LOCK_EX)
         text=f.read();heading='## 最新代码清理授权：仅保留NVIDIA mHC（2026-10-31）\n'
-        note=f'\n清理已完成并推送main {s["pushed_commit"]}：GPU gate{s["job"]}本次9项通过，加此前7564226.0已通过16项共25项，无W&B；旧代码重复反向噪声已测，2K唯一token输入的新旧初始化逐位相同，loss/全参数梯度在原严格阈值下通过。报告research/connections/nvidia-only/validation.json。旧DeepSeek/eager/compile/projection-only/no-manifold代码、入口、依赖已删除，NVIDIA类已独立。两个10B训练继续固定699dcf2。此段覆盖本节所有尚未推送/排队描述，勿重启清理gate。\n'
+        note=f'\n清理已完成并推送main {s["pushed_commit"]}：GPU gate{s["job"]}本次9项通过，加此前7564226.0已通过16项共25项，无W&B；2K输入的新旧初始化逐位相同，FP32稠密CE的全参数梯度按rtol3e-4/atol1e-6通过，原生CCE的loss及总体梯度范数对照通过；两种目标均用旧代码重复反向作控制。原先对近零梯度强制纯相对误差、对BF16 CCE逐元素极小阈值的检查被修正，不能称原生CCE逐元素/训练轨迹逐位相同。报告research/connections/nvidia-only/validation.json。旧DeepSeek/eager/compile/projection-only/no-manifold代码、入口、依赖已删除，NVIDIA类已独立。两个10B训练继续固定699dcf2。此段覆盖本节所有尚未推送/排队描述，勿重启清理gate。\n'
         assert heading in text;f.seek(0);f.write(text.replace(heading,heading+note,1));f.truncate()
 
 

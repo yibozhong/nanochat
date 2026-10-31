@@ -7,8 +7,56 @@
     "test_699dcf2_initialization_forward_backward_parity[mhc]"
   ],
   "archive_sha256": "5fcd6974110db08de189c2f64e0f6ab1176b20b381feece38ca54eb92b6c79e3",
-  "diagnosis": "Initial weights and CE already matched. Both failures first occurred on BF16 embedding gradient elements, max7.62939453125e-6. No production model change; measure unchanged-code repeat noise and remove repeated input token indices from strict parity case.",
-  "thresholds": "Unchanged: elementwise rtol3e-4/atol1e-6, per-parameter relative L2<3e-4, CE absolute2e-6. No numerical tolerance relaxation.",
   "new_checks": 9,
-  "combined_passed_if_successful": 25
+  "combined_passed_if_successful": 25,
+  "diagnosis_at_first_retry": "Initial weights and CE already matched. Both failures first occurred on BF16 embedding gradient elements, max7.62939453125e-6. No production model change; measure unchanged-code repeat noise and remove repeated input token indices from strict parity case.",
+  "thresholds_at_first_retry": "Unchanged: elementwise rtol3e-4/atol1e-6, per-parameter relative L2<3e-4, CE absolute2e-6. No numerical tolerance relaxation.",
+  "second_job": "7568137.0",
+  "second_archive_sha256": "f578f038830d3880e86bb99cf758d3abd0dda705913056aa029d1163589a34cb",
+  "second_result": "Both unique-token CCE gradient comparisons failed. Repeated embedding indices did not explain the failures. The previous assertion did not label the failed parameter; its shape was shared by embedding and lm_head, so the embedding identification was unsupported.",
+  "measured_old_old": {
+    "baseline": {
+      "lm_head.weight": {
+        "dtype": "torch.float32",
+        "max_abs": 7.62939453125e-06,
+        "relative_l2": 7.067392981198033e-05,
+        "changed_elements": 193526,
+        "elements": 16777216
+      },
+      "wte.weight": {
+        "dtype": "torch.bfloat16",
+        "max_abs": 4.470348358154297e-08,
+        "relative_l2": 0.004298395260541016,
+        "changed_elements": 475686,
+        "elements": 16777216
+      },
+      "maximum_parameter_relative_l2": 0.00732063412640585
+    },
+    "mhc": {
+      "lm_head.weight": {
+        "dtype": "torch.float32",
+        "max_abs": 7.62939453125e-06,
+        "relative_l2": 6.5536849410915e-05,
+        "changed_elements": 179663,
+        "elements": 16777216
+      },
+      "wte.weight": {
+        "dtype": "torch.bfloat16",
+        "max_abs": 4.470348358154297e-08,
+        "relative_l2": 0.004057187097311706,
+        "changed_elements": 460067,
+        "elements": 16777216
+      },
+      "maximum_parameter_relative_l2": 1.314618833180874
+    }
+  },
+  "revised_validation": {
+    "method": "fp32-dense-parity-and-cce-repeat-control-v2",
+    "initialization": "All parameters bitwise equal, with nonzero attention and MLP output projections.",
+    "dense_fp32": "Full BF16 architecture, FP32 dense readout CE. Compare all gradient elements with rtol3e-4/atol1e-6; norm criterion includes the same absolute tolerance. No pure relative criterion on near-zero parameters.",
+    "production_cce": "Unchanged production loss absolute difference <=2e-6 and complete gradient relative L2 <=3e-4. Record every parameter and elementwise violation; do not claim bitwise or per-element CCE gradient equality.",
+    "controls": "Two old-code backward evaluations of each objective on exactly the same unique-token input must pass the same criteria as the new-old comparison.",
+    "failure_diagnostics": "Write all named parameter statistics before assertions. Run independent native checks even when a parity check fails.",
+    "scope": "No changes to production model, optimizer, CCE, or running jobs. Reuse the 16 previously passed checks and run the outstanding9."
+  }
 }
