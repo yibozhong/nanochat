@@ -54,7 +54,7 @@ def main():
             gate_commit=state['gate_source']['commit'],requested_tokens=state['requested_tokens'],
             steps=steps,training_tokens=steps*32768,data_uri=state['data_uri'],
             launcher_sha256=hashlib.sha256((ROOT/'train.sh').read_bytes()).hexdigest(),
-            launcher_commit=launcher_commit,checkpoint_upload_seconds=1800,backfill_opt_in=False)
+            launcher_commit=launcher_commit,checkpoint_upload_seconds=1800,backfill_opt_in=True)
         source['hashes']=dict(source['hashes'])
         source['hashes']['source.tar']=hashlib.sha256((bundle/'source.tar').read_bytes()).hexdigest()
         (bundle/'source.json').write_text(json.dumps(source,indent=2)+'\n')
@@ -83,7 +83,8 @@ gpus_minimum_capability = 9.0
 require_gpus = (Capability == 9.0) && ((MaxSupportedVersion >= 13010) || regexp("^(570|580)[.]",NvidiaDriver)) && (GlobalMemoryMb >= 22000) && !regexp("MIG",DeviceName)
 +WantGPULab = true
 +GPUJobLength = "short"
-+is_resumable = false
++is_resumable = true
+rank = ifThenElse(regexp("^backfill", TARGET.Name), 0.0, 1.0)
 transfer_input_files = training-bundles/transformer_engine_torch-2.20.2-cp311-cp311-linux_x86_64.whl,training-bundles/source.tar,training-bundles/legacy-baseline.tar,training-bundles/source.json,training-bundles/inputs.sha256,/home/yzhong239/.netrc,{state['data_uri']},osdf:///chtc/staging/y/yzhong239/mhc-official-runtime-7546767.tar.gz,https://developer.download.nvidia.com/compute/cuda/repos/debian12/x86_64/cuda-compat-13-1_590.48.01-1_amd64.deb
 transfer_output_files = results.tar,checkpoints.tar
 transfer_output_remaps = "results.tar=results/$(variant)-$(Cluster).$(Process).tar;checkpoints.tar=results/$(variant)-$(Cluster).$(Process)-checkpoints.tar"

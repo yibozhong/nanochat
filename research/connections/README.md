@@ -2,9 +2,10 @@
 
 ## Scheduling and checkpoint transport defaults (2026-10-31)
 
-New jobs opt into the public GPU Lab but not research-group backfill
-(`WantGPULab=true`, `is_resumable=false`). Backfill is a deliberate scheduling
-choice; having a resumable model does not imply opting into interruptible cards.
+New jobs allow both the public GPU Lab and research-group backfill
+(`WantGPULab=true`, `is_resumable=true`). Job Rank prefers non-backfill slots:
+`ifThenElse(regexp("^backfill", TARGET.Name), 0.0, 1.0)`. This is a preference
+among available matches, not a requirement to wait exclusively for public GPUs.
 New training launchers request an exit85/upload every30minutes, configurable with
 `NANOCHAT_CHECKPOINT_SECONDS`. The trainer's standalone default is also1800seconds.
 A local save every500steps does not establish a durable scheduler checkpoint.
@@ -12,8 +13,15 @@ Archive writes use temporary files plus atomic rename; packaging failure returns
 74, never85. Keep the official self-checkpoint transfer mechanism rather than
 assuming an eviction-time transfer will always succeed.
 
-The running7562105.1/7581136.0 jobs only received a scheduler edit to disable
-backfill at their next scheduling. Their already-running workers and immutable
+Resume checkpoints overwrite only `latest.pt` every500steps; they do not
+accumulate numbered snapshots. Dev-selected `best.pt` is a separate policy.
+Upload to the access point is not intrinsically necessary when the storage is
+already persistent. CHTC worker scratch is temporary, so an off-worker durable
+copy is needed with the current storage arrangement; high-frequency local
+writes alone cannot preserve the latest state across eviction.
+
+The running7562105.1/7581136.0 jobs received a scheduler edit to allow backfill
+while preferring public slots at their next scheduling. Their already-running workers and immutable
 input bundles still have the original4h cadence; this is not a hot update.
 Future use of the historical pretraining submitter records its maintenance
 launcher commit separately from its pinned model commit.

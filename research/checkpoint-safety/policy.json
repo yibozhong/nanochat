@@ -1,15 +1,20 @@
 {
-  "gpu_pool": "Public GPU Lab by default; is_resumable=false. Backfill opt-in requires an explicit scheduling decision and verified durable restart.",
+  "gpu_pool": "Prefer public/non-backfill slots by Rank; is_resumable=true allows research-group backfill. Rank is a preference among available matches, not a hard exclusion or a global scheduling guarantee.",
   "checkpoint_upload_seconds": 1800,
   "local_save_steps": 500,
   "transport": "checkpoint_exit_code85 with transfer_checkpoint_files; ON_EXIT, not an untested ON_EXIT_OR_EVICT substitution",
   "archive": "Write checkpoints.tar.tmp/results.tar.tmp then atomically rename; archive errors exit74 and never advertise checkpoint success85.",
   "restore": "model, optimizer, RNG, step/data position, data/source/protocol identities, best model and same W&B run ID",
-  "current_jobs": "7562105.1 and7581136.0 is_resumable=false edited without-forward; current workers continue unchanged with old4h upload cadence. No source, checkpoint, launcher or run ID migration.",
+  "current_jobs": "7562105.1 and7581136.0 restored to is_resumable=true with public-slot Rank, without-forward. Current worker code/source/launcher/checkpoints unchanged; local latest every500steps, current transport interval4h.",
   "scope": "New defaults are for future submissions. Current historical protocol and immutable bundles remain the original evidence.",
   "documentation": [
     "https://chtc.cs.wisc.edu/uw-research-computing/gpu-jobs/",
     "https://htcondor.readthedocs.io/en/25.0/users-manual/self-checkpointing-applications.html",
     "https://htcondor.readthedocs.io/en/latest/man-pages/condor_qedit.html"
-  ]
+  ],
+  "rank": "ifThenElse(regexp(\"^backfill\", TARGET.Name), 0.0, 1.0)",
+  "resume_retention": "Overwrite latest.pt atomically; no numbered/history resume checkpoints. The dev-selected best.pt has an independent evaluation/selection purpose.",
+  "user_preference": "High-frequency rolling latest for resume; best/top-k retention is separate. Uploading to the access point is not intrinsically required if storage already survives eviction.",
+  "storage_requirement": "Worker scratch alone does not survive cross-node eviction. Keep a verified durable checkpoint mechanism until an equivalent persistent store is in place; local-only writes do not replace it.",
+  "checkpoint_upload_seconds_note": "Existing implementation default safety mechanism, not a user mandate. Avoid unnecessary exit/upload overhead when a verified persistent-storage alternative exists."
 }
