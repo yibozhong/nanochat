@@ -1,0 +1,542 @@
+{
+  "complete": true,
+  "logging_backend": "local",
+  "source": {
+    "commit": "c455f1243d4917668f1cef7da685c8f1ec106bf6",
+    "reference_training_commit": "699dcf27bdafc82b34e3ca9ef46cb62326447b69",
+    "purpose": "User-authorized persistent-mHC partitioned-vocabulary global-softmax10B experiment",
+    "hashes": {
+      "mhc-official-runtime-7546767.tar.gz": "6b927f93021961293e12452b4001a479ff1b54cbc1aae0355e73e75a393d4dc0",
+      "cuda-compat-13-1_590.48.01-1_amd64.deb": "066f24c715f5f8f31bb7e8bd0f9ddc93fe78a82d3be55c6f3e9bbe26fa4fd7be",
+      "transformer_engine_torch-2.20.2-cp311-cp311-linux_x86_64.whl": "9b69f40b34570e3073171dcb231d6dd038092d20a277e501e7da01e6475920de",
+      "source.tar": "a9172510ecda3888509c09035919f9df52c0c133311cfffd493d71b3a8d99901"
+    },
+    "variant": "mhc",
+    "readout": "vocab_partition",
+    "steps": 305176,
+    "training_tokens": 10000007168,
+    "checkpoint_upload_seconds": 1800,
+    "backfill_opt_in": true,
+    "data_uri": "osdf:///chtc/staging/y/yzhong239/nanochat-mhc-10b-data-7560536.tar",
+    "gate_data_uri": "osdf:///chtc/staging/y/yzhong239/nanochat-ebt-20261029/data-7444406.tar",
+    "reference_jobs": {
+      "baseline": {
+        "job": "7562105.0",
+        "run_id": "6a07f085"
+      },
+      "mhc": {
+        "job": "7562105.1",
+        "run_id": "048c708c"
+      }
+    },
+    "data_archive_sha256": "27a247cded8a77f4ef9f37cd19f55ce41df4be937583cc39d15c120ea9fb0702",
+    "launcher_sha256": "9d6d449fbd72a11f0dc4aee435a66c24f1993a12f90580aedd7fdbc7df5af526",
+    "gate_launcher_sha256": "de6d13788de2817b79ba70c7852a0794b70786b5f730d844cc1a9da0a3742205"
+  },
+  "checks": {
+    "tests": 11,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "trial": {
+    "complete": true,
+    "variant": "mhc",
+    "run_id": "1356bc32",
+    "steps": 50,
+    "training_tokens": 1638400,
+    "initial_dev_ce": 10.398012638092041,
+    "final_dev_ce": 6.498789548873901,
+    "best_dev_ce": 6.498789548873901,
+    "dev_tokens": 131072,
+    "training_seconds": 13.580901700654067,
+    "elapsed_seconds": 40.464245943003334,
+    "steady_step_seconds": 0.0890607872667412,
+    "gpu": "NVIDIA H200",
+    "peak_allocated_bytes": 9157863936,
+    "peak_reserved_bytes": 9409921024,
+    "source": {
+      "commit": "c455f1243d4917668f1cef7da685c8f1ec106bf6",
+      "reference_training_commit": "699dcf27bdafc82b34e3ca9ef46cb62326447b69",
+      "purpose": "User-authorized persistent-mHC partitioned-vocabulary global-softmax10B experiment",
+      "hashes": {
+        "mhc-official-runtime-7546767.tar.gz": "6b927f93021961293e12452b4001a479ff1b54cbc1aae0355e73e75a393d4dc0",
+        "cuda-compat-13-1_590.48.01-1_amd64.deb": "066f24c715f5f8f31bb7e8bd0f9ddc93fe78a82d3be55c6f3e9bbe26fa4fd7be",
+        "transformer_engine_torch-2.20.2-cp311-cp311-linux_x86_64.whl": "9b69f40b34570e3073171dcb231d6dd038092d20a277e501e7da01e6475920de",
+        "source.tar": "a9172510ecda3888509c09035919f9df52c0c133311cfffd493d71b3a8d99901"
+      },
+      "variant": "mhc",
+      "readout": "vocab_partition",
+      "steps": 305176,
+      "training_tokens": 10000007168,
+      "checkpoint_upload_seconds": 1800,
+      "backfill_opt_in": true,
+      "data_uri": "osdf:///chtc/staging/y/yzhong239/nanochat-mhc-10b-data-7560536.tar",
+      "gate_data_uri": "osdf:///chtc/staging/y/yzhong239/nanochat-ebt-20261029/data-7444406.tar",
+      "reference_jobs": {
+        "baseline": {
+          "job": "7562105.0",
+          "run_id": "6a07f085"
+        },
+        "mhc": {
+          "job": "7562105.1",
+          "run_id": "048c708c"
+        }
+      },
+      "data_archive_sha256": "27a247cded8a77f4ef9f37cd19f55ce41df4be937583cc39d15c120ea9fb0702",
+      "launcher_sha256": "9d6d449fbd72a11f0dc4aee435a66c24f1993a12f90580aedd7fdbc7df5af526",
+      "gate_launcher_sha256": "de6d13788de2817b79ba70c7852a0794b70786b5f730d844cc1a9da0a3742205"
+    },
+    "test_evaluated": false,
+    "checkpoint_files": {
+      "latest.pt": {
+        "bytes": 513559881,
+        "sha256": "7bf15786026c482d0bfd381ef05e1c24e4a0457e8087110e1fc27908bf61f103"
+      },
+      "best.pt": {
+        "bytes": 205033913,
+        "sha256": "11c3f7814c31c20590c0340acb9c98454371be00a53ca31a74e772888fdfc2cc"
+      }
+    }
+  },
+  "config": {
+    "logging_backend": "local",
+    "model": {
+      "variant": "mhc",
+      "depth": 8,
+      "width": 512,
+      "heads": 4,
+      "sequence_length": 2048,
+      "vocab_size": 32768,
+      "streams": 4,
+      "sinkhorn_iterations": 20,
+      "activation_checkpoint": false,
+      "connection_backend": "nvidia",
+      "fused_connection_grad": false,
+      "architecture": "vanilla",
+      "window_pattern": "SSSL",
+      "readout": "vocab_partition",
+      "partition_seed": 20261031
+    },
+    "protocol": {
+      "steps": 50,
+      "schedule_steps": 305176,
+      "batch_tokens": 32768,
+      "microbatch": 16,
+      "grad_accum": 1,
+      "seed": 42,
+      "attention_backend": "sdpa_cudnn",
+      "matched_backbone_init": true,
+      "evaluate_test": false
+    },
+    "data_manifest": {
+      "complete": true,
+      "run_id": "gy1xhvud",
+      "sequence_length": 2048,
+      "dtype": "uint16",
+      "layout": "rows of 2049 token ids; x=row[:-1], y=row[1:]",
+      "batch_tokens": 32768,
+      "training_steps": 30518,
+      "requested_tokens": 1000000000,
+      "training_tokens": 1000013824,
+      "files": {
+        "train": {
+          "rows": 488288,
+          "tokens": 1000013824,
+          "bytes": 2001004224,
+          "sha256": "614ef0ecce77ca839cb7650bfe7da9a8fbb92bbfc8efe461ded57a1f2af315c7",
+          "last_source_state": {
+            "pq_idx": 1,
+            "rg_idx": 630,
+            "epoch": 1
+          }
+        },
+        "dev": {
+          "rows": 64,
+          "tokens": 131072,
+          "bytes": 262272,
+          "sha256": "bd67b90b4386ba6428992864712f56eb10527678ed8b3664ed5f63c1643458a4",
+          "last_source_state": {
+            "pq_idx": 0,
+            "rg_idx": 1,
+            "epoch": 1
+          }
+        },
+        "test": {
+          "rows": 1024,
+          "tokens": 2097152,
+          "bytes": 4196352,
+          "sha256": "e7d24b6a89155ebc7123afe68bd2c58aeaf159b5087dbdf28e090ce09f293d09",
+          "last_source_state": {
+            "pq_idx": 0,
+            "rg_idx": 4,
+            "epoch": 1
+          }
+        }
+      },
+      "tokenizer": {
+        "dataset": "HuggingFaceFW/fineweb-edu",
+        "config": "sample-10BT",
+        "revision": "87f09149ef4734204d70ed1d046ddc9ca3f2b8f9",
+        "full_dataset_bytes": 28518193415,
+        "full_source_gpt2_tokens": 9972918177,
+        "nanochat_commit": "145da40cdd37b9522aa53d26c0c356e9126458bb",
+        "nanochat_source_sha256": "9a39516fc52effabe6bf9b87fc5fc67f7026a95060861be560d3525257bfb3e6",
+        "files": {
+          "token_bytes.pt": {
+            "bytes": 132649,
+            "sha256": "8e6ed9947610b8b329f0aed7e01bf332359331790e61fc6c0c95dc3cff29bdb4"
+          },
+          "tokenizer.pkl": {
+            "bytes": 412696,
+            "sha256": "8d1a5a03421ca24e7acafd1ef68fe8dbc6326dad903bc65cc726ec0601c577de"
+          }
+        },
+        "train_shards": [
+          "000_00000.parquet"
+        ],
+        "validation_shards": [
+          "013_00000.parquet"
+        ],
+        "tokenizer": "native RustBPE 32768 vocab, first 100M capped characters from training shard",
+        "benchmark": "native base_train d8/D512/2K/SSSL, 300 steps x 32768 model tokens; original source unmodified",
+        "vocab_size": 32768,
+        "max_chars": 100000000,
+        "doc_cap": 10000,
+        "purpose": "Throughput pilot tokenizer; native RustBPE; train shard only",
+        "elapsed_seconds": 5.633999116718769,
+        "run_id": "eqnd6jdz"
+      },
+      "dataset_revision": "87f09149ef4734204d70ed1d046ddc9ca3f2b8f9",
+      "train_shards": "000..012",
+      "heldout_shard": "013",
+      "seconds": 1009.9609482300002,
+      "validation": "dev first 64 rows, test next 1024 rows; no shared packed rows"
+    },
+    "source": {
+      "commit": "c455f1243d4917668f1cef7da685c8f1ec106bf6",
+      "reference_training_commit": "699dcf27bdafc82b34e3ca9ef46cb62326447b69",
+      "purpose": "User-authorized persistent-mHC partitioned-vocabulary global-softmax10B experiment",
+      "hashes": {
+        "mhc-official-runtime-7546767.tar.gz": "6b927f93021961293e12452b4001a479ff1b54cbc1aae0355e73e75a393d4dc0",
+        "cuda-compat-13-1_590.48.01-1_amd64.deb": "066f24c715f5f8f31bb7e8bd0f9ddc93fe78a82d3be55c6f3e9bbe26fa4fd7be",
+        "transformer_engine_torch-2.20.2-cp311-cp311-linux_x86_64.whl": "9b69f40b34570e3073171dcb231d6dd038092d20a277e501e7da01e6475920de",
+        "source.tar": "a9172510ecda3888509c09035919f9df52c0c133311cfffd493d71b3a8d99901"
+      },
+      "variant": "mhc",
+      "readout": "vocab_partition",
+      "steps": 305176,
+      "training_tokens": 10000007168,
+      "checkpoint_upload_seconds": 1800,
+      "backfill_opt_in": true,
+      "data_uri": "osdf:///chtc/staging/y/yzhong239/nanochat-mhc-10b-data-7560536.tar",
+      "gate_data_uri": "osdf:///chtc/staging/y/yzhong239/nanochat-ebt-20261029/data-7444406.tar",
+      "reference_jobs": {
+        "baseline": {
+          "job": "7562105.0",
+          "run_id": "6a07f085"
+        },
+        "mhc": {
+          "job": "7562105.1",
+          "run_id": "048c708c"
+        }
+      },
+      "data_archive_sha256": "27a247cded8a77f4ef9f37cd19f55ce41df4be937583cc39d15c120ea9fb0702",
+      "launcher_sha256": "9d6d449fbd72a11f0dc4aee435a66c24f1993a12f90580aedd7fdbc7df5af526",
+      "gate_launcher_sha256": "de6d13788de2817b79ba70c7852a0794b70786b5f730d844cc1a9da0a3742205"
+    },
+    "checkpoint_transport": {
+      "upload_interval_seconds": 1800,
+      "local_save_every_steps": 500,
+      "method": "exit85 plus scheduler transfer; local save alone is not durable"
+    },
+    "gpu": "NVIDIA H200",
+    "torch": "2.10.0+cu130",
+    "cuda": "13.0",
+    "gpu_capability": [
+      9,
+      0
+    ],
+    "explicit_portability_gate": false,
+    "parameters": 59507120,
+    "residual_mixing": "sinkhorn",
+    "applied_sinkhorn_iterations": 20,
+    "optimizer": "native MuonAdamW; connector AdamW at native unembedding LR, no decay",
+    "optimizer_groups": [
+      {
+        "kind": "adamw",
+        "lr": 0.0024494897427831783,
+        "betas": [
+          0.8,
+          0.96
+        ],
+        "eps": 1e-10,
+        "weight_decay": 0.01,
+        "initial_lr": 0.0024494897427831783
+      },
+      {
+        "kind": "adamw",
+        "lr": 0.09185586535436918,
+        "betas": [
+          0.8,
+          0.995
+        ],
+        "eps": 1e-10,
+        "weight_decay": 0.001,
+        "initial_lr": 0.09185586535436918
+      },
+      {
+        "kind": "adamw",
+        "lr": 0.0024494897427831783,
+        "betas": [
+          0.8,
+          0.96
+        ],
+        "eps": 1e-10,
+        "weight_decay": 0.0,
+        "initial_lr": 0.0024494897427831783
+      },
+      {
+        "kind": "muon",
+        "lr": 0.005,
+        "momentum": 0.95,
+        "ns_steps": 5,
+        "beta2": 0.9,
+        "weight_decay": 0.18375000000000002,
+        "initial_lr": 0.005
+      },
+      {
+        "kind": "muon",
+        "lr": 0.005,
+        "momentum": 0.95,
+        "ns_steps": 5,
+        "beta2": 0.9,
+        "weight_decay": 0.18375000000000002,
+        "initial_lr": 0.005
+      },
+      {
+        "kind": "muon",
+        "lr": 0.005,
+        "momentum": 0.95,
+        "ns_steps": 5,
+        "beta2": 0.9,
+        "weight_decay": 0.18375000000000002,
+        "initial_lr": 0.005
+      }
+    ],
+    "loss": "partitioned CCE/LSE combined into ONE global softmax; no gradient filtering",
+    "references": "research/connections/references.json"
+  },
+  "profiles": {
+    "collapse": {
+      "readout": "collapse",
+      "gpu": "NVIDIA H200",
+      "warmup": 20,
+      "timed_steps": 30,
+      "mean_seconds": 0.08762754638446495,
+      "median_seconds": 0.0875787574914284,
+      "step_seconds": [
+        0.08761670906096697,
+        0.08753781602717936,
+        0.08745838096365333,
+        0.08743078808765858,
+        0.08766170800663531,
+        0.08750471100211143,
+        0.08755151904188097,
+        0.08766521490179002,
+        0.08755277702584863,
+        0.08763569302391261,
+        0.08755544701125473,
+        0.08763523306697607,
+        0.08752629195805639,
+        0.0875801199581474,
+        0.08758512500207871,
+        0.0875657299766317,
+        0.08769876707810909,
+        0.08758154802490026,
+        0.0874837429728359,
+        0.08754331106320024,
+        0.08758298703469336,
+        0.0875508759636432,
+        0.08833158598281443,
+        0.08842837205156684,
+        0.08773160201963037,
+        0.0876166820526123,
+        0.08754227904137224,
+        0.0875773950247094,
+        0.08759403205476701,
+        0.08749994705431163
+      ],
+      "final_loss": 6.563844203948975,
+      "peak_reserved_bytes": 9447669760,
+      "peak_allocated_bytes": 9193028608,
+      "logging_backend": "local"
+    },
+    "vocab_partition": {
+      "readout": "vocab_partition",
+      "gpu": "NVIDIA H200",
+      "warmup": 20,
+      "timed_steps": 30,
+      "mean_seconds": 0.08888453302206471,
+      "median_seconds": 0.08886343654012308,
+      "step_seconds": [
+        0.08892285008914769,
+        0.08878434693906456,
+        0.08881002198904753,
+        0.08888308692257851,
+        0.08898750005755574,
+        0.08882660104427487,
+        0.08880254602991045,
+        0.08876708894968033,
+        0.08880818402394652,
+        0.08881677105091512,
+        0.08878087799530476,
+        0.08895184192806482,
+        0.08883154601790011,
+        0.08885337796527892,
+        0.08877167804166675,
+        0.08937818103004247,
+        0.0888867670437321,
+        0.08884697908069938,
+        0.08882943808566779,
+        0.08888422604650259,
+        0.0889837620779872,
+        0.08886177104432136,
+        0.08904960798099637,
+        0.08888382103759795,
+        0.08886510203592479,
+        0.0888537410646677,
+        0.08888534607831389,
+        0.08893895894289017,
+        0.08889949403237551,
+        0.08889047603588551
+      ],
+      "final_loss": 6.563580513000488,
+      "peak_reserved_bytes": 9242148864,
+      "peak_allocated_bytes": 9006083072,
+      "logging_backend": "local"
+    }
+  },
+  "unique_training_steps": 50,
+  "restart": "Real exit85 at25, fresh process restores and completes50; exact optimizer/RNG unit check also passed",
+  "scope": "Diagnostic weights remain in worker scratch; formal run starts independently at step0",
+  "unit_results": {
+    "cce-0.1-True.json": {
+      "cce_loss": 6.9392781257629395,
+      "dense_loss": 6.939298629760742,
+      "gradient_relative_errors": [
+        0.002035342983346415,
+        0.00204897817874154
+      ],
+      "stream_gradient_norms": [
+        0.14100436866283417,
+        0.0024340760428458452,
+        0.00243694637902081,
+        0.0024136723950505257
+      ]
+    },
+    "integration.json": {
+      "causal_tokens": 2048,
+      "cce_loss": 5.54713249206543,
+      "dense_loss": 5.54713249206543,
+      "checkpoint_gradient_relative_errors": {
+        "wte.weight": 0.0,
+        "blocks.0.attn.c_q.weight": 0.0,
+        "blocks.0.attn.c_k.weight": 0.0,
+        "blocks.0.attn.c_v.weight": 0.0,
+        "blocks.0.attn.c_proj.weight": 0.0,
+        "blocks.0.mlp.c_fc.weight": 0.0,
+        "blocks.0.mlp.c_proj.weight": 0.0,
+        "blocks.0.attn_connection.phi": 0.0,
+        "blocks.0.attn_connection.bias": 0.0,
+        "blocks.0.attn_connection.scales": 0.0,
+        "blocks.0.mlp_connection.phi": 0.0,
+        "blocks.0.mlp_connection.bias": 0.0,
+        "blocks.0.mlp_connection.scales": 0.0,
+        "blocks.1.attn.c_q.weight": 0.0,
+        "blocks.1.attn.c_k.weight": 0.0,
+        "blocks.1.attn.c_v.weight": 0.0,
+        "blocks.1.attn.c_proj.weight": 0.0,
+        "blocks.1.mlp.c_fc.weight": 0.0,
+        "blocks.1.mlp.c_proj.weight": 0.0,
+        "blocks.1.attn_connection.phi": 0.0,
+        "blocks.1.attn_connection.bias": 0.0,
+        "blocks.1.attn_connection.scales": 0.0,
+        "blocks.1.mlp_connection.phi": 0.0,
+        "blocks.1.mlp_connection.bias": 0.0,
+        "blocks.1.mlp_connection.scales": 0.0,
+        "lm_head.weight": 0.0
+      }
+    },
+    "fp64.json": {
+      "loss_error": 0.0,
+      "gradient_errors": [
+        2.9899496266448366e-16,
+        2.9838609639200247e-16
+      ],
+      "stream_gradient_norms": [
+        0.6743789494984962,
+        0.26375263363943297,
+        0.15484164120706398,
+        0.13100841896439605
+      ],
+      "example_partition_rank": 20,
+      "example_collapsed_rank": 5
+    },
+    "initialization.json": {
+      "shared_parameters_bitwise_equal": true,
+      "optimizer_hyperparameters_equal": true,
+      "parameters": [
+        59515317,
+        59507120
+      ],
+      "head_parameters": 16777216,
+      "partition_seed": 20261031
+    },
+    "cce-1.0-False.json": {
+      "cce_loss": 9.333833694458008,
+      "dense_loss": 9.333967208862305,
+      "gradient_relative_errors": [
+        0.002252155200761671,
+        0.0022507530837634062
+      ],
+      "stream_gradient_norms": [
+        0.07285509258508682,
+        0.0741734579205513,
+        0.07171908020973206,
+        0.06075059249997139
+      ]
+    },
+    "cce-0.1-False.json": {
+      "cce_loss": 6.963844299316406,
+      "dense_loss": 6.963839054107666,
+      "gradient_relative_errors": [
+        0.0020474234939684807,
+        0.0020488422344546995
+      ],
+      "stream_gradient_norms": [
+        0.07298837602138519,
+        0.07458756119012833,
+        0.0727754458785057,
+        0.06131551042199135
+      ]
+    },
+    "cce-1.0-True.json": {
+      "cce_loss": 9.097295761108398,
+      "dense_loss": 9.097355842590332,
+      "gradient_relative_errors": [
+        0.0022832408003151837,
+        0.00226026924833362
+      ],
+      "stream_gradient_norms": [
+        0.13783375918865204,
+        0.0124751515686512,
+        0.01182022225111723,
+        0.011080816388130188
+      ]
+    }
+  },
+  "profile_partition_over_collapse": 1.0143446517614991,
+  "archive_sha256": "132c675352b14e7ad4cc32f9cd857032a6c8a0138d11c8ca316ebf021ac79b9d",
+  "gate_job": "7643586.0"
+}
