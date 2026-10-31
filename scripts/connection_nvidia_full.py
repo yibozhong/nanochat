@@ -1,4 +1,4 @@
-"""Full NVIDIA mHC correctness gate and five same-GPU training-step profiles."""
+"""Full NVIDIA mHC correctness gate and three same-GPU training-step profiles."""
 import hashlib
 import json
 import os
@@ -13,11 +13,9 @@ from nanochat.experiment_logging import diagnostic_run
 
 GROUP='mhc-nvidia-full-20261030'
 TRIALS={
-    'baseline':('baseline','deepseek','official',False,'0'),
-    'mhc_deepseek':('mhc','deepseek','official',False,'0'),
-    'mhc_nvidia_projection_only':('mhc','deepseek','nvidia',False,None),
-    'mhc_nvidia_full_unfused':('mhc','nvidia','official',False,None),
-    'mhc_nvidia_full_fused':('mhc','nvidia','official',True,None),
+    'baseline':('baseline','nvidia',False,'0'),
+    'mhc_nvidia_full_unfused':('mhc','nvidia',False,None),
+    'mhc_nvidia_full_fused':('mhc','nvidia',True,None),
 }
 
 
@@ -38,10 +36,7 @@ def main():
     run=diagnostic_run(**kwargs)
     try:
         suites=[]
-        # Recheck both projection-only and full paths after the shared TMA
-        # allocator adapter changed. Unchanged DeepSeek regressions already
-        # passed in 7547609.0; all native/full tests still run before profiling.
-        gates=[('controlled',['tests/test_mhc_nvidia_projection.py','tests/test_mhc_nvidia_full.py'],'0'),
+        gates=[('controlled',['tests/test_mhc_nvidia_full.py'],'0'),
                ('native',['tests/test_mhc_nvidia_full.py','-k','pipeline or model_no'],None)]
         for label,tests,override in gates:
             print('Checks '+label,flush=True)
@@ -63,7 +58,7 @@ def main():
             suites+=ET.parse(out/f'tests-{label}.xml').getroot().findall('testsuite')
             shutil.copytree(out/'nvidia-full-checks',out/f'oracle-{label}')
         checks={k:sum(int(s.attrib.get(k,0)) for s in suites) for k in ('tests','failures','errors','skipped')}
-        assert checks==dict(tests=22,failures=0,errors=0,skipped=0),checks
+        assert checks==dict(tests=16,failures=0,errors=0,skipped=0),checks
         print('Checks passed '+json.dumps(checks),flush=True)
         manifest=json.loads(Path('../data/manifest.json').read_text())
         for name,info in manifest['files'].items():
@@ -72,10 +67,10 @@ def main():
                 while chunk:=f.read(8*1024*1024):digest.update(chunk)
             assert digest.hexdigest()==info['sha256']
         trials={}
-        for name,(variant,backend,projection,fused,override) in TRIALS.items():
+        for name,(variant,backend,fused,override) in TRIALS.items():
             print('Profiling '+name,flush=True)
             cmd=[sys.executable,'-m','scripts.connection_profile','--variant',variant,
-                '--projection-backend',projection,'--connection-backend',backend,
+                '--connection-backend',backend,
                 '--fused-connection-grad' if fused else '--no-fused-connection-grad',
                 '--wandb-group',GROUP,'--output-dir',str(out/name),
                 '--timed-steps','60','--collect-after-warmup']
@@ -88,7 +83,7 @@ def main():
         result=dict(complete=True,source=source,run_id=ident,checks=checks,
             trials=trials,data_manifest=manifest,pretraining_launched=False)
         (out/'comparison.json').write_text(json.dumps(result,indent=2)+'\n')
-        run.summary.update(dict(complete=True,checks_passed=True,trials=5,total_diagnostic_tokens=5*106*32768))
+        run.summary.update(dict(complete=True,checks_passed=True,trials=len(TRIALS),total_diagnostic_tokens=len(TRIALS)*106*32768))
         run.save('results/*.json',base_path='.',policy='now');run.finish()
         print('Comparison complete',flush=True)
     except BaseException:

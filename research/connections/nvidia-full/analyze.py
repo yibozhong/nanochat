@@ -10,8 +10,6 @@ def main():
     root=Path(sys.argv[1]);result=json.loads((root/'comparison.json').read_text())
     assert result['complete'] and (result.get('local_verified') or result.get('wandb_verified'))
     trials=result['trials'];base=trials['baseline']['normal_ms']['mean']
-    partial=trials['mhc_nvidia_projection_only']['normal_ms']['mean']
-    original=trials['mhc_deepseek']['normal_ms']['mean']
     assert len({v['config']['gpu_uuid'] for v in trials.values()})==1
     expected={'_mhc_projection_fwd_fused':34,'_mhc_projection_bwd_fused_dx':34,
         '_mhc_scale_fwd_fused':34,'_mhc_scale_bwd_fused':34,
@@ -28,8 +26,7 @@ def main():
                 assert counts[fragment]==n,(name,fragment,counts[fragment],n)
             assert all('_fused' in k['name'] for k in kernels if 'sinkhorn' in k['name'].lower())
         rows[name]=dict(mean_ms=ms,median_ms=v['normal_ms']['median'],stdev_ms=v['normal_ms']['stdev'],
-            overhead_vs_baseline_pct=100*(ms/base-1),reduction_vs_projection_only_pct=100*(1-ms/partial),
-            reduction_vs_deepseek_pct=100*(1-ms/original),
+            overhead_vs_baseline_pct=100*(ms/base-1),
             memory_gib={k:b/1024**3 for k,b in v['normal_timing_memory'].items()},
             nvidia_kernel_counts=counts,phase_means=v['phase_means'],run_id=v['run_id'])
     archive=root/'results'/f'gate-{result["job"]}.tar'

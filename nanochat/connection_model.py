@@ -1,4 +1,4 @@
-"""Full-attention vanilla/mHC and no-manifold on nanochat attention and MLP.
+"""Full-attention vanilla and NVIDIA mHC on nanochat attention and MLP.
 
 This research model keeps native GPT and its SSSL/extras path unchanged.
 The residual option matches the audited 58.72M full-attention vanilla baseline.
@@ -12,7 +12,7 @@ from torch.nn import functional as F
 from torch.utils.checkpoint import checkpoint
 
 from nanochat.gpt import Block, GPTConfig, Linear, norm
-from nanochat.manifold_connections import ManifoldHyperConnection, ManifoldHyperHead, expand_streams, check_official_device
+from nanochat.nvidia_connections import NvidiaHyperConnection, NvidiaHyperHead, expand_streams, check_nvidia_device
 from nanochat.optim import MuonAdamW
 
 
@@ -27,22 +27,16 @@ class ConnectionConfig:
     streams: int = 4
     sinkhorn_iterations: int = 20
     activation_checkpoint: bool = False
-    projection_backend: str = 'official'
-    connection_backend: str = 'deepseek'
+    connection_backend: str = 'nvidia'
     fused_connection_grad: bool = False
 
     def __post_init__(self):
-        if self.connection_backend not in ('deepseek', 'nvidia', 'nvidia_precise'):
-            raise ValueError(f'Unknown full connection backend: {self.connection_backend}')
-        if self.connection_backend != 'deepseek':
-            if self.variant != 'mhc' or self.projection_backend != 'official' or self.sinkhorn_iterations != 20:
-                raise ValueError('Full NVIDIA backend requires mhc, 20 iterations, and no projection-only override')
-        if self.variant not in ('baseline', 'mhc', 'mhc_no_manifold'):
+        if self.connection_backend not in ('nvidia', 'nvidia_precise'):
+            raise ValueError('Only the full NVIDIA mHC implementation is supported')
+        if self.variant not in ('baseline', 'mhc'):
             raise ValueError(f'Unknown connection variant: {self.variant}')
-        if self.projection_backend not in ('official', 'torch', 'torch_compile', 'nvidia', 'nvidia_precise'):
-            raise ValueError(f'Unknown projection backend: {self.projection_backend}')
-        if self.variant == 'baseline' and self.projection_backend != 'official':
-            raise ValueError('Baseline has no connection projection to replace')
+        if self.sinkhorn_iterations != 20:
+            raise ValueError('The NVIDIA composite API requires 20 Sinkhorn iterations')
         if min(self.depth, self.width, self.heads, self.sequence_length, self.vocab_size, self.streams) < 1:
             raise ValueError('Model dimensions must be positive')
         if self.width % self.heads or (self.width // self.heads) % 2:
@@ -50,7 +44,18 @@ class ConnectionConfig:
         if self.sinkhorn_iterations < 1:
             raise ValueError('Sinkhorn needs at least one iteration')
         if self.variant != 'baseline' and (self.streams != 4 or self.width % 128):
-            raise ValueError('Official mHC kernels require four streams and width divisible by 128')
+            raise ValueError('NVIDIA mHC kernels require four streams and width divisible by 128')
+
+    @classmethod
+    def from_checkpoint(cls, config):
+        """Read pre-cleanup NVIDIA/vanilla metadata; reject retired model weights."""
+        config = dict(config)
+        projection = config.pop('projection_backend', 'official')
+        if projection != 'official':
+            raise ValueError('Projection-only checkpoints belong to a retired implementation')
+        if config.get('variant', 'baseline') == 'baseline':
+            config['connection_backend'] = 'nvidia'  # unused by the vanilla model
+        return cls(**config)
 
 
 class ConnectionBlock(Block):
@@ -60,15 +65,9 @@ class ConnectionBlock(Block):
         self.variant = config.variant
         self.compiled_attention = self.compiled_mlp = None
         if self.variant != 'baseline':
-            if config.connection_backend == 'deepseek':
-                cls = ManifoldHyperConnection
-                kwargs = dict(manifold=config.variant == 'mhc', projection_backend=config.projection_backend)
-            else:
-                from nanochat.nvidia_connections import NvidiaHyperConnection
-                cls = NvidiaHyperConnection
-                kwargs = dict(use_tf32=config.connection_backend == 'nvidia', fused_grad_acc=config.fused_connection_grad)
-            self.attn_connection = cls(config.width, config.streams, 2*index, config.sinkhorn_iterations, **kwargs)
-            self.mlp_connection = cls(config.width, config.streams, 2*index+1, config.sinkhorn_iterations, **kwargs)
+            kwargs = dict(use_tf32=config.connection_backend == 'nvidia', fused_grad_acc=config.fused_connection_grad)
+            self.attn_connection = NvidiaHyperConnection(config.width, config.streams, 2*index, config.sinkhorn_iterations, **kwargs)
+            self.mlp_connection = NvidiaHyperConnection(config.width, config.streams, 2*index+1, config.sinkhorn_iterations, **kwargs)
 
     def attention_branch(self, h, cos, sin, kv_cache=None):
         return self.attn(norm(h), None, (cos, sin), (-1, 0), kv_cache)
@@ -111,10 +110,7 @@ class ConnectionModel(nn.Module):
                 b.attn_connection.reset_parameters(); b.mlp_connection.reset_parameters()
         if config.variant == 'baseline':
             self.stream_head = None
-        elif config.connection_backend == 'deepseek':
-            self.stream_head = ManifoldHyperHead(config.width, config.streams, projection_backend=config.projection_backend)
         else:
-            from nanochat.nvidia_connections import NvidiaHyperHead
             self.stream_head = NvidiaHyperHead(config.width, config.streams, use_tf32=config.connection_backend == 'nvidia')
         if self.stream_head is not None:
             self.stream_head.reset_parameters()
@@ -127,16 +123,16 @@ class ConnectionModel(nn.Module):
 
     def prepare(self, device='cuda', dtype=torch.bfloat16, compile_blocks=False):
         if self.config.variant != 'baseline':
-            check_official_device(device)
+            check_nvidia_device(device)
             if dtype != torch.bfloat16:
-                raise ValueError('Official mHC kernels require BF16 activations')
+                raise ValueError('NVIDIA mHC kernels require BF16 activations')
         self.to(device)
         self.wte.to(dtype=dtype)
         self.cos = self.cos.to(dtype); self.sin = self.sin.to(dtype)
         if compile_blocks and self.config.variant == 'baseline':
             self.compiled_steps = [torch.compile(b.forward, dynamic=False, fullgraph=True) for b in self.blocks]
         elif compile_blocks:
-            # TileKernels supplies its own compiled kernels and custom backward.
+            # NVIDIA TE supplies its own kernels and custom backward.
             # Compile only the unchanged attention/MLP branches with Inductor.
             for b in self.blocks:
                 b.compiled_attention = torch.compile(b.attention_branch, dynamic=False, fullgraph=True)
@@ -149,11 +145,7 @@ class ConnectionModel(nn.Module):
             raise ValueError('Input exceeds configured context length')
         x = norm(self.wte(idx))
         if self.config.variant != 'baseline':
-            if self.config.connection_backend == 'deepseek':
-                x = expand_streams(x, self.config.streams)
-            else:
-                from nanochat.nvidia_connections import expand_streams as nvidia_expand
-                x = nvidia_expand(x, self.config.streams)
+            x = expand_streams(x, self.config.streams)
         cos, sin = self.cos[:, start:start+idx.shape[1]], self.sin[:, start:start+idx.shape[1]]
         for i, b in enumerate(self.blocks):
             fn = self.compiled_steps[i] if self.compiled_steps is not None else b.forward

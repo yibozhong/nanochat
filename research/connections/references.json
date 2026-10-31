@@ -1,20 +1,19 @@
 {
-  "active_method": "mHC and its no-manifold ablation; original LayerNorm/tanh HC remains archived",
-  "official_kernel_repo": "https://github.com/deepseek-ai/TileKernels",
-  "official_kernel_commit": "36d9e45d38e204ebb87e6f6e833821eee0482fe5",
-  "version_reason": "This official release includes the complete prenorm forward/backward and autograd wrappers. v2 moved prenorm GEMM to DeepGEMM and removed mHC modeling wrappers.",
-  "official_module": "tile_kernels.modeling.mhc.ops",
+  "active_method": "Full NVIDIA mHC only; vanilla baseline",
+  "official_kernel_repo": "https://github.com/NVIDIA/TransformerEngine",
+  "official_version": "2.20.2",
+  "official_module": "transformer_engine.pytorch.triton.mhc",
   "locally_written_kernels": false,
-  "integration_choices": [
-    "fuse_grad_acc=False for normal PyTorch gradient accumulation",
-    "n_splits=1 matches the official TileLang prenorm implementation",
-    "contiguous head slice before kernel call",
-    "same documented local initialization and nanochat optimizer",
-    "On locally validated SM120, use official Sinkhorn backward token_block_size=16 via a thin autograd adapter; official SM90/SM100 wrapper retains tile32"
-  ],
-  "runtime": "runtime/pyproject.toml + uv.lock; independent CUDA 13.1 compiler/headers in toolchain/pyproject.toml + uv.lock",
-  "hardware": "Upstream documents SM90/SM100. Local full gate and two 50-step smokes passed on SM120 RTX PRO 6000, tile16/repeat20; other GPU architectures unvalidated.",
   "paper": "https://arxiv.org/html/2512.24880v2",
+  "runtime": "runtime/pyproject.toml and uv.lock; CUDA toolchain in toolchain/",
+  "integration_choices": [
+    "BF16 activations; four streams in channel/stream interleaved layout",
+    "Native TE FP32 epsilon, sigmoid pre/post gates and log-space 20-iteration Sinkhorn",
+    "Ordinary gradient accumulation by default; NVIDIA fused accumulation optional",
+    "Audited local parameter initialization retained bitwise from 699dcf2",
+    "Thin per-context TMA allocator registration; upstream kernel sources hash-verified"
+  ],
+  "hardware": "Full-model correctness and training validated on SM90 H100/H200; other architectures need validation",
   "cuda_forward_compatibility": {
     "package": "cuda-compat-13-1_590.48.01-1_amd64.deb",
     "sha256": "066f24c715f5f8f31bb7e8bd0f9ddc93fe78a82d3be55c6f3e9bbe26fa4fd7be",
@@ -24,6 +23,5 @@
       580
     ]
   },
-  "sm120_shared_memory_source": "https://docs.nvidia.com/cuda/blackwell-tuning-guide/index.html",
-  "no_manifold_ablation": "Bypass Sinkhorn only; retain identical parameters, initialization, pre/post gating, final head and optimizer. Use official individual operations for inference to avoid fused Sinkhorn."
+  "retired_implementations": "DeepSeek TileKernels, eager/compiled projection and projection-only NVIDIA adapters removed; reports and Git history retained"
 }

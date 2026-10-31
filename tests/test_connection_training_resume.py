@@ -31,7 +31,7 @@ def build(variant):
     seed_all(42)
     config=ConnectionConfig(variant=variant,depth=2,width=128,heads=1,
         sequence_length=128,vocab_size=256,
-        connection_backend='nvidia' if variant=='mhc' else 'deepseek')
+        connection_backend='nvidia')
     model=ConnectionModel(config).prepare()
     match_vanilla_initialization(model,42)
     return model

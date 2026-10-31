@@ -115,18 +115,17 @@ def trace_summary(path, steps):
 
 def main():
     p=argparse.ArgumentParser()
-    p.add_argument('--variant',required=True,choices=['baseline','mhc','mhc_no_manifold'])
+    p.add_argument('--variant',required=True,choices=['baseline','mhc'])
     p.add_argument('--data-dir',default='../data')
     p.add_argument('--output-dir',required=True)
-    p.add_argument('--projection-backend',choices=['official','torch','torch_compile','nvidia','nvidia_precise'],default='official')
-    p.add_argument('--connection-backend',choices=['deepseek','nvidia','nvidia_precise'],default='deepseek')
+    p.add_argument('--connection-backend',choices=['nvidia','nvidia_precise'],default='nvidia')
     p.add_argument('--fused-connection-grad',action=argparse.BooleanOptionalAction,default=False)
     p.add_argument('--wandb-group',default='mhc-profiling-20261030')
     p.add_argument('--timed-steps',type=int,default=20)
     p.add_argument('--collect-after-warmup',action='store_true')
     a=p.parse_args();out=Path(a.output_dir);out.mkdir(parents=True,exist_ok=True)
     torch.set_num_threads(2);torch.backends.cuda.matmul.allow_tf32=False;seed_all(42)
-    config=ConnectionConfig(variant=a.variant,projection_backend=a.projection_backend,
+    config=ConnectionConfig(variant=a.variant,
         connection_backend=a.connection_backend,fused_connection_grad=a.fused_connection_grad)
     model=ConnectionModel(config).prepare(compile_blocks=True);opt,wd=optimizer_for(model)
     data=PackedData(a.data_dir);source=json.loads(Path('source.json').read_text())
@@ -141,7 +140,7 @@ def main():
         event_instrumented_steps=4,profiler_steps=2,torch=torch.__version__,cuda=torch.version.cuda,
         note=f'{46+a.timed_steps} temporary diagnostic optimizer steps, no checkpoint/pretraining promotion; finite-check-off is diagnostic only')
     kwargs=dict(project='nanochat',entity='yibozhong657-none',group=a.wandb_group,
-                name='profile-'+a.variant+'-'+a.connection_backend+'-'+a.projection_backend,job_type='profiling',id=run_id,config=settings)
+                name='profile-'+a.variant+'-'+a.connection_backend,job_type='profiling',id=run_id,config=settings)
     run=diagnostic_run(**kwargs)
     json_write(out/'config.json',settings)
     step=0;started=time.perf_counter()
@@ -202,7 +201,7 @@ def main():
             optimizer_updates=step,training_tokens=step*32768,elapsed_seconds=time.perf_counter()-started,
             normal_ms=normal,no_finite_check_ms=no_check,phase_means=phase_means,phase_samples=events,
             cuda_profile=attribution,last_train_ce=loss,pretraining_launched=False,
-            normal_timing_memory=memory,projection_backend=a.projection_backend)
+            normal_timing_memory=memory)
         assert step==46+a.timed_steps
         json_write(out/'summary.json',result)
         run.summary.update(dict(complete=True,optimizer_updates=step,training_tokens=step*32768,

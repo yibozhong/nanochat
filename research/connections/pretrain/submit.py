@@ -31,16 +31,11 @@ def main():
         existing=json.loads(command(['condor_q','yzhong239','-constraint',
             'MHCPretrainKey == "mhc-pretrain-20261030"','-json']) or '[]')
         assert not existing,'Marked jobs already exist; recover their IDs instead of duplicating'
-        core=['nanochat/connection_model.py','nanochat/manifold_connections.py','nanochat/nvidia_connections.py',
-              'nanochat/nvidia_projection.py','nanochat/connection_experiment.py','nanochat/packed_training.py',
-              'nanochat/gpt.py','nanochat/optim.py','nanochat/flash_attention.py','scripts/connection_train.py']
-        changed=set(command(['git','diff','--name-only',state['gate_source']['commit'],'HEAD','--',*core],REPO).splitlines())
-        assert changed <= {'scripts/connection_train.py'}
-        audit=json.loads((REPO/'research/connections/pretrain/logging-audit.json').read_text())
-        assert audit['complete'] and audit['gate_commit']==state['gate_source']['commit']
-        for name,key in [('scripts/connection_train.py','training_script_sha256'),('nanochat/experiment_logging.py','logging_helper_sha256')]:
-            assert hashlib.sha256((REPO/name).read_bytes()).hexdigest()==audit[key]
-        assert not command(['git','status','--porcelain','--',*core],REPO)
+        # This one-off protocol belongs to the already authorized 699dcf2 pair.
+        # The current model is NVIDIA-only; reproduce the original job source
+        # from Git history rather than mixing revisions across resumes.
+        commit='699dcf27bdafc82b34e3ca9ef46cb62326447b69'
+        assert command(['git','rev-parse',commit],REPO)==commit
         steps=math.ceil(state['requested_tokens']/32768)
         assert state['data_training_tokens']>=steps*32768
         intent=dict(run_ids={v:uuid.uuid4().hex[:8] for v in ('baseline','mhc')},
@@ -48,10 +43,10 @@ def main():
         (ROOT/'submission-intent.json').write_text(json.dumps(intent,indent=2)+'\n')
         bundle=ROOT/'training-bundles';bundle.mkdir(exist_ok=True)
         # The executable lives outside the source tar; refresh it from this commit.
-        shutil.copy2(REPO/'research/connections/pretrain/train.sh',ROOT/'train.sh')
+        (ROOT/'train.sh').write_text(command(['git','show',commit+':research/connections/pretrain/train.sh'],REPO)+'\n')
+        (ROOT/'train.sh').chmod(0o755)
         for name in ('legacy-baseline.tar','transformer_engine_torch-2.20.2-cp311-cp311-linux_x86_64.whl'):
             shutil.copy2(ROOT/'bundles'/name,bundle/name)
-        commit=command(['git','rev-parse','HEAD'],REPO)
         command(['git','archive','--format=tar','--prefix=nanochat-src/',f'--output={bundle/"source.tar"}',commit],REPO)
         source=dict(state['gate_source'])
         source.update(commit=commit,purpose='Authorized matched vanilla/full-NVIDIA mHC pretraining',

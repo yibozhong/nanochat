@@ -30,8 +30,7 @@ def match_vanilla_initialization(model, seed):
     if model.config.variant == 'baseline':
         return
     options = asdict(model.config)
-    options.update(variant='baseline', connection_backend='deepseek',
-                   projection_backend='official', fused_connection_grad=False)
+    options.update(variant='baseline', fused_connection_grad=False)
     with torch.random.fork_rng(devices=list(range(torch.cuda.device_count()))):
         torch.manual_seed(seed)
         reference = ConnectionModel(ConnectionConfig(**options))

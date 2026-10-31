@@ -24,7 +24,7 @@ def collect(s):
         result=json.load(tar.extractfile('results/comparison.json'))
     assert result['complete'] and result['source']==s['source']
     assert result['checks']['failures']==result['checks']['errors']==result['checks']['skipped']==0
-    assert set(result['trials'])=={'baseline','mhc_deepseek','mhc_nvidia_projection_only','mhc_nvidia_full_unfused','mhc_nvidia_full_fused'}
+    assert set(result['trials'])=={'baseline','mhc_nvidia_full_unfused','mhc_nvidia_full_fused'}
     assert len({v['config']['gpu_uuid'] for v in result['trials'].values()})==1
     for name,v in result['trials'].items():
         assert v['complete'] and v['source']==s['source']

@@ -25,11 +25,10 @@ from nanochat.connection_experiment import configure_attention, match_vanilla_in
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument('--variant', choices=('baseline','mhc','mhc_no_manifold'), required=True)
+    p.add_argument('--variant', choices=('baseline','mhc'), required=True)
     p.add_argument('--formal-training', action='store_true', help='Explicitly enable W&B for a formal training run')
     p.add_argument('--wandb-group', default='mhc-official-kernels-20261030')
-    p.add_argument('--projection-backend', choices=('official','torch','torch_compile','nvidia','nvidia_precise'), default='official')
-    p.add_argument('--connection-backend', choices=('deepseek','nvidia','nvidia_precise'), default='deepseek')
+    p.add_argument('--connection-backend', choices=('nvidia','nvidia_precise'), default='nvidia')
     p.add_argument('--fused-connection-grad', action=argparse.BooleanOptionalAction, default=False)
     p.add_argument('--steps', type=int, required=True)
     p.add_argument('--schedule-steps', type=int, default=30518)
@@ -60,7 +59,7 @@ def main():
     configure_attention(a.attention_backend)
     seed_all(a.seed)
     c=ConnectionConfig(variant=a.variant,streams=a.streams,sinkhorn_iterations=a.sinkhorn_iterations,
-                       activation_checkpoint=a.activation_checkpoint, projection_backend=a.projection_backend,
+                       activation_checkpoint=a.activation_checkpoint,
                        connection_backend=a.connection_backend, fused_connection_grad=a.fused_connection_grad)
     data=PackedData(a.data_dir)
     assert data.manifest['sequence_length']==c.sequence_length
@@ -89,7 +88,7 @@ def main():
         a.resume=str(ckpt/'latest.pt') if (ckpt/'latest.pt').exists() else None
     if a.resume:
         state=torch.load(a.resume,map_location='cpu',weights_only=False)
-        assert state['config']==asdict(c) and state['protocol']==protocol
+        assert asdict(ConnectionConfig.from_checkpoint(state['config']))==asdict(c) and state['protocol']==protocol
         assert state['data_manifest']==data.manifest and state['source']==source
         if a.run_id:assert state['run_id']==a.run_id
         run_id=state['run_id'];step=state['step'];best=state['best_dev_ce']
@@ -105,7 +104,7 @@ def main():
         explicit_portability_gate=os.environ.get('NANOCHAT_MHC_TEST_PORTABILITY')=='1',
         parameters=sum(p.numel() for p in model.parameters()),
         residual_mixing=('sinkhorn' if a.variant=='mhc' else
-                         'unconstrained' if a.variant=='mhc_no_manifold' else 'additive'),
+                         'additive'),
         optimizer='native MuonAdamW; connector AdamW at native unembedding LR, no decay',
         optimizer_groups=initial_groups,
         loss='full-token full-vocabulary CCE; no gradient filtering',

@@ -1,5 +1,4 @@
 """New-width gates; existing kernel/model tests are already archived and passed."""
-from unittest.mock import patch
 
 import pytest
 import torch
@@ -45,12 +44,11 @@ def test_new_width_2k_causality_and_cce(width):
             block.attn.c_proj.weight.normal_(std=.01); block.mlp.c_proj.weight.normal_(std=.01)
     ids = torch.randint(0, 256, (1, 2048), device='cuda')
     changed = ids.clone(); changed[:, 1024:] = (changed[:, 1024:] + 17) % 256
-    with patch('nanochat.manifold_connections.official_ops', side_effect=AssertionError('DeepSeek mHC called')):
-        with torch.no_grad():
-            a, b = model(ids), model(changed)
-            torch.testing.assert_close(a[:, :1024], b[:, :1024], atol=0, rtol=0)
-        x, y = ids[:, :128].contiguous(), ids[:, 1:129].contiguous()
-        loss, dense = model(x, y), model(x, y, dense=True)
-        torch.testing.assert_close(loss, dense, atol=2e-4, rtol=2e-4)
-        loss.backward()
-        assert all(p.grad is not None and torch.isfinite(p.grad).all() for p in model.parameters())
+    with torch.no_grad():
+        a, b = model(ids), model(changed)
+        torch.testing.assert_close(a[:, :1024], b[:, :1024], atol=0, rtol=0)
+    x, y = ids[:, :128].contiguous(), ids[:, 1:129].contiguous()
+    loss, dense = model(x, y), model(x, y, dense=True)
+    torch.testing.assert_close(loss, dense, atol=2e-4, rtol=2e-4)
+    loss.backward()
+    assert all(p.grad is not None and torch.isfinite(p.grad).all() for p in model.parameters())

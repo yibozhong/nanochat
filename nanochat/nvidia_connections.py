@@ -7,16 +7,17 @@ TE's FP32 machine epsilon and log-space Sinkhorn are retained as published;
 this is not bitwise identical to DeepSeek's epsilon-regularized arithmetic.
 """
 import os
+import math
 
 import torch
+from torch import nn
 from torch.nn import functional as F
 
-from nanochat.manifold_connections import ManifoldHyperConnection, ManifoldHyperHead
-from nanochat.nvidia_projection import nvidia_ops
+from nanochat.nvidia_ops import nvidia_ops
 
 
 def interleave_phi(phi, streams=4):
-    """Convert DeepSeek stream-major projection columns to NVIDIA's layout."""
+    """Interleave stream-major random draws, preserving our audited initialization."""
     return phi.reshape(phi.shape[0], streams, -1).transpose(1, 2).reshape_as(phi).contiguous()
 
 
@@ -26,22 +27,41 @@ def expand_streams(x, streams=4):
     return x.unsqueeze(-1).expand(*x.shape, streams).contiguous()
 
 
+def check_nvidia_device(device):
+    if torch.device(device).type != 'cuda':
+        raise RuntimeError('NVIDIA mHC requires CUDA')
+    major, _ = torch.cuda.get_device_capability(device)
+    if major < 9:
+        raise RuntimeError('NVIDIA TMA kernels require SM90 or later; no fallback is provided')
+    if major not in (9, 10) and os.environ.get('NANOCHAT_MHC_TEST_PORTABILITY') != '1':
+        raise RuntimeError('Other GPU architectures require an explicit portability gate')
+
+
 def check_precision(use_tf32):
     if not use_tf32 and os.environ.get('NVIDIA_TF32_OVERRIDE') != '0':
         raise RuntimeError('NVIDIA precise mode requires NVIDIA_TF32_OVERRIDE=0 at startup')
 
 
-class NvidiaHyperConnection(ManifoldHyperConnection):
+class NvidiaHyperConnection(nn.Module):
     def __init__(self, width, streams, branch_index, iterations=20, *,
                  use_tf32=True, fused_grad_acc=False):
-        super().__init__(width, streams, branch_index, iterations)
+        super().__init__()
+        self.width, self.streams, self.iterations = width, streams, iterations
+        self.phi = nn.Parameter(torch.empty(2*streams+streams*streams, streams*width))
+        self.bias = nn.Parameter(torch.empty(2*streams+streams*streams))
+        self.scales = nn.Parameter(torch.empty(3))
         self.use_tf32, self.fused_grad_acc = use_tf32, fused_grad_acc
         if streams != 4 or iterations != 20:
             raise ValueError('The NVIDIA composite API requires four streams and 20 iterations')
 
     @torch.no_grad()
     def reset_parameters(self):
-        super().reset_parameters()
+        nn.init.normal_(self.phi, std=1/math.sqrt(self.streams*self.width))
+        n = self.streams
+        self.bias[:n].fill_(-math.log(n-1))
+        self.bias[n:2*n].zero_()
+        self.bias[2*n:].view(n,n).copy_(torch.eye(n, device=self.phi.device))
+        self.scales.fill_(.01)
         self.phi.copy_(interleave_phi(self.phi, self.streams))
 
     def read(self, x):
@@ -65,14 +85,20 @@ class NvidiaHyperConnection(ManifoldHyperConnection):
             use_tf32=self.use_tf32, fused_grad_x_acc_buffer=buffer)
 
 
-class NvidiaHyperHead(ManifoldHyperHead):
+class NvidiaHyperHead(nn.Module):
     def __init__(self, width, streams, *, use_tf32=True):
-        super().__init__(width, streams)
+        super().__init__()
+        self.width, self.streams = width, streams
+        self.phi = nn.Parameter(torch.empty(streams, streams*width))
+        self.scale = nn.Parameter(torch.empty(1))
+        self.bias = nn.Parameter(torch.empty(streams))
         self.use_tf32 = use_tf32
 
     @torch.no_grad()
     def reset_parameters(self):
-        super().reset_parameters()
+        nn.init.normal_(self.phi, std=1/math.sqrt(self.streams*self.width))
+        self.scale.fill_(.01)
+        self.bias.fill_(-math.log(self.streams-1))
         self.phi.copy_(interleave_phi(self.phi, self.streams))
 
     def forward(self, x):

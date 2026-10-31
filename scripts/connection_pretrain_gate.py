@@ -49,7 +49,7 @@ def main():
             out=root/('resume-'+variant)
             checkpoints=Path('../gate-checkpoints')/variant
             cmd=[sys.executable,'-m','scripts.connection_train','--variant',variant,
-                '--connection-backend','nvidia' if variant=='mhc' else 'deepseek',
+                '--connection-backend','nvidia',
                 '--steps','50','--schedule-steps','30518','--microbatch','16',
                 '--attention-backend','sdpa_cudnn','--matched-backbone-init',
                 '--data-dir','../data','--output-dir',str(out),'--checkpoint-dir',str(checkpoints),

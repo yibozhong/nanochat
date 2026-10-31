@@ -9,7 +9,7 @@ should_transfer_files = YES
 when_to_transfer_output = ON_EXIT
 stream_output = True
 stream_error = True
-transfer_input_files = bundles/pyproject.toml,bundles/uv.lock
+transfer_input_files = ../transformer_engine_torch-2.20.2-cp311-cp311-linux_x86_64.whl,bundles/pyproject.toml,bundles/uv.lock
 transfer_output_files = runtime.tar.gz,preparation-results.tar
 transfer_output_remaps = "runtime.tar.gz=osdf:///chtc/staging/y/yzhong239/mhc-official-runtime-$(Cluster).tar.gz;preparation-results.tar=results/runtime-$(Cluster).tar"
 output = logs/runtime.$(Cluster).out

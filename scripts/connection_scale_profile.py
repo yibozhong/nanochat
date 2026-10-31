@@ -104,7 +104,7 @@ def main():
     torch.set_num_threads(2); torch.backends.cuda.matmul.allow_tf32 = False
     configure_attention(); seed_all(42)
     cfg = ConnectionConfig(variant=args.variant, depth=args.depth, width=args.width,
-        heads=args.width // 128, connection_backend='nvidia' if args.variant == 'mhc' else 'deepseek',
+        heads=args.width // 128, connection_backend='nvidia',
         fused_connection_grad=False, activation_checkpoint=False)
     source = json.loads(Path('source.json').read_text())
     props = torch.cuda.get_device_properties(0)

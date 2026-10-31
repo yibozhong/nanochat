@@ -1,12 +1,6 @@
-"""Shape/RMS adapter for NVIDIA Transformer Engine's unmodified projection.
-
-TE 2.20.2 supplies the Triton forward/dx and cuBLAS weight-gradient operations.
-Only the small output normalization is native PyTorch here. All other mHC
-operations remain the existing DeepSeek implementation. No silent fallback.
-"""
+"""Load hash-pinned NVIDIA TE mHC operations and register its TMA allocator."""
 from functools import lru_cache
 import hashlib
-import os
 from importlib.metadata import version
 from pathlib import Path
 
@@ -46,19 +40,3 @@ def nvidia_ops():
         triton.set_allocator(_allocate_tma_workspace)
     return ops
 
-
-def nvidia_projection(x, phi, *, use_tf32=True):
-    # TE's use_tf32 argument controls Triton, not its separate cuBLAS dphi.
-    # This must be configured before CUDA/library initialization by the caller.
-    if not use_tf32 and os.environ.get('NVIDIA_TF32_OVERRIDE') != '0':
-        raise RuntimeError('nvidia_precise requires NVIDIA_TF32_OVERRIDE=0 at process startup for the cuBLAS weight gradient')
-    if x.shape[-2] != 4 or phi.shape != (24, x.shape[-2]*x.shape[-1]):
-        raise ValueError('NVIDIA projection requires four streams and 24 output rows')
-    shape = x.shape[:-2]
-    flat = x.reshape(-1, phi.shape[1])
-    raw, mean_square = nvidia_ops().mhc_fused_projection(
-        flat, phi, use_tf32=use_tf32, norm_weight=None,
-        fused_grad_x_acc_buffer=None, use_split_k=False)
-    # TE pads its raw output to 32; retain our RMS epsilon and coefficient map.
-    normalized = raw[:, :24] * torch.rsqrt(mean_square[:, None] + 1e-6)
-    return normalized.reshape(*shape, 24)

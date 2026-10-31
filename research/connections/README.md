@@ -1,5 +1,35 @@
 # Official mHC kernels in nanochat
 
+## Current implementation: NVIDIA only (2026-10-31)
+
+The executable model supports `baseline` and `mhc`. mHC always uses the complete
+NVIDIA Transformer Engine 2.20.2 pipeline, including its final stream head.
+`connection_backend=nvidia_precise` only changes NVIDIA precision flags; it does
+not select another implementation. `fused_connection_grad=False` remains default.
+DeepSeek TileKernels, eager/compiled PyTorch projection alternatives, the hybrid
+NVIDIA-projection-only adapter, and the old no-manifold variant were removed.
+The ordinary attention/MLP `torch.compile` optimization remains enabled.
+
+Use `research/connections/runtime/{pyproject.toml,uv.lock}` with the pinned official
+TE extension wheel; the CUDA compiler environment is in `toolchain/`. No
+TileKernels/TileLang is installed by the current runtime. `ConnectionConfig.from_checkpoint`
+accepts the pre-cleanup vanilla/full-NVIDIA metadata and rejects retired methods.
+
+Jobs 7562105.0/.1 continue using immutable commit `699dcf2` and their existing
+source bundles, runtime and launcher. The one-off pretraining submitter is pinned
+to that commit for reproducibility. Do not replace those job inputs during a resume.
+Old code remains in Git history. Sections and JSON reports below are historical;
+commands selecting retired backends should be reproduced from their recorded commit.
+
+Skipping Sinkhorn in the NVIDIA composite requires composing its individual
+projection/scale/aggregate/expand-combine APIs. That gives an unconstrained
+residual-mixing ablation with mHC's sigmoid gates, not an exact reproduction of
+original HC. The HC paper's parameterization and initialization also differ (it
+studies variants with and without tanh). No new HC training is launched here.
+References: [NVIDIA implementation and benchmark](https://github.com/NVIDIA/TransformerEngine/pull/2790#issuecomment-4208434892),
+[original HC, sections 2.2–2.3](https://arxiv.org/html/2409.19606v3).
+
+
 As of 2026-10-30, **only formal training records W&B runs**. Connection profiling,
 capacity probes, correctness/restart gates, smoke tests, data preparation and
 standalone evaluation write ordinary local JSON/logs. Diagnostic collectors never
