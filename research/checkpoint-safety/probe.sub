@@ -1,0 +1,21 @@
+universe = vanilla
+executable = transport.sh
+arguments = transport diagnostic 6
+request_cpus = 1
+request_memory = 512MB
+request_disk = 1GB
+should_transfer_files = YES
+when_to_transfer_output = ON_EXIT
+checkpoint_exit_code = 85
+transfer_checkpoint_files = checkpoints.tar,results.tar
+transfer_input_files = transport_probe.py
+transfer_output_files = checkpoints.tar,results.tar
+stream_output = True
+stream_error = True
+output = probe.out
+error = probe.err
+log = probe.log
++JobBatchName = "checkpoint-safety-transport-probe"
++CheckpointSafetyKey = "20261031"
++TransportEvictionIssued = false
+queue 1

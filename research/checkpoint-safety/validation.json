@@ -1,0 +1,36 @@
+{
+  "complete": true,
+  "restored_after_eviction_step": 3,
+  "final_step": 6,
+  "lost_unuploaded_steps": 1,
+  "rng_and_value_match_uninterrupted": true,
+  "stable_run_id": true,
+  "scope": "CPU synthetic payload tests scheduler transport; model/optimizer restore is covered by prior GPU gates",
+  "job": "7627681.0",
+  "job_history": {
+    "CheckpointSafetyKey": "20261031",
+    "ClusterId": 7627681,
+    "ExitCode": 0,
+    "JobStatus": 4,
+    "NumJobStarts": 2,
+    "ProcId": 0,
+    "TransportEvictionIssued": true
+  },
+  "actual_eviction": true,
+  "logging_backend": "local",
+  "probe_source": {
+    "probe_job": "7627681.0",
+    "scope": "New-job launcher transport, no model-math changes or W&B",
+    "hashes": {
+      "probe/transport.sh": "5317ff540108875eda500fc035816cc803b6d24f87d2300e3f3e519d378bc495",
+      "probe/transport_probe.py": "330cc56423541b04bae873a474213657e24ad32b595d6caa3b7d58363bbf6eb6",
+      "probe/probe.sub": "7c26d4f2e075f77edfc57882c5839ace1f80756614df2d223b777ee1792ccddb",
+      "probe/control.py": "86a943c0910a50b5beb6902ca22dcba711751624c8b92ff459a084c96b37574b"
+    }
+  },
+  "tested_launchers": {
+    "research/connections/pretrain/train.sh": "b06bceaed9b7a3043996c3f984f4adc7d394c104d6188b613a78b301769c8a3b",
+    "research/connections/no-sinkhorn/train.sh": "293039e7df376d2c007e79561bc4b6745b8588c9fe6b52e872e614042e6c00b0"
+  },
+  "training_math_optimizer_rng_data_resume_code_unchanged": true
+}

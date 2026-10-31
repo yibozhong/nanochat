@@ -1,5 +1,28 @@
 # Official mHC kernels in nanochat
 
+## Scheduling and checkpoint transport defaults (2026-10-31)
+
+New jobs opt into the public GPU Lab but not research-group backfill
+(`WantGPULab=true`, `is_resumable=false`). Backfill is a deliberate scheduling
+choice; having a resumable model does not imply opting into interruptible cards.
+New training launchers request an exit85/upload every30minutes, configurable with
+`NANOCHAT_CHECKPOINT_SECONDS`. The trainer's standalone default is also1800seconds.
+A local save every500steps does not establish a durable scheduler checkpoint.
+Archive writes use temporary files plus atomic rename; packaging failure returns
+74, never85. Keep the official self-checkpoint transfer mechanism rather than
+assuming an eviction-time transfer will always succeed.
+
+The running7562105.1/7581136.0 jobs only received a scheduler edit to disable
+backfill at their next scheduling. Their already-running workers and immutable
+input bundles still have the original4h cadence; this is not a hot update.
+Future use of the historical pretraining submitter records its maintenance
+launcher commit separately from its pinned model commit.
+
+Evidence and policy: `research/checkpoint-safety/`. GPU model/optimizer/RNG resume
+was already checked by the pretraining and no-Sinkhorn gates; the new CPU probe
+checks actual scheduler upload, eviction and restoration with the production
+archive/restore shell code. No diagnostic W&B runs are created.
+
 ## Current implementation: NVIDIA only (2026-10-31)
 
 The executable model supports `baseline`, `mhc`, and the `mhc_no_sinkhorn` ablation. mHC uses the complete

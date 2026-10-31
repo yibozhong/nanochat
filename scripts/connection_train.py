@@ -44,7 +44,8 @@ def main():
     p.add_argument('--evaluate-test', action='store_true')
     p.add_argument('--run-id', default=None)
     p.add_argument('--resume', default=None)
-    p.add_argument('--segment-seconds', type=float, default=4*3600)
+    p.add_argument('--segment-seconds', type=float, default=1800,
+                   help='Exit85 for durable checkpoint upload; worker-local saves are not durable')
     p.add_argument('--segment-steps', type=int, default=0,
                    help='Bounded restart validation; 0 uses only the time/signal limit')
     p.add_argument('--seed', type=int, default=42)
@@ -99,6 +100,8 @@ def main():
         assert (ckpt/'best.pt').exists(),'Resume requires the paired dev-best checkpoint'
     start_step=step
     config=dict(logging_backend='wandb' if a.formal_training else 'local',model=asdict(c),protocol=protocol,data_manifest=data.manifest,source=source,
+        checkpoint_transport=dict(upload_interval_seconds=a.segment_seconds,local_save_every_steps=500,
+            method='exit85 plus scheduler transfer; local save alone is not durable'),
         gpu=torch.cuda.get_device_name(),torch=torch.__version__,cuda=torch.version.cuda,
         gpu_capability=list(torch.cuda.get_device_capability()),
         explicit_portability_gate=os.environ.get('NANOCHAT_MHC_TEST_PORTABILITY')=='1',

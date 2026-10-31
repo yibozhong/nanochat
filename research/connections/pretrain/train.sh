@@ -10,7 +10,20 @@ if [ -f results.tar ]; then tar -xf results.tar; fi
 if [ -f checkpoints.tar ]; then tar -xf checkpoints.tar; fi
 mkdir -p results work cache
 cp "$0" results/launcher.sh
-trap 'tar -cf "$TASK_ROOT/results.tar" -C "$TASK_ROOT" results; tar -cf "$TASK_ROOT/checkpoints.tar" -C "$TASK_ROOT" checkpoints' EXIT
+# Only fully written archives are eligible for a scheduler checkpoint transfer.
+checkpoint_archives_on_exit() {
+    TASK_EXIT_STATUS=$?
+    trap - EXIT
+    if ! tar -cf "$TASK_ROOT/checkpoints.tar.tmp" -C "$TASK_ROOT" checkpoints ||
+       ! mv "$TASK_ROOT/checkpoints.tar.tmp" "$TASK_ROOT/checkpoints.tar" ||
+       ! tar -cf "$TASK_ROOT/results.tar.tmp" -C "$TASK_ROOT" results ||
+       ! mv "$TASK_ROOT/results.tar.tmp" "$TASK_ROOT/results.tar"; then
+        # Do not report a successful checkpoint (85) after an archive failure.
+        exit 74
+    fi
+    exit "$TASK_EXIT_STATUS"
+}
+trap checkpoint_archives_on_exit EXIT
 sha256sum -c inputs.sha256
 # A transferred completion marker must never trigger training from step zero.
 if [ -f results/train/summary.json ]; then
@@ -99,4 +112,4 @@ python -m scripts.connection_train --variant "$TASK_VARIANT" --connection-backen
     --attention-backend sdpa_cudnn --matched-backbone-init --evaluate-test \
     --no-activation-checkpoint --no-fused-connection-grad --seed 42 \
     --data-dir ../data --output-dir results/train --checkpoint-dir ../checkpoints \
-    --run-id "$TASK_RUN_ID" --formal-training --wandb-group mhc-pretrain-20261030 --resume auto --segment-seconds 14400
+    --run-id "$TASK_RUN_ID" --formal-training --wandb-group mhc-pretrain-20261030 --resume auto --segment-seconds "${NANOCHAT_CHECKPOINT_SECONDS:-1800}"

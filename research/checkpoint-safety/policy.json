@@ -1,0 +1,15 @@
+{
+  "gpu_pool": "Public GPU Lab by default; is_resumable=false. Backfill opt-in requires an explicit scheduling decision and verified durable restart.",
+  "checkpoint_upload_seconds": 1800,
+  "local_save_steps": 500,
+  "transport": "checkpoint_exit_code85 with transfer_checkpoint_files; ON_EXIT, not an untested ON_EXIT_OR_EVICT substitution",
+  "archive": "Write checkpoints.tar.tmp/results.tar.tmp then atomically rename; archive errors exit74 and never advertise checkpoint success85.",
+  "restore": "model, optimizer, RNG, step/data position, data/source/protocol identities, best model and same W&B run ID",
+  "current_jobs": "7562105.1 and7581136.0 is_resumable=false edited without-forward; current workers continue unchanged with old4h upload cadence. No source, checkpoint, launcher or run ID migration.",
+  "scope": "New defaults are for future submissions. Current historical protocol and immutable bundles remain the original evidence.",
+  "documentation": [
+    "https://chtc.cs.wisc.edu/uw-research-computing/gpu-jobs/",
+    "https://htcondor.readthedocs.io/en/25.0/users-manual/self-checkpointing-applications.html",
+    "https://htcondor.readthedocs.io/en/latest/man-pages/condor_qedit.html"
+  ]
+}

@@ -63,6 +63,7 @@ def main():
         source = dict(commit=commit, reference_training_commit=prior['training_source']['commit'],
             purpose='User-authorized NVIDIA mHC no-Sinkhorn10B ablation', hashes=hashes,
             variant='mhc_no_sinkhorn', steps=305176, training_tokens=10000007168,
+            checkpoint_upload_seconds=1800, backfill_opt_in=False,
             data_uri=DATA, gate_data_uri=GATE_DATA, reference_jobs=prior['training_jobs'])
         for name in ('validate.sh', 'train.sh'):
             shutil.copy2(REPO/'research/connections/no-sinkhorn'/name, ROOT/name)
@@ -85,7 +86,7 @@ gpus_minimum_capability = 9.0
 require_gpus = (Capability == 9.0) && ((MaxSupportedVersion >= 13010) || regexp("^(570|580)[.]",NvidiaDriver)) && (GlobalMemoryMb >= 22000) && !regexp("MIG",DeviceName)
 +WantGPULab = true
 +GPUJobLength = "short"
-+is_resumable = true
++is_resumable = false
 '''+f'+NoSinkhornKey = "{KEY}"\n'
         inputs = ','.join([f'bundles/{wheel}', 'bundles/source.tar', 'bundles/source.json', 'bundles/inputs.sha256',
             'osdf:///chtc/staging/y/yzhong239/mhc-official-runtime-7546767.tar.gz',

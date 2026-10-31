@@ -19,7 +19,7 @@ gpus_minimum_capability = 9.0
 require_gpus = (Capability == 9.0) && ((MaxSupportedVersion >= 13010) || regexp("^(570|580)[.]",NvidiaDriver)) && (GlobalMemoryMb >= 80000) && !regexp("MIG",DeviceName)
 +WantGPULab = true
 +GPUJobLength = "short"
-+is_resumable = true
++is_resumable = false
 transfer_input_files = bundles/transformer_engine_torch-2.20.2-cp311-cp311-linux_x86_64.whl,bundles/source.tar,bundles/source.json,bundles/inputs.sha256,/home/yzhong239/.netrc,osdf:///chtc/staging/y/yzhong239/nanochat-ebt-20261029/data-7444406.tar,osdf:///chtc/staging/y/yzhong239/mhc-official-runtime-7546767.tar.gz,https://developer.download.nvidia.com/compute/cuda/repos/debian12/x86_64/cuda-compat-13-1_590.48.01-1_amd64.deb
 transfer_output_files = results.tar
 transfer_output_remaps = "results.tar=results/gate-$(Cluster).$(Process).tar"
