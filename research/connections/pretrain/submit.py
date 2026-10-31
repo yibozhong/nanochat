@@ -47,6 +47,8 @@ def main():
                     steps=steps,requested_tokens=state['requested_tokens'])
         (ROOT/'submission-intent.json').write_text(json.dumps(intent,indent=2)+'\n')
         bundle=ROOT/'training-bundles';bundle.mkdir(exist_ok=True)
+        # The executable lives outside the source tar; refresh it from this commit.
+        shutil.copy2(REPO/'research/connections/pretrain/train.sh',ROOT/'train.sh')
         for name in ('legacy-baseline.tar','transformer_engine_torch-2.20.2-cp311-cp311-linux_x86_64.whl'):
             shutil.copy2(ROOT/'bundles'/name,bundle/name)
         commit=command(['git','rev-parse','HEAD'],REPO)
@@ -54,7 +56,8 @@ def main():
         source=dict(state['gate_source'])
         source.update(commit=commit,purpose='Authorized matched vanilla/full-NVIDIA mHC pretraining',
             gate_commit=state['gate_source']['commit'],requested_tokens=state['requested_tokens'],
-            steps=steps,training_tokens=steps*32768,data_uri=state['data_uri'])
+            steps=steps,training_tokens=steps*32768,data_uri=state['data_uri'],
+            launcher_sha256=hashlib.sha256((ROOT/'train.sh').read_bytes()).hexdigest())
         source['hashes']=dict(source['hashes'])
         source['hashes']['source.tar']=hashlib.sha256((bundle/'source.tar').read_bytes()).hexdigest()
         (bundle/'source.json').write_text(json.dumps(source,indent=2)+'\n')
