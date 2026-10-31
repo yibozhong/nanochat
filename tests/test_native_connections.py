@@ -98,8 +98,14 @@ def test_full_size_backbone_initialization_and_optimizer_groups():
         assert len(connector) == 1 and connector[0]['kind'] == 'adamw' and connector[0]['weight_decay'] == 0
     counts = [m.num_scaling_params() for m in models]
     assert all(count['total'] == sum(p.numel() for p in m.parameters()) for m, count in zip(models, counts))
+    from torch._dynamo import config as compiler_config
+    params = dict(models[1].named_parameters())
+    shapes = {(tuple(params[n].shape), str(params[n].dtype))
+              for g in signatures[1] if g['kind'] == 'adamw' for n in g['params']}
+    assert len(shapes) > 8 and compiler_config.recompile_limit >= len(shapes)
     record('initialization', dict(counts=counts, all_shared_parameters_bitwise_equal=True,
-        mhc_and_no_sinkhorn_all_parameters_equal=True, native_optimizer_groups_unchanged=True))
+        mhc_and_no_sinkhorn_all_parameters_equal=True, native_optimizer_groups_unchanged=True,
+        adamw_shape_dtype_variants=len(shapes), compiler_recompile_limit=compiler_config.recompile_limit))
 
 
 def test_streamwise_native_extras_reduce_to_original_model():

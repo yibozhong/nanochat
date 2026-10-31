@@ -1,0 +1,93 @@
+[
+  {
+    "job": "7633335.0",
+    "source": {
+      "commit": "ca9d8f9b8fae2f718e72590f8eb3b16065acd6de",
+      "reference_commit": "fa6fca599483bfec79f227c4152856772ec247ed",
+      "hashes": {
+        "mhc-official-runtime-7546767.tar.gz": "6b927f93021961293e12452b4001a479ff1b54cbc1aae0355e73e75a393d4dc0",
+        "cuda-compat-13-1_590.48.01-1_amd64.deb": "066f24c715f5f8f31bb7e8bd0f9ddc93fe78a82d3be55c6f3e9bbe26fa4fd7be",
+        "transformer_engine_torch-2.20.2-cp311-cp311-linux_x86_64.whl": "9b69f40b34570e3073171dcb231d6dd038092d20a277e501e7da01e6475920de",
+        "source.tar": "3574ceb69e3906ad3465434dd59db7ef16bc255e73cfd896982ca8d3aa19b0d0",
+        "reference-gpt.py": "8cdedc2e418b9d4dc45884e07f59904fcdec066bb3d76664b2adf2d415f704e3"
+      },
+      "purpose": "Native nanochat plus NVIDIA mHC/no-Sinkhorn implementation gate",
+      "formal_training": false
+    },
+    "exit_code": 1,
+    "device": {
+      "gpu": "NVIDIA H200",
+      "capability": [
+        9,
+        0
+      ],
+      "torch": "2.10.0+cu130"
+    },
+    "checks": {
+      "tests": 11,
+      "passed": 8,
+      "failed": 3
+    },
+    "cases": [
+      {
+        "name": "test_original_native_baseline_parity",
+        "passed": true,
+        "failure": null
+      },
+      {
+        "name": "test_full_size_backbone_initialization_and_optimizer_groups",
+        "passed": true,
+        "failure": null
+      },
+      {
+        "name": "test_streamwise_native_extras_reduce_to_original_model",
+        "passed": true,
+        "failure": null
+      },
+      {
+        "name": "test_real_kernels_causal_swa_gqa_cache_and_feature_gradients[mhc]",
+        "passed": true,
+        "failure": null
+      },
+      {
+        "name": "test_real_kernels_causal_swa_gqa_cache_and_feature_gradients[mhc_no_sinkhorn]",
+        "passed": true,
+        "failure": null
+      },
+      {
+        "name": "test_cce_compile_checkpoint_and_resume[baseline]",
+        "passed": true,
+        "failure": null
+      },
+      {
+        "name": "test_cce_compile_checkpoint_and_resume[mhc]",
+        "passed": false,
+        "failure": "torch._dynamo.exc.FailOnRecompileLimitHit: recompile_limit reached with fullgraph=True. Excessive recompilations can degrade performance due to the compilation overhead of each recompilation. To monitor recompilations, enable TORCH_LOGS=recompiles. If recompilations are expected, consider increasing torch._dynamo.config.cache_size_limit to an appropriate value."
+      },
+      {
+        "name": "test_cce_compile_checkpoint_and_resume[mhc_no_sinkhorn]",
+        "passed": false,
+        "failure": "torch._dynamo.exc.FailOnRecompileLimitHit: recompile_limit reached with fullgraph=True. Excessive recompilations can degrade performance due to the compilation overhead of each recompilation. To monitor recompilations, enable TORCH_LOGS=recompiles. If recompilations are expected, consider increasing torch._dynamo.config.cache_size_limit to an appropriate value."
+      },
+      {
+        "name": "test_backbones_have_identical_initial_weights",
+        "passed": true,
+        "failure": null
+      },
+      {
+        "name": "test_optimizer_rng_checkpoint_and_fixed_gradient_next_update[baseline]",
+        "passed": true,
+        "failure": null
+      },
+      {
+        "name": "test_optimizer_rng_checkpoint_and_fixed_gradient_next_update[mhc]",
+        "passed": false,
+        "failure": "torch._dynamo.exc.FailOnRecompileLimitHit: recompile_limit reached with fullgraph=True. Excessive recompilations can degrade performance due to the compilation overhead of each recompilation. To monitor recompilations, enable TORCH_LOGS=recompiles. If recompilations are expected, consider increasing torch._dynamo.config.cache_size_limit to an appropriate value."
+      }
+    ],
+    "archive_sha256": "fad7b19f64ddcb173d99c2d6e6d3c9a182ab772a9c072c1cee1c8ded6ce54ec0",
+    "cause": "All failures in adamw_step_fused: Dynamo recompile_limit=8. Native mHC has ten AdamW shape/dtype combinations at d8/D512; the same-process suite also accumulates variants.",
+    "training_restart_diagnostics_started": false,
+    "remedy": "Reserve twice known native mHC AdamW parameter signatures as the process recompile limit; preserve optimizer math/groups and all tolerances."
+  }
+]

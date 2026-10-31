@@ -60,6 +60,15 @@ original upstream compilation path. Existing vanilla checkpoints default to
 `architecture=vanilla`; native/vanilla and mHC/no-Sinkhorn identities are checked
 before resuming in the packed harness.
 
+Native mHC's AdamW parameters have ten distinct shape/dtype combinations at
+d8/D512, beyond the default eight compiled variants. Its optimizer setup reserves
+twice the known shape/dtype/stride/device signature count (or keeps a larger
+existing process limit). This raises the process-wide Dynamo cache limit; it does
+not alter optimizer math, groups, or numerical tolerances. The first GPU gate
+passed eight checks but stopped on this compilation limit in three optimizer
+tests. See `failed-attempts.json`; the short training/restart diagnostics had not
+started in that attempt.
+
 ## Validation
 
 The gate compares the default native model against immutable pre-change `gpt.py`;

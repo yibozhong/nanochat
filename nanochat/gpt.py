@@ -534,6 +534,17 @@ class GPT(nn.Module):
                 momentum=0.95, ns_steps=5, beta2=0.9, weight_decay=weight_decay,
             ))
 
+        if connection_params:
+            # Native scalars/VE plus connector tensors need more than the
+            # default eight static AdamW specializations (ten at d8/D512).
+            # Leave the fused optimizer and its math unchanged. Reserve bounded
+            # cache space for these known shapes, with room for gradient layouts.
+            from torch._dynamo import config as compiler_config
+            signatures = {(tuple(p.shape), p.dtype, tuple(p.stride()), p.device.type)
+                          for group in param_groups if group['kind'] == 'adamw'
+                          for p in group['params']}
+            compiler_config.recompile_limit = max(compiler_config.recompile_limit, 2 * len(signatures))
+
         optimizer = MuonAdamW(param_groups)
         for group in optimizer.param_groups:
             group["initial_lr"] = group["lr"]
