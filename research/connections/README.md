@@ -449,3 +449,32 @@ including the capacity probes; no checkpoint or long pretraining was produced.
 
 - [Audited scaling results](scale/audit.json), [raw summaries](scale/results.json).
 - [W&B scaling experiment](https://wandb.ai/yibozhong657-none/nanochat/runs/ecc79ff9).
+
+## Matched small-model pretraining restart gate
+
+The authorized formal comparison uses the existing 58.72M vanilla and 59.52M
+full NVIDIA mHC models. Unlike throughput-only tests, both now start from
+identical seeded backbone weights; the mHC connector initialization is
+unchanged. Training keeps micro16/accum1, full 2K attention, cuDNN SDPA, no
+activation checkpointing, the same frozen FineWeb-Edu data and native
+MuonAdamW/LR rules. Latest and dev-best checkpoints are saved separately;
+formal runs evaluate final and dev-selected models on the heldout test set.
+
+Restart job **7547947.0** (source `d4f19d4`) completed successfully on H200.
+All three new initialization/optimizer/RNG checks passed. Each full-size
+variant then trained through step25, exited with code85, and resumed in a
+fresh Python process through step50, using the same W&B ID and exactly one
+record for every step1--50. Model/optimizer/RNG serialization and the next
+fixed-gradient optimizer update were verified exactly. This does not claim
+bitwise equality of independent floating-point backward trajectories.
+The parent and both training-smoke W&B runs are finished and API-verified.
+
+Formal training has **not** been submitted: the user's reference to "10B"
+is awaiting clarification between the sample-10BT dataset with the prior
+1B-token training budget, and 10B training tokens per model. The submission
+workflow requires the user budget, data readiness, and both verified gates;
+it then submits the two independent single-GPU jobs without another approval.
+The short gate is not a quality comparison or formal pretraining result.
+
+- [Restart results](pretrain/gate-results.json), [planned protocol](pretrain/protocol.json).
+- [W&B restart gate](https://wandb.ai/yibozhong657-none/nanochat/runs/f4830805).
