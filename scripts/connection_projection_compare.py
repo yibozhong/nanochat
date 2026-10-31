@@ -9,7 +9,7 @@ import uuid
 import xml.etree.ElementTree as ET
 
 import torch
-import wandb
+from nanochat.experiment_logging import diagnostic_run
 
 from nanochat.manifold_connections import projection
 
@@ -52,8 +52,7 @@ def main():
     run_id=uuid.uuid4().hex[:8]
     kwargs=dict(project='nanochat',entity='yibozhong657-none',group=GROUP,name='projection-backend-audit',
                 job_type='correctness-and-profiling',id=run_id,config=dict(source=source,trials=TRIALS))
-    try:run=wandb.init(**kwargs,settings=wandb.Settings(init_timeout=60))
-    except wandb.errors.CommError:run=wandb.init(**kwargs,mode='offline')
+    run=diagnostic_run(**kwargs)
     try:
         print('Checking PyTorch projection and existing official paths',flush=True)
         with (out/'pytest.log').open('w') as log:

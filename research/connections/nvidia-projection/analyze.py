@@ -11,7 +11,7 @@ def main():
     state = json.loads((root / 'state.json').read_text())
     archive = root / 'results' / f'gate-{state["job"]}.tar'
     result = json.loads((root / 'comparison.json').read_text())
-    assert result['complete'] and result['wandb_verified']
+    assert result['complete'] and (result.get('local_verified') or result.get('wandb_verified'))
     trials = result['trials']
     assert len({v['config']['gpu_uuid'] for v in trials.values()}) == 1
     rows = {}

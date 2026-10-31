@@ -23,13 +23,6 @@ def collect(s):
     with tarfile.open(ROOT/'results'/f'gate-{s["job"]}.tar') as tar:
         result=json.load(tar.extractfile('results/gate.json'))
         configs={v:json.load(tar.extractfile(f'results/{v}/config.json')) for v in result['smokes']}
-        offline=[m for m in tar.getmembers() if '/offline-run-' in m.name and m.isfile()]
-        if offline:
-            dest=ROOT/'results'/('offline-'+s['job'])
-            for m in offline:
-                p=dest/m.name;assert p.resolve().is_relative_to(dest.resolve())
-                p.parent.mkdir(parents=True,exist_ok=True);p.write_bytes(tar.extractfile(m).read())
-            for p in sorted((dest/'results/wandb').glob('offline-run-*')):command(['wandb','sync',str(p)])
     assert len({v['gpu'] for v in result['smokes'].values()})==1
     ref=configs['mhc'];other=configs['mhc_no_manifold']
     assert ref['parameters']==other['parameters']
@@ -38,18 +31,11 @@ def collect(s):
     assert result['passed'] and result['source']==s['source']
     assert result['checks']['failures']==result['checks']['errors']==0
     assert set(result['smokes'])=={'baseline','mhc','mhc_no_manifold'}
-    import wandb
-    api=wandb.Api(timeout=30)
-    r=api.run('yibozhong657-none/nanochat/'+result['run_id'])
-    assert r.state=='finished' and r.summary['passed']
     for name,smoke in result['smokes'].items():
         assert smoke['complete'] and smoke['variant']==name and smoke['steps']==50
         assert smoke['training_tokens']==1638400 and smoke['source']==s['source']
         assert smoke['final_dev_ce']<smoke['initial_dev_ce']-.02
-        r=api.run('yibozhong657-none/nanochat/'+smoke['run_id'])
-        assert r.state=='finished' and r.summary['complete']
-        assert math.isclose(r.summary['final_dev_ce'],smoke['final_dev_ce'],rel_tol=1e-8)
-    result.update(wandb_verified=True,job=s['job'])
+    result.update(local_verified=True,job=s['job'])
     for p in [ROOT/'validation.json',REPO/'research/connections/no-manifold/validation.json']:p.write_text(json.dumps(result,indent=2)+'\n')
     s.update(status='complete',validation=result,push_status='pending_review_and_push');save(s)
 def main():

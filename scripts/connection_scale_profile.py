@@ -14,7 +14,7 @@ import uuid
 
 import torch
 from torch.profiler import profile, ProfilerActivity, record_function
-import wandb
+from nanochat.experiment_logging import diagnostic_run
 
 from nanochat.connection_model import ConnectionConfig, ConnectionModel, optimizer_for, schedule
 from nanochat.packed_training import PackedData, seed_all, train_step, json_write
@@ -122,10 +122,7 @@ def main():
     kwargs = dict(project='nanochat', entity='yibozhong657-none', group=GROUP,
         id=ident, name=f'{"capacity" if args.probe else "profile"}-d{args.width}-{args.variant}-r{args.repetition}-mb{args.microbatch}',
         job_type='capacity-probe' if args.probe else 'profiling', config=settings)
-    try:
-        run = wandb.init(**kwargs, settings=wandb.Settings(init_timeout=60))
-    except wandb.errors.CommError:
-        run = wandb.init(**kwargs, mode='offline')
+    run=diagnostic_run(**kwargs)
     step = 0; tick = time.perf_counter()
     try:
         model = ConnectionModel(cfg).prepare(compile_blocks=True)

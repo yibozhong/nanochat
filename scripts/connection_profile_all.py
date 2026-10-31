@@ -6,7 +6,7 @@ import subprocess
 import sys
 import uuid
 
-import wandb
+from nanochat.experiment_logging import diagnostic_run
 
 
 def main():
@@ -14,8 +14,7 @@ def main():
     run_id=uuid.uuid4().hex[:8]
     kwargs=dict(project='nanochat',entity='yibozhong657-none',group='mhc-profiling-20261030',
                 name='same-gpu-profile',job_type='profiling-audit',id=run_id,config=dict(source=source))
-    try:run=wandb.init(**kwargs,settings=wandb.Settings(init_timeout=60))
-    except wandb.errors.CommError:run=wandb.init(**kwargs,mode='offline')
+    run=diagnostic_run(**kwargs)
     try:
         manifest=json.loads(Path('../data/manifest.json').read_text())
         for name,info in manifest['files'].items():

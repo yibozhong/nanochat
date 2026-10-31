@@ -22,30 +22,14 @@ def check(row):
 def collect(s):
     with tarfile.open(ROOT/'results'/f'gate-{s["job"]}.tar') as tar:
         result=json.load(tar.extractfile('results/profile.json'))
-        offline=[m for m in tar.getmembers() if '/offline-run-' in m.name and m.isfile()]
-        if offline:
-            dest=ROOT/'results'/('offline-'+s['job'])
-            for m in offline:
-                p=dest/m.name;assert p.resolve().is_relative_to(dest.resolve())
-                p.parent.mkdir(parents=True,exist_ok=True);p.write_bytes(tar.extractfile(m).read())
-            for p in sorted((dest/'results/wandb').glob('offline-run-*')):command(['wandb','sync',str(p)])
     assert result['complete'] and result['source']==s['source']
     assert set(result['variants'])=={'baseline','mhc','mhc_no_manifold'}
     assert len({v['config']['gpu'] for v in result['variants'].values()})==1
-    import wandb
-    api=wandb.Api(timeout=30)
-    parent=api.run('yibozhong657-none/nanochat/'+result['run_id'])
-    assert parent.state=='finished' and parent.summary['complete']
-    assert parent.group=='mhc-profiling-20261030'
     for name,v in result['variants'].items():
         assert v['complete'] and v['source']==s['source'] and v['variant']==name
         assert v['optimizer_updates']==66 and v['training_tokens']==66*32768
         assert v['cuda_profile']['kernel_count']>0
-        run=api.run('yibozhong657-none/nanochat/'+v['run_id'])
-        assert run.state=='finished' and run.summary['complete']
-        assert run.group==parent.group
-        assert math.isclose(run.summary['normal_step_ms'],v['normal_ms']['mean'],rel_tol=1e-8)
-    result.update(wandb_verified=True,job=s['job'])
+    result.update(local_verified=True,job=s['job'])
     for p in [ROOT/'profile.json',REPO/'research/connections/profile/results.json']:
         p.write_text(json.dumps(result,indent=2)+'\n')
     s.update(status='complete',push_status='pending_analysis_and_push');save(s)

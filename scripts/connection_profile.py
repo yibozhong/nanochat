@@ -14,7 +14,7 @@ import uuid
 
 import torch
 from torch.profiler import profile, ProfilerActivity, record_function
-import wandb
+from nanochat.experiment_logging import diagnostic_run
 
 from nanochat.connection_model import ConnectionConfig, ConnectionModel, optimizer_for, schedule
 from nanochat.packed_training import PackedData, seed_all, train_step, json_write
@@ -142,8 +142,7 @@ def main():
         note=f'{46+a.timed_steps} temporary diagnostic optimizer steps, no checkpoint/pretraining promotion; finite-check-off is diagnostic only')
     kwargs=dict(project='nanochat',entity='yibozhong657-none',group=a.wandb_group,
                 name='profile-'+a.variant+'-'+a.connection_backend+'-'+a.projection_backend,job_type='profiling',id=run_id,config=settings)
-    try:run=wandb.init(**kwargs,settings=wandb.Settings(init_timeout=60))
-    except wandb.errors.CommError:run=wandb.init(**kwargs,mode='offline')
+    run=diagnostic_run(**kwargs)
     json_write(out/'config.json',settings)
     step=0;started=time.perf_counter()
     def perform(fn, *, scheduled=False):

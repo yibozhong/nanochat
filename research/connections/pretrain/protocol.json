@@ -26,8 +26,8 @@
   "optimizer": "Native MuonAdamW/default LR and native batch-width scaling",
   "dataset": "FineWeb-Edu official sample-10BT revision87f09149; train000..012 heldout013",
   "tokenizer": "Existing RustBPE32K pilot tokenizer; unchanged",
-  "training_token_budget": null,
-  "budget_status": "Waiting for user clarification: sample-10BT dataset with previous1B/run, or10B/run",
+  "training_token_budget": 10000000000,
+  "budget_status": "Explicitly confirmed10B training tokens per model",
   "data_uri_1b": "osdf:///chtc/staging/y/yzhong239/nanochat-ebt-20261029/data-7444406.tar",
   "validation": {
     "dev_tokens": 131072,
@@ -47,5 +47,9 @@
   "wandb_project": "yibozhong657-none/nanochat",
   "wandb_group": "mhc-pretrain-20261030",
   "submission": "Two independent single-GPU jobs in parallel after scale audit, GPU restart gate, budget clarification and packed-data readiness",
-  "status": "preparing_gate"
+  "status": "gpu_gates_passed_preparing_10b_data",
+  "training_steps": 305176,
+  "actual_training_tokens": 10000007168,
+  "packing": "Unmodified native BOS best-fit loader; verify golden 1B prefix and dev/test SHA-256; cycle only train000..012 if needed and report source epochs",
+  "wandb_policy": "Only formal training; all diagnostics/data preparation/evaluation write local JSON only"
 }

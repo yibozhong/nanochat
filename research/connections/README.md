@@ -1,5 +1,29 @@
 # Official mHC kernels in nanochat
 
+As of 2026-10-30, **only formal training records W&B runs**. Connection profiling,
+capacity probes, correctness/restart gates, smoke tests, data preparation and
+standalone evaluation write ordinary local JSON/logs. Diagnostic collectors never
+sync offline W&B runs. `scripts.connection_train` defaults to local logging;
+`--formal-training` explicitly enables the `yibozhong657-none/nanochat` project.
+Formal training resumes the same run ID; its own dev/test metrics stay in that run.
+The formal pretraining launcher supplies this flag.
+
+The user requested deletion of all previous nanochat W&B runs: 85 online runs,
+six local W&B directories and W&B members in 100 result archives were removed.
+Reports/configuration/metric summaries and independent checkpoints remain. Old run
+links and `wandb_verified` fields below are historical, not live remote evidence.
+Archive SHA-256 values below refer to the original archives; local cleanup records
+both hashes and verifies every retained member at
+`/home/yzhong239/research-cleanup-20261030-wandb/local-deletions.jsonl`.
+
+The authorized next comparison trains each small vanilla/full-NVIDIA mHC model
+for 305,176 updates (10,000,007,168 tokens). CPU preparation uses the unchanged
+native loader over train shards 000..012, cycling the whole training split if
+needed; heldout 013 supplies the fixed dev/test sets. The first 1B training prefix
+and both heldout files must match the existing cache SHA-256 values. Preparation
+and transfer must pass before the monitor submits the two independent GPU jobs.
+
+
 HC was removed at the user's request on 2026-10-30. Its code remains in Git tag
 `hc-archive-2026-10-30`; the old measurements under `archive/` describe the
 retired PyTorch reference implementation, not this kernel implementation.

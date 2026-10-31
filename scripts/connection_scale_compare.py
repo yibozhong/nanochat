@@ -9,7 +9,7 @@ import threading
 import uuid
 import xml.etree.ElementTree as ET
 
-import wandb
+from nanochat.experiment_logging import diagnostic_run
 
 GROUP = 'mhc-scale-1b-2b-20261030'
 WIDTHS = (2048, 2560, 3072)
@@ -49,10 +49,7 @@ def main():
     kwargs = dict(project='nanochat', entity='yibozhong657-none', group=GROUP,
         name='1b-to-2b-width-sweep', job_type='correctness-and-profiling', id=ident,
         config=dict(source=source, protocol=protocol))
-    try:
-        run = wandb.init(**kwargs, settings=wandb.Settings(init_timeout=60))
-    except wandb.errors.CommError:
-        run = wandb.init(**kwargs, mode='offline')
+    run=diagnostic_run(**kwargs)
     result = dict(complete=False, source=source, run_id=ident, protocol=protocol,
                   probes={}, trials={}, pretraining_launched=False)
     def save():

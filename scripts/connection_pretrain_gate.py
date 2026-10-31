@@ -8,7 +8,7 @@ import threading
 import uuid
 import xml.etree.ElementTree as ET
 
-import wandb
+from nanochat.experiment_logging import diagnostic_run
 
 GROUP='mhc-pretrain-20261030'
 
@@ -33,8 +33,7 @@ def main():
     ident=uuid.uuid4().hex[:8]
     kwargs=dict(project='nanochat',entity='yibozhong657-none',group=GROUP,id=ident,
         name='formal-pretraining-resume-gate',job_type='correctness',config=dict(source=source))
-    try:run=wandb.init(**kwargs,settings=wandb.Settings(init_timeout=60))
-    except wandb.errors.CommError:run=wandb.init(**kwargs,mode='offline')
+    run=diagnostic_run(**kwargs)
     try:
         env=os.environ.copy();env.pop('NVIDIA_TF32_OVERRIDE',None)
         execute([sys.executable,'-m','pytest','tests/test_connection_training_resume.py','-v',

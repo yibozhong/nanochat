@@ -8,7 +8,7 @@ import sys
 
 
 def analyze(result):
-    assert result['complete'] and result['wandb_verified']
+    assert result['complete'] and (result.get('local_verified') or result.get('wandb_verified'))
     assert result['checks'] == dict(tests=9, failures=0, errors=0, skipped=0)
     trials = list(result['trials'].values())
     assert len(trials) == 12

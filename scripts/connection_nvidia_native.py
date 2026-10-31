@@ -9,7 +9,7 @@ import sys
 import uuid
 import xml.etree.ElementTree as ET
 
-import wandb
+from nanochat.experiment_logging import diagnostic_run
 
 GROUP = 'mhc-nvidia-native-20261030'
 TRIALS = {
@@ -47,8 +47,7 @@ def main():
         name='nvidia-native-precision-and-timing',job_type='correctness-and-profiling',
         id=ident,config=dict(source=source,trials=TRIALS,timed_steps=60,
             collect_compile_garbage_after_warmup=True,micro_fresh_process=True))
-    try: run = wandb.init(**kwargs,settings=wandb.Settings(init_timeout=60))
-    except wandb.errors.CommError: run = wandb.init(**kwargs,mode='offline')
+    run=diagnostic_run(**kwargs)
     try:
         suites = []
         gates = [

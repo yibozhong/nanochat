@@ -16,7 +16,7 @@ import time
 import uuid
 
 import torch
-import wandb
+from nanochat.experiment_logging import training_run
 
 from nanochat.connection_model import ConnectionConfig, ConnectionModel, optimizer_for, schedule
 from nanochat.packed_training import PackedData, seed_all, evaluate, train_step, snapshot, atomic_save, restore_rng, json_write
@@ -26,6 +26,7 @@ from nanochat.connection_experiment import configure_attention, match_vanilla_in
 def main():
     p = argparse.ArgumentParser()
     p.add_argument('--variant', choices=('baseline','mhc','mhc_no_manifold'), required=True)
+    p.add_argument('--formal-training', action='store_true', help='Explicitly enable W&B for a formal training run')
     p.add_argument('--wandb-group', default='mhc-official-kernels-20261030')
     p.add_argument('--projection-backend', choices=('official','torch','torch_compile','nvidia','nvidia_precise'), default='official')
     p.add_argument('--connection-backend', choices=('deepseek','nvidia','nvidia_precise'), default='deepseek')
@@ -98,7 +99,7 @@ def main():
         restore_rng(state['rng']);del state
         assert (ckpt/'best.pt').exists(),'Resume requires the paired dev-best checkpoint'
     start_step=step
-    config=dict(model=asdict(c),protocol=protocol,data_manifest=data.manifest,source=source,
+    config=dict(logging_backend='wandb' if a.formal_training else 'local',model=asdict(c),protocol=protocol,data_manifest=data.manifest,source=source,
         gpu=torch.cuda.get_device_name(),torch=torch.__version__,cuda=torch.version.cuda,
         gpu_capability=list(torch.cuda.get_device_capability()),
         explicit_portability_gate=os.environ.get('NANOCHAT_MHC_TEST_PORTABILITY')=='1',
@@ -110,10 +111,9 @@ def main():
         loss='full-token full-vocabulary CCE; no gradient filtering',
         references='research/connections/references.json')
     kwargs=dict(project='nanochat',entity='yibozhong657-none',group=a.wandb_group,
-                job_type='implementation-smoke' if a.steps<=50 else 'pretrain',
+                job_type='pretrain' if a.formal_training else 'diagnostic',
                 name=f'{a.variant}-{a.steps}steps',id=run_id,resume='allow',config=config)
-    try:run=wandb.init(**kwargs,settings=wandb.Settings(init_timeout=60))
-    except wandb.errors.CommError:run=wandb.init(**kwargs,mode='offline')
+    run=training_run(formal_training=a.formal_training, local_dir=out/"diagnostics", **kwargs)
     run.define_metric('tokens')
     for metric in ('train/*','dev/*','perf/*'):
         run.define_metric(metric,step_metric='tokens')

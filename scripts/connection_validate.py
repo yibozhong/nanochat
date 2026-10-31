@@ -11,7 +11,7 @@ import time
 import uuid
 import xml.etree.ElementTree as ET
 
-import wandb
+from nanochat.experiment_logging import diagnostic_run
 
 
 def main():
@@ -30,8 +30,7 @@ def main():
                 job_type='correctness-gate',name='mhc-official-kernel-integration',id=run_id,
                 config=dict(source=source,microbatch=16,batch_tokens=32768,smoke_steps_per_variant=50,
                             variants=a.variants))
-    try:run=wandb.init(**kwargs,settings=wandb.Settings(init_timeout=60))
-    except wandb.errors.CommError:run=wandb.init(**kwargs,mode='offline')
+    run=diagnostic_run(**kwargs)
     started=time.time()
     try:
         print('Starting official-kernel and integration checks', flush=True)

@@ -1,0 +1,7 @@
+{
+  "complete": true,
+  "gate_commit": "d4f19d4b12c7c6358b5bcca359fe6d6582ffa532",
+  "training_script_sha256": "aa62e346e46c493bced2d92be98c7ecad247474052e0b8f66db7cfd18f79fe4b",
+  "logging_helper_sha256": "076e0c0a09ebde50095d39c5aa3ad232627754dcef9860ea3bf8f10384dd33a7",
+  "validation": "Reversing the five enumerated logging-only substitutions restores the GPU-gated training script byte-for-byte. Model, optimizer, loss, RNG, schedule, resume protocol and checkpoint logic unchanged. Two isolated mock-SDK tests pass; diagnostics never import W&B."
+}

@@ -8,7 +8,7 @@ import tarfile
 
 def main():
     root=Path(sys.argv[1]);result=json.loads((root/'comparison.json').read_text())
-    assert result['complete'] and result['wandb_verified']
+    assert result['complete'] and (result.get('local_verified') or result.get('wandb_verified'))
     trials=result['trials'];base=trials['baseline']['normal_ms']['mean']
     partial=trials['mhc_nvidia_projection_only']['normal_ms']['mean']
     original=trials['mhc_deepseek']['normal_ms']['mean']

@@ -9,7 +9,7 @@ import sys
 import uuid
 import xml.etree.ElementTree as ET
 
-import wandb
+from nanochat.experiment_logging import diagnostic_run
 
 GROUP='mhc-nvidia-full-20261030'
 TRIALS={
@@ -35,8 +35,7 @@ def main():
         name='full-nvidia-mhc-gate-and-comparison',job_type='correctness-and-profiling',
         id=ident,config=dict(source=source,trials=TRIALS,timed_steps=60,
             scope='all five NVIDIA mHC forward/backward operations, head and persistent interleaved layout'))
-    try:run=wandb.init(**kwargs,settings=wandb.Settings(init_timeout=60))
-    except wandb.errors.CommError:run=wandb.init(**kwargs,mode='offline')
+    run=diagnostic_run(**kwargs)
     try:
         suites=[]
         # Recheck both projection-only and full paths after the shared TMA

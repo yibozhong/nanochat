@@ -24,6 +24,7 @@ def main():
         if state.get('training_jobs'):
             print(json.dumps(state['training_jobs']));return
         assert state['gate_verified'] and state['scale_verified']
+        assert state['wandb_cleanup_complete'] and not state.get('automation_paused_for_wandb_cleanup')
         assert state.get('budget_confirmed_by_user') is True
         assert state['requested_tokens'] in (1_000_000_000,10_000_000_000)
         assert state.get('data_ready') and state['data_uri']
@@ -33,7 +34,12 @@ def main():
         core=['nanochat/connection_model.py','nanochat/manifold_connections.py','nanochat/nvidia_connections.py',
               'nanochat/nvidia_projection.py','nanochat/connection_experiment.py','nanochat/packed_training.py',
               'nanochat/gpt.py','nanochat/optim.py','nanochat/flash_attention.py','scripts/connection_train.py']
-        assert not command(['git','diff','--name-only',state['gate_source']['commit'],'HEAD','--',*core],REPO)
+        changed=set(command(['git','diff','--name-only',state['gate_source']['commit'],'HEAD','--',*core],REPO).splitlines())
+        assert changed <= {'scripts/connection_train.py'}
+        audit=json.loads((REPO/'research/connections/pretrain/logging-audit.json').read_text())
+        assert audit['complete'] and audit['gate_commit']==state['gate_source']['commit']
+        for name,key in [('scripts/connection_train.py','training_script_sha256'),('nanochat/experiment_logging.py','logging_helper_sha256')]:
+            assert hashlib.sha256((REPO/name).read_bytes()).hexdigest()==audit[key]
         assert not command(['git','status','--porcelain','--',*core],REPO)
         steps=math.ceil(state['requested_tokens']/32768)
         assert state['data_training_tokens']>=steps*32768

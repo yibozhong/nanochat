@@ -81,7 +81,7 @@ else
     echo "Native system CUDA driver $SYSTEM_CUDA_DRIVER" > results/compatibility.txt
 fi
 cd nanochat-src
-ln -s ../results results
+ln -sfn ../results results
 cp ../source.json source.json
 python - <<'PYCHECK'
 import torch,tilelang,cut_cross_entropy
@@ -104,4 +104,4 @@ python -m scripts.connection_train --variant "$TASK_VARIANT" --connection-backen
     --attention-backend sdpa_cudnn --matched-backbone-init --evaluate-test \
     --no-activation-checkpoint --no-fused-connection-grad --seed 42 \
     --data-dir ../data --output-dir results/train --checkpoint-dir ../checkpoints \
-    --run-id "$TASK_RUN_ID" --wandb-group mhc-pretrain-20261030 --resume auto --segment-seconds 14400
+    --run-id "$TASK_RUN_ID" --formal-training --wandb-group mhc-pretrain-20261030 --resume auto --segment-seconds 14400

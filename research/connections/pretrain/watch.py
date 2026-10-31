@@ -34,10 +34,10 @@ def failure(row):
     return row and (row['JobStatus'] in (3,5) or row['JobStatus']==4 and row.get('ExitCode')!=0)
 
 
-def read_archive(path,member):
+def read_archive(path,member,*,formal_training=False):
     with tarfile.open(path) as archive:
         value=json.load(archive.extractfile(member))
-        offline=[m for m in archive.getmembers() if '/offline-run-' in m.name and m.isfile()]
+        offline=[m for m in archive.getmembers() if formal_training and '/offline-run-' in m.name and m.isfile()]
         if offline:
             dest=ROOT/'results'/(path.stem+'-offline')
             for item in offline:
@@ -52,18 +52,35 @@ def verify_gate(state):
     value=read_archive(ROOT/'results'/f'gate-{state["gate_job"]}.tar','results/pretrain-gate.json')
     assert value['complete'] and value['source']==state['gate_source']
     assert value['checks']==dict(tests=3,failures=0,errors=0,skipped=0)
-    import wandb
-    api=wandb.Api(timeout=30)
-    parent=api.run('yibozhong657-none/nanochat/'+value['run_id'])
-    assert parent.state=='finished' and parent.summary['complete'] and parent.summary['checks_passed']
     for variant,trial in value['trials'].items():
-        run=api.run('yibozhong657-none/nanochat/'+trial['run_id'])
-        assert run.state=='finished' and run.summary['complete'] and run.summary['steps']==50
-        assert math.isclose(run.summary['final_dev_ce'],trial['final_dev_ce'],rel_tol=1e-8)
-    value['wandb_verified']=True
+        assert trial['complete'] and trial['steps']==50
+        assert trial['source']==state['gate_source'] and trial['training_tokens']==50*32768
+    value['local_verified']=True
     for path in (ROOT/'gate.json',REPO/'research/connections/pretrain/gate-results.json'):
         path.write_text(json.dumps(value,indent=2)+'\n')
     state.update(gate_verified=True,status='gate_complete_waiting_budget');save(state)
+
+
+def verify_data(state):
+    path=ROOT/'results'/f'data-{state["data_job"]}.tar'
+    value=read_archive(path,'results/data.json')
+    archive=read_archive(path,'results/data-archive.json')
+    assert value['complete'] and value['logging_backend']=='local'
+    assert value['requested_tokens']==state['requested_tokens']==10_000_000_000
+    assert value['training_steps']==305176 and value['training_tokens']==10_000_007_168
+    assert value['train_shards']=='000..012' and value['heldout_shard']=='013'
+    assert value['files']['dev']['tokens']==131072 and value['files']['test']['tokens']==2097152
+    assert value['first_1b_prefix_sha256']=='614ef0ecce77ca839cb7650bfe7da9a8fbb92bbfc8efe461ded57a1f2af315c7'
+    with tarfile.open(path) as report:
+        recorded={name:digest for digest,name in (line.split() for line in report.extractfile('results/prepare-inputs.sha256').read().decode().splitlines())}
+    assert recorded==state['data_preparation_hashes']
+    staging=Path('/staging/y/yzhong239')/state['data_uri'].rsplit('/',1)[-1]
+    assert staging.stat().st_size==archive['bytes']
+    # Each training worker rehashes every transferred token file before CUDA work.
+    state.update(data_ready=True,data_training_tokens=value['training_tokens'],data_archive=archive,
+                 status='data_ready_waiting_training_submission')
+    (ROOT/'data.json').write_text(json.dumps(value,indent=2)+'\n')
+    save(state)
 
 
 def collect_training(state):
@@ -71,7 +88,7 @@ def collect_training(state):
     api=wandb.Api(timeout=30);results={}
     for variant,info in state['training_jobs'].items():
         path=ROOT/'results'/f'{variant}-{info["job"]}.tar'
-        value=read_archive(path,'results/train/summary.json')
+        value=read_archive(path,'results/train/summary.json',formal_training=True)
         assert value['complete'] and value['source']==state['training_source']
         assert value['steps']==state['training_steps'] and value['test_evaluated']
         assert value['training_tokens']==state['training_steps']*32768
@@ -102,8 +119,12 @@ def main():
             # a poll cannot overwrite a newly recorded user decision.
             fcntl.flock(state_lock,fcntl.LOCK_EX)
             state=json.loads(STATE.read_text());state['monitor_pid']=os.getpid()
-            if state['status'] in ('complete','needs_attention'):return
+            if state['status'] in ('complete','needs_attention') or state.get('automation_paused_for_wandb_cleanup'):return
             try:
+                if state.get('data_job') and not state.get('data_ready'):
+                    row=job(state['data_job']);state['last_data_job']=row
+                    if failure(row):raise RuntimeError(row)
+                    if row and row['JobStatus']==4:verify_data(state)
                 if not state.get('gate_verified'):
                     row=job(state['gate_job']);state['last_gate_job']=row
                     if failure(row):raise RuntimeError(row)
