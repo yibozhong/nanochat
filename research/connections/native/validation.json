@@ -1,0 +1,1619 @@
+{
+  "complete": true,
+  "source": {
+    "commit": "1855eb476269c513dc6471c862cd4ee7e2f9d526",
+    "reference_commit": "fa6fca599483bfec79f227c4152856772ec247ed",
+    "hashes": {
+      "mhc-official-runtime-7546767.tar.gz": "6b927f93021961293e12452b4001a479ff1b54cbc1aae0355e73e75a393d4dc0",
+      "cuda-compat-13-1_590.48.01-1_amd64.deb": "066f24c715f5f8f31bb7e8bd0f9ddc93fe78a82d3be55c6f3e9bbe26fa4fd7be",
+      "transformer_engine_torch-2.20.2-cp311-cp311-linux_x86_64.whl": "9b69f40b34570e3073171dcb231d6dd038092d20a277e501e7da01e6475920de",
+      "source.tar": "55814d41357b93205eb2188e44f07b78250e69bccd47db0de298fa4ed259c122",
+      "reference-gpt.py": "8cdedc2e418b9d4dc45884e07f59904fcdec066bb3d76664b2adf2d415f704e3"
+    },
+    "purpose": "Native nanochat plus NVIDIA mHC/no-Sinkhorn implementation gate",
+    "formal_training": false,
+    "previous_job": "7633335.0"
+  },
+  "checks": {
+    "tests": 11,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "trials": {
+    "baseline": {
+      "summary": {
+        "complete": true,
+        "variant": "baseline",
+        "run_id": "9867015a",
+        "steps": 10,
+        "training_tokens": 327680,
+        "initial_dev_ce": 10.39687967300415,
+        "final_dev_ce": 10.094528198242188,
+        "best_dev_ce": 10.094528198242188,
+        "dev_tokens": 131072,
+        "training_seconds": 31.376648925244808,
+        "elapsed_seconds": 60.82095201127231,
+        "steady_step_seconds": null,
+        "gpu": "NVIDIA H100 80GB HBM3",
+        "peak_allocated_bytes": 6667608576,
+        "peak_reserved_bytes": 6719275008,
+        "source": {
+          "commit": "1855eb476269c513dc6471c862cd4ee7e2f9d526",
+          "reference_commit": "fa6fca599483bfec79f227c4152856772ec247ed",
+          "hashes": {
+            "mhc-official-runtime-7546767.tar.gz": "6b927f93021961293e12452b4001a479ff1b54cbc1aae0355e73e75a393d4dc0",
+            "cuda-compat-13-1_590.48.01-1_amd64.deb": "066f24c715f5f8f31bb7e8bd0f9ddc93fe78a82d3be55c6f3e9bbe26fa4fd7be",
+            "transformer_engine_torch-2.20.2-cp311-cp311-linux_x86_64.whl": "9b69f40b34570e3073171dcb231d6dd038092d20a277e501e7da01e6475920de",
+            "source.tar": "55814d41357b93205eb2188e44f07b78250e69bccd47db0de298fa4ed259c122",
+            "reference-gpt.py": "8cdedc2e418b9d4dc45884e07f59904fcdec066bb3d76664b2adf2d415f704e3"
+          },
+          "purpose": "Native nanochat plus NVIDIA mHC/no-Sinkhorn implementation gate",
+          "formal_training": false,
+          "previous_job": "7633335.0"
+        },
+        "test_evaluated": false,
+        "checkpoint_files": {
+          "latest.pt": {
+            "bytes": 906217057,
+            "sha256": "ea0d9c1522e78f6bd875deaeab351d53f5c61269dc08a58deb52582385cba7e1"
+          },
+          "best.pt": {
+            "bytes": 335571287,
+            "sha256": "78d6928609c447d295b45416a7eec28469e6418ea9148f9e671e39107a88768e"
+          }
+        }
+      },
+      "config": {
+        "logging_backend": "local",
+        "model": {
+          "variant": "baseline",
+          "depth": 8,
+          "width": 512,
+          "heads": 4,
+          "sequence_length": 2048,
+          "vocab_size": 32768,
+          "streams": 4,
+          "sinkhorn_iterations": 20,
+          "activation_checkpoint": false,
+          "connection_backend": "nvidia",
+          "fused_connection_grad": false,
+          "architecture": "native",
+          "window_pattern": "SSSL"
+        },
+        "protocol": {
+          "steps": 10,
+          "schedule_steps": 305176,
+          "batch_tokens": 32768,
+          "microbatch": 16,
+          "grad_accum": 1,
+          "seed": 42,
+          "attention_backend": "auto",
+          "matched_backbone_init": true,
+          "evaluate_test": false
+        },
+        "data_manifest": {
+          "complete": true,
+          "run_id": "gy1xhvud",
+          "sequence_length": 2048,
+          "dtype": "uint16",
+          "layout": "rows of 2049 token ids; x=row[:-1], y=row[1:]",
+          "batch_tokens": 32768,
+          "training_steps": 30518,
+          "requested_tokens": 1000000000,
+          "training_tokens": 1000013824,
+          "files": {
+            "train": {
+              "rows": 488288,
+              "tokens": 1000013824,
+              "bytes": 2001004224,
+              "sha256": "614ef0ecce77ca839cb7650bfe7da9a8fbb92bbfc8efe461ded57a1f2af315c7",
+              "last_source_state": {
+                "pq_idx": 1,
+                "rg_idx": 630,
+                "epoch": 1
+              }
+            },
+            "dev": {
+              "rows": 64,
+              "tokens": 131072,
+              "bytes": 262272,
+              "sha256": "bd67b90b4386ba6428992864712f56eb10527678ed8b3664ed5f63c1643458a4",
+              "last_source_state": {
+                "pq_idx": 0,
+                "rg_idx": 1,
+                "epoch": 1
+              }
+            },
+            "test": {
+              "rows": 1024,
+              "tokens": 2097152,
+              "bytes": 4196352,
+              "sha256": "e7d24b6a89155ebc7123afe68bd2c58aeaf159b5087dbdf28e090ce09f293d09",
+              "last_source_state": {
+                "pq_idx": 0,
+                "rg_idx": 4,
+                "epoch": 1
+              }
+            }
+          },
+          "tokenizer": {
+            "dataset": "HuggingFaceFW/fineweb-edu",
+            "config": "sample-10BT",
+            "revision": "87f09149ef4734204d70ed1d046ddc9ca3f2b8f9",
+            "full_dataset_bytes": 28518193415,
+            "full_source_gpt2_tokens": 9972918177,
+            "nanochat_commit": "145da40cdd37b9522aa53d26c0c356e9126458bb",
+            "nanochat_source_sha256": "9a39516fc52effabe6bf9b87fc5fc67f7026a95060861be560d3525257bfb3e6",
+            "files": {
+              "token_bytes.pt": {
+                "bytes": 132649,
+                "sha256": "8e6ed9947610b8b329f0aed7e01bf332359331790e61fc6c0c95dc3cff29bdb4"
+              },
+              "tokenizer.pkl": {
+                "bytes": 412696,
+                "sha256": "8d1a5a03421ca24e7acafd1ef68fe8dbc6326dad903bc65cc726ec0601c577de"
+              }
+            },
+            "train_shards": [
+              "000_00000.parquet"
+            ],
+            "validation_shards": [
+              "013_00000.parquet"
+            ],
+            "tokenizer": "native RustBPE 32768 vocab, first 100M capped characters from training shard",
+            "benchmark": "native base_train d8/D512/2K/SSSL, 300 steps x 32768 model tokens; original source unmodified",
+            "vocab_size": 32768,
+            "max_chars": 100000000,
+            "doc_cap": 10000,
+            "purpose": "Throughput pilot tokenizer; native RustBPE; train shard only",
+            "elapsed_seconds": 5.633999116718769,
+            "run_id": "eqnd6jdz"
+          },
+          "dataset_revision": "87f09149ef4734204d70ed1d046ddc9ca3f2b8f9",
+          "train_shards": "000..012",
+          "heldout_shard": "013",
+          "seconds": 1009.9609482300002,
+          "validation": "dev first 64 rows, test next 1024 rows; no shared packed rows"
+        },
+        "source": {
+          "commit": "1855eb476269c513dc6471c862cd4ee7e2f9d526",
+          "reference_commit": "fa6fca599483bfec79f227c4152856772ec247ed",
+          "hashes": {
+            "mhc-official-runtime-7546767.tar.gz": "6b927f93021961293e12452b4001a479ff1b54cbc1aae0355e73e75a393d4dc0",
+            "cuda-compat-13-1_590.48.01-1_amd64.deb": "066f24c715f5f8f31bb7e8bd0f9ddc93fe78a82d3be55c6f3e9bbe26fa4fd7be",
+            "transformer_engine_torch-2.20.2-cp311-cp311-linux_x86_64.whl": "9b69f40b34570e3073171dcb231d6dd038092d20a277e501e7da01e6475920de",
+            "source.tar": "55814d41357b93205eb2188e44f07b78250e69bccd47db0de298fa4ed259c122",
+            "reference-gpt.py": "8cdedc2e418b9d4dc45884e07f59904fcdec066bb3d76664b2adf2d415f704e3"
+          },
+          "purpose": "Native nanochat plus NVIDIA mHC/no-Sinkhorn implementation gate",
+          "formal_training": false,
+          "previous_job": "7633335.0"
+        },
+        "checkpoint_transport": {
+          "upload_interval_seconds": 1800,
+          "local_save_every_steps": 500,
+          "method": "exit85 plus scheduler transfer; local save alone is not durable"
+        },
+        "gpu": "NVIDIA H100 80GB HBM3",
+        "torch": "2.10.0+cu130",
+        "cuda": "13.0",
+        "gpu_capability": [
+          9,
+          0
+        ],
+        "explicit_portability_gate": false,
+        "parameters": 125829354,
+        "residual_mixing": "additive",
+        "applied_sinkhorn_iterations": 0,
+        "optimizer": "native MuonAdamW; connector AdamW at native unembedding LR, no decay",
+        "optimizer_groups": [
+          {
+            "kind": "adamw",
+            "lr": 0.0024494897427831783,
+            "betas": [
+              0.8,
+              0.96
+            ],
+            "eps": 1e-10,
+            "weight_decay": 0.01,
+            "initial_lr": 0.0024494897427831783
+          },
+          {
+            "kind": "adamw",
+            "lr": 0.09185586535436918,
+            "betas": [
+              0.8,
+              0.995
+            ],
+            "eps": 1e-10,
+            "weight_decay": 0.001,
+            "initial_lr": 0.09185586535436918
+          },
+          {
+            "kind": "adamw",
+            "lr": 0.04592793267718459,
+            "betas": [
+              0.8,
+              0.995
+            ],
+            "eps": 1e-10,
+            "weight_decay": 0.01,
+            "initial_lr": 0.04592793267718459
+          },
+          {
+            "kind": "adamw",
+            "lr": 0.00125,
+            "betas": [
+              0.8,
+              0.95
+            ],
+            "eps": 1e-10,
+            "weight_decay": 0.05,
+            "initial_lr": 0.00125
+          },
+          {
+            "kind": "adamw",
+            "lr": 0.125,
+            "betas": [
+              0.96,
+              0.95
+            ],
+            "eps": 1e-10,
+            "weight_decay": 0.0,
+            "initial_lr": 0.125
+          },
+          {
+            "kind": "adamw",
+            "lr": 0.2,
+            "betas": [
+              0.8,
+              0.95
+            ],
+            "eps": 1e-10,
+            "weight_decay": 0.0,
+            "initial_lr": 0.2
+          },
+          {
+            "kind": "muon",
+            "lr": 0.005,
+            "momentum": 0.95,
+            "ns_steps": 5,
+            "beta2": 0.9,
+            "weight_decay": 0.1837498798375862,
+            "initial_lr": 0.005
+          },
+          {
+            "kind": "muon",
+            "lr": 0.005,
+            "momentum": 0.95,
+            "ns_steps": 5,
+            "beta2": 0.9,
+            "weight_decay": 0.1837498798375862,
+            "initial_lr": 0.005
+          },
+          {
+            "kind": "muon",
+            "lr": 0.005,
+            "momentum": 0.95,
+            "ns_steps": 5,
+            "beta2": 0.9,
+            "weight_decay": 0.1837498798375862,
+            "initial_lr": 0.005
+          },
+          {
+            "kind": "muon",
+            "lr": 0.005,
+            "momentum": 0.95,
+            "ns_steps": 5,
+            "beta2": 0.9,
+            "weight_decay": 0.1837498798375862,
+            "initial_lr": 0.005
+          }
+        ],
+        "loss": "full-token full-vocabulary CCE; no gradient filtering",
+        "references": "research/connections/references.json"
+      }
+    },
+    "mhc": {
+      "summary": {
+        "complete": true,
+        "variant": "mhc",
+        "run_id": "e39a6383",
+        "steps": 10,
+        "training_tokens": 327680,
+        "initial_dev_ce": 10.396878719329834,
+        "final_dev_ce": 10.09904146194458,
+        "best_dev_ce": 10.09904146194458,
+        "dev_tokens": 131072,
+        "training_seconds": 28.252219527959824,
+        "elapsed_seconds": 81.10498621873558,
+        "steady_step_seconds": null,
+        "gpu": "NVIDIA H100 80GB HBM3",
+        "peak_allocated_bytes": 10995676160,
+        "peak_reserved_bytes": 11064573952,
+        "source": {
+          "commit": "1855eb476269c513dc6471c862cd4ee7e2f9d526",
+          "reference_commit": "fa6fca599483bfec79f227c4152856772ec247ed",
+          "hashes": {
+            "mhc-official-runtime-7546767.tar.gz": "6b927f93021961293e12452b4001a479ff1b54cbc1aae0355e73e75a393d4dc0",
+            "cuda-compat-13-1_590.48.01-1_amd64.deb": "066f24c715f5f8f31bb7e8bd0f9ddc93fe78a82d3be55c6f3e9bbe26fa4fd7be",
+            "transformer_engine_torch-2.20.2-cp311-cp311-linux_x86_64.whl": "9b69f40b34570e3073171dcb231d6dd038092d20a277e501e7da01e6475920de",
+            "source.tar": "55814d41357b93205eb2188e44f07b78250e69bccd47db0de298fa4ed259c122",
+            "reference-gpt.py": "8cdedc2e418b9d4dc45884e07f59904fcdec066bb3d76664b2adf2d415f704e3"
+          },
+          "purpose": "Native nanochat plus NVIDIA mHC/no-Sinkhorn implementation gate",
+          "formal_training": false,
+          "previous_job": "7633335.0"
+        },
+        "test_evaluated": false,
+        "checkpoint_files": {
+          "latest.pt": {
+            "bytes": 915804049,
+            "sha256": "12f1284617efbc3b0bbd86f7baf9f4419f7c0d5805cfb033c7f5cf8df8170495"
+          },
+          "best.pt": {
+            "bytes": 338767347,
+            "sha256": "f37fa4813b842c4d89e1e1e1d77af4be4554921f77f9f3bcf3774701c632c5af"
+          }
+        }
+      },
+      "config": {
+        "logging_backend": "local",
+        "model": {
+          "variant": "mhc",
+          "depth": 8,
+          "width": 512,
+          "heads": 4,
+          "sequence_length": 2048,
+          "vocab_size": 32768,
+          "streams": 4,
+          "sinkhorn_iterations": 20,
+          "activation_checkpoint": false,
+          "connection_backend": "nvidia",
+          "fused_connection_grad": false,
+          "architecture": "native",
+          "window_pattern": "SSSL"
+        },
+        "protocol": {
+          "steps": 10,
+          "schedule_steps": 305176,
+          "batch_tokens": 32768,
+          "microbatch": 16,
+          "grad_accum": 1,
+          "seed": 42,
+          "attention_backend": "auto",
+          "matched_backbone_init": true,
+          "evaluate_test": false
+        },
+        "data_manifest": {
+          "complete": true,
+          "run_id": "gy1xhvud",
+          "sequence_length": 2048,
+          "dtype": "uint16",
+          "layout": "rows of 2049 token ids; x=row[:-1], y=row[1:]",
+          "batch_tokens": 32768,
+          "training_steps": 30518,
+          "requested_tokens": 1000000000,
+          "training_tokens": 1000013824,
+          "files": {
+            "train": {
+              "rows": 488288,
+              "tokens": 1000013824,
+              "bytes": 2001004224,
+              "sha256": "614ef0ecce77ca839cb7650bfe7da9a8fbb92bbfc8efe461ded57a1f2af315c7",
+              "last_source_state": {
+                "pq_idx": 1,
+                "rg_idx": 630,
+                "epoch": 1
+              }
+            },
+            "dev": {
+              "rows": 64,
+              "tokens": 131072,
+              "bytes": 262272,
+              "sha256": "bd67b90b4386ba6428992864712f56eb10527678ed8b3664ed5f63c1643458a4",
+              "last_source_state": {
+                "pq_idx": 0,
+                "rg_idx": 1,
+                "epoch": 1
+              }
+            },
+            "test": {
+              "rows": 1024,
+              "tokens": 2097152,
+              "bytes": 4196352,
+              "sha256": "e7d24b6a89155ebc7123afe68bd2c58aeaf159b5087dbdf28e090ce09f293d09",
+              "last_source_state": {
+                "pq_idx": 0,
+                "rg_idx": 4,
+                "epoch": 1
+              }
+            }
+          },
+          "tokenizer": {
+            "dataset": "HuggingFaceFW/fineweb-edu",
+            "config": "sample-10BT",
+            "revision": "87f09149ef4734204d70ed1d046ddc9ca3f2b8f9",
+            "full_dataset_bytes": 28518193415,
+            "full_source_gpt2_tokens": 9972918177,
+            "nanochat_commit": "145da40cdd37b9522aa53d26c0c356e9126458bb",
+            "nanochat_source_sha256": "9a39516fc52effabe6bf9b87fc5fc67f7026a95060861be560d3525257bfb3e6",
+            "files": {
+              "token_bytes.pt": {
+                "bytes": 132649,
+                "sha256": "8e6ed9947610b8b329f0aed7e01bf332359331790e61fc6c0c95dc3cff29bdb4"
+              },
+              "tokenizer.pkl": {
+                "bytes": 412696,
+                "sha256": "8d1a5a03421ca24e7acafd1ef68fe8dbc6326dad903bc65cc726ec0601c577de"
+              }
+            },
+            "train_shards": [
+              "000_00000.parquet"
+            ],
+            "validation_shards": [
+              "013_00000.parquet"
+            ],
+            "tokenizer": "native RustBPE 32768 vocab, first 100M capped characters from training shard",
+            "benchmark": "native base_train d8/D512/2K/SSSL, 300 steps x 32768 model tokens; original source unmodified",
+            "vocab_size": 32768,
+            "max_chars": 100000000,
+            "doc_cap": 10000,
+            "purpose": "Throughput pilot tokenizer; native RustBPE; train shard only",
+            "elapsed_seconds": 5.633999116718769,
+            "run_id": "eqnd6jdz"
+          },
+          "dataset_revision": "87f09149ef4734204d70ed1d046ddc9ca3f2b8f9",
+          "train_shards": "000..012",
+          "heldout_shard": "013",
+          "seconds": 1009.9609482300002,
+          "validation": "dev first 64 rows, test next 1024 rows; no shared packed rows"
+        },
+        "source": {
+          "commit": "1855eb476269c513dc6471c862cd4ee7e2f9d526",
+          "reference_commit": "fa6fca599483bfec79f227c4152856772ec247ed",
+          "hashes": {
+            "mhc-official-runtime-7546767.tar.gz": "6b927f93021961293e12452b4001a479ff1b54cbc1aae0355e73e75a393d4dc0",
+            "cuda-compat-13-1_590.48.01-1_amd64.deb": "066f24c715f5f8f31bb7e8bd0f9ddc93fe78a82d3be55c6f3e9bbe26fa4fd7be",
+            "transformer_engine_torch-2.20.2-cp311-cp311-linux_x86_64.whl": "9b69f40b34570e3073171dcb231d6dd038092d20a277e501e7da01e6475920de",
+            "source.tar": "55814d41357b93205eb2188e44f07b78250e69bccd47db0de298fa4ed259c122",
+            "reference-gpt.py": "8cdedc2e418b9d4dc45884e07f59904fcdec066bb3d76664b2adf2d415f704e3"
+          },
+          "purpose": "Native nanochat plus NVIDIA mHC/no-Sinkhorn implementation gate",
+          "formal_training": false,
+          "previous_job": "7633335.0"
+        },
+        "checkpoint_transport": {
+          "upload_interval_seconds": 1800,
+          "local_save_every_steps": 500,
+          "method": "exit85 plus scheduler transfer; local save alone is not durable"
+        },
+        "gpu": "NVIDIA H100 80GB HBM3",
+        "torch": "2.10.0+cu130",
+        "cuda": "13.0",
+        "gpu_capability": [
+          9,
+          0
+        ],
+        "explicit_portability_gate": false,
+        "parameters": 126624415,
+        "residual_mixing": "sinkhorn",
+        "applied_sinkhorn_iterations": 20,
+        "optimizer": "native MuonAdamW; connector AdamW at native unembedding LR, no decay",
+        "optimizer_groups": [
+          {
+            "kind": "adamw",
+            "lr": 0.0024494897427831783,
+            "betas": [
+              0.8,
+              0.96
+            ],
+            "eps": 1e-10,
+            "weight_decay": 0.01,
+            "initial_lr": 0.0024494897427831783
+          },
+          {
+            "kind": "adamw",
+            "lr": 0.09185586535436918,
+            "betas": [
+              0.8,
+              0.995
+            ],
+            "eps": 1e-10,
+            "weight_decay": 0.001,
+            "initial_lr": 0.09185586535436918
+          },
+          {
+            "kind": "adamw",
+            "lr": 0.04592793267718459,
+            "betas": [
+              0.8,
+              0.995
+            ],
+            "eps": 1e-10,
+            "weight_decay": 0.01,
+            "initial_lr": 0.04592793267718459
+          },
+          {
+            "kind": "adamw",
+            "lr": 0.00125,
+            "betas": [
+              0.8,
+              0.95
+            ],
+            "eps": 1e-10,
+            "weight_decay": 0.05,
+            "initial_lr": 0.00125
+          },
+          {
+            "kind": "adamw",
+            "lr": 0.125,
+            "betas": [
+              0.96,
+              0.95
+            ],
+            "eps": 1e-10,
+            "weight_decay": 0.0,
+            "initial_lr": 0.125
+          },
+          {
+            "kind": "adamw",
+            "lr": 0.2,
+            "betas": [
+              0.8,
+              0.95
+            ],
+            "eps": 1e-10,
+            "weight_decay": 0.0,
+            "initial_lr": 0.2
+          },
+          {
+            "kind": "adamw",
+            "lr": 0.0024494897427831783,
+            "betas": [
+              0.8,
+              0.96
+            ],
+            "eps": 1e-10,
+            "weight_decay": 0.0,
+            "initial_lr": 0.0024494897427831783
+          },
+          {
+            "kind": "muon",
+            "lr": 0.005,
+            "momentum": 0.95,
+            "ns_steps": 5,
+            "beta2": 0.9,
+            "weight_decay": 0.1837498798375862,
+            "initial_lr": 0.005
+          },
+          {
+            "kind": "muon",
+            "lr": 0.005,
+            "momentum": 0.95,
+            "ns_steps": 5,
+            "beta2": 0.9,
+            "weight_decay": 0.1837498798375862,
+            "initial_lr": 0.005
+          },
+          {
+            "kind": "muon",
+            "lr": 0.005,
+            "momentum": 0.95,
+            "ns_steps": 5,
+            "beta2": 0.9,
+            "weight_decay": 0.1837498798375862,
+            "initial_lr": 0.005
+          },
+          {
+            "kind": "muon",
+            "lr": 0.005,
+            "momentum": 0.95,
+            "ns_steps": 5,
+            "beta2": 0.9,
+            "weight_decay": 0.1837498798375862,
+            "initial_lr": 0.005
+          }
+        ],
+        "loss": "full-token full-vocabulary CCE; no gradient filtering",
+        "references": "research/connections/references.json"
+      }
+    },
+    "mhc_no_sinkhorn": {
+      "summary": {
+        "complete": true,
+        "variant": "mhc_no_sinkhorn",
+        "run_id": "dd05b7bc",
+        "steps": 10,
+        "training_tokens": 327680,
+        "initial_dev_ce": 10.396879434585571,
+        "final_dev_ce": 10.061496019363403,
+        "best_dev_ce": 10.061496019363403,
+        "dev_tokens": 131072,
+        "training_seconds": 10.918737201020122,
+        "elapsed_seconds": 40.13618334941566,
+        "steady_step_seconds": null,
+        "gpu": "NVIDIA H100 80GB HBM3",
+        "peak_allocated_bytes": 10962121728,
+        "peak_reserved_bytes": 11005853696,
+        "source": {
+          "commit": "1855eb476269c513dc6471c862cd4ee7e2f9d526",
+          "reference_commit": "fa6fca599483bfec79f227c4152856772ec247ed",
+          "hashes": {
+            "mhc-official-runtime-7546767.tar.gz": "6b927f93021961293e12452b4001a479ff1b54cbc1aae0355e73e75a393d4dc0",
+            "cuda-compat-13-1_590.48.01-1_amd64.deb": "066f24c715f5f8f31bb7e8bd0f9ddc93fe78a82d3be55c6f3e9bbe26fa4fd7be",
+            "transformer_engine_torch-2.20.2-cp311-cp311-linux_x86_64.whl": "9b69f40b34570e3073171dcb231d6dd038092d20a277e501e7da01e6475920de",
+            "source.tar": "55814d41357b93205eb2188e44f07b78250e69bccd47db0de298fa4ed259c122",
+            "reference-gpt.py": "8cdedc2e418b9d4dc45884e07f59904fcdec066bb3d76664b2adf2d415f704e3"
+          },
+          "purpose": "Native nanochat plus NVIDIA mHC/no-Sinkhorn implementation gate",
+          "formal_training": false,
+          "previous_job": "7633335.0"
+        },
+        "test_evaluated": false,
+        "checkpoint_files": {
+          "latest.pt": {
+            "bytes": 915804049,
+            "sha256": "4cc856470b28e9f283dd68675c2fccd13a4b3d0d2b1073d1ed92b864cb8f9fea"
+          },
+          "best.pt": {
+            "bytes": 338767347,
+            "sha256": "743ac1fba524012df69e309fe68444701352e18a9b8806c1dc739d7b474c69f6"
+          }
+        }
+      },
+      "config": {
+        "logging_backend": "local",
+        "model": {
+          "variant": "mhc_no_sinkhorn",
+          "depth": 8,
+          "width": 512,
+          "heads": 4,
+          "sequence_length": 2048,
+          "vocab_size": 32768,
+          "streams": 4,
+          "sinkhorn_iterations": 20,
+          "activation_checkpoint": false,
+          "connection_backend": "nvidia",
+          "fused_connection_grad": false,
+          "architecture": "native",
+          "window_pattern": "SSSL"
+        },
+        "protocol": {
+          "steps": 10,
+          "schedule_steps": 305176,
+          "batch_tokens": 32768,
+          "microbatch": 16,
+          "grad_accum": 1,
+          "seed": 42,
+          "attention_backend": "auto",
+          "matched_backbone_init": true,
+          "evaluate_test": false
+        },
+        "data_manifest": {
+          "complete": true,
+          "run_id": "gy1xhvud",
+          "sequence_length": 2048,
+          "dtype": "uint16",
+          "layout": "rows of 2049 token ids; x=row[:-1], y=row[1:]",
+          "batch_tokens": 32768,
+          "training_steps": 30518,
+          "requested_tokens": 1000000000,
+          "training_tokens": 1000013824,
+          "files": {
+            "train": {
+              "rows": 488288,
+              "tokens": 1000013824,
+              "bytes": 2001004224,
+              "sha256": "614ef0ecce77ca839cb7650bfe7da9a8fbb92bbfc8efe461ded57a1f2af315c7",
+              "last_source_state": {
+                "pq_idx": 1,
+                "rg_idx": 630,
+                "epoch": 1
+              }
+            },
+            "dev": {
+              "rows": 64,
+              "tokens": 131072,
+              "bytes": 262272,
+              "sha256": "bd67b90b4386ba6428992864712f56eb10527678ed8b3664ed5f63c1643458a4",
+              "last_source_state": {
+                "pq_idx": 0,
+                "rg_idx": 1,
+                "epoch": 1
+              }
+            },
+            "test": {
+              "rows": 1024,
+              "tokens": 2097152,
+              "bytes": 4196352,
+              "sha256": "e7d24b6a89155ebc7123afe68bd2c58aeaf159b5087dbdf28e090ce09f293d09",
+              "last_source_state": {
+                "pq_idx": 0,
+                "rg_idx": 4,
+                "epoch": 1
+              }
+            }
+          },
+          "tokenizer": {
+            "dataset": "HuggingFaceFW/fineweb-edu",
+            "config": "sample-10BT",
+            "revision": "87f09149ef4734204d70ed1d046ddc9ca3f2b8f9",
+            "full_dataset_bytes": 28518193415,
+            "full_source_gpt2_tokens": 9972918177,
+            "nanochat_commit": "145da40cdd37b9522aa53d26c0c356e9126458bb",
+            "nanochat_source_sha256": "9a39516fc52effabe6bf9b87fc5fc67f7026a95060861be560d3525257bfb3e6",
+            "files": {
+              "token_bytes.pt": {
+                "bytes": 132649,
+                "sha256": "8e6ed9947610b8b329f0aed7e01bf332359331790e61fc6c0c95dc3cff29bdb4"
+              },
+              "tokenizer.pkl": {
+                "bytes": 412696,
+                "sha256": "8d1a5a03421ca24e7acafd1ef68fe8dbc6326dad903bc65cc726ec0601c577de"
+              }
+            },
+            "train_shards": [
+              "000_00000.parquet"
+            ],
+            "validation_shards": [
+              "013_00000.parquet"
+            ],
+            "tokenizer": "native RustBPE 32768 vocab, first 100M capped characters from training shard",
+            "benchmark": "native base_train d8/D512/2K/SSSL, 300 steps x 32768 model tokens; original source unmodified",
+            "vocab_size": 32768,
+            "max_chars": 100000000,
+            "doc_cap": 10000,
+            "purpose": "Throughput pilot tokenizer; native RustBPE; train shard only",
+            "elapsed_seconds": 5.633999116718769,
+            "run_id": "eqnd6jdz"
+          },
+          "dataset_revision": "87f09149ef4734204d70ed1d046ddc9ca3f2b8f9",
+          "train_shards": "000..012",
+          "heldout_shard": "013",
+          "seconds": 1009.9609482300002,
+          "validation": "dev first 64 rows, test next 1024 rows; no shared packed rows"
+        },
+        "source": {
+          "commit": "1855eb476269c513dc6471c862cd4ee7e2f9d526",
+          "reference_commit": "fa6fca599483bfec79f227c4152856772ec247ed",
+          "hashes": {
+            "mhc-official-runtime-7546767.tar.gz": "6b927f93021961293e12452b4001a479ff1b54cbc1aae0355e73e75a393d4dc0",
+            "cuda-compat-13-1_590.48.01-1_amd64.deb": "066f24c715f5f8f31bb7e8bd0f9ddc93fe78a82d3be55c6f3e9bbe26fa4fd7be",
+            "transformer_engine_torch-2.20.2-cp311-cp311-linux_x86_64.whl": "9b69f40b34570e3073171dcb231d6dd038092d20a277e501e7da01e6475920de",
+            "source.tar": "55814d41357b93205eb2188e44f07b78250e69bccd47db0de298fa4ed259c122",
+            "reference-gpt.py": "8cdedc2e418b9d4dc45884e07f59904fcdec066bb3d76664b2adf2d415f704e3"
+          },
+          "purpose": "Native nanochat plus NVIDIA mHC/no-Sinkhorn implementation gate",
+          "formal_training": false,
+          "previous_job": "7633335.0"
+        },
+        "checkpoint_transport": {
+          "upload_interval_seconds": 1800,
+          "local_save_every_steps": 500,
+          "method": "exit85 plus scheduler transfer; local save alone is not durable"
+        },
+        "gpu": "NVIDIA H100 80GB HBM3",
+        "torch": "2.10.0+cu130",
+        "cuda": "13.0",
+        "gpu_capability": [
+          9,
+          0
+        ],
+        "explicit_portability_gate": false,
+        "parameters": 126624415,
+        "residual_mixing": "unconstrained_raw",
+        "applied_sinkhorn_iterations": 0,
+        "optimizer": "native MuonAdamW; connector AdamW at native unembedding LR, no decay",
+        "optimizer_groups": [
+          {
+            "kind": "adamw",
+            "lr": 0.0024494897427831783,
+            "betas": [
+              0.8,
+              0.96
+            ],
+            "eps": 1e-10,
+            "weight_decay": 0.01,
+            "initial_lr": 0.0024494897427831783
+          },
+          {
+            "kind": "adamw",
+            "lr": 0.09185586535436918,
+            "betas": [
+              0.8,
+              0.995
+            ],
+            "eps": 1e-10,
+            "weight_decay": 0.001,
+            "initial_lr": 0.09185586535436918
+          },
+          {
+            "kind": "adamw",
+            "lr": 0.04592793267718459,
+            "betas": [
+              0.8,
+              0.995
+            ],
+            "eps": 1e-10,
+            "weight_decay": 0.01,
+            "initial_lr": 0.04592793267718459
+          },
+          {
+            "kind": "adamw",
+            "lr": 0.00125,
+            "betas": [
+              0.8,
+              0.95
+            ],
+            "eps": 1e-10,
+            "weight_decay": 0.05,
+            "initial_lr": 0.00125
+          },
+          {
+            "kind": "adamw",
+            "lr": 0.125,
+            "betas": [
+              0.96,
+              0.95
+            ],
+            "eps": 1e-10,
+            "weight_decay": 0.0,
+            "initial_lr": 0.125
+          },
+          {
+            "kind": "adamw",
+            "lr": 0.2,
+            "betas": [
+              0.8,
+              0.95
+            ],
+            "eps": 1e-10,
+            "weight_decay": 0.0,
+            "initial_lr": 0.2
+          },
+          {
+            "kind": "adamw",
+            "lr": 0.0024494897427831783,
+            "betas": [
+              0.8,
+              0.96
+            ],
+            "eps": 1e-10,
+            "weight_decay": 0.0,
+            "initial_lr": 0.0024494897427831783
+          },
+          {
+            "kind": "muon",
+            "lr": 0.005,
+            "momentum": 0.95,
+            "ns_steps": 5,
+            "beta2": 0.9,
+            "weight_decay": 0.1837498798375862,
+            "initial_lr": 0.005
+          },
+          {
+            "kind": "muon",
+            "lr": 0.005,
+            "momentum": 0.95,
+            "ns_steps": 5,
+            "beta2": 0.9,
+            "weight_decay": 0.1837498798375862,
+            "initial_lr": 0.005
+          },
+          {
+            "kind": "muon",
+            "lr": 0.005,
+            "momentum": 0.95,
+            "ns_steps": 5,
+            "beta2": 0.9,
+            "weight_decay": 0.1837498798375862,
+            "initial_lr": 0.005
+          },
+          {
+            "kind": "muon",
+            "lr": 0.005,
+            "momentum": 0.95,
+            "ns_steps": 5,
+            "beta2": 0.9,
+            "weight_decay": 0.1837498798375862,
+            "initial_lr": 0.005
+          }
+        ],
+        "loss": "full-token full-vocabulary CCE; no gradient filtering",
+        "references": "research/connections/references.json"
+      }
+    }
+  },
+  "logging_backend": "local",
+  "diagnostic_tokens": 983040,
+  "scope": "Implementation checks; no quality or throughput comparison, no formal training",
+  "restart": "Each native variant: exit85 at5, fresh process restores model/optimizer/RNG/data and completes10",
+  "job": "7636681.0",
+  "device": {
+    "gpu": "NVIDIA H100 80GB HBM3",
+    "capability": [
+      9,
+      0
+    ],
+    "torch": "2.10.0+cu130"
+  },
+  "evidence": {
+    "mhc_no_sinkhorn-resume": {
+      "dense_loss": 5.5454020500183105,
+      "cce_loss": 5.5454020500183105,
+      "compiled_loss": 5.530933380126953,
+      "exact_fixed_gradient_resume": true,
+      "activation_checkpoint": true,
+      "optimizer_groups": [
+        {
+          "kind": "adamw",
+          "lr": 0.00036742346141747673,
+          "betas": [
+            0.8,
+            0.96
+          ],
+          "eps": 1e-10,
+          "weight_decay": 0.01,
+          "initial_lr": 0.004898979485566357,
+          "params": [
+            "native.lm_head.weight"
+          ]
+        },
+        {
+          "kind": "adamw",
+          "lr": 0.013778379803155378,
+          "betas": [
+            0.8,
+            0.995
+          ],
+          "eps": 1e-10,
+          "weight_decay": 0.001,
+          "initial_lr": 0.18371173070873836,
+          "params": [
+            "native.transformer.wte.weight"
+          ]
+        },
+        {
+          "kind": "adamw",
+          "lr": 0.006889189901577689,
+          "betas": [
+            0.8,
+            0.995
+          ],
+          "eps": 1e-10,
+          "weight_decay": 0.01,
+          "initial_lr": 0.09185586535436918,
+          "params": [
+            "native.value_embeds.1.weight",
+            "native.value_embeds.3.weight"
+          ]
+        },
+        {
+          "kind": "adamw",
+          "lr": 9.375e-05,
+          "betas": [
+            0.8,
+            0.95
+          ],
+          "eps": 1e-10,
+          "weight_decay": 0.05,
+          "initial_lr": 0.00125,
+          "params": [
+            "native.resid_lambdas"
+          ]
+        },
+        {
+          "kind": "adamw",
+          "lr": 0.009375,
+          "betas": [
+            0.96,
+            0.95
+          ],
+          "eps": 1e-10,
+          "weight_decay": 0.0,
+          "initial_lr": 0.125,
+          "params": [
+            "native.x0_lambdas"
+          ]
+        },
+        {
+          "kind": "adamw",
+          "lr": 0.015,
+          "betas": [
+            0.8,
+            0.95
+          ],
+          "eps": 1e-10,
+          "weight_decay": 0.0,
+          "initial_lr": 0.2,
+          "params": [
+            "native.smear_gate.weight",
+            "native.smear_lambda",
+            "native.backout_lambda"
+          ]
+        },
+        {
+          "kind": "adamw",
+          "lr": 0.00036742346141747673,
+          "betas": [
+            0.8,
+            0.96
+          ],
+          "eps": 1e-10,
+          "weight_decay": 0.0,
+          "initial_lr": 0.004898979485566357,
+          "params": [
+            "native.transformer.h.0.attn_connection.phi",
+            "native.transformer.h.0.attn_connection.bias",
+            "native.transformer.h.0.attn_connection.scales",
+            "native.transformer.h.0.mlp_connection.phi",
+            "native.transformer.h.0.mlp_connection.bias",
+            "native.transformer.h.0.mlp_connection.scales",
+            "native.transformer.h.1.attn_connection.phi",
+            "native.transformer.h.1.attn_connection.bias",
+            "native.transformer.h.1.attn_connection.scales",
+            "native.transformer.h.1.mlp_connection.phi",
+            "native.transformer.h.1.mlp_connection.bias",
+            "native.transformer.h.1.mlp_connection.scales",
+            "native.transformer.h.2.attn_connection.phi",
+            "native.transformer.h.2.attn_connection.bias",
+            "native.transformer.h.2.attn_connection.scales",
+            "native.transformer.h.2.mlp_connection.phi",
+            "native.transformer.h.2.mlp_connection.bias",
+            "native.transformer.h.2.mlp_connection.scales",
+            "native.transformer.h.3.attn_connection.phi",
+            "native.transformer.h.3.attn_connection.bias",
+            "native.transformer.h.3.attn_connection.scales",
+            "native.transformer.h.3.mlp_connection.phi",
+            "native.transformer.h.3.mlp_connection.bias",
+            "native.transformer.h.3.mlp_connection.scales",
+            "native.stream_head.phi",
+            "native.stream_head.scale",
+            "native.stream_head.bias"
+          ]
+        },
+        {
+          "kind": "muon",
+          "lr": 0.000375,
+          "momentum": 0.8506,
+          "ns_steps": 5,
+          "beta2": 0.9,
+          "weight_decay": 7.274010701727046,
+          "initial_lr": 0.005,
+          "params": [
+            "native.transformer.h.1.attn.ve_gate.weight",
+            "native.transformer.h.3.attn.ve_gate.weight"
+          ]
+        },
+        {
+          "kind": "muon",
+          "lr": 0.000375,
+          "momentum": 0.8506,
+          "ns_steps": 5,
+          "beta2": 0.9,
+          "weight_decay": 7.274010701727046,
+          "initial_lr": 0.005,
+          "params": [
+            "native.transformer.h.0.attn.c_q.weight",
+            "native.transformer.h.0.attn.c_k.weight",
+            "native.transformer.h.0.attn.c_v.weight",
+            "native.transformer.h.0.attn.c_proj.weight",
+            "native.transformer.h.1.attn.c_q.weight",
+            "native.transformer.h.1.attn.c_k.weight",
+            "native.transformer.h.1.attn.c_v.weight",
+            "native.transformer.h.1.attn.c_proj.weight",
+            "native.transformer.h.2.attn.c_q.weight",
+            "native.transformer.h.2.attn.c_k.weight",
+            "native.transformer.h.2.attn.c_v.weight",
+            "native.transformer.h.2.attn.c_proj.weight",
+            "native.transformer.h.3.attn.c_q.weight",
+            "native.transformer.h.3.attn.c_k.weight",
+            "native.transformer.h.3.attn.c_v.weight",
+            "native.transformer.h.3.attn.c_proj.weight"
+          ]
+        },
+        {
+          "kind": "muon",
+          "lr": 0.000375,
+          "momentum": 0.8506,
+          "ns_steps": 5,
+          "beta2": 0.9,
+          "weight_decay": 7.274010701727046,
+          "initial_lr": 0.005,
+          "params": [
+            "native.transformer.h.0.mlp.c_proj.weight",
+            "native.transformer.h.1.mlp.c_proj.weight",
+            "native.transformer.h.2.mlp.c_proj.weight",
+            "native.transformer.h.3.mlp.c_proj.weight"
+          ]
+        },
+        {
+          "kind": "muon",
+          "lr": 0.000375,
+          "momentum": 0.8506,
+          "ns_steps": 5,
+          "beta2": 0.9,
+          "weight_decay": 7.274010701727046,
+          "initial_lr": 0.005,
+          "params": [
+            "native.transformer.h.0.mlp.c_fc.weight",
+            "native.transformer.h.1.mlp.c_fc.weight",
+            "native.transformer.h.2.mlp.c_fc.weight",
+            "native.transformer.h.3.mlp.c_fc.weight"
+          ]
+        }
+      ]
+    },
+    "baseline-resume": {
+      "dense_loss": 5.543578624725342,
+      "cce_loss": 5.5435791015625,
+      "compiled_loss": 5.5293097496032715,
+      "exact_fixed_gradient_resume": true,
+      "activation_checkpoint": true,
+      "optimizer_groups": [
+        {
+          "kind": "adamw",
+          "lr": 0.00036742346141747673,
+          "betas": [
+            0.8,
+            0.96
+          ],
+          "eps": 1e-10,
+          "weight_decay": 0.01,
+          "initial_lr": 0.004898979485566357,
+          "params": [
+            "native.lm_head.weight"
+          ]
+        },
+        {
+          "kind": "adamw",
+          "lr": 0.013778379803155378,
+          "betas": [
+            0.8,
+            0.995
+          ],
+          "eps": 1e-10,
+          "weight_decay": 0.001,
+          "initial_lr": 0.18371173070873836,
+          "params": [
+            "native.transformer.wte.weight"
+          ]
+        },
+        {
+          "kind": "adamw",
+          "lr": 0.006889189901577689,
+          "betas": [
+            0.8,
+            0.995
+          ],
+          "eps": 1e-10,
+          "weight_decay": 0.01,
+          "initial_lr": 0.09185586535436918,
+          "params": [
+            "native.value_embeds.1.weight",
+            "native.value_embeds.3.weight"
+          ]
+        },
+        {
+          "kind": "adamw",
+          "lr": 9.375e-05,
+          "betas": [
+            0.8,
+            0.95
+          ],
+          "eps": 1e-10,
+          "weight_decay": 0.05,
+          "initial_lr": 0.00125,
+          "params": [
+            "native.resid_lambdas"
+          ]
+        },
+        {
+          "kind": "adamw",
+          "lr": 0.009375,
+          "betas": [
+            0.96,
+            0.95
+          ],
+          "eps": 1e-10,
+          "weight_decay": 0.0,
+          "initial_lr": 0.125,
+          "params": [
+            "native.x0_lambdas"
+          ]
+        },
+        {
+          "kind": "adamw",
+          "lr": 0.015,
+          "betas": [
+            0.8,
+            0.95
+          ],
+          "eps": 1e-10,
+          "weight_decay": 0.0,
+          "initial_lr": 0.2,
+          "params": [
+            "native.smear_gate.weight",
+            "native.smear_lambda",
+            "native.backout_lambda"
+          ]
+        },
+        {
+          "kind": "muon",
+          "lr": 0.000375,
+          "momentum": 0.8506,
+          "ns_steps": 5,
+          "beta2": 0.9,
+          "weight_decay": 7.274010701727046,
+          "initial_lr": 0.005,
+          "params": [
+            "native.transformer.h.1.attn.ve_gate.weight",
+            "native.transformer.h.3.attn.ve_gate.weight"
+          ]
+        },
+        {
+          "kind": "muon",
+          "lr": 0.000375,
+          "momentum": 0.8506,
+          "ns_steps": 5,
+          "beta2": 0.9,
+          "weight_decay": 7.274010701727046,
+          "initial_lr": 0.005,
+          "params": [
+            "native.transformer.h.0.attn.c_q.weight",
+            "native.transformer.h.0.attn.c_k.weight",
+            "native.transformer.h.0.attn.c_v.weight",
+            "native.transformer.h.0.attn.c_proj.weight",
+            "native.transformer.h.1.attn.c_q.weight",
+            "native.transformer.h.1.attn.c_k.weight",
+            "native.transformer.h.1.attn.c_v.weight",
+            "native.transformer.h.1.attn.c_proj.weight",
+            "native.transformer.h.2.attn.c_q.weight",
+            "native.transformer.h.2.attn.c_k.weight",
+            "native.transformer.h.2.attn.c_v.weight",
+            "native.transformer.h.2.attn.c_proj.weight",
+            "native.transformer.h.3.attn.c_q.weight",
+            "native.transformer.h.3.attn.c_k.weight",
+            "native.transformer.h.3.attn.c_v.weight",
+            "native.transformer.h.3.attn.c_proj.weight"
+          ]
+        },
+        {
+          "kind": "muon",
+          "lr": 0.000375,
+          "momentum": 0.8506,
+          "ns_steps": 5,
+          "beta2": 0.9,
+          "weight_decay": 7.274010701727046,
+          "initial_lr": 0.005,
+          "params": [
+            "native.transformer.h.0.mlp.c_proj.weight",
+            "native.transformer.h.1.mlp.c_proj.weight",
+            "native.transformer.h.2.mlp.c_proj.weight",
+            "native.transformer.h.3.mlp.c_proj.weight"
+          ]
+        },
+        {
+          "kind": "muon",
+          "lr": 0.000375,
+          "momentum": 0.8506,
+          "ns_steps": 5,
+          "beta2": 0.9,
+          "weight_decay": 7.274010701727046,
+          "initial_lr": 0.005,
+          "params": [
+            "native.transformer.h.0.mlp.c_fc.weight",
+            "native.transformer.h.1.mlp.c_fc.weight",
+            "native.transformer.h.2.mlp.c_fc.weight",
+            "native.transformer.h.3.mlp.c_fc.weight"
+          ]
+        }
+      ]
+    },
+    "initialization": {
+      "counts": [
+        {
+          "wte": 16777216,
+          "value_embeds": 67108864,
+          "lm_head": 16777216,
+          "transformer_matrices": 25166016,
+          "scalars": 42,
+          "total": 125829354
+        },
+        {
+          "wte": 16777216,
+          "value_embeds": 67108864,
+          "lm_head": 16777216,
+          "transformer_matrices": 25166016,
+          "scalars": 42,
+          "total": 126624415,
+          "connections": 795061
+        },
+        {
+          "wte": 16777216,
+          "value_embeds": 67108864,
+          "lm_head": 16777216,
+          "transformer_matrices": 25166016,
+          "scalars": 42,
+          "total": 126624415,
+          "connections": 795061
+        }
+      ],
+      "all_shared_parameters_bitwise_equal": true,
+      "mhc_and_no_sinkhorn_all_parameters_equal": true,
+      "native_optimizer_groups_unchanged": true,
+      "adamw_shape_dtype_variants": 10,
+      "compiler_recompile_limit": 20
+    },
+    "mhc-integration": {
+      "causal_tokens": 2048,
+      "cache_across_swa_boundary": true,
+      "gqa": true,
+      "feature_gradient_norms": {
+        "resid_lambdas": 0.0004599004751071334,
+        "x0_lambdas": 0.0004979961086064577,
+        "smear_lambda": 5.1021575927734375e-05,
+        "backout_lambda": 3.9577484130859375e-05,
+        "transformer.h.1.attn.ve_gate.weight": 1.2166565284132957e-05,
+        "transformer.h.3.attn.ve_gate.weight": 1.0767959793156479e-05,
+        "smear_gate.weight": 0.0003633545129559934,
+        "value_embeds.1.weight": 0.00011638772411970422,
+        "value_embeds.3.weight": 0.00012406981841195375
+      },
+      "loss": 5.545668125152588
+    },
+    "mhc_no_sinkhorn-integration": {
+      "causal_tokens": 2048,
+      "cache_across_swa_boundary": true,
+      "gqa": true,
+      "feature_gradient_norms": {
+        "resid_lambdas": 0.00044454241287894547,
+        "x0_lambdas": 0.0004785364435520023,
+        "smear_lambda": 5.888938903808594e-05,
+        "backout_lambda": 3.5762786865234375e-05,
+        "transformer.h.1.attn.ve_gate.weight": 1.2176925338280853e-05,
+        "transformer.h.3.attn.ve_gate.weight": 1.0598091648716945e-05,
+        "smear_gate.weight": 0.000363091443432495,
+        "value_embeds.1.weight": 0.0001164177228929475,
+        "value_embeds.3.weight": 0.00012384842557366937
+      },
+      "loss": 5.545680046081543
+    },
+    "streamwise-extras": {
+      "loss": 5.544546127319336,
+      "native_extras_and_gradients_preserved": true
+    },
+    "mhc-resume": {
+      "dense_loss": 5.5453948974609375,
+      "cce_loss": 5.5453948974609375,
+      "compiled_loss": 5.530941486358643,
+      "exact_fixed_gradient_resume": true,
+      "activation_checkpoint": true,
+      "optimizer_groups": [
+        {
+          "kind": "adamw",
+          "lr": 0.00036742346141747673,
+          "betas": [
+            0.8,
+            0.96
+          ],
+          "eps": 1e-10,
+          "weight_decay": 0.01,
+          "initial_lr": 0.004898979485566357,
+          "params": [
+            "native.lm_head.weight"
+          ]
+        },
+        {
+          "kind": "adamw",
+          "lr": 0.013778379803155378,
+          "betas": [
+            0.8,
+            0.995
+          ],
+          "eps": 1e-10,
+          "weight_decay": 0.001,
+          "initial_lr": 0.18371173070873836,
+          "params": [
+            "native.transformer.wte.weight"
+          ]
+        },
+        {
+          "kind": "adamw",
+          "lr": 0.006889189901577689,
+          "betas": [
+            0.8,
+            0.995
+          ],
+          "eps": 1e-10,
+          "weight_decay": 0.01,
+          "initial_lr": 0.09185586535436918,
+          "params": [
+            "native.value_embeds.1.weight",
+            "native.value_embeds.3.weight"
+          ]
+        },
+        {
+          "kind": "adamw",
+          "lr": 9.375e-05,
+          "betas": [
+            0.8,
+            0.95
+          ],
+          "eps": 1e-10,
+          "weight_decay": 0.05,
+          "initial_lr": 0.00125,
+          "params": [
+            "native.resid_lambdas"
+          ]
+        },
+        {
+          "kind": "adamw",
+          "lr": 0.009375,
+          "betas": [
+            0.96,
+            0.95
+          ],
+          "eps": 1e-10,
+          "weight_decay": 0.0,
+          "initial_lr": 0.125,
+          "params": [
+            "native.x0_lambdas"
+          ]
+        },
+        {
+          "kind": "adamw",
+          "lr": 0.015,
+          "betas": [
+            0.8,
+            0.95
+          ],
+          "eps": 1e-10,
+          "weight_decay": 0.0,
+          "initial_lr": 0.2,
+          "params": [
+            "native.smear_gate.weight",
+            "native.smear_lambda",
+            "native.backout_lambda"
+          ]
+        },
+        {
+          "kind": "adamw",
+          "lr": 0.00036742346141747673,
+          "betas": [
+            0.8,
+            0.96
+          ],
+          "eps": 1e-10,
+          "weight_decay": 0.0,
+          "initial_lr": 0.004898979485566357,
+          "params": [
+            "native.transformer.h.0.attn_connection.phi",
+            "native.transformer.h.0.attn_connection.bias",
+            "native.transformer.h.0.attn_connection.scales",
+            "native.transformer.h.0.mlp_connection.phi",
+            "native.transformer.h.0.mlp_connection.bias",
+            "native.transformer.h.0.mlp_connection.scales",
+            "native.transformer.h.1.attn_connection.phi",
+            "native.transformer.h.1.attn_connection.bias",
+            "native.transformer.h.1.attn_connection.scales",
+            "native.transformer.h.1.mlp_connection.phi",
+            "native.transformer.h.1.mlp_connection.bias",
+            "native.transformer.h.1.mlp_connection.scales",
+            "native.transformer.h.2.attn_connection.phi",
+            "native.transformer.h.2.attn_connection.bias",
+            "native.transformer.h.2.attn_connection.scales",
+            "native.transformer.h.2.mlp_connection.phi",
+            "native.transformer.h.2.mlp_connection.bias",
+            "native.transformer.h.2.mlp_connection.scales",
+            "native.transformer.h.3.attn_connection.phi",
+            "native.transformer.h.3.attn_connection.bias",
+            "native.transformer.h.3.attn_connection.scales",
+            "native.transformer.h.3.mlp_connection.phi",
+            "native.transformer.h.3.mlp_connection.bias",
+            "native.transformer.h.3.mlp_connection.scales",
+            "native.stream_head.phi",
+            "native.stream_head.scale",
+            "native.stream_head.bias"
+          ]
+        },
+        {
+          "kind": "muon",
+          "lr": 0.000375,
+          "momentum": 0.8506,
+          "ns_steps": 5,
+          "beta2": 0.9,
+          "weight_decay": 7.274010701727046,
+          "initial_lr": 0.005,
+          "params": [
+            "native.transformer.h.1.attn.ve_gate.weight",
+            "native.transformer.h.3.attn.ve_gate.weight"
+          ]
+        },
+        {
+          "kind": "muon",
+          "lr": 0.000375,
+          "momentum": 0.8506,
+          "ns_steps": 5,
+          "beta2": 0.9,
+          "weight_decay": 7.274010701727046,
+          "initial_lr": 0.005,
+          "params": [
+            "native.transformer.h.0.attn.c_q.weight",
+            "native.transformer.h.0.attn.c_k.weight",
+            "native.transformer.h.0.attn.c_v.weight",
+            "native.transformer.h.0.attn.c_proj.weight",
+            "native.transformer.h.1.attn.c_q.weight",
+            "native.transformer.h.1.attn.c_k.weight",
+            "native.transformer.h.1.attn.c_v.weight",
+            "native.transformer.h.1.attn.c_proj.weight",
+            "native.transformer.h.2.attn.c_q.weight",
+            "native.transformer.h.2.attn.c_k.weight",
+            "native.transformer.h.2.attn.c_v.weight",
+            "native.transformer.h.2.attn.c_proj.weight",
+            "native.transformer.h.3.attn.c_q.weight",
+            "native.transformer.h.3.attn.c_k.weight",
+            "native.transformer.h.3.attn.c_v.weight",
+            "native.transformer.h.3.attn.c_proj.weight"
+          ]
+        },
+        {
+          "kind": "muon",
+          "lr": 0.000375,
+          "momentum": 0.8506,
+          "ns_steps": 5,
+          "beta2": 0.9,
+          "weight_decay": 7.274010701727046,
+          "initial_lr": 0.005,
+          "params": [
+            "native.transformer.h.0.mlp.c_proj.weight",
+            "native.transformer.h.1.mlp.c_proj.weight",
+            "native.transformer.h.2.mlp.c_proj.weight",
+            "native.transformer.h.3.mlp.c_proj.weight"
+          ]
+        },
+        {
+          "kind": "muon",
+          "lr": 0.000375,
+          "momentum": 0.8506,
+          "ns_steps": 5,
+          "beta2": 0.9,
+          "weight_decay": 7.274010701727046,
+          "initial_lr": 0.005,
+          "params": [
+            "native.transformer.h.0.mlp.c_fc.weight",
+            "native.transformer.h.1.mlp.c_fc.weight",
+            "native.transformer.h.2.mlp.c_fc.weight",
+            "native.transformer.h.3.mlp.c_fc.weight"
+          ]
+        }
+      ]
+    },
+    "native-parity": {
+      "loss": 5.545662879943848,
+      "native_parameters_equal": true,
+      "windows": [
+        [
+          512,
+          0
+        ],
+        [
+          512,
+          0
+        ],
+        [
+          512,
+          0
+        ],
+        [
+          2048,
+          0
+        ]
+      ],
+      "optimizer_groups_equal": true,
+      "causal_length": 2048
+    }
+  }
+}
