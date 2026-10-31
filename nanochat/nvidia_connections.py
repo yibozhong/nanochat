@@ -44,13 +44,14 @@ def check_precision(use_tf32):
 
 class NvidiaHyperConnection(nn.Module):
     def __init__(self, width, streams, branch_index, iterations=20, *,
-                 use_tf32=True, fused_grad_acc=False):
+                 use_tf32=True, fused_grad_acc=False, sinkhorn=True):
         super().__init__()
         self.width, self.streams, self.iterations = width, streams, iterations
         self.phi = nn.Parameter(torch.empty(2*streams+streams*streams, streams*width))
         self.bias = nn.Parameter(torch.empty(2*streams+streams*streams))
         self.scales = nn.Parameter(torch.empty(3))
         self.use_tf32, self.fused_grad_acc = use_tf32, fused_grad_acc
+        self.sinkhorn = sinkhorn
         if streams != 4 or iterations != 20:
             raise ValueError('The NVIDIA composite API requires four streams and 20 iterations')
 
@@ -72,10 +73,24 @@ class NvidiaHyperConnection(nn.Module):
         # No module-global buffer is shared across invocations/checkpoints.
         buffer = (torch.empty_like(x, dtype=torch.float32)
                   if self.fused_grad_acc and torch.is_grad_enabled() and x.requires_grad else None)
-        branch, post, comb = nvidia_ops().mhc_generate_mix_and_aggregate(
-            x, self.phi, self.scales, self.bias.unsqueeze(0),
-            norm_weight=None, use_tf32=self.use_tf32,
-            fused_grad_x_acc_buffer=buffer, use_split_k=False)
+        ops = nvidia_ops()
+        if self.sinkhorn:
+            branch, post, comb = ops.mhc_generate_mix_and_aggregate(
+                x, self.phi, self.scales, self.bias.unsqueeze(0),
+                norm_weight=None, use_tf32=self.use_tf32,
+                fused_grad_x_acc_buffer=buffer, use_split_k=False)
+        else:
+            # Exactly TE's composite above, omitting its log-space Sinkhorn.
+            # Raw signed coefficients are used directly: no exp, softmax,
+            # clipping, row normalization, or replacement PyTorch kernels.
+            b, t, d, n = x.shape
+            raw, ms = ops.mhc_fused_projection(x.view(b*t, d*n), self.phi,
+                norm_weight=None, use_tf32=self.use_tf32,
+                fused_grad_x_acc_buffer=buffer, use_split_k=False)
+            pre, post, comb = ops.mhc_fused_scale(raw, self.scales, self.bias.unsqueeze(0), ms, n)
+            branch = ops.mhc_fused_aggregate(x, pre.view(b, t, n), n,
+                use_tf32=self.use_tf32, fused_grad_x_acc_buffer=buffer)
+            post, comb = post.view(b, t, n), comb.view(b, t, n, n)
         return branch, x, (post, comb, buffer)
 
     def write(self, output, residual, mixes):

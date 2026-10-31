@@ -25,7 +25,7 @@ from nanochat.connection_experiment import configure_attention, match_vanilla_in
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument('--variant', choices=('baseline','mhc'), required=True)
+    p.add_argument('--variant', choices=('baseline','mhc','mhc_no_sinkhorn'), required=True)
     p.add_argument('--formal-training', action='store_true', help='Explicitly enable W&B for a formal training run')
     p.add_argument('--wandb-group', default='mhc-official-kernels-20261030')
     p.add_argument('--connection-backend', choices=('nvidia','nvidia_precise'), default='nvidia')
@@ -104,7 +104,9 @@ def main():
         explicit_portability_gate=os.environ.get('NANOCHAT_MHC_TEST_PORTABILITY')=='1',
         parameters=sum(p.numel() for p in model.parameters()),
         residual_mixing=('sinkhorn' if a.variant=='mhc' else
+                         'unconstrained_raw' if a.variant=='mhc_no_sinkhorn' else
                          'additive'),
+        applied_sinkhorn_iterations=c.sinkhorn_iterations if a.variant=='mhc' else 0,
         optimizer='native MuonAdamW; connector AdamW at native unembedding LR, no decay',
         optimizer_groups=initial_groups,
         loss='full-token full-vocabulary CCE; no gradient filtering',

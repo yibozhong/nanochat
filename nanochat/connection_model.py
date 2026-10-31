@@ -33,7 +33,7 @@ class ConnectionConfig:
     def __post_init__(self):
         if self.connection_backend not in ('nvidia', 'nvidia_precise'):
             raise ValueError('Only the full NVIDIA mHC implementation is supported')
-        if self.variant not in ('baseline', 'mhc'):
+        if self.variant not in ('baseline', 'mhc', 'mhc_no_sinkhorn'):
             raise ValueError(f'Unknown connection variant: {self.variant}')
         if self.sinkhorn_iterations != 20:
             raise ValueError('The NVIDIA composite API requires 20 Sinkhorn iterations')
@@ -65,7 +65,8 @@ class ConnectionBlock(Block):
         self.variant = config.variant
         self.compiled_attention = self.compiled_mlp = None
         if self.variant != 'baseline':
-            kwargs = dict(use_tf32=config.connection_backend == 'nvidia', fused_grad_acc=config.fused_connection_grad)
+            kwargs = dict(use_tf32=config.connection_backend == 'nvidia', fused_grad_acc=config.fused_connection_grad,
+                          sinkhorn=config.variant != 'mhc_no_sinkhorn')
             self.attn_connection = NvidiaHyperConnection(config.width, config.streams, 2*index, config.sinkhorn_iterations, **kwargs)
             self.mlp_connection = NvidiaHyperConnection(config.width, config.streams, 2*index+1, config.sinkhorn_iterations, **kwargs)
 

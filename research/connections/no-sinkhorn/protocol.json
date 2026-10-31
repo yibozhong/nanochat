@@ -1,0 +1,70 @@
+{
+  "purpose": "Remove only the NVIDIA residual-matrix Sinkhorn operation; retain signed raw mixing, every other operator and initialization.",
+  "scale_job": "7547870.0",
+  "scale_audit": "research/connections/scale/audit.json",
+  "model": {
+    "depth": 8,
+    "width": 512,
+    "heads": 4,
+    "sequence_length": 2048,
+    "vocab_size": 32768,
+    "baseline_parameters": 58720256,
+    "mhc_parameters": 59515317
+  },
+  "variants": [
+    "mhc_no_sinkhorn"
+  ],
+  "connection_backend": "nvidia for mhc; ordinary gradient accumulation, no FP32 fusion buffers",
+  "initialization": "All backbone AND connector tensors bitwise equal to mHC under seed42. Only the residual matrix mapping changes, so initial effective mixing is not equal.",
+  "seed": 42,
+  "microbatch": 16,
+  "grad_accum": 1,
+  "batch_tokens": 32768,
+  "activation_checkpoint": false,
+  "attention_backend": "sdpa_cudnn",
+  "optimizer": "Native MuonAdamW/default LR and native batch-width scaling",
+  "dataset": "FineWeb-Edu official sample-10BT revision87f09149; train000..012 heldout013",
+  "tokenizer": "Existing RustBPE32K pilot tokenizer; unchanged",
+  "training_token_budget": 10000000000,
+  "budget_status": "Explicitly confirmed10B training tokens per model",
+  "data_uri_1b": "osdf:///chtc/staging/y/yzhong239/nanochat-ebt-20261029/data-7444406.tar",
+  "validation": {
+    "dev_tokens": 131072,
+    "test_tokens": 2097152,
+    "dev_every_steps": 250,
+    "save_every_steps": 500,
+    "final_test": "Final checkpoint and dev-selected checkpoint; test never used for selection"
+  },
+  "checkpoint": {
+    "latest": "model/optimizer/RNG/step/data manifest/source/protocol",
+    "best": "dev-selected model",
+    "segment_seconds": 14400,
+    "resume_wandb_id": true,
+    "transfer": "HTCondor exit85/spool every4h; final latest+best archive returned to a unique home path, budget<2GiB for this additional run."
+  },
+  "gate": "9 GPU unit/integration checks plus a full D512 micro16 run:25 steps, exit85, new process to50. Gate uses the previously verified golden1B prefix and full305176-step LR schedule.",
+  "wandb_project": "yibozhong657-none/nanochat",
+  "wandb_group": "mhc-pretrain-20261030",
+  "submission": "One formal305176-step job is submitted held, then automatically released only after gate audit. Formal run starts from scratch, never resumes diagnostic weights.",
+  "status": "prepared_requires_gpu_gate",
+  "training_steps": 305176,
+  "actual_training_tokens": 10000007168,
+  "packing": "Unmodified native BOS best-fit loader; verify golden 1B prefix and dev/test SHA-256; cycle only train000..012 if needed and report source epochs",
+  "wandb_policy": "Only formal training; all diagnostics/data preparation/evaluation write local JSON only",
+  "variant": "mhc_no_sinkhorn",
+  "reference_variants": [
+    "baseline",
+    "mhc"
+  ],
+  "reference_jobs": [
+    "7562105.0",
+    "7562105.1"
+  ],
+  "reference_training_source": "699dcf27bdafc82b34e3ca9ef46cb62326447b69",
+  "implementation_base": "7d015d7452edcc11cf9981adcec2ec8241ff00b1",
+  "residual_mixing": "unconstrained raw scaled projection plus existing identity bias; no exp/softmax/Sinkhorn/clipping",
+  "data_uri": "osdf:///chtc/staging/y/yzhong239/nanochat-mhc-10b-data-7560536.tar",
+  "ablation_scope": "No original-HC reproduction; pre/post sigmoid gates, RMSNorm and initialization remain mHC.",
+  "expected_steps": 305176,
+  "expected_training_tokens": 10000007168
+}

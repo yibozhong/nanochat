@@ -2,7 +2,7 @@
 
 ## Current implementation: NVIDIA only (2026-10-31)
 
-The executable model supports `baseline` and `mhc`. mHC always uses the complete
+The executable model supports `baseline`, `mhc`, and the `mhc_no_sinkhorn` ablation. mHC uses the complete
 NVIDIA Transformer Engine 2.20.2 pipeline, including its final stream head.
 `connection_backend=nvidia_precise` only changes NVIDIA precision flags; it does
 not select another implementation. `fused_connection_grad=False` remains default.
@@ -30,11 +30,21 @@ gradients: even unchanged code violated those criteria. Details and preserved
 failure evidence are in `nvidia-only/retry-protocol.json`. Production model,
 optimizer and CCE code are unchanged by this validation adjustment.
 
-Skipping Sinkhorn in the NVIDIA composite requires composing its individual
-projection/scale/aggregate/expand-combine APIs. That gives an unconstrained
-residual-mixing ablation with mHC's sigmoid gates, not an exact reproduction of
-original HC. The HC paper's parameterization and initialization also differ (it
-studies variants with and without tanh). No new HC training is launched here.
+The authorized `mhc_no_sinkhorn` ablation composes NVIDIA's individual
+projection/scale/aggregate/expand-combine APIs and skips only Sinkhorn. Its
+residual matrix is the raw signed scaled projection plus the existing identity
+bias: no exponentiation, normalization or clipping. Pre/post sigmoid gates,
+stream head, parameter initialization and optimizer are unchanged. All initial
+parameter tensors match mHC; the effective initial residual matrix differs
+because the mapping itself is removed. This is an ablation of mHC's doubly
+stochastic constraint, not an exact reproduction of original HC.
+
+Protocol: `no-sinkhorn/protocol.json`. One additional single-GPU10B-token run,
+seed42/micro16/accum1/full attention, reuses the existing frozen10B cache and the
+same learning-rate schedule. A local-only mathematical/causal/checkpoint gate
+and actual25-to50-step process restart precede automatic release of the held
+formal run. Diagnostics have no W&B; the formal run joins the existing
+`mhc-pretrain-20261030` group. Existing two training jobs remain immutable.
 References: [NVIDIA implementation and benchmark](https://github.com/NVIDIA/TransformerEngine/pull/2790#issuecomment-4208434892),
 [original HC, sections 2.2–2.3](https://arxiv.org/html/2409.19606v3).
 
