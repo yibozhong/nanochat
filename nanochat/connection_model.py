@@ -12,7 +12,7 @@ from torch.nn import functional as F
 from torch.utils.checkpoint import checkpoint
 
 from nanochat.gpt import Block, GPTConfig, Linear, norm
-from nanochat.nvidia_connections import NvidiaHyperConnection, NvidiaHyperHead, NvidiaStreamMixer, expand_streams, check_nvidia_device
+from nanochat.nvidia_connections import NvidiaHyperConnection, NvidiaHyperHead, NvidiaStreamMixer, NvidiaOrthogonalStreamMixer, expand_streams, check_nvidia_device
 from nanochat.optim import MuonAdamW
 
 
@@ -36,7 +36,7 @@ class ConnectionConfig:
     partition_mixing: str = 'none'
 
     def __post_init__(self):
-        if self.partition_mixing not in ('none', 'mhc'):
+        if self.partition_mixing not in ('none', 'mhc', 'orthogonal'):
             raise ValueError(f'Unknown partition mixing: {self.partition_mixing}')
         if self.partition_mixing != 'none' and (self.readout != 'vocab_partition' or self.variant != 'mhc'):
             raise ValueError('Final mHC mixing requires the mHC partitioned readout')
@@ -143,8 +143,9 @@ class ConnectionModel(nn.Module):
             self.register_buffer('partition_ids', ids)
             self.register_buffer('partition_inverse', inverse)
         self.partition_mixer = None
-        if config.partition_mixing == 'mhc':
-            self.partition_mixer = NvidiaStreamMixer(config.width, config.streams,
+        if config.partition_mixing in ('mhc','orthogonal'):
+            mixer_type=NvidiaStreamMixer if config.partition_mixing=='mhc' else NvidiaOrthogonalStreamMixer
+            self.partition_mixer = mixer_type(config.width, config.streams,
                 use_tf32=config.connection_backend == 'nvidia')
             self.partition_mixer.reset_parameters()
         d = config.width // config.heads

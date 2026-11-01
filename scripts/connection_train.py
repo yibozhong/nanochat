@@ -29,7 +29,8 @@ def main():
     p.add_argument('--architecture', choices=('vanilla', 'native'), default='vanilla')
     p.add_argument('--readout', choices=('collapse', 'vocab_partition'), default='collapse')
     p.add_argument('--partition-seed', type=int, default=20261031)
-    p.add_argument('--partition-mixing', choices=('none', 'mhc'), default='none')
+    p.add_argument('--partition-mixing', choices=('none', 'mhc', 'orthogonal'), default='none')
+    p.add_argument('--inspect-stream-mixing', action='store_true', help='Fixed-dev stream/matrix diagnostics at validation steps')
     p.add_argument('--window-pattern', default='SSSL', help='Native backbone only; vanilla always uses full attention')
     p.add_argument('--formal-training', action='store_true', help='Explicitly enable W&B for a formal training run')
     p.add_argument('--wandb-group', default='mhc-official-kernels-20261030')
@@ -122,12 +123,13 @@ def main():
         loss=('partitioned CCE/LSE combined into ONE global softmax; no gradient filtering'
               if a.readout == 'vocab_partition' else 'full-token full-vocabulary CCE; no gradient filtering'),
         references='research/connections/references.json')
+    mixing_label=f'-mix-{a.partition_mixing}' if a.readout=='vocab_partition' else ''
     kwargs=dict(project='nanochat',entity='yibozhong657-none',group=a.wandb_group,
                 job_type='pretrain' if a.formal_training else 'diagnostic',
-                name=f'{a.architecture}-{a.variant}-{a.readout}-{a.steps}steps',id=run_id,resume='allow',config=config)
+                name=f'{a.architecture}-{a.variant}-{a.readout}{mixing_label}-{a.steps}steps',id=run_id,resume='allow',config=config)
     run=training_run(formal_training=a.formal_training, local_dir=out/"diagnostics", **kwargs)
     run.define_metric('tokens')
-    for metric in ('train/*','dev/*','perf/*'):
+    for metric in ('train/*','dev/*','perf/*','stream/*','mix/*'):
         run.define_metric(metric,step_metric='tokens')
     json_write(out/'config.json',config)
     stop=False;begin=time.perf_counter()
@@ -146,6 +148,19 @@ def main():
     def save_best(dev):
         atomic_save(dict(model=model.state_dict(),config=asdict(c),protocol=protocol,source=source,
             run_id=run_id,step=step,dev_ce=dev,data_manifest=data.manifest),ckpt/'best.pt')
+    def inspect_mixing():
+        from nanochat.stream_mixing_diagnostics import inspect_stream_mixing
+        diagnostic_ids=torch.tensor(data.arrays['dev'][:2,:-1].copy(),device='cuda',dtype=torch.long)
+        value=inspect_stream_mixing(model,diagnostic_ids)
+        with (out/'stream-mixing.jsonl').open('a') as handle:
+            handle.write(json.dumps(dict(step=step,training_tokens=step*32768,**value))+'\n')
+        run.log(dict(step=step,tokens=step*32768,**{
+            'stream/before_difference_fraction':value['before']['stream_difference_energy_fraction'],
+            'stream/after_difference_fraction':value['after']['stream_difference_energy_fraction'],
+            'mix/difference_energy_retention':value['stream_difference_energy_retention'],
+            'mix/minimum_singular_value':value['minimum_singular_value']['0.0'],
+            'mix/median_condition_number':value['condition_number']['0.5'],
+            'mix/orthogonality_max_error':value['orthogonality_max_error']}))
     try:
         torch.cuda.reset_peak_memory_stats()
         dev,dev_tokens=evaluate(model,data,microbatch=a.microbatch)
@@ -153,6 +168,7 @@ def main():
         if step==0:
             best=dev;save_best(dev);save()
         run.log(dict(step=step,tokens=step*32768,**{'dev/ce':dev}))
+        if a.inspect_stream_mixing and c.readout=='vocab_partition':inspect_mixing()
         durations=[]
         with (out/'steps.jsonl').open('a',buffering=1) as log:
             while step<a.steps:
@@ -172,6 +188,7 @@ def main():
                     if dev<best:
                         best=dev;save_best(dev)
                     run.log(dict(step=step,tokens=step*32768,**{'dev/ce':dev,'dev/tokens':dev_tokens}))
+                    if a.inspect_stream_mixing and c.readout=='vocab_partition':inspect_mixing()
                 if step==50 or step%500==0 or step==a.steps or stop:save()
                 if step<a.steps and (stop or time.perf_counter()-begin>=a.segment_seconds
                                       or a.segment_steps and step-start_step>=a.segment_steps):
@@ -179,7 +196,7 @@ def main():
                     run.finish();return 85
         save()
         test_result={}
-        if c.partition_mixing != 'none':
+        if c.readout == 'vocab_partition':
             from nanochat.stream_mixing_diagnostics import inspect_stream_mixing
             diagnostic_ids=torch.tensor(data.arrays['dev'][:2,:-1].copy(),device='cuda',dtype=torch.long)
             test_result['final_stream_mixing']=inspect_stream_mixing(model,diagnostic_ids)

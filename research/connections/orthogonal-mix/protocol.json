@@ -1,0 +1,112 @@
+{
+  "authorized": true,
+  "user_request": "那就换一下；承接从零开始的短程三组匹配对照建议",
+  "budget_choice": "Assistant selected1B tokens per run for the requested short comparison; no automatic10B extension",
+  "modes": [
+    "none",
+    "mhc",
+    "orthogonal"
+  ],
+  "model": {
+    "architecture": "vanilla",
+    "variant": "mhc",
+    "readout": "vocab_partition",
+    "depth": 8,
+    "width": 512,
+    "heads": 4,
+    "streams": 4,
+    "vocab_size": 32768,
+    "sequence_length": 2048,
+    "full_attention": true,
+    "partition_seed": 20261031
+  },
+  "steps": 30518,
+  "tokens": 1000013824,
+  "schedule_steps": 30518,
+  "seed": 42,
+  "microbatch": 16,
+  "gradient_accumulation": 1,
+  "batch_tokens": 32768,
+  "data_uri": "osdf:///chtc/staging/y/yzhong239/nanochat-ebt-20261029/data-7444406.tar",
+  "data_archive_sha256": "44ea6ce7f62efda533ef89664da9d399e9361102ae3138229e4b78a7d331c239",
+  "data_split_sha256": {
+    "train": "614ef0ecce77ca839cb7650bfe7da9a8fbb92bbfc8efe461ded57a1f2af315c7",
+    "dev": "bd67b90b4386ba6428992864712f56eb10527678ed8b3664ed5f63c1643458a4",
+    "test": "e7d24b6a89155ebc7123afe68bd2c58aeaf159b5087dbdf28e090ce09f293d09"
+  },
+  "data_note": "Existing fixed1B cache is the byte-identical first1B prefix of the previous10B cache; identical dev/test. No download or tokenization duplication in staging.",
+  "orthogonal_parameterization": {
+    "generator": "3 input-dependent coordinates from RMS-normalized flattened4D state",
+    "phi_shape": [
+      3,
+      2048
+    ],
+    "bias": [
+      0,
+      0,
+      0
+    ],
+    "scale_init": 0.01,
+    "map": "Q=e e.T + C Cayley(A) C.T, where e=(1,1,1,1)/2, C=three Hadamard contrast columns, A=3x3 skew matrix",
+    "cayley": "R=(I-A)^(-1)(I+A), evaluated by closed-form3D formula",
+    "backend": "NVIDIA TE projection/scale/expand-combine and their backward; new small coefficient map uses compiledFP32 PyTorch",
+    "family": "signed common-preserving SO(3); no final Sinkhorn, no SVD, no orthogonal penalty",
+    "added_parameters": 6148,
+    "limitations": [
+      "The dynamic whole-module Jacobian need not be orthogonal.",
+      "BF16 output rounding is not exactly norm-preserving.",
+      "SO(3) Cayley chart excludes exact180-degree rotations at finite coordinates.",
+      "Per-stream RMSNorm and head softcap are unchanged and not isometries."
+    ]
+  },
+  "parameters": {
+    "none": 59507120,
+    "mhc": 59539905,
+    "orthogonal": 59513268
+  },
+  "optimizer": "Default native MuonAdamW; mixers use existing connector AdamW group, unembedding LR/no weight decay; head is unchanged AdamW",
+  "initialization": "All shared backbone, connector and head parameters bitwise matched, same token order and fixed vocabulary partition",
+  "comparison_limits": [
+    "Single seed and only1B; not a general effectiveness claim.",
+    "Different mixer parameter counts and initial coefficient spectra are reported.",
+    "Earlier stopped runs used a10B learning-rate schedule; do not use their partial losses as matched1B controls."
+  ],
+  "backbone_mhc": "All16 attention/MLP connectors retain original20-step Sinkhorn",
+  "gate": {
+    "tests": 26,
+    "profile_warmup": 20,
+    "profile_timed_steps": 30,
+    "profile_variants": 3,
+    "restart": "Each mode25 steps -> exit85 -> fresh process50",
+    "wandb": false,
+    "minimum_gpu_memory_mib": 22000,
+    "max_reserved_fraction": 0.9
+  },
+  "formal_logging": {
+    "project": "nanochat",
+    "entity": "yibozhong657-none",
+    "group": "mhc-orthogonal-mix-1b-20261031",
+    "mixing_in_run_name": true,
+    "mixing_diagnostics_every_dev": true
+  },
+  "checkpoints": {
+    "latest_every_steps": 500,
+    "latest_only": true,
+    "best_separate": true,
+    "durable_upload_exit85_seconds": 1800
+  },
+  "resources": {
+    "single_gpu_per_run": true,
+    "cpus": 2,
+    "ram_gb": 16,
+    "disk_gb": 45,
+    "public_soft_priority": true,
+    "backfill_allowed": true
+  },
+  "storage_budget": {
+    "new_checkpoint_archives_gb_max": 3,
+    "existing_home_gib": 9.615,
+    "existing_staging_gib": 65.723,
+    "new_staging_data_bytes": 0
+  }
+}

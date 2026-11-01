@@ -183,3 +183,65 @@ class NvidiaStreamMixer(nn.Module):
         post = torch.zeros(b, t, n, device=x.device, dtype=torch.float32)
         return nvidia_ops().mhc_fused_expand_combine(branch, None, post, x,
             matrix, n, use_tf32=self.use_tf32, fused_grad_x_acc_buffer=None)
+
+
+def common_preserving_cayley(coordinates):
+    """Embed a three-dimensional Cayley rotation in four-stream space.
+
+    The common vector (1,1,1,1)/2 is fixed. The three Hadamard contrast
+    columns have entries +/-1/2, so the basis itself is exactly representable.
+    Closed-form Cayley avoids SVD gradients and batched matrix solves.
+    Orthogonality applies to the coefficient matrix, not the complete
+    input-dependent Jacobian. Negative coefficients are intentional.
+    """
+    x,y,z=coordinates.unbind(-1)
+    xx,yy,zz=x*x,y*y,z*z
+    inv=1/(1+xx+yy+zz)
+    rotation=(( (1+xx-yy-zz)*inv, 2*(x*y-z)*inv, 2*(x*z+y)*inv ),
+              ( 2*(x*y+z)*inv, (1-xx+yy-zz)*inv, 2*(y*z-x)*inv ),
+              ( 2*(x*z-y)*inv, 2*(y*z+x)*inv, (1-xx-yy+zz)*inv ))
+    signs=((1,1,1),(-1,1,-1),(1,-1,-1),(-1,-1,1))
+    entries=[.25+.25*sum(signs[i][a]*signs[j][b]*rotation[a][b]
+                         for a in range(3) for b in range(3))
+             for i in range(4) for j in range(4)]
+    return torch.stack(entries,-1).reshape(*coordinates.shape[:-1],4,4)
+
+
+_compiled_common_preserving_cayley=torch.compile(common_preserving_cayley, dynamic=False, fullgraph=True)
+
+
+class NvidiaOrthogonalStreamMixer(NvidiaStreamMixer):
+    """NVIDIA projection/scale/combine with a compiled signed SO(3) map.
+
+    Only the final readout mixing is replaced. Three dynamic coordinates
+    parameterize rotations in the contrast subspace; no Sinkhorn or penalty
+    is applied here. The backbone mHC connectors retain their own Sinkhorn.
+    """
+    def __init__(self, width, streams=4, *, use_tf32=True):
+        nn.Module.__init__(self)
+        if streams != 4:
+            raise ValueError('The orthogonal mixer requires four streams')
+        self.width,self.streams,self.use_tf32=width,streams,use_tf32
+        self.phi=nn.Parameter(torch.empty(3,streams*width))
+        self.bias=nn.Parameter(torch.empty(3))
+        self.scale=nn.Parameter(torch.empty(1))
+
+    @torch.no_grad()
+    def reset_parameters(self):
+        nn.init.normal_(self.phi,std=1/math.sqrt(self.streams*self.width))
+        self.phi.copy_(interleave_phi(self.phi,self.streams))
+        self.bias.zero_();self.scale.fill_(.01)
+
+    def mixing_matrix(self,x):
+        check_precision(self.use_tf32)
+        b,t,d,n=x.shape;ops=nvidia_ops()
+        # Keep TE's24-output layout; only three residual-coordinate slots
+        # carry parameters. Padding does not add trainable null directions.
+        phi=F.pad(self.phi,(0,0,2*n,n*n-3))
+        scales=F.pad(self.scale,(2,0))
+        bias=F.pad(self.bias,(2*n,n*n-3)).unsqueeze(0)
+        raw,ms=ops.mhc_fused_projection(x.reshape(b*t,d*n),phi,
+            norm_weight=None,use_tf32=self.use_tf32,
+            fused_grad_x_acc_buffer=None,use_split_k=False)
+        _,_,coordinates=ops.mhc_fused_scale(raw,scales,bias,ms,n)
+        return _compiled_common_preserving_cayley(coordinates[:,:3].reshape(b,t,3))
