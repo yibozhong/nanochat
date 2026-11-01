@@ -59,13 +59,16 @@ def collect(s,phase):
 
 
 def main():
+    if (ROOT/'STOPPED.json').exists():
+        print('Workflow stopped by user; no monitoring or submissions')
+        return
     with (ROOT/'monitor.lock').open('a') as lock:
         fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
         errors=0
         while True:
             s=json.loads((ROOT/'state.json').read_text())
             s['monitor_pid']=os.getpid()
-            if s['status'] in ('complete','needs_attention'):return
+            if s['status'] in ('complete','needs_attention','stopped_by_user'):return
             try:
                 for phase,p in list(s['phases'].items()):
                     if p['status']=='complete':continue

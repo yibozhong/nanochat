@@ -1,0 +1,23 @@
+{
+  "checkpoint_run_id": "f643360b",
+  "checkpoint_step": 17891,
+  "checkpoint_tokens": 586252288,
+  "formal_training_stopped": true,
+  "no_training_or_orthogonalization_training": true,
+  "data": "same fixed64 dev2K rows, full131072-token CE backward,8192 fixed sampled positions",
+  "comparisons": "Within one checkpoint only",
+  "mixed_gradient_validation": "True direct plus dynamic coefficient VJP compared to actual pre-mixer gradient, relative error<.03; independent FP64 chain-rule oracle",
+  "frozen_probes": [
+    "original",
+    "reconstructed original numerical control",
+    "identity bypass",
+    "0.5 identity +0.5 original",
+    "signed orthogonal factor preserving common stream mode",
+    "common mean of all streams"
+  ],
+  "probe_head_weights": "Unchanged",
+  "uncertainty": "Paired64-sequence SE and disjoint halves are descriptive, not multi-seed training evidence",
+  "logging_backend": "local",
+  "wandb_retained": true,
+  "cancelled_workflow_guards": "Six stopped submit/monitor entrypoints executed as no-ops before scheduler or training access"
+}

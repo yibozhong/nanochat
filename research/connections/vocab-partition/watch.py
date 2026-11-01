@@ -183,13 +183,16 @@ def collect_training(s):
 
 
 def main():
+    if (ROOT/'STOPPED.json').exists():
+        print('Workflow stopped by user; no monitoring or submissions')
+        return
     with (ROOT/'monitor.lock').open('w') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX|fcntl.LOCK_NB)
         errors = 0
         while True:
             s = json.loads(STATE.read_text())
             s['monitor_pid'] = os.getpid()
-            if s['status'] in ('complete', 'needs_attention'):
+            if s['status'] in ('complete', 'needs_attention', 'stopped_by_user'):
                 return
             try:
                 if not s['gate_verified']:

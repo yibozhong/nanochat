@@ -28,6 +28,9 @@ def save(state):
 
 
 def main():
+    if (ROOT/'STOPPED.json').exists():
+        print('Workflow stopped by user; no monitoring or submissions')
+        return
     ROOT.mkdir(exist_ok=True)
     with (ROOT/'submit.lock').open('w') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX|fcntl.LOCK_NB)

@@ -32,6 +32,9 @@ def save(state):
 
 
 def main():
+    if (ROOT/'STOPPED.json').exists():
+        print('Workflow stopped by user; no monitoring or submissions')
+        return
     assert PHASE in ('interim','final')
     ROOT.mkdir(exist_ok=True)
     for n in ('bundles','logs','results'):(ROOT/n).mkdir(exist_ok=True)
