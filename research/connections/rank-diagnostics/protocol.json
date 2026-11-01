@@ -1,0 +1,50 @@
+{
+  "purpose": "Diagnose whether output-weight conditioning, stream redundancy or gradient concentration limits the partitioned head experiment",
+  "phases": [
+    "interim: partition step36500/1.196B against ordinary mHC10B, descriptive only",
+    "final: equal305176steps/10B"
+  ],
+  "no_training": true,
+  "no_optimizer_updates": true,
+  "no_wandb": true,
+  "checkpoint_member": "latest.pt; final training state, not dev-best",
+  "data": "same64 heldout dev rows, full2048 context, all131072 tokens supervise each backward",
+  "sampling": "128 seeded uniform positions per row,8192 total, identical across checkpoints; seed20261031",
+  "sites": [
+    "expanded embedding",
+    "all8 block outputs before final stream reduction",
+    "normalized input to head"
+  ],
+  "measurements": [
+    "BF16-applied head-weight singular spectra via FP64 QR+small SVD, compared with matching initialization",
+    "centered and uncentered token activation and hidden-adjoint covariance spectra in FP64",
+    "energy entropy effective rank (squared-singular weights), singular entropy, stable and participation ranks,90/95/99%energy dimensions",
+    "unit-row gradient spectra and two disjoint dev halves at final sites",
+    "stream correlation, within-token stream difference energy, gradient energy by target partition",
+    "aggregate full-dev head parameter gradient spectrum, separate from token-hidden gradients",
+    "softcap attenuation and logit-error energy captured by current head column space",
+    "frozen polar head with same per-block Frobenius norm; final-stream mean and stream-cycle probes"
+  ],
+  "correctness": [
+    "FP64 direct SVD oracle for Gram spectrum",
+    "flat spectrum known rank",
+    "identical streams zero difference",
+    "FP64 analytic gradient vs autograd",
+    "real checkpoint CCE vs analytic FP32 output gradient relativeL2<.02"
+  ],
+  "limitations": [
+    "interim checkpoints unmatched in training tokens",
+    "across-token covariance ranks are not pointwise Jacobian ranks",
+    "measurements and frozen interventions cannot uniquely prove training causality",
+    "components outside the current hidden-gradient subspace can still train the head",
+    "polar reparameterization changes predictions; immediate loss does not predict retraining performance"
+  ],
+  "resources": {
+    "gpu": "one Hopper SM90 >=22000MiB",
+    "ram_GiB": 16,
+    "cpus": 2,
+    "scratch_GiB": 45,
+    "backfill": true
+  },
+  "outputs": "small JSON and spectra.npz only; no diagnostic weights; interim snapshot uses existing persisted spool read-only copy"
+}
