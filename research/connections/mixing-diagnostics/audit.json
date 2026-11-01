@@ -1,0 +1,52 @@
+{
+  "job": "7645520.0",
+  "exit_code": 0,
+  "source_commit": "d959bec5217fa1f8b02f18517c201ab5a6375f4c",
+  "checkpoint_step": 17891,
+  "checkpoint_tokens": 586252288,
+  "gpu": "NVIDIA H200",
+  "diagnostic_seconds": 62.61791396141052,
+  "checks": {
+    "passed": true,
+    "gradient_decomposition": true,
+    "orthogonal_common_preservation": true,
+    "spectral_oracle": true
+  },
+  "actual_gradient_decomposition_relative_error_max": 0.0023416336476326572,
+  "derived": {
+    "block7_to8_absolute_stream_difference_energy_retention": 0.05933541579060307,
+    "final_mixer_absolute_stream_difference_energy_retention": 0.051598887082594,
+    "final_mixer_total_adjoint_energy_retention": 0.24493421900272486,
+    "final_mixer_stream_difference_adjoint_energy_retention": 0.03489048519839649
+  },
+  "artifacts": {
+    "/home/yzhong239/mhc-mixing-diagnostics-20261031/results/collected/mixing-spectra.npz": {
+      "bytes": 556082,
+      "sha256": "93ce2246c249f64f0b1bfa034eab056e2e62a100b06294deb099f62b4580c501"
+    },
+    "/home/yzhong239/mhc-mixing-diagnostics-20261031/results/collected/mixing-diagnostics.json": {
+      "bytes": 88753,
+      "sha256": "8ed8860153eb6a1550c11f4a74bd293ef8608033d4bbacc72799bc51aba6e599"
+    },
+    "/home/yzhong239/mhc-mixing-diagnostics-20261031/results/collected/mixing-probe-losses.npz": {
+      "bytes": 213339,
+      "sha256": "6abab13a8fc328802b9d5d707139c1c9519423e62ad289dbe504070c67baa607"
+    },
+    "/home/yzhong239/mhc-mixing-diagnostics-20261031/results/collected/mixing-self-test.json": {
+      "bytes": 124,
+      "sha256": "e03ccd3a3c7d80448e1b8159f0d1ad55b297ec37796bec3ca0e16e8db64fd989"
+    }
+  },
+  "interpretation": [
+    "This checkpoint retains substantial differences through block7. Block8 reduces absolute stream-difference energy to5.93% of block7 and increases common energy; normalized difference fraction falls36.30%->1.0069%. This is not a claim that every layer or the whole backbone has collapsed.",
+    "The final mixer then retains5.16% of its input stream-difference energy, leaving a0.05245% difference fraction. It is a measured additional contraction, not the only site of convergence.",
+    "Median sorted coefficient singular values are approximately[1,.25938,.14036,.03550]. All8192 coefficient matrices have minimum singular value>1e-6; full numerical rank coexists with strong attenuation of contrast directions.",
+    "Actual pre-mixer stream-difference adjoint energy is3.489% of post-mixer energy; this includes the dynamic routing derivative. Routing VJP norm is3.314% of total upstream VJP norm. Covariance gradient eRank282.757->193.638 is descriptive and is not a pointwise Jacobian rank.",
+    "Frozen identity bypass, half-identity mix and common-preserving signed polar worsen sampled CE by.025094,.006810,.021193; both data halves agree. Matrix reconstruction control changes mean CE by only-8.18e-9.",
+    "Replacing all input streams by their mean changes sampled CE by+.0009995 (paired sequence SE.0005336), indicating limited present reliance on stream-specific features; do not present the small mean delta as a significant multi-seed result.",
+    "Orthogonal mixing has a specific mechanism to test (preserving stream differences), but these probes do not establish a training benefit. The existing head/backbone have adapted to the original mixing, so frozen replacement does not answer a from-initialization constrained-training question.",
+    "The last block also contracts diversity substantially. Modifying only the final mixer is not guaranteed to address the whole observed phenomenon.",
+    "Strict nonnegative doubly-stochastic orthogonal matrices are permutations. Signed common-preserving polar leaves that parameter family. Soft penalties and signed orthogonal parameterizations would be distinct future experiments.",
+    "Training remains stopped, checkpoint and W&B retained. No orthogonalization training authorized or submitted."
+  ]
+}
