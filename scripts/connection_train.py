@@ -28,6 +28,7 @@ def main():
     p.add_argument('--variant', choices=('baseline','mhc','mhc_no_sinkhorn'), required=True)
     p.add_argument('--architecture', choices=('vanilla', 'native'), default='vanilla')
     p.add_argument('--readout', choices=('collapse', 'vocab_partition', 'channel_partition', 'dense_expanded'), default='collapse')
+    p.add_argument('--lm-head-transform', choices=('linear', 'nonlinear_lmhead', 'nonlinear_residual_lmhead'), default='linear')
     p.add_argument('--partition-seed', type=int, default=20261031)
     p.add_argument('--partition-mixing', choices=('none', 'mhc', 'orthogonal'), default='none')
     p.add_argument('--inspect-stream-mixing', action='store_true', help='Fixed-dev stream/matrix diagnostics at validation steps')
@@ -67,6 +68,7 @@ def main():
     seed_all(a.seed)
     c=ConnectionConfig(variant=a.variant,streams=a.streams,sinkhorn_iterations=a.sinkhorn_iterations,
                        readout=a.readout, partition_seed=a.partition_seed, partition_mixing=a.partition_mixing,
+                       lm_head_transform=a.lm_head_transform,
                        architecture=a.architecture, window_pattern=a.window_pattern,
                        activation_checkpoint=a.activation_checkpoint,
                        connection_backend=a.connection_backend, fused_connection_grad=a.fused_connection_grad)
@@ -118,15 +120,18 @@ def main():
                          'unconstrained_raw' if a.variant=='mhc_no_sinkhorn' else
                          'additive'),
         applied_sinkhorn_iterations=c.sinkhorn_iterations if a.variant=='mhc' else 0,
-        optimizer='native MuonAdamW; connector AdamW at native unembedding LR, no decay',
+        optimizer=('native MuonAdamW; gate/up use existing Muon group, W_vocab uses original unembedding AdamW'
+                   if a.lm_head_transform!='linear' else
+                   'native MuonAdamW; connector AdamW at native unembedding LR, no decay'),
         optimizer_groups=initial_groups,
         loss=('partitioned CCE/LSE combined into ONE global softmax; no gradient filtering'
               if a.readout in ('vocab_partition', 'channel_partition') else 'full-token full-vocabulary CCE; no gradient filtering'),
         references='research/connections/references.json')
     mixing_label=f'-mix-{a.partition_mixing}' if a.readout=='vocab_partition' else ''
+    head_label=f'-{a.lm_head_transform}' if a.lm_head_transform!='linear' else ''
     kwargs=dict(project='nanochat',entity='yibozhong657-none',group=a.wandb_group,
                 job_type='pretrain' if a.formal_training else 'diagnostic',
-                name=f'{a.architecture}-{a.variant}-{a.readout}{mixing_label}-{a.steps}steps',id=run_id,resume='allow',config=config)
+                name=f'{a.architecture}-{a.variant}-{a.readout}{mixing_label}{head_label}-{a.steps}steps',id=run_id,resume='allow',config=config)
     run=training_run(formal_training=a.formal_training, local_dir=out/"diagnostics", **kwargs)
     run.define_metric('tokens')
     for metric in ('train/*','dev/*','perf/*','stream/*','mix/*'):
@@ -215,7 +220,7 @@ def main():
             with path.open('rb') as handle:
                 while chunk:=handle.read(8*1024*1024):digest.update(chunk)
             checkpoint_files[name]=dict(bytes=path.stat().st_size,sha256=digest.hexdigest())
-        result=dict(complete=True,variant=a.variant,run_id=run_id,steps=step,training_tokens=step*32768,
+        result=dict(complete=True,variant=a.variant,lm_head_transform=a.lm_head_transform,run_id=run_id,steps=step,training_tokens=step*32768,
             initial_dev_ce=initial_dev,final_dev_ce=dev,best_dev_ce=best,dev_tokens=dev_tokens,
             training_seconds=training_seconds,elapsed_seconds=prior_elapsed+time.perf_counter()-begin,
             steady_step_seconds=sum(durations[10:])/len(durations[10:]) if len(durations)>10 else None,

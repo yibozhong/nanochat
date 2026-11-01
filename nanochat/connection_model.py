@@ -34,8 +34,13 @@ class ConnectionConfig:
     readout: str = 'collapse'
     partition_seed: int = 20261031
     partition_mixing: str = 'none'
+    lm_head_transform: str = 'linear'
 
     def __post_init__(self):
+        if self.lm_head_transform not in ('linear', 'nonlinear_lmhead', 'nonlinear_residual_lmhead'):
+            raise ValueError(f'Unknown LM-head transform: {self.lm_head_transform}')
+        if self.lm_head_transform != 'linear' and (self.architecture != 'vanilla' or self.readout != 'collapse'):
+            raise ValueError('Nonlinear LM heads require the vanilla backbone and a D-wide collapsed readout')
         if self.partition_mixing not in ('none', 'mhc', 'orthogonal'):
             raise ValueError(f'Unknown partition mixing: {self.partition_mixing}')
         if self.partition_mixing != 'none' and (self.readout != 'vocab_partition' or self.variant != 'mhc'):
@@ -163,6 +168,15 @@ class ConnectionModel(nn.Module):
             with torch.random.fork_rng(devices=[]):
                 self.lm_head = Linear(config.streams*config.width, config.vocab_size, bias=False)
                 nn.init.normal_(self.lm_head.weight, std=.001/math.sqrt(config.streams))
+        self.lm_head_features = None
+        self.compiled_head_features = None
+        if config.lm_head_transform != 'linear':
+            from nanochat.nonlinear_lmhead import NonlinearLMHeadFeatures
+            # Preserve all shared initialization and the caller's RNG stream.
+            # Both nonlinear variants start with identical gate/up matrices.
+            with torch.random.fork_rng(devices=[]):
+                self.lm_head_features = NonlinearLMHeadFeatures(config.width,
+                    residual=config.lm_head_transform == 'nonlinear_residual_lmhead')
 
     def prepare(self, device='cuda', dtype=torch.bfloat16, compile_blocks=False):
         if self.config.variant != 'baseline':
@@ -180,6 +194,8 @@ class ConnectionModel(nn.Module):
             for b in self.blocks:
                 b.compiled_attention = torch.compile(b.attention_branch, dynamic=False, fullgraph=True)
                 b.compiled_mlp = torch.compile(b.mlp_branch, dynamic=False, fullgraph=True)
+        if compile_blocks and self.lm_head_features is not None:
+            self.compiled_head_features = torch.compile(self.lm_head_features.forward, dynamic=False, fullgraph=True)
         return self
 
     def hidden(self, idx, kv_cache=None, *, return_streams=False):
@@ -222,6 +238,8 @@ class ConnectionModel(nn.Module):
 
     def forward(self, idx, targets=None, dense=False, kv_cache=None):
         h = self.hidden(idx, kv_cache)
+        if self.lm_head_features is not None:
+            h = (self.compiled_head_features or self.lm_head_features)(h)
         w = self.lm_head.weight.to(h.dtype)
         if self.config.readout in ('vocab_partition', 'channel_partition'):
             from nanochat.partitioned_readout import partitioned_logits, partitioned_cross_entropy
@@ -265,6 +283,8 @@ def optimizer_for(model, batch_tokens=32768):
         routing.extend(model.stream_head.parameters())
     if model.partition_mixer is not None:
         routing.extend(model.partition_mixer.parameters())
+    if model.lm_head_features is not None:
+        matrices.extend(model.lm_head_features.parameters())
     if routing:
         groups.append(dict(kind='adamw', params=routing, lr=.008*batch_scale*width_scale,
                            betas=(.8, .96), eps=1e-10, weight_decay=0.))

@@ -1,0 +1,108 @@
+{
+  "authorized": true,
+  "user_request": "Stop both current runs; train nonlinear_lmhead and nonlinear_residual_lmhead without alpha",
+  "budget_choice": "Two independent fresh10B formal runs, no extra formal controls",
+  "modes": [
+    "nonlinear_lmhead",
+    "nonlinear_residual_lmhead"
+  ],
+  "model": {
+    "architecture": "vanilla",
+    "variant": "baseline",
+    "depth": 8,
+    "width": 512,
+    "heads": 4,
+    "vocab_size": 32768,
+    "sequence_length": 2048,
+    "full_attention": true,
+    "readout": "collapse"
+  },
+  "steps": 305176,
+  "tokens": 10000007168,
+  "schedule_steps": 305176,
+  "seed": 42,
+  "microbatch": 16,
+  "gradient_accumulation": 1,
+  "batch_tokens": 32768,
+  "data_uri": "osdf:///chtc/staging/y/yzhong239/nanochat-mhc-10b-data-7560536.tar",
+  "data_archive_sha256": "27a247cded8a77f4ef9f37cd19f55ce41df4be937583cc39d15c120ea9fb0702",
+  "data_split_sha256": {
+    "train": "85ed8668da74daba482f76eee8773748c8e56d38c2cd1ce90120d27d391b2721",
+    "dev": "bd67b90b4386ba6428992864712f56eb10527678ed8b3664ed5f63c1643458a4",
+    "test": "e7d24b6a89155ebc7123afe68bd2c58aeaf159b5087dbdf28e090ce09f293d09"
+  },
+  "data_note": "Reuse the existing10B packed cache, same tokenizer/dev/test/seed/order and full10B LR schedule as earlier partition experiments; no new dataset download.",
+  "parameters": {
+    "nonlinear_lmhead": 59244544,
+    "nonlinear_residual_lmhead": 59244544
+  },
+  "optimizer": "Original vanilla MuonAdamW and all LR/WD scalings unchanged; new gate/up D-by-D matrices use the existing Muon group; W_vocab remains unembedding AdamW",
+  "initialization": "Seed42, shared embedding/backbone/W_vocab bitwise identical to vanilla; gate/up appended under fork_rng, each uniform+-sqrt(3/D), identical across two nonlinear variants; no zero-initialized gate and no alpha",
+  "comparison_limits": [
+    "Single seed, matched token budget; report added parameters and wall-clock cost.",
+    "Before the unchanged softcap, W_vocab remains a fixed V-by-D matrix; pointwise Jacobian rank cannot exceed D. Nonlinearity changes the input-dependent pullback, not the shared vocabulary column space.",
+    "Plain and residual features have different initial scales; neither is renormalized or rescaled after the branch. No promise that a residual branch cannot learn to become small."
+  ],
+  "gate": {
+    "tests": 15,
+    "profile_warmup": 20,
+    "profile_timed_steps": 30,
+    "profile_variants": 3,
+    "restart": "Each new mode25steps -> exit85 -> fresh process50 with305176-step LR schedule",
+    "wandb": false,
+    "minimum_gpu_memory_mib": 22000,
+    "max_reserved_fraction": 0.9,
+    "data_uri": "osdf:///chtc/staging/y/yzhong239/nanochat-ebt-20261029/data-7444406.tar",
+    "data_archive_sha256": "44ea6ce7f62efda533ef89664da9d399e9361102ae3138229e4b78a7d331c239",
+    "data_note": "Diagnostics only read the existing cache prefix; formal training uses the full10B cache."
+  },
+  "formal_logging": {
+    "project": "nanochat",
+    "entity": "yibozhong657-none",
+    "group": "nonlinear-lmhead-10b-20261101",
+    "head_transform_in_run_name": true
+  },
+  "checkpoints": {
+    "latest_every_steps": 500,
+    "latest_only": true,
+    "best_separate": true,
+    "durable_upload_exit85_seconds": 1800
+  },
+  "resources": {
+    "single_gpu_per_run": true,
+    "cpus": 2,
+    "ram_gb": 16,
+    "disk_gb": 80,
+    "public_soft_priority": true,
+    "backfill_allowed": true,
+    "gate_disk_gb": 45
+  },
+  "storage_budget": {
+    "new_checkpoint_archives_gb_max": 2,
+    "existing_home_gib": 16,
+    "existing_staging_gib": 65.723,
+    "new_staging_data_bytes": 0
+  },
+  "readouts": {
+    "nonlinear_lmhead": "W_vocab @ (SiLU(W_g @ h) * (W_u @ h))",
+    "nonlinear_residual_lmhead": "W_vocab @ (h + SiLU(W_g @ RMSNorm(h)) * (W_u @ RMSNorm(h)))"
+  },
+  "head_parameters": {
+    "nonlinear_lmhead": 17301504,
+    "nonlinear_residual_lmhead": 17301504
+  },
+  "linear_reference_parameters": 58720256,
+  "head_input": "h = existing final RMSNorm(last block output). Residual branch additionally computes hat_h=RMSNorm(h), with native dtype-dependent RMSNorm epsilon. No post-branch norm.",
+  "stopped_jobs": {
+    "channel_partition": {
+      "job": "7647605.0",
+      "run_id": "4f20c89a",
+      "retained_step": 16794
+    },
+    "dense_expanded": {
+      "job": "7647606.0",
+      "run_id": "e704b48e",
+      "retained_step": 9500
+    }
+  }
+}
