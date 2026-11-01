@@ -27,7 +27,7 @@ def match_vanilla_initialization(model, seed):
     alone therefore do not give the two architectures identical backbone
     weights. This explicit copy makes the formal quality comparison matched.
     """
-    if model.config.variant == 'baseline':
+    if model.config.variant in ('baseline','dfwr'):
         return
     if model.config.architecture == 'native':
         # Native initialization finishes the entire backbone before drawing

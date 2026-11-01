@@ -35,8 +35,20 @@ class ConnectionConfig:
     partition_seed: int = 20261031
     partition_mixing: str = 'none'
     lm_head_transform: str = 'linear'
+    fw_bottleneck: int = 8
+    fw_inner_lr: float = .01
+    fw_momentum: float = .95
+    fw_ns_steps: int = 5
+    fw_ns_eps: float = 1e-7
+    fw_ns_bf16: bool = False
+    fw_learnable_lr: bool = True
 
     def __post_init__(self):
+        if self.variant == 'dfwr' and (self.architecture != 'vanilla' or self.readout != 'collapse'
+                                      or self.lm_head_transform != 'linear'):
+            raise ValueError('DFWR initially uses vanilla branches and the ordinary linear LM head')
+        if min(self.fw_bottleneck,self.fw_inner_lr,self.fw_ns_steps,self.fw_ns_eps)<=0 or not 0<=self.fw_momentum<1:
+            raise ValueError('Invalid DFWR dimensions or Inner Muon settings')
         if self.lm_head_transform not in ('linear', 'nonlinear_lmhead', 'nonlinear_residual_lmhead'):
             raise ValueError(f'Unknown LM-head transform: {self.lm_head_transform}')
         if self.lm_head_transform != 'linear' and (self.architecture != 'vanilla' or self.readout != 'collapse'):
@@ -61,7 +73,7 @@ class ConnectionConfig:
             raise ValueError('window_pattern must contain S and/or L')
         if self.connection_backend not in ('nvidia', 'nvidia_precise'):
             raise ValueError('Only the full NVIDIA mHC implementation is supported')
-        if self.variant not in ('baseline', 'mhc', 'mhc_no_sinkhorn'):
+        if self.variant not in ('baseline', 'mhc', 'mhc_no_sinkhorn', 'dfwr'):
             raise ValueError(f'Unknown connection variant: {self.variant}')
         if self.sinkhorn_iterations != 20:
             raise ValueError('The NVIDIA composite API requires 20 Sinkhorn iterations')
@@ -71,7 +83,7 @@ class ConnectionConfig:
             raise ValueError('RoPE requires an even integral head dimension')
         if self.sinkhorn_iterations < 1:
             raise ValueError('Sinkhorn needs at least one iteration')
-        if self.variant != 'baseline' and (self.streams != 4 or self.width % 128):
+        if self.variant in ('mhc','mhc_no_sinkhorn') and (self.streams != 4 or self.width % 128):
             raise ValueError('NVIDIA mHC kernels require four streams and width divisible by 128')
 
     @classmethod
@@ -120,6 +132,8 @@ class ConnectionModel(nn.Module):
         super().__init__()
         if config.architecture != 'vanilla':
             raise ValueError('Use build_connection_model for native nanochat')
+        if config.variant == 'dfwr':
+            raise ValueError('Use build_connection_model for DFWR')
         self.config = config
         native = GPTConfig(sequence_len=config.sequence_length, vocab_size=config.vocab_size,
             n_layer=config.depth, n_head=config.heads, n_kv_head=config.heads,
@@ -285,6 +299,9 @@ def optimizer_for(model, batch_tokens=32768):
         routing.extend(model.partition_mixer.parameters())
     if model.lm_head_features is not None:
         matrices.extend(model.lm_head_features.parameters())
+    if c.variant == 'dfwr':
+        for name,p in model.depth_memory.named_parameters():
+            (routing if name=='log_learning_rates' else matrices).append(p)
     if routing:
         groups.append(dict(kind='adamw', params=routing, lr=.008*batch_scale*width_scale,
                            betas=(.8, .96), eps=1e-10, weight_decay=0.))
@@ -293,7 +310,7 @@ def optimizer_for(model, batch_tokens=32768):
             lr=.02*batch_scale, momentum=.95, ns_steps=5, beta2=.9, weight_decay=wd))
     ids = [id(p) for g in groups for p in g['params']]
     assert len(ids) == len(set(ids)) and set(ids) == {id(p) for p in model.parameters()}
-    if model.partition_mixer is not None or c.readout == 'dense_expanded':
+    if model.partition_mixer is not None or c.readout == 'dense_expanded' or c.variant=='dfwr':
         from torch._dynamo import config as compiler_config
         signatures = {(tuple(p.shape), p.dtype, tuple(p.stride()), p.device.type)
                       for g in groups if g['kind'] == 'adamw' for p in g['params']}
@@ -305,6 +322,9 @@ def optimizer_for(model, batch_tokens=32768):
 
 
 def build_connection_model(config):
+    if config.variant == 'dfwr':
+        from nanochat.dfwr_model import DFWRModel
+        return DFWRModel(config)
     if config.architecture == 'native':
         from nanochat.native_connection_model import NativeConnectionModel
         return NativeConnectionModel(config)

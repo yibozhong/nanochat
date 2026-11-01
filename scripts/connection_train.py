@@ -25,7 +25,14 @@ from nanochat.connection_experiment import configure_attention, match_vanilla_in
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument('--variant', choices=('baseline','mhc','mhc_no_sinkhorn'), required=True)
+    p.add_argument('--variant', choices=('baseline','mhc','mhc_no_sinkhorn','dfwr'), required=True)
+    p.add_argument('--fw-bottleneck',type=int,default=8)
+    p.add_argument('--fw-inner-lr',type=float,default=.01)
+    p.add_argument('--fw-momentum',type=float,default=.95)
+    p.add_argument('--fw-ns-steps',type=int,default=5)
+    p.add_argument('--fw-ns-eps',type=float,default=1e-7)
+    p.add_argument('--fw-ns-bf16',action=argparse.BooleanOptionalAction,default=False)
+    p.add_argument('--fw-learnable-lr',action=argparse.BooleanOptionalAction,default=True)
     p.add_argument('--architecture', choices=('vanilla', 'native'), default='vanilla')
     p.add_argument('--readout', choices=('collapse', 'vocab_partition', 'channel_partition', 'dense_expanded'), default='collapse')
     p.add_argument('--lm-head-transform', choices=('linear', 'nonlinear_lmhead', 'nonlinear_residual_lmhead'), default='linear')
@@ -69,6 +76,9 @@ def main():
     c=ConnectionConfig(variant=a.variant,streams=a.streams,sinkhorn_iterations=a.sinkhorn_iterations,
                        readout=a.readout, partition_seed=a.partition_seed, partition_mixing=a.partition_mixing,
                        lm_head_transform=a.lm_head_transform,
+                       fw_bottleneck=a.fw_bottleneck,fw_inner_lr=a.fw_inner_lr,fw_momentum=a.fw_momentum,
+                       fw_ns_steps=a.fw_ns_steps,fw_ns_eps=a.fw_ns_eps,fw_ns_bf16=a.fw_ns_bf16,
+                       fw_learnable_lr=a.fw_learnable_lr,
                        architecture=a.architecture, window_pattern=a.window_pattern,
                        activation_checkpoint=a.activation_checkpoint,
                        connection_backend=a.connection_backend, fused_connection_grad=a.fused_connection_grad)
@@ -116,11 +126,12 @@ def main():
         gpu_capability=list(torch.cuda.get_device_capability()),
         explicit_portability_gate=os.environ.get('NANOCHAT_MHC_TEST_PORTABILITY')=='1',
         parameters=sum(p.numel() for p in model.parameters()),
-        residual_mixing=('sinkhorn' if a.variant=='mhc' else
+        residual_mixing=('depth_fast_weight_no_residual' if a.variant=='dfwr' else 'sinkhorn' if a.variant=='mhc' else
                          'unconstrained_raw' if a.variant=='mhc_no_sinkhorn' else
                          'additive'),
         applied_sinkhorn_iterations=c.sinkhorn_iterations if a.variant=='mhc' else 0,
-        optimizer=('native MuonAdamW; gate/up use existing Muon group, W_vocab uses original unembedding AdamW'
+        optimizer=('native MuonAdamW; shared FW initial matrices and Q/K use Muon; log inner rates use unembedding AdamW without decay'
+                   if a.variant=='dfwr' else 'native MuonAdamW; gate/up use existing Muon group, W_vocab uses original unembedding AdamW'
                    if a.lm_head_transform!='linear' else
                    'native MuonAdamW; connector AdamW at native unembedding LR, no decay'),
         optimizer_groups=initial_groups,
