@@ -1,0 +1,69 @@
+{
+  "phase": "interim",
+  "job": "7644651.0",
+  "exit_code": 0,
+  "source_commit": "97da3b5c2ddbd92996912c2099a760fffee9966a",
+  "checked": {
+    "self_test": {
+      "passed": true,
+      "svd_oracle": true,
+      "equal_spectrum": true,
+      "identical_streams": true,
+      "analytic_gradient": true
+    },
+    "actual_cce_relative_gradient_error": {
+      "partition": 0.0032897486817091703,
+      "mhc": 0.0037466168869286776
+    },
+    "checkpoint_training_protocol_equal": true,
+    "checkpoint_data_manifest_equal": true,
+    "protocol_audit_file": "/home/yzhong239/mhc-rank-diagnostics-20261031/checkpoint-protocol-audit.json"
+  },
+  "source_artifacts": {
+    "/home/yzhong239/mhc-rank-diagnostics-20261031/results/interim/diagnostics.json": {
+      "bytes": 238389,
+      "sha256": "9ddc3e6e6bd78b8e323b2c20876a0a6e44a6e15f860e4a43bff7a512570bdb26"
+    },
+    "/home/yzhong239/mhc-rank-diagnostics-20261031/results/interim/spectra.npz": {
+      "bytes": 1781754,
+      "sha256": "fa10bb3167b9397a72897cf34e4be03cd9e19a141b505a39cbe7c6385fca3d51"
+    },
+    "/home/yzhong239/mhc-rank-diagnostics-20261031/results/interim/self-test.json": {
+      "bytes": 127,
+      "sha256": "3c1fbc2b34bf9d79d4e8a529d0f1402741d4750223c6bb6cff14e820e5f4a957"
+    }
+  },
+  "partition_probe_deltas": {
+    "polar_same_frobenius": {
+      "ce_delta": 1.025413226576413,
+      "ce_delta_halves": [
+        1.0241871453270797,
+        1.0266393078257465
+      ]
+    },
+    "mean_streams": {
+      "ce_delta": 0.0011741699725629218,
+      "ce_delta_halves": [
+        0.0012587701840054422,
+        0.0010895697611204014
+      ]
+    },
+    "cycle_stream_assignment": {
+      "ce_delta": 0.0043342335940970145,
+      "ce_delta_halves": [
+        0.004793627345385687,
+        0.003874839842808342
+      ]
+    }
+  },
+  "interpretation": [
+    "At 1.196B tokens, each partition head already has numerical column rank512 at relative singular-value tolerances1e-6 and1e-4; the block diagonal head has rank2048. Head rank deficiency is not observed.",
+    "Final raw stream disagreement energy is0.07556%, with pairwise mean token cosines0.99917-0.99945. Mean-stream and cyclic-assignment probes show small but nonzero positive loss deltas on each data half. This supports weak learned stream specialization at this checkpoint, not exact collapse or a proven unique cause.",
+    "Final head-input gradient energy entropy rank is200.285, but90%/99% energy needs750/1557 directions. Effective rank200 must not be read as only200 active directions; the expanded gradient space is used.",
+    "Frozen equal-Frobenius polar projection increases gradient energy entropy rank200.281->623.335 while worsening sampled CE3.58250->4.60791. A larger gradient effective rank alone does not guarantee immediate loss improvement. This is not an orthogonally constrained training experiment.",
+    "The mHC control is at10B versus partition1.196B; cross-model loss, rank and diversity differences are confounded by training progress. No same-budget method advantage or failure is concluded.",
+    "Primary effective rank uses squared-singular-value energy entropy. Across-token covariance is distinct from a pointwise output Jacobian.",
+    "Polar probes reuse original head column-space bases after BF16 rounding; their captured-fraction numbers should not be treated as an exact projection onto the rounded polar matrix column space.",
+    "The independent monitor remains active and will submit one matching10B diagnostic after original formal-training completion/audit. No extra training, optimizer updates or W&B diagnostics were launched."
+  ]
+}
