@@ -137,11 +137,38 @@ def test_initial_binding_encodes_embedding():
 def test_memory_estimate_and_config_validation():
     full=state_memory_estimate(1,2048,512,512,8)
     small=state_memory_estimate(1,2048,512,8,8)
+    selected=state_memory_estimate(1,2048,512,32,8)
     assert full['live_state_bytes']==12*1024**3
     assert small['live_state_bytes']==192*1024**2
+    assert selected['live_state_bytes']==768*1024**2
+    assert ConnectionConfig(variant='dfwr').fw_bottleneck==32
     with pytest.raises(ValueError):ConnectionConfig(variant='dfwr',architecture='native')
     with pytest.raises(ValueError):ConnectionConfig(variant='dfwr',fw_bottleneck=0)
-    record('memory-estimate',dict(full=full,bottleneck8=small))
+    record('memory-estimate',dict(full=full,bottleneck8=small,bottleneck32=selected))
+
+
+def test_production_r32_inner_and_outer_autograd_oracle():
+    torch.manual_seed(20261101)
+    memory=DepthFastWeights(512,32).to(device='cuda',dtype=torch.float64)
+    h=torch.randn(1,2,512,device='cuda',dtype=torch.float64,requires_grad=True)
+    delta=(torch.randn_like(h)*.1).requires_grad_()
+    _,theta,_=memory.initialize(h)
+    momentum=tuple(torch.randn_like(w)*.01 for w in theta)
+    key=memory.key(h)
+    actual,_,_=binding_gradient(theta,key,delta)
+    proxy=tuple(w.clone() for w in theta)
+    target=reference_fw(theta,key).detach()+delta
+    expected=torch.autograd.grad(.5*(reference_fw(proxy,key)-target).square().sum(),proxy,create_graph=True)
+    for a,b in zip(actual,expected):torch.testing.assert_close(a,b,atol=2e-10,rtol=2e-10)
+    wa,_=inner_muon(theta,momentum,actual,memory.log_learning_rates.exp())
+    wr,_=reference_update(theta,momentum,expected,memory.log_learning_rates.exp())
+    variables=(*memory.parameters(),h,delta)
+    ga=torch.autograd.grad(swiglu(wa,key)[0].square().mean(),variables,retain_graph=True)
+    gr=torch.autograd.grad(reference_fw(wr,key).square().mean(),variables)
+    assert all(torch.isfinite(g).all() for g in (*ga,*gr))
+    error=relative(torch.cat([g.flatten() for g in ga]),torch.cat([g.flatten() for g in gr]))
+    assert error<2e-7,error
+    record('production-r32-oracle',dict(width=512,bottleneck=32,outer_relative_error=error))
 
 
 def build(**kwargs):
@@ -180,6 +207,20 @@ def test_real_2k_causality_batch_isolation_cache_and_state_reset():
     assert all(torch.equal(v,m.state_dict()[k]) for k,v in before.items())
     assert not any('runtime' in k or 'momentum' in k for k in m.state_dict())
     record('causality',dict(context=2048,future_and_other_sequence_isolated=True,reset=True,cache=True))
+
+
+def test_production_r32_full_depth_2k_causality_and_reset():
+    m=build(depth=8,width=512,heads=4,vocab_size=32768,fw_bottleneck=32)
+    assert sum(p.numel() for p in m.parameters())==59031555
+    idx=torch.randint(0,32768,(1,2048),device='cuda')
+    changed=idx.clone();changed[:,1024:]=(changed[:,1024:]+17)%32768
+    with torch.no_grad():
+        a=m.hidden(idx);b=m.hidden(changed);again=m.hidden(idx)
+    assert torch.isfinite(a).all() and torch.isfinite(b).all()
+    torch.testing.assert_close(a[:,:1024],b[:,:1024],atol=0,rtol=0)
+    torch.testing.assert_close(a,again,atol=0,rtol=0)
+    record('production-r32-causality',dict(width=512,bottleneck=32,depth=8,context=2048,
+        parameters=59031555,future_isolated=True,reset=True))
 
 
 def test_outer_ntp_reaches_all_slow_parameters_and_cce_matches_dense():

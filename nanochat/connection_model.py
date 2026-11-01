@@ -35,7 +35,7 @@ class ConnectionConfig:
     partition_seed: int = 20261031
     partition_mixing: str = 'none'
     lm_head_transform: str = 'linear'
-    fw_bottleneck: int = 8
+    fw_bottleneck: int = 32
     fw_inner_lr: float = .01
     fw_momentum: float = .95
     fw_ns_steps: int = 5

@@ -91,7 +91,7 @@ def state_memory_estimate(batch, tokens, width, bottleneck, depth, bytes_per_val
 
 
 class DepthFastWeights(nn.Module):
-    def __init__(self, width, bottleneck=8, inner_lr=.01, momentum=.95,
+    def __init__(self, width, bottleneck=32, inner_lr=.01, momentum=.95,
                  ns_steps=5, ns_eps=1e-7, ns_bf16=False, learnable_lr=True):
         super().__init__()
         if min(width, bottleneck, inner_lr, ns_eps) <= 0 or not 0 <= momentum < 1 or ns_steps < 1:

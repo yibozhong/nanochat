@@ -27,7 +27,7 @@ def job(ident):
     attrs='ClusterId,ProcId,JobStatus,ExitCode,HoldReason,HoldReasonCode,RemoteHost,DFWRKey,DFWRRole,DFWRMode'
     rows=json.loads(command(['condor_q',ident,'-json','-attributes',attrs]) or '[]')
     if not rows:rows=json.loads(command(['condor_history',ident,'-limit','1','-scanlimit','10000','-json','-attributes',attrs]) or '[]')
-    if rows:assert rows[0]['DFWRKey']=='dfwr-10b-20261101'
+    if rows:assert rows[0]['DFWRKey']=='dfwr-r32-10b-20261101'
     return rows[0] if rows else None
 
 
@@ -41,23 +41,25 @@ def gate(s):
     with tarfile.open(path) as tar:
         r=json.load(tar.extractfile('results/dfwr-gate.json'))
         assert r['complete'] and r['source']==s['source'] and r['logging_backend']=='local'
-        assert r['checks']==dict(tests=11,failures=0,errors=0,skipped=0)
+        assert r['checks']==dict(tests=13,failures=0,errors=0,skipped=0)
         assert set(r['profiles'])=={'baseline','dfwr'} and r['formal_ready']
-        assert r['selected_microbatch']==1 and r['selected_bottleneck']==8
+        assert r['selected_microbatch']==1 and r['selected_bottleneck']==32
         assert not any(m.name.endswith(('.pt','.wandb')) or 'wandb' in Path(m.name).parts for m in tar)
         r['unit_results']={Path(m.name).name:json.load(tar.extractfile(m)) for m in tar
             if m.isfile() and m.name.startswith('results/dfwr-checks/') and m.name.endswith('.json')}
         assert r['unit_results']['initial-binding.json']['relative_reconstruction_error']<1e-4
         assert r['unit_results']['finite-differences.json']['passed']
         assert r['unit_results']['causality.json']['future_and_other_sequence_isolated']
+        assert r['unit_results']['production-r32-causality.json']['future_isolated']
+        assert r['unit_results']['production-r32-oracle.json']['outer_relative_error']<2e-7
     assert len({x['gpu'] for x in r['profiles'].values()})==1
     p=r['profiles']['dfwr'];t=r['trial'];c=r['config']
     assert p['timed_steps']==10 and math.isfinite(p['mean_seconds']) and p['peak_reserved_bytes']<.9*22000*1024**2
-    assert p['bottleneck']==8 and p['microbatch']==1 and p['parameters']==58994691
+    assert p['bottleneck']==32 and p['microbatch']==1 and p['parameters']==59031555
     assert all(math.isfinite(x) and x>0 for x in p['step_seconds'])
     assert t['complete'] and t['steps']==50 and t['training_tokens']==50*32768 and t['final_dev_ce']<t['initial_dev_ce']
     assert t['peak_reserved_bytes']<.9*22000*1024**2
-    assert c['model']['variant']=='dfwr' and c['model']['fw_bottleneck']==8 and c['model']['activation_checkpoint']
+    assert c['model']['variant']=='dfwr' and c['model']['fw_bottleneck']==32 and c['model']['activation_checkpoint']
     assert c['protocol']['schedule_steps']==305176 and c['protocol']['microbatch']==1 and c['logging_backend']=='local'
     immutable_inputs();r['gate_job']=s['gate_job'];r['archive_sha256']=hashlib.sha256(path.read_bytes()).hexdigest()
     (ROOT/'gate.json').write_text(json.dumps(r,indent=2)+'\n')
@@ -65,12 +67,13 @@ def gate(s):
 
 
 def publish_release(s):
+    if (ROOT/'STOPPED.json').exists():raise RuntimeError('Workflow stopped before publishing/release')
     if not s.get('report_committed'):
         assert command(['git','rev-parse','HEAD'],REPO)==s['reviewed_head']
         assert not command(['git','status','--porcelain'],REPO)
         report=REPO/'research/connections/dfwr/gate-results.json';report.write_bytes((ROOT/'gate.json').read_bytes())
         command(['git','add',str(report)],REPO)
-        command(['git','commit','-m','Validate per-token DFWR gradients, memory and fresh-process resume'],REPO)
+        command(['git','commit','-m','Validate r32 DFWR gradients, memory and fresh-process resume'],REPO)
         s.update(report_committed=True,reviewed_head=command(['git','rev-parse','HEAD'],REPO));save(s)
     if not s.get('pushed_commit'):
         assert command(['git','rev-parse','HEAD'],REPO)==s['reviewed_head']
@@ -78,6 +81,7 @@ def publish_release(s):
         helper=runpy.run_path(str(REPO/'research/connections/nvidia-only/watch.py'))
         s['pushed_commit']=helper['push']();save(s)
     for mode in MODES:
+        if (ROOT/'STOPPED.json').exists():raise RuntimeError('Workflow stopped before training release')
         t=s['training_jobs'][mode]
         if t['released']:continue
         immutable_inputs();row=job(t['job'])
@@ -92,8 +96,8 @@ def publish_release(s):
         p=Path('/home/yzhong239/AGENTS.md')
         with p.open('r+') as handle:
             fcntl.flock(handle,fcntl.LOCK_EX)
-            text=handle.read();heading='## 新授权：Depth-wise Fast Weight Residual（DFWR）（2026-11-01）\n'
-            note=f'\n最新：gate{s["gate_job"]}已exit0，11检查、DFWR吞吐显存与25→50真实恢复通过；实现/报告已推送main {s["pushed_commit"]}。正式DFWR10B作业已自动release：'+', '.join(f'{m}={t["job"]}/W&B{t["run_id"]}' for m,t in s['training_jobs'].items())+'。release不等于已开跑，监控继续跟踪，勿重复提交。\n'
+            text=handle.read();heading='## 新授权：per-token DFWR固定r32，检查通过后直接10B（2026-11-01）\n'
+            note=f'\n最新：gate{s["gate_job"]}已exit0，13检查、r32 DFWR吞吐显存与25→50真实恢复通过；实现/报告已推送main {s["pushed_commit"]}。正式DFWR10B作业已自动release：'+', '.join(f'{m}={t["job"]}/W&B{t["run_id"]}' for m,t in s['training_jobs'].items())+'。release不等于已开跑，监控继续跟踪，勿重复提交。\n'
             assert heading in text
             handle.seek(0);handle.write(text.replace(heading,heading+note,1));handle.truncate()
 
@@ -113,7 +117,7 @@ def collect(s,mode):
     assert r['variant']=='dfwr'
     assert r['steps']==305176 and r['training_tokens']==10000007168
     assert r['test_evaluated'] and r['test_tokens']==2097152
-    assert c['model']['variant']=='dfwr' and c['model']['fw_bottleneck']==8 and c['model']['readout']=='collapse' and c['protocol']['schedule_steps']==305176 and c['logging_backend']=='wandb'
+    assert c['model']['variant']=='dfwr' and c['model']['fw_bottleneck']==32 and c['model']['readout']=='collapse' and c['protocol']['schedule_steps']==305176 and c['logging_backend']=='wandb'
     assert {k:v['sha256'] for k,v in c['data_manifest']['files'].items()}==s['source']['data_split_sha256']
     archive=ROOT/'results'/f'{mode}-{t["job"]}-checkpoints.tar'
     with tarfile.open(archive) as tar:

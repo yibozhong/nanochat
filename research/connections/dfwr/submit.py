@@ -12,7 +12,7 @@ import uuid
 ROOT=Path(sys.argv[1]).resolve()
 REPO=Path(__file__).resolve().parents[3]
 BASE=Path('/home/yzhong239/mhc-partition-mix-20261031')
-KEY='dfwr-10b-20261101'
+KEY='dfwr-r32-10b-20261101'
 DATA='osdf:///chtc/staging/y/yzhong239/nanochat-mhc-10b-data-7560536.tar'
 GATE_DATA='osdf:///chtc/staging/y/yzhong239/nanochat-ebt-20261029/data-7444406.tar'
 MODES=('dfwr',)
@@ -35,11 +35,13 @@ def main():
         assert not json.loads(command(['condor_q','yzhong239','-constraint',f'DFWRKey == "{KEY}"','-json','-attributes','ClusterId,ProcId']) or '[]')
         protocol=json.loads((REPO/'research/connections/dfwr/protocol.json').read_text())
         assert protocol['steps']==305176 and protocol['tokens']==10000007168 and protocol['modes']==list(MODES)
+        assert protocol['model']['fw_bottleneck']==32 and protocol['formal_logging']['group']==KEY
+        assert ROOT.name==KEY,'Use the new r32 workflow; do not revive the stopped r8 workflow'
         for n in ('bundles','logs','results'):(ROOT/n).mkdir(exist_ok=True)
         commit=command(['git','rev-parse','HEAD'],REPO);run_ids={m:uuid.uuid4().hex[:8] for m in MODES}
         (ROOT/'submission-intent.json').write_text(json.dumps(dict(commit=commit,run_ids=run_ids,key=KEY),indent=2)+'\n')
         immutable={}
-        for name in ('mhc-native-pretrain-20261031','mhc-vocab-partition-20261031','mhc-partition-mix-20261031','mhc-orthogonal-mix-10b-20261031','mhc-channel-partition-10b-20261101'):
+        for name in ('mhc-native-pretrain-20261031','mhc-vocab-partition-20261031','mhc-partition-mix-20261031','mhc-orthogonal-mix-10b-20261031','mhc-channel-partition-10b-20261101','nonlinear-lmhead-10b-20261101','dfwr-10b-20261101'):
             for p in (Path('/home/yzhong239')/name).rglob('*'):
                 if p.is_file() and p.name in ('source.tar','source.json','inputs.sha256','train.sh','train.sub'):
                     immutable[str(p)]=hashlib.sha256(p.read_bytes()).hexdigest()
@@ -53,7 +55,8 @@ def main():
         digest=protocol['data_archive_sha256'];assert len(digest)==64 and all(c in '0123456789abcdef' for c in digest)
         for name in ('train.sh','validate.sh'):shutil.copy2(REPO/'research/connections/dfwr'/name,ROOT/name)
         source=dict(commit=commit,hashes=hashes,steps=305176,training_tokens=10000007168,
-            purpose='Depth-wise Fast Weight Residual, per-token state, differentiable Inner Muon,10B run',
+            fw_bottleneck=32,parameters=59031555,
+            purpose='Depth-wise Fast Weight Residual r32, per-token state, differentiable Inner Muon,10B run',
             data_uri=DATA,data_split_sha256=protocol['data_split_sha256'],
             data_archive_sha256=digest,gate_data_uri=GATE_DATA,
             gate_data_archive_sha256=protocol['gate']['data_archive_sha256'],
@@ -94,13 +97,13 @@ log = logs/gate.$(Cluster).$(Process).log
 output = logs/gate.$(Cluster).$(Process).out
 error = logs/gate.$(Cluster).$(Process).err
 +DFWRRole = "gate"
-+JobBatchName = "nanochat-dfwr-gate"
++JobBatchName = "nanochat-dfwr-r32-gate"
 queue 1
 '''
         specs={'gate':gate}
         for mode in MODES:
             specs['train-'+mode]=common+f'''executable = train.sh
-arguments = dfwr {run_ids[mode]} 305176 8
+arguments = dfwr {run_ids[mode]} 305176 32
 environment = "NANOCHAT_DATA_ARCHIVE=nanochat-mhc-10b-data-7560536.tar"
 encrypt_input_files = /home/yzhong239/.netrc
 hold = True
@@ -116,7 +119,7 @@ error = logs/{mode}.$(Cluster).$(Process).err
 +DFWRRole = "formal"
 +DFWRMode = "{mode}"
 +MHCRunID = "{run_ids[mode]}"
-+JobBatchName = "nanochat-dfwr-10b"
++JobBatchName = "nanochat-dfwr-r32-10b"
 queue 1
 '''
         for name,body in specs.items():

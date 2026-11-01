@@ -10,7 +10,7 @@ has its own runtime gate/up/down matrices and momentum buffers. They persist
 across all16 sublayers of the8-layer model, and reset at the next forward pass.
 Causal attention is the only path connecting token positions. Cached decoding
 also initializes the new token's own FW state; it never inherits another token's
-FW state. Initial implementation uses a configurable512->8->512 SwiGLU.
+FW state. Initial implementation uses a configurable512->32->512 SwiGLU.
 
 The inner objective per state is0.5 times the sum of squared output errors:
 prediction=FW_old(k), target=stop_gradient(prediction)+delta. It is **not** an
@@ -61,11 +61,11 @@ the head/embedding retain their groups, and log inner rates use unembedding Adam
 without decay. There are no per-layer learned FW initial matrices.
 
 For one2K sequence, full D512 bottleneck512 needs12GiB for just live FP32 FW and
-momentum; retaining states across depth is infeasible on a22GB budget. Bottleneck8
-needs192MiB per live state. With checkpointing each two-sublayer block, saved input
-states have a conservative state-only estimate1.6875GiB at microbatch1. Activations,
+momentum; retaining states across depth is infeasible on a22GB budget. Bottleneck32
+needs768MiB per live state. With checkpointing each two-sublayer block, saved input
+states have a conservative state-only estimate6.75GiB at microbatch1. Activations,
 recomputation, gradients, model optimizer and allocator storage are extra and must
-be measured. Microbatch16 would already require27GiB for those checkpoint input
+be measured. Microbatch16 would already require108GiB for those checkpoint input
 states alone. Start microbatch1/accum16 to retain batch32768.
 
 The GPU gate covers independent FP64 inner and outer autograd oracles, finite
@@ -80,7 +80,7 @@ formal job held; it must not silently change state sharing or truncate gradients
 
 Formal target retains the established FineWeb-Edu10B packed cache, seed42 and
 305176steps (10,000,007,168 model tokens), default outer LR schedule, dev/test and
-single-GPU setup. Group `dfwr-10b-20261101`, project `nanochat`. One formal run;
+single-GPU setup. Group `dfwr-r32-10b-20261101`, project `nanochat`. One formal run;
 historical vanilla is the reference. Latest overwrites every500 steps, dev-best
 is separate, and exit85 every1800seconds durably transfers checkpoints; restart
 uses the same W&B ID and exact data position. Runtime FW state is reconstructed
@@ -90,3 +90,14 @@ No quality/efficiency benefit is established. A single nonlinear update need not
 fit the incremental target, and finite FW capacity does not guarantee retention
 of all earlier-layer information. GPU memory and stability gate results are
 required before releasing the full training run.
+
+The user explicitly selected r32 on2026-11-01. This supersedes the cancelled r8
+workflow; new jobs use `/home/yzhong239/dfwr-r32-10b-20261101`. The gate has13
+tests, including the production D512/r32 derivative oracle and the full8-layer,
+2K-token causality/reset check. No silent reduction of r32 or gradient truncation
+is allowed. The formal run has59,031,555 slow parameters.
+
+[Depth Memory](https://arxiv.org/abs/2610.18809) is a direct related work: per-token
+depth memory itself is not a novelty claim. Its LDM uses linear RLS and retains
+a separate residual stream; our nonlinear incremental target and no-residual
+path remain unvalidated hypotheses. Only the authorized DFWR run is submitted.

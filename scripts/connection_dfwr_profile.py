@@ -17,7 +17,7 @@ from nanochat.packed_training import PackedData,seed_all,train_step
 def main():
     p=argparse.ArgumentParser()
     p.add_argument('--microbatch',type=int,default=1)
-    p.add_argument('--bottleneck',type=int,default=8)
+    p.add_argument('--bottleneck',type=int,default=32)
     p.add_argument('--steps',type=int,default=12)
     p.add_argument('--variant',choices=('baseline','dfwr'),default='dfwr')
     p.add_argument('--output',required=True)
@@ -39,6 +39,8 @@ def main():
         gpu=torch.cuda.get_device_name(),parameters=sum(p.numel() for p in model.parameters()),
         logging_backend='local',warmup=2,timed_steps=len(durations),losses=losses,
         mean_seconds=statistics.mean(durations),step_seconds=durations,
+        tokens_per_second=32768/statistics.mean(durations),
+        estimated_10b_training_hours=305176*statistics.mean(durations)/3600,
         peak_reserved_bytes=torch.cuda.max_memory_reserved(),peak_allocated_bytes=torch.cuda.max_memory_allocated(),
         state_estimate=state_memory_estimate(a.microbatch,2048,512,a.bottleneck,8))
     Path(a.output).write_text(json.dumps(record,indent=2)+'\n')

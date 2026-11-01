@@ -26,7 +26,7 @@ from nanochat.connection_experiment import configure_attention, match_vanilla_in
 def main():
     p = argparse.ArgumentParser()
     p.add_argument('--variant', choices=('baseline','mhc','mhc_no_sinkhorn','dfwr'), required=True)
-    p.add_argument('--fw-bottleneck',type=int,default=8)
+    p.add_argument('--fw-bottleneck',type=int,default=32)
     p.add_argument('--fw-inner-lr',type=float,default=.01)
     p.add_argument('--fw-momentum',type=float,default=.95)
     p.add_argument('--fw-ns-steps',type=int,default=5)
@@ -140,9 +140,10 @@ def main():
         references='research/connections/references.json')
     mixing_label=f'-mix-{a.partition_mixing}' if a.readout=='vocab_partition' else ''
     head_label=f'-{a.lm_head_transform}' if a.lm_head_transform!='linear' else ''
+    fw_label=f'-r{a.fw_bottleneck}' if a.variant=='dfwr' else ''
     kwargs=dict(project='nanochat',entity='yibozhong657-none',group=a.wandb_group,
                 job_type='pretrain' if a.formal_training else 'diagnostic',
-                name=f'{a.architecture}-{a.variant}-{a.readout}{mixing_label}{head_label}-{a.steps}steps',id=run_id,resume='allow',config=config)
+                name=f'{a.architecture}-{a.variant}{fw_label}-{a.readout}{mixing_label}{head_label}-{a.steps}steps',id=run_id,resume='allow',config=config)
     run=training_run(formal_training=a.formal_training, local_dir=out/"diagnostics", **kwargs)
     run.define_metric('tokens')
     for metric in ('train/*','dev/*','perf/*','stream/*','mix/*'):
