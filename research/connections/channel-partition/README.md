@@ -46,10 +46,10 @@ and the same cuDNN attention backend as the previous formal mHC comparison.
 This is a same-token comparison with differing compute and parameter budgets;
 report wall-clock cost alongside CE. The plain mHC10B comparison already exists.
 
-Before release, a single GPU gate runs27 checks: independent FP64 coordinate/
+Before release, a single GPU gate runs29 checks: independent FP64 coordinate/
 logit/gradient oracle, rank-under-collapse example, BF16 CCE input/weight
 gradients, target and denominator routing, matched initialization/optimizer,
-actual2K causality, KV cache, compile/recompute, optimizer/RNG resume, and old
+actual2K causality, KV cache, compile/recompute, explicit raw-stream diagnostics, optimizer/RNG resume, and old
 readout regression. It profiles collapse/channel/expanded on the same GPU and
 does separate25->exit85->fresh-process50-step restart checks for both new modes
 with the full10B LR schedule. Gate/profiling have no W&B and return no weights.

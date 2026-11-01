@@ -16,5 +16,21 @@
       "7647605.0",
       "7647606.0"
     ]
+  },
+  {
+    "job": "7647948.0",
+    "source": "2e5fa1d7e2e6af715e83f75f159d3a44791ca96f",
+    "passed": 27,
+    "failed_tests": 0,
+    "failed_stage": "channel_partition profile initial stream diagnostic",
+    "error": "KeyError: before",
+    "finding": "ConnectionModel.hidden calls block.forward directly; last-block nn.Module forward hook never fires. Final-mixer hooks worked only when a final mixer existed.",
+    "fix": "Expose raw before/after stream states through optional hidden(return_streams=True); diagnostics use explicit outputs. Add two compiled no-mixer regressions verifying block-walk equality, unchanged logits/state/RNG.",
+    "model_update_math_changed": false,
+    "baseline_profile_seconds": 0.08714712833364804,
+    "formal_jobs_remain_held": [
+      "7647605.0",
+      "7647606.0"
+    ]
   }
 ]

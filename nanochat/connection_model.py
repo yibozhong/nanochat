@@ -182,7 +182,9 @@ class ConnectionModel(nn.Module):
                 b.compiled_mlp = torch.compile(b.mlp_branch, dynamic=False, fullgraph=True)
         return self
 
-    def hidden(self, idx, kv_cache=None):
+    def hidden(self, idx, kv_cache=None, *, return_streams=False):
+        if return_streams and self.config.readout == 'collapse':
+            raise ValueError('Raw stream diagnostics require a multistream readout')
         start = 0 if kv_cache is None else kv_cache.get_pos()
         if start + idx.shape[1] > self.config.sequence_length:
             raise ValueError('Input exceeds configured context length')
@@ -198,10 +200,15 @@ class ConnectionModel(nn.Module):
                 x = checkpoint(fn, x, cos, sin, use_reentrant=False)
             else:
                 x = fn(x, cos, sin, kv_cache)
+        before_mixing = x if return_streams else None
         if self.stream_head is not None:
             x = self.stream_head(x)
         if self.partition_mixer is not None:
             x = self.partition_mixer(x)
+        if return_streams:
+            # Explicit observation also works when blocks invoke .forward
+            # directly, which bypasses nn.Module forward hooks.
+            return before_mixing, x
         if self.config.readout != 'collapse':
             # Normalize each D-dimensional stream, never the K stream axis.
             x = norm(x.transpose(-1, -2).contiguous())

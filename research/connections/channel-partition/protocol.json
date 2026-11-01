@@ -47,7 +47,7 @@
   ],
   "backbone_mhc": "All16 attention/MLP connectors retain original20-step Sinkhorn",
   "gate": {
-    "tests": 27,
+    "tests": 29,
     "profile_warmup": 20,
     "profile_timed_steps": 30,
     "profile_variants": 3,

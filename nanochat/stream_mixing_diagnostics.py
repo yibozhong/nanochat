@@ -4,16 +4,8 @@ import torch
 
 @torch.no_grad()
 def inspect_stream_mixing(model, idx):
-    capture = {}
-    def collect(module, args, output):
-        capture['before'] = args[0].detach() if model.partition_mixer is not None else output.detach()
-        capture['after'] = output.detach()
-    module=model.partition_mixer if model.partition_mixer is not None else model.blocks[-1]
-    hook = module.register_forward_hook(collect)
-    try:
-        model.hidden(idx)
-    finally:
-        hook.remove()
+    before, after = model.hidden(idx, return_streams=True)
+    capture = dict(before=before.detach(), after=after.detach())
     if model.partition_mixer is None:
         matrix=torch.eye(4,device=idx.device,dtype=torch.float64).expand(*idx.shape,4,4)
     else:

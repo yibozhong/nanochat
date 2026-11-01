@@ -168,3 +168,33 @@ def test_invalid_configurations():
         with pytest.raises(ValueError):ConnectionConfig(variant='baseline',readout=readout)
         with pytest.raises(ValueError):ConnectionConfig(variant='mhc',readout=readout,partition_mixing='orthogonal')
         with pytest.raises(ValueError):ConnectionConfig(variant='mhc',readout=readout,architecture='native')
+
+
+@pytest.mark.parametrize('readout',MODES)
+def test_compiled_no_mixer_diagnostics_preserve_model_and_readout(readout):
+    from nanochat.gpt import norm
+    from nanochat.nvidia_connections import expand_streams
+    from nanochat.stream_mixing_diagnostics import inspect_stream_mixing
+    configure_attention('sdpa_cudnn')
+    model=build(readout,depth=2,width=128,heads=1,vocab_size=256,sequence_length=128)
+    model.prepare(compile_blocks=True)
+    idx=torch.randint(0,256,(2,32),device='cuda')
+    with torch.no_grad():
+        expected=expand_streams(norm(model.wte(idx)),4)
+        for block in model.blocks:
+            expected=block(expected,model.cos[:,:32],model.sin[:,:32])
+        before,after=model.hidden(idx,return_streams=True)
+        torch.testing.assert_close(before,expected,atol=0,rtol=0)
+        torch.testing.assert_close(after,expected,atol=0,rtol=0)
+        logits_before=model(idx)
+        state={k:v.clone() for k,v in model.state_dict().items()}
+        rng=torch.cuda.get_rng_state().clone()
+        diagnostics=inspect_stream_mixing(model,idx)
+        assert diagnostics['tokens']==64 and diagnostics['before']==diagnostics['after']
+        assert diagnostics['stream_difference_energy_retention'] in (None,1.)
+        assert diagnostics['orthogonality_max_error']==0
+        torch.testing.assert_close(model(idx),logits_before,atol=0,rtol=0)
+        assert torch.equal(torch.cuda.get_rng_state(),rng)
+        assert all(torch.equal(value,model.state_dict()[key]) for key,value in state.items())
+    record('diagnostics-'+readout,dict(explicit_stream_capture_matches_block_walk=True,
+        model_and_logits_unchanged=True,rng_unchanged=True,**diagnostics))

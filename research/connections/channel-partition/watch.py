@@ -41,7 +41,7 @@ def gate(s):
     with tarfile.open(path) as tar:
         r=json.load(tar.extractfile('results/channel-readout-gate.json'))
         assert r['complete'] and r['source']==s.get('gate_source',s['source']) and r['logging_backend']=='local'
-        assert r['checks']==dict(tests=27,failures=0,errors=0,skipped=0)
+        assert r['checks']==dict(tests=29,failures=0,errors=0,skipped=0)
         assert set(r['profiles'])=={'collapse',*MODES}
         assert set(r['trials'])==set(r['configs'])==set(MODES)
         assert not any(m.name.endswith(('.pt','.wandb')) or 'wandb' in Path(m.name).parts for m in tar)
@@ -99,7 +99,7 @@ def publish_release(s):
         with p.open('r+') as handle:
             fcntl.flock(handle,fcntl.LOCK_EX)
             text=handle.read();heading='## 新授权：channel partition与完整expanded head各10B（2026-11-01）\n'
-            note=f'\n最新：gate{s["gate_job"]}已exit0，27检查、两新readout吞吐与25→50真实恢复通过；实现/报告已推送main {s["pushed_commit"]}。两个正式10B作业已自动release：'+', '.join(f'{m}={t["job"]}/W&B{t["run_id"]}' for m,t in s['training_jobs'].items())+'。release不等于已开跑，监控继续跟踪，勿重复提交。\n'
+            note=f'\n最新：gate{s["gate_job"]}已exit0，29检查、两新readout吞吐与25→50真实恢复通过；实现/报告已推送main {s["pushed_commit"]}。两个正式10B作业已自动release：'+', '.join(f'{m}={t["job"]}/W&B{t["run_id"]}' for m,t in s['training_jobs'].items())+'。release不等于已开跑，监控继续跟踪，勿重复提交。\n'
             assert heading in text
             handle.seek(0);handle.write(text.replace(heading,heading+note,1));handle.truncate()
 
