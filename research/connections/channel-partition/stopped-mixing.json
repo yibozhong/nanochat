@@ -1,0 +1,21 @@
+{
+  "job": "7645934.0",
+  "run_id": "d340fc37",
+  "status": "stopped_by_user",
+  "checkpoint_step": 28500,
+  "checkpoint_tokens": 933888000,
+  "checkpoint_archive": "/home/yzhong239/mhc-orthogonal-mix-10b-20261031/stop-20261101/last-durable-checkpoints.tar",
+  "verification": {
+    "queue": [],
+    "history": [
+      {
+        "ClusterId": 7645934,
+        "ExitCode": 143,
+        "JobStatus": 3,
+        "ProcId": 0
+      }
+    ],
+    "checked_at": 1793511390.4796789,
+    "monitor_alive": false
+  }
+}

@@ -20,7 +20,7 @@ def main():
     m=ConnectionModel(ConnectionConfig(variant='mhc',readout=a.readout,partition_mixing=a.partition_mixing)).prepare(compile_blocks=True)
     match_vanilla_initialization(m,42);opt,wd=optimizer_for(m);data=PackedData('../data')
     inspections={}
-    if a.readout == 'vocab_partition':
+    if a.readout != 'collapse':
         from nanochat.stream_mixing_diagnostics import inspect_stream_mixing
         diagnostic_ids=torch.tensor(data.arrays['dev'][:2,:-1].copy(),device='cuda',dtype=torch.long)
         inspections['initial']=inspect_stream_mixing(m,diagnostic_ids)
@@ -36,7 +36,7 @@ def main():
            mean_seconds=statistics.mean(durations),median_seconds=statistics.median(durations),
            step_seconds=durations,final_loss=loss,peak_reserved_bytes=torch.cuda.max_memory_reserved(),
            peak_allocated_bytes=torch.cuda.max_memory_allocated(),logging_backend='local')
-    if a.readout == 'vocab_partition':
+    if a.readout != 'collapse':
         inspections['after50']=inspect_stream_mixing(m,diagnostic_ids)
         r['stream_mixing']=inspections
     Path(a.output).write_text(json.dumps(r,indent=2)+'\n');print(json.dumps(r),flush=True)

@@ -27,7 +27,7 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument('--variant', choices=('baseline','mhc','mhc_no_sinkhorn'), required=True)
     p.add_argument('--architecture', choices=('vanilla', 'native'), default='vanilla')
-    p.add_argument('--readout', choices=('collapse', 'vocab_partition'), default='collapse')
+    p.add_argument('--readout', choices=('collapse', 'vocab_partition', 'channel_partition', 'dense_expanded'), default='collapse')
     p.add_argument('--partition-seed', type=int, default=20261031)
     p.add_argument('--partition-mixing', choices=('none', 'mhc', 'orthogonal'), default='none')
     p.add_argument('--inspect-stream-mixing', action='store_true', help='Fixed-dev stream/matrix diagnostics at validation steps')
@@ -121,7 +121,7 @@ def main():
         optimizer='native MuonAdamW; connector AdamW at native unembedding LR, no decay',
         optimizer_groups=initial_groups,
         loss=('partitioned CCE/LSE combined into ONE global softmax; no gradient filtering'
-              if a.readout == 'vocab_partition' else 'full-token full-vocabulary CCE; no gradient filtering'),
+              if a.readout in ('vocab_partition', 'channel_partition') else 'full-token full-vocabulary CCE; no gradient filtering'),
         references='research/connections/references.json')
     mixing_label=f'-mix-{a.partition_mixing}' if a.readout=='vocab_partition' else ''
     kwargs=dict(project='nanochat',entity='yibozhong657-none',group=a.wandb_group,
@@ -168,7 +168,7 @@ def main():
         if step==0:
             best=dev;save_best(dev);save()
         run.log(dict(step=step,tokens=step*32768,**{'dev/ce':dev}))
-        if a.inspect_stream_mixing and c.readout=='vocab_partition':inspect_mixing()
+        if a.inspect_stream_mixing and c.readout!='collapse':inspect_mixing()
         durations=[]
         with (out/'steps.jsonl').open('a',buffering=1) as log:
             while step<a.steps:
@@ -188,7 +188,7 @@ def main():
                     if dev<best:
                         best=dev;save_best(dev)
                     run.log(dict(step=step,tokens=step*32768,**{'dev/ce':dev,'dev/tokens':dev_tokens}))
-                    if a.inspect_stream_mixing and c.readout=='vocab_partition':inspect_mixing()
+                    if a.inspect_stream_mixing and c.readout!='collapse':inspect_mixing()
                 if step==50 or step%500==0 or step==a.steps or stop:save()
                 if step<a.steps and (stop or time.perf_counter()-begin>=a.segment_seconds
                                       or a.segment_steps and step-start_step>=a.segment_steps):
@@ -196,7 +196,7 @@ def main():
                     run.finish();return 85
         save()
         test_result={}
-        if c.readout == 'vocab_partition':
+        if c.readout != 'collapse':
             from nanochat.stream_mixing_diagnostics import inspect_stream_mixing
             diagnostic_ids=torch.tensor(data.arrays['dev'][:2,:-1].copy(),device='cuda',dtype=torch.long)
             test_result['final_stream_mixing']=inspect_stream_mixing(model,diagnostic_ids)

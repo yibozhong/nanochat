@@ -38,7 +38,18 @@ def match_vanilla_initialization(model, seed):
     with torch.random.fork_rng(devices=list(range(torch.cuda.device_count()))):
         torch.manual_seed(seed)
         reference = ConnectionModel(ConnectionConfig(**options))
-    missing, unexpected = model.load_state_dict(reference.state_dict(), strict=False)
+    state = reference.state_dict()
+    if model.config.readout == 'dense_expanded':
+        # Same backbone/connector initialization; the larger head cannot copy
+        # a D-wide matrix. Use an independent, reproducible CPU RNG instead.
+        import math
+        state.pop('lm_head.weight')
+        generator = torch.Generator(device='cpu').manual_seed(seed+1)
+        weights = torch.empty(model.lm_head.weight.shape, dtype=torch.float32, device='cpu')
+        weights.normal_(std=.001/math.sqrt(model.config.streams), generator=generator)
+        model.lm_head.weight.copy_(weights)
+    missing, unexpected = model.load_state_dict(state, strict=False)
     assert not unexpected
     assert all('_connection.' in name or name.startswith(('stream_head.', 'partition_mixer.'))
-               or name in ('partition_ids', 'partition_inverse') for name in missing)
+               or name in ('partition_ids', 'partition_inverse')
+               or (name == 'lm_head.weight' and model.config.readout == 'dense_expanded') for name in missing)

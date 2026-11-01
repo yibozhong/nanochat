@@ -40,13 +40,16 @@ class ConnectionConfig:
             raise ValueError(f'Unknown partition mixing: {self.partition_mixing}')
         if self.partition_mixing != 'none' and (self.readout != 'vocab_partition' or self.variant != 'mhc'):
             raise ValueError('Final mHC mixing requires the mHC partitioned readout')
-        if self.readout not in ('collapse', 'vocab_partition'):
+        if self.readout not in ('collapse', 'vocab_partition', 'channel_partition', 'dense_expanded'):
             raise ValueError(f'Unknown readout: {self.readout}')
-        if self.readout == 'vocab_partition':
+        if self.readout != 'collapse':
             if self.architecture != 'vanilla' or self.variant == 'baseline':
-                raise ValueError('Partitioned readout currently requires vanilla multistream mHC')
+                raise ValueError('Multistream readouts currently require vanilla multistream mHC')
+        if self.readout in ('vocab_partition', 'channel_partition'):
             if self.streams < 1 or self.vocab_size % self.streams:
                 raise ValueError('Vocabulary must divide evenly across streams')
+        if self.readout == 'channel_partition' and self.width % self.streams:
+            raise ValueError('Channel partition requires width divisible by streams')
         if self.architecture not in ('vanilla', 'native'):
             raise ValueError(f'Unknown backbone architecture: {self.architecture}')
         if not self.window_pattern or any(c not in 'SL' for c in self.window_pattern):
@@ -131,13 +134,13 @@ class ConnectionModel(nn.Module):
         if config.variant != 'baseline':
             for b in self.blocks:
                 b.attn_connection.reset_parameters(); b.mlp_connection.reset_parameters()
-        if config.variant == 'baseline' or config.readout == 'vocab_partition':
+        if config.variant == 'baseline' or config.readout != 'collapse':
             self.stream_head = None
         else:
             self.stream_head = NvidiaHyperHead(config.width, config.streams, use_tf32=config.connection_backend == 'nvidia')
         if self.stream_head is not None:
             self.stream_head.reset_parameters()
-        if config.readout == 'vocab_partition':
+        if config.readout in ('vocab_partition', 'channel_partition'):
             from nanochat.partitioned_readout import vocab_partition
             ids, inverse = vocab_partition(config.vocab_size, config.streams, config.partition_seed)
             self.register_buffer('partition_ids', ids)
@@ -154,6 +157,12 @@ class ConnectionModel(nn.Module):
         self.register_buffer('cos', freq.cos()[None, :, None, :], persistent=False)
         self.register_buffer('sin', freq.sin()[None, :, None, :], persistent=False)
         self.compiled_steps = None
+        if config.readout == 'dense_expanded':
+            # Build after all shared parameters, without advancing their RNG
+            # stream. Wider fan-in gets matched initial logit variance.
+            with torch.random.fork_rng(devices=[]):
+                self.lm_head = Linear(config.streams*config.width, config.vocab_size, bias=False)
+                nn.init.normal_(self.lm_head.weight, std=.001/math.sqrt(config.streams))
 
     def prepare(self, device='cuda', dtype=torch.bfloat16, compile_blocks=False):
         if self.config.variant != 'baseline':
@@ -193,15 +202,21 @@ class ConnectionModel(nn.Module):
             x = self.stream_head(x)
         if self.partition_mixer is not None:
             x = self.partition_mixer(x)
-        if self.config.readout == 'vocab_partition':
+        if self.config.readout != 'collapse':
             # Normalize each D-dimensional stream, never the K stream axis.
-            x = x.transpose(-1, -2).contiguous()
+            x = norm(x.transpose(-1, -2).contiguous())
+            if self.config.readout == 'channel_partition':
+                from nanochat.partitioned_readout import channel_partition_hidden
+                return channel_partition_hidden(x)
+            if self.config.readout == 'dense_expanded':
+                return x.flatten(-2)
+            return x
         return norm(x)
 
     def forward(self, idx, targets=None, dense=False, kv_cache=None):
         h = self.hidden(idx, kv_cache)
         w = self.lm_head.weight.to(h.dtype)
-        if self.config.readout == 'vocab_partition':
+        if self.config.readout in ('vocab_partition', 'channel_partition'):
             from nanochat.partitioned_readout import partitioned_logits, partitioned_cross_entropy
             if targets is None or dense:
                 logits = partitioned_logits(h, w, self.partition_ids, self.partition_inverse)
@@ -251,7 +266,7 @@ def optimizer_for(model, batch_tokens=32768):
             lr=.02*batch_scale, momentum=.95, ns_steps=5, beta2=.9, weight_decay=wd))
     ids = [id(p) for g in groups for p in g['params']]
     assert len(ids) == len(set(ids)) and set(ids) == {id(p) for p in model.parameters()}
-    if model.partition_mixer is not None:
+    if model.partition_mixer is not None or c.readout == 'dense_expanded':
         from torch._dynamo import config as compiler_config
         signatures = {(tuple(p.shape), p.dtype, tuple(p.stride()), p.device.type)
                       for g in groups if g['kind'] == 'adamw' for p in g['params']}

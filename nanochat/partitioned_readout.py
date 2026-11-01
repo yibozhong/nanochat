@@ -9,6 +9,20 @@ import torch
 from torch.nn import functional as F
 
 
+def channel_partition_hidden(hidden):
+    """Regroup [..., stream, channel] into [..., vocab_group, stream*slice].
+
+    Group g receives channels [g*D/K:(g+1)*D/K] from EVERY stream,
+    concatenated in stream-major order. This is a permutation, not a mix,
+    projection, or additional normalization. Normalize each original stream
+    before calling this function. The output retains shape [..., K, D].
+    """
+    k, d = hidden.shape[-2:]
+    if d % k:
+        raise ValueError('Channel partition requires width divisible by streams')
+    return hidden.reshape(*hidden.shape[:-2], k, k, d//k).transpose(-3, -2).flatten(-2).contiguous()
+
+
 def vocab_partition(vocab_size, streams, seed):
     if vocab_size % streams:
         raise ValueError('The balanced partition requires vocab_size divisible by streams')
