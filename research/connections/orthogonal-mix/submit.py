@@ -1,4 +1,4 @@
-"""One GPU gate followed by three held, matched1B formal experiments."""
+"""One GPU gate followed by the single authorized orthogonal10B run."""
 import fcntl
 import hashlib
 import json
@@ -12,9 +12,10 @@ import uuid
 ROOT=Path(sys.argv[1]).resolve()
 REPO=Path(__file__).resolve().parents[3]
 BASE=Path('/home/yzhong239/mhc-partition-mix-20261031')
-KEY='mhc-orthogonal-mix-1b-20261031'
-DATA='osdf:///chtc/staging/y/yzhong239/nanochat-ebt-20261029/data-7444406.tar'
-MODES=('none','mhc','orthogonal')
+KEY='mhc-orthogonal-mix-10b-20261031'
+DATA='osdf:///chtc/staging/y/yzhong239/nanochat-mhc-10b-data-7560536.tar'
+GATE_DATA='osdf:///chtc/staging/y/yzhong239/nanochat-ebt-20261029/data-7444406.tar'
+MODES=('orthogonal',)
 
 
 def command(args,cwd=ROOT):return subprocess.check_output(args,cwd=cwd,text=True,timeout=60).strip()
@@ -33,7 +34,7 @@ def main():
         assert not command(['git','status','--porcelain'],REPO)
         assert not json.loads(command(['condor_q','yzhong239','-constraint',f'OrthogonalMixKey == "{KEY}"','-json','-attributes','ClusterId,ProcId']) or '[]')
         protocol=json.loads((REPO/'research/connections/orthogonal-mix/protocol.json').read_text())
-        assert protocol['steps']==30518 and protocol['tokens']==1000013824
+        assert protocol['steps']==305176 and protocol['tokens']==10000007168 and protocol['modes']==list(MODES)
         for n in ('bundles','logs','results'):(ROOT/n).mkdir(exist_ok=True)
         commit=command(['git','rev-parse','HEAD'],REPO);run_ids={m:uuid.uuid4().hex[:8] for m in MODES}
         (ROOT/'submission-intent.json').write_text(json.dumps(dict(commit=commit,run_ids=run_ids,key=KEY),indent=2)+'\n')
@@ -50,15 +51,19 @@ def main():
         hashes={k:v for k,v in prior['hashes'].items() if k!='source.tar'}
         hashes['source.tar']=hashlib.sha256((bundle/'source.tar').read_bytes()).hexdigest()
         digest=protocol['data_archive_sha256'];assert len(digest)==64 and all(c in '0123456789abcdef' for c in digest)
-        hashes['data-7444406.tar']=digest
         for name in ('train.sh','validate.sh'):shutil.copy2(REPO/'research/connections/orthogonal-mix'/name,ROOT/name)
-        source=dict(commit=commit,hashes=hashes,steps=30518,training_tokens=1000013824,
-            purpose='Authorized orthogonal final-mixing1B matched three-way experiment',
+        source=dict(commit=commit,hashes=hashes,steps=305176,training_tokens=10000007168,
+            purpose='User-authorized single orthogonal final-mixing10B experiment',
             data_uri=DATA,data_split_sha256=protocol['data_split_sha256'],
+            data_archive_sha256=digest,gate_data_uri=GATE_DATA,
+            gate_data_archive_sha256=protocol['gate']['data_archive_sha256'],
             launcher_sha256=hashlib.sha256((ROOT/'train.sh').read_bytes()).hexdigest(),
             gate_launcher_sha256=hashlib.sha256((ROOT/'validate.sh').read_bytes()).hexdigest())
         (bundle/'source.json').write_text(json.dumps(source,indent=2)+'\n')
-        (bundle/'inputs.sha256').write_text(''.join(f'{v}  {k}\n' for k,v in hashes.items()))
+        for role,name,data_digest in [('gate','data-7444406.tar',source['gate_data_archive_sha256']),
+                                     ('train','nanochat-mhc-10b-data-7560536.tar',digest)]:
+            folder=bundle/role;folder.mkdir()
+            (folder/'inputs.sha256').write_text(''.join(f'{v}  {k}\n' for k,v in hashes.items())+f'{data_digest}  {name}\n')
         common='''universe = vanilla
 container_image = file:///staging/y/yzhong239/gradformer/nanochat-uv-v4.sif
 should_transfer_files = YES
@@ -77,12 +82,12 @@ require_gpus = (Capability == 9.0) && ((MaxSupportedVersion >= 13010) || regexp(
 +is_resumable = true
 rank = ifThenElse(regexp("^backfill", TARGET.Name), 0.0, 1.0)
 '''+f'+OrthogonalMixKey = "{KEY}"\n'
-        inputs=','.join([f'bundles/{wheel}','bundles/source.tar','bundles/source.json','bundles/inputs.sha256',
+        inputs=','.join([f'bundles/{wheel}','bundles/source.tar','bundles/source.json',
             'osdf:///chtc/staging/y/yzhong239/mhc-official-runtime-7546767.tar.gz',
-            'https://developer.download.nvidia.com/compute/cuda/repos/debian12/x86_64/cuda-compat-13-1_590.48.01-1_amd64.deb',DATA])
+            'https://developer.download.nvidia.com/compute/cuda/repos/debian12/x86_64/cuda-compat-13-1_590.48.01-1_amd64.deb'])
         gate=common+f'''executable = validate.sh
 request_disk = 45GB
-transfer_input_files = {inputs}
+transfer_input_files = {inputs},bundles/gate/inputs.sha256,{GATE_DATA}
 transfer_output_files = results.tar
 transfer_output_remaps = "results.tar=results/gate-$(Cluster).$(Process).tar"
 log = logs/gate.$(Cluster).$(Process).log
@@ -95,14 +100,14 @@ queue 1
         specs={'gate':gate}
         for mode in MODES:
             specs['train-'+mode]=common+f'''executable = train.sh
-arguments = mhc {run_ids[mode]} 30518 {mode}
-environment = "NANOCHAT_DATA_ARCHIVE=data-7444406.tar"
+arguments = mhc {run_ids[mode]} 305176 {mode}
+environment = "NANOCHAT_DATA_ARCHIVE=nanochat-mhc-10b-data-7560536.tar"
 encrypt_input_files = /home/yzhong239/.netrc
 hold = True
-request_disk = 45GB
+request_disk = 80GB
 checkpoint_exit_code = 85
 transfer_checkpoint_files = checkpoints.tar,results.tar
-transfer_input_files = {inputs},/home/yzhong239/.netrc
+transfer_input_files = {inputs},bundles/train/inputs.sha256,{DATA},/home/yzhong239/.netrc
 transfer_output_files = results.tar,checkpoints.tar
 transfer_output_remaps = "results.tar=results/{mode}-$(Cluster).$(Process).tar;checkpoints.tar=results/{mode}-$(Cluster).$(Process)-checkpoints.tar"
 log = logs/{mode}.$(Cluster).$(Process).log
@@ -111,14 +116,14 @@ error = logs/{mode}.$(Cluster).$(Process).err
 +OrthogonalMixRole = "formal"
 +ReadoutMixing = "{mode}"
 +MHCRunID = "{run_ids[mode]}"
-+JobBatchName = "nanochat-orthogonal-mix-three-way-1b"
++JobBatchName = "nanochat-orthogonal-mix-10b"
 queue 1
 '''
         for name,body in specs.items():
             (ROOT/(name+'.sub')).write_text(body)
             command(['condor_submit','-dry-run',name+'-dryrun.ad',name+'.sub'])
         state=dict(status='submitting',source=source,reviewed_head=commit,training_jobs={},
-            gate_verified=False,expected_steps=30518,expected_tokens=1000013824,submitted_at=time.time())
+            gate_verified=False,expected_steps=305176,expected_tokens=10000007168,submitted_at=time.time())
         save(state)
         for mode in MODES:
             job=command(['condor_submit','-terse','train-'+mode+'.sub']).split()[0]

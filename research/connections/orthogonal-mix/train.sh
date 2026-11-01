@@ -43,7 +43,7 @@ PYDONE
 fi
 
 tar -xf source.tar
-tar -xf "${NANOCHAT_DATA_ARCHIVE:-data-7444406.tar}"
+tar -xf "${NANOCHAT_DATA_ARCHIVE:-nanochat-mhc-10b-data-7560536.tar}"
 tar -xzf mhc-official-runtime-7546767.tar.gz
 export PATH="/opt/project/.venv/bin:$PATH"
 export UV_CACHE_DIR="$PWD/uv-cache" UV_LINK_MODE=copy
@@ -114,4 +114,4 @@ python -m scripts.connection_train --variant "$TASK_VARIANT" --readout vocab_par
     --attention-backend sdpa_cudnn --matched-backbone-init --evaluate-test \
     --no-activation-checkpoint --no-fused-connection-grad --seed 42 \
     --data-dir ../data --output-dir results/train --checkpoint-dir ../checkpoints \
-    --run-id "$TASK_RUN_ID" --formal-training --wandb-group mhc-orthogonal-mix-1b-20261031 --resume auto --segment-seconds "${NANOCHAT_CHECKPOINT_SECONDS:-1800}"
+    --run-id "$TASK_RUN_ID" --formal-training --wandb-group mhc-orthogonal-mix-10b-20261031 --resume auto --segment-seconds "${NANOCHAT_CHECKPOINT_SECONDS:-1800}"

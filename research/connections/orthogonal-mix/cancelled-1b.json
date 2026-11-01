@@ -1,0 +1,56 @@
+{
+  "jobs": [
+    "7645918.0",
+    "7645919.0",
+    "7645920.0",
+    "7645921.0"
+  ],
+  "queue": [
+    {
+      "ClusterId": 7645919,
+      "JobStatus": 3,
+      "NumJobStarts": 0,
+      "ProcId": 0
+    },
+    {
+      "ClusterId": 7645920,
+      "JobStatus": 3,
+      "NumJobStarts": 0,
+      "ProcId": 0
+    },
+    {
+      "ClusterId": 7645921,
+      "JobStatus": 3,
+      "NumJobStarts": 0,
+      "ProcId": 0
+    }
+  ],
+  "monitor_stopped": true,
+  "verification_time": 1793502056.7355857,
+  "history": {
+    "7645918.0": {
+      "ClusterId": 7645918,
+      "JobStatus": 3,
+      "NumJobStarts": 0,
+      "ProcId": 0
+    },
+    "7645919.0": {
+      "ClusterId": 7645919,
+      "JobStatus": 3,
+      "NumJobStarts": 0,
+      "ProcId": 0
+    },
+    "7645920.0": {
+      "ClusterId": 7645920,
+      "JobStatus": 3,
+      "NumJobStarts": 0,
+      "ProcId": 0
+    },
+    "7645921.0": {
+      "ClusterId": 7645921,
+      "JobStatus": 3,
+      "NumJobStarts": 0,
+      "ProcId": 0
+    }
+  }
+}

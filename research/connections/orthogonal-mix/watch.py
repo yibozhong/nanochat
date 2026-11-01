@@ -1,4 +1,4 @@
-"""Audit one gate, publish, release three matched runs, and collect their results."""
+"""Audit one gate, publish, release the orthogonal10B run, and collect results."""
 import fcntl
 import hashlib
 import json
@@ -13,7 +13,7 @@ import time
 
 ROOT=Path(sys.argv[1]).resolve()
 REPO=Path(__file__).resolve().parents[3]
-MODES=('none','mhc','orthogonal')
+MODES=('orthogonal',)
 
 
 def command(args,cwd=ROOT):return subprocess.check_output(args,cwd=cwd,text=True,timeout=60).strip()
@@ -27,7 +27,7 @@ def job(ident):
     attrs='ClusterId,ProcId,JobStatus,ExitCode,HoldReason,HoldReasonCode,RemoteHost,OrthogonalMixKey,OrthogonalMixRole,ReadoutMixing'
     rows=json.loads(command(['condor_q',ident,'-json','-attributes',attrs]) or '[]')
     if not rows:rows=json.loads(command(['condor_history',ident,'-limit','1','-scanlimit','10000','-json','-attributes',attrs]) or '[]')
-    if rows:assert rows[0]['OrthogonalMixKey']=='mhc-orthogonal-mix-1b-20261031'
+    if rows:assert rows[0]['OrthogonalMixKey']=='mhc-orthogonal-mix-10b-20261031'
     return rows[0] if rows else None
 
 
@@ -53,7 +53,7 @@ def gate(s):
         p=r['profiles'][mode];t=r['trials'][mode];c=r['configs'][mode]
         assert p['timed_steps']==30 and math.isfinite(p['mean_seconds']) and p['peak_reserved_bytes']<.9*22000*1024**2
         assert t['complete'] and t['steps']==50 and t['training_tokens']==50*32768 and t['final_dev_ce']<t['initial_dev_ce']
-        assert c['model']['partition_mixing']==mode and c['protocol']['schedule_steps']==30518
+        assert c['model']['partition_mixing']==mode and c['protocol']['schedule_steps']==305176
         assert c['applied_sinkhorn_iterations']==20 and c['logging_backend']=='local'
         if mode=='orthogonal':
             assert t['final_stream_mixing']['orthogonality_max_error']<3e-6
@@ -69,7 +69,7 @@ def publish_release(s):
         assert not command(['git','status','--porcelain'],REPO)
         report=REPO/'research/connections/orthogonal-mix/gate-results.json';report.write_bytes((ROOT/'gate.json').read_bytes())
         command(['git','add',str(report)],REPO)
-        command(['git','commit','-m','Validate orthogonal readout and three-way restart'],REPO)
+        command(['git','commit','-m','Validate orthogonal readout and10B-schedule restart'],REPO)
         s.update(report_committed=True,reviewed_head=command(['git','rev-parse','HEAD'],REPO));save(s)
     if not s.get('pushed_commit'):
         assert command(['git','rev-parse','HEAD'],REPO)==s['reviewed_head']
@@ -91,8 +91,8 @@ def publish_release(s):
         p=Path('/home/yzhong239/AGENTS.md')
         with p.open('r+') as handle:
             fcntl.flock(handle,fcntl.LOCK_EX)
-            text=handle.read();heading='## 新授权：末端正交mixing的三组1B对照（2026-10-31）\n'
-            note=f'\n最新：gate{s["gate_job"]}已exit0，26检查、三组同卡吞吐与各25→50真实恢复通过；实现/报告已推送main {s["pushed_commit"]}。三组正式1B作业已自动release：'+', '.join(f'{m}={t["job"]}/W&B{t["run_id"]}' for m,t in s['training_jobs'].items())+'。release不等于已开跑，监控继续跟踪，勿重复提交。\n'
+            text=handle.read();heading='## 最新纠正：只跑正交mixing，直接10B（2026-10-31）\n'
+            note=f'\n最新：gate{s["gate_job"]}已exit0，26检查、正交版吞吐与25→50真实恢复通过；实现/报告已推送main {s["pushed_commit"]}。唯一正式10B作业已自动release：'+', '.join(f'{m}={t["job"]}/W&B{t["run_id"]}' for m,t in s['training_jobs'].items())+'。release不等于已开跑，监控继续跟踪，勿重复提交。\n'
             assert heading in text
             handle.seek(0);handle.write(text.replace(heading,heading+note,1));handle.truncate()
 
@@ -109,9 +109,9 @@ def collect(s,mode):
                 target.parent.mkdir(parents=True,exist_ok=True);target.write_bytes(tar.extractfile(member).read())
             for run in sorted((dest/'results/wandb').glob('offline-run-*')):command(['wandb','sync',str(run)])
     assert r['complete'] and r['source']==s['source'] and r['run_id']==t['run_id']
-    assert r['steps']==30518 and r['training_tokens']==1000013824
+    assert r['steps']==305176 and r['training_tokens']==10000007168
     assert r['test_evaluated'] and r['test_tokens']==2097152 and r['final_stream_mixing']['tokens']==4096
-    assert c['model']['partition_mixing']==mode and c['protocol']['schedule_steps']==30518 and c['logging_backend']=='wandb'
+    assert c['model']['partition_mixing']==mode and c['protocol']['schedule_steps']==305176 and c['logging_backend']=='wandb'
     assert {k:v['sha256'] for k,v in c['data_manifest']['files'].items()}==s['source']['data_split_sha256']
     archive=ROOT/'results'/f'{mode}-{t["job"]}-checkpoints.tar'
     with tarfile.open(archive) as tar:
@@ -130,7 +130,7 @@ def main():
         fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB);errors=0
         while True:
             s=json.loads((ROOT/'state.json').read_text());s['monitor_pid']=os.getpid()
-            if s['status'] in ('complete','needs_attention','stopped_by_user'):return
+            if s['status'] in ('complete','needs_attention','stopped_by_user') or (ROOT/'STOPPED.json').exists():return
             try:
                 if not s['gate_verified']:
                     row=job(s['gate_job']);s['last_gate_job']=row
@@ -144,7 +144,7 @@ def main():
                     if row and row['JobStatus']==5 and (t['released'] or row.get('HoldReasonCode')!=15):raise RuntimeError(row)
                     if t['released'] and row and row['JobStatus']==4:collect(s,mode)
                 if all(t['collected'] for t in s['training_jobs'].values()):
-                    result=dict(complete=True,steps=30518,training_tokens_per_run=1000013824,
+                    result=dict(complete=True,steps=305176,training_tokens_per_run=10000007168,
                         trials={m:t['result'] for m,t in s['training_jobs'].items()})
                     (ROOT/'results.json').write_text(json.dumps(result,indent=2)+'\n')
                     s['status']='complete'
