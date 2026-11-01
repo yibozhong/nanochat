@@ -1,0 +1,20 @@
+[
+  {
+    "job": "7647607.0",
+    "source": "47c6df372f0191d1833b7388261e1e3a6adc9d59",
+    "passed": 26,
+    "failed": 1,
+    "failed_test": "test_cce_loss_and_input_weight_gradients[True-1.0-dense_expanded]",
+    "actual_ce": 9.22266960144043,
+    "fp32_reference_ce": 9.22305679321289,
+    "absolute_difference": 0.0003871917724609375,
+    "pinned_cce_commit": "3de376c106a1916bc5e1b619f9c77c87a461ee1c",
+    "upstream_source": "https://github.com/apple/ml-cross-entropy/blob/3de376c106a1916bc5e1b619f9c77c87a461ee1c/cut_cross_entropy/cce_lse_forward.py#L90",
+    "finding": "Pinned CCE explicitly casts accumulated logits to input dtype before softcap/LSE. New forward oracle mirrors this BF16 rounding; full FP32 gradient oracle and all thresholds unchanged. GPU rerun still required.",
+    "production_changed": false,
+    "formal_jobs_remain_held": [
+      "7647605.0",
+      "7647606.0"
+    ]
+  }
+]

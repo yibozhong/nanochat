@@ -102,13 +102,21 @@ def test_cce_loss_and_input_weight_gradients(readout,scale,one_partition):
     grads=torch.autograd.grad(actual,(h,w))
     hr=h.detach().float().requires_grad_();wr=w.detach().float().requires_grad_()
     matrix=explicit_matrix(wr,ids,k,d) if readout=='channel_partition' else wr
-    expected=F.cross_entropy(15*torch.tanh(F.linear(hr.flatten(-2),matrix)/15),targets)
+    full_precision_logits=F.linear(hr.flatten(-2),matrix)
+    expected=F.cross_entropy(15*torch.tanh(full_precision_logits/15),targets)
     ref=torch.autograd.grad(expected,(hr,wr))
     errors=[relative(a,b) for a,b in zip(grads,ref)]
-    torch.testing.assert_close(actual,expected,atol=3e-5,rtol=3e-5)
+    # Pinned CCE cce_lse_forward.py:90 explicitly rounds accumulated logits
+    # to the input dtype before softcap/LSE. Match that forward contract;
+    # retain the independent full-FP32 oracle for BOTH gradient checks.
+    rounded_reference=F.cross_entropy(15*torch.tanh(full_precision_logits.detach().to(h.dtype).float()/15),targets)
+    record(f'cce-{readout}-{scale}-{one_partition}',dict(cce_loss=actual.item(),
+        fp32_loss=expected.item(),bf16_logit_reference_loss=rounded_reference.item(),
+        fp32_loss_error=abs((actual-expected).item()),
+        matched_precision_loss_error=abs((actual-rounded_reference).item()),gradient_relative_errors=errors))
+    torch.testing.assert_close(actual,rounded_reference,atol=3e-5,rtol=3e-5)
     assert max(errors)<.012,errors
     assert (grads[0].float().square().sum((0,2))>0).all()
-    record(f'cce-{readout}-{scale}-{one_partition}',dict(loss_error=abs((actual-expected).item()),gradient_relative_errors=errors))
 
 
 def build(readout,**kwargs):

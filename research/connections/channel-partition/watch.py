@@ -40,7 +40,7 @@ def gate(s):
     path=ROOT/'results'/f'gate-{s["gate_job"]}.tar'
     with tarfile.open(path) as tar:
         r=json.load(tar.extractfile('results/channel-readout-gate.json'))
-        assert r['complete'] and r['source']==s['source'] and r['logging_backend']=='local'
+        assert r['complete'] and r['source']==s.get('gate_source',s['source']) and r['logging_backend']=='local'
         assert r['checks']==dict(tests=27,failures=0,errors=0,skipped=0)
         assert set(r['profiles'])=={'collapse',*MODES}
         assert set(r['trials'])==set(r['configs'])==set(MODES)
@@ -57,6 +57,15 @@ def gate(s):
         assert c['model']['readout']==mode and c['model']['partition_mixing']=='none' and c['protocol']['schedule_steps']==305176
         assert c['applied_sinkhorn_iterations']==20 and c['logging_backend']=='local'
     immutable_inputs();r['gate_job']=s['gate_job'];r['archive_sha256']=hashlib.sha256(path.read_bytes()).hexdigest()
+    if 'gate_source' in s:
+        # A test-only retry may use a newer validation archive while the
+        # untouched, never-started formal jobs retain their original inputs.
+        changed=command(['git','diff','--name-only',s['source']['commit'],s['gate_source']['commit'],
+            '--','nanochat','scripts','research/connections/runtime','research/connections/toolchain',
+            'pyproject.toml','uv.lock'],REPO)
+        assert not changed,changed
+        r['training_source']=s['source']
+        r['training_code_identical_to_gate']=True
     (ROOT/'gate.json').write_text(json.dumps(r,indent=2)+'\n')
     s.update(gate_verified=True,status='gate_passed_training_held');save(s)
 
