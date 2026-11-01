@@ -1,0 +1,789 @@
+{
+  "complete": true,
+  "logging_backend": "local",
+  "source": {
+    "commit": "c32b1c90907de1ef65d84b686215ca92b1023a45",
+    "hashes": {
+      "mhc-official-runtime-7546767.tar.gz": "6b927f93021961293e12452b4001a479ff1b54cbc1aae0355e73e75a393d4dc0",
+      "cuda-compat-13-1_590.48.01-1_amd64.deb": "066f24c715f5f8f31bb7e8bd0f9ddc93fe78a82d3be55c6f3e9bbe26fa4fd7be",
+      "transformer_engine_torch-2.20.2-cp311-cp311-linux_x86_64.whl": "9b69f40b34570e3073171dcb231d6dd038092d20a277e501e7da01e6475920de",
+      "source.tar": "21fe16fcd24c2c1bbaf23e6652a382c0239b3cf803eef9446d7bee423e694656"
+    },
+    "steps": 305176,
+    "training_tokens": 10000007168,
+    "purpose": "User-authorized single orthogonal final-mixing10B experiment",
+    "data_uri": "osdf:///chtc/staging/y/yzhong239/nanochat-mhc-10b-data-7560536.tar",
+    "data_split_sha256": {
+      "train": "85ed8668da74daba482f76eee8773748c8e56d38c2cd1ce90120d27d391b2721",
+      "dev": "bd67b90b4386ba6428992864712f56eb10527678ed8b3664ed5f63c1643458a4",
+      "test": "e7d24b6a89155ebc7123afe68bd2c58aeaf159b5087dbdf28e090ce09f293d09"
+    },
+    "data_archive_sha256": "27a247cded8a77f4ef9f37cd19f55ce41df4be937583cc39d15c120ea9fb0702",
+    "gate_data_uri": "osdf:///chtc/staging/y/yzhong239/nanochat-ebt-20261029/data-7444406.tar",
+    "gate_data_archive_sha256": "44ea6ce7f62efda533ef89664da9d399e9361102ae3138229e4b78a7d331c239",
+    "launcher_sha256": "5560f57c487b04f9e89d7446db5123db87bbb3131019a6008bc52b325d0ef412",
+    "gate_launcher_sha256": "833d8bc1223b5ed6bb9be5ac89ebe9ea10e3d76ca6213bb676da3448189fb6ae"
+  },
+  "checks": {
+    "tests": 26,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "profiles": {
+    "orthogonal": {
+      "readout": "vocab_partition",
+      "partition_mixing": "orthogonal",
+      "gpu": "NVIDIA H100 80GB HBM3",
+      "warmup": 20,
+      "timed_steps": 30,
+      "mean_seconds": 0.09478448859105508,
+      "median_seconds": 0.09478527400642633,
+      "step_seconds": [
+        0.09470045194029808,
+        0.09477155655622482,
+        0.09480227530002594,
+        0.0946239996701479,
+        0.09465748257935047,
+        0.09480752423405647,
+        0.0951335933059454,
+        0.0948090311139822,
+        0.09485680051147938,
+        0.0948498472571373,
+        0.09481197595596313,
+        0.0948240365833044,
+        0.09496039524674416,
+        0.09479709900915623,
+        0.09477344900369644,
+        0.09482095204293728,
+        0.09489194303750992,
+        0.09492270275950432,
+        0.0947162639349699,
+        0.09469812735915184,
+        0.09470272623002529,
+        0.09470783732831478,
+        0.09471566416323185,
+        0.09470398724079132,
+        0.0947999395430088,
+        0.09480653144419193,
+        0.09475798346102238,
+        0.0946519561111927,
+        0.0947104673832655,
+        0.09474805742502213
+      ],
+      "final_loss": 6.5638251304626465,
+      "peak_reserved_bytes": 9661579264,
+      "peak_allocated_bytes": 9193823232,
+      "logging_backend": "local",
+      "stream_mixing": {
+        "initial": {
+          "tokens": 4096,
+          "partition_mixing": "orthogonal",
+          "matrix_mean": [
+            [
+              0.9996268828836037,
+              0.0005781711479357909,
+              5.5602824431844056e-05,
+              -0.00026065831480082124
+            ],
+            [
+              -0.0003598534458433278,
+              0.9996529888594523,
+              0.0010710387978178915,
+              -0.0003641758157755248
+            ],
+            [
+              0.0002499334150343202,
+              -0.0008082705644483212,
+              0.9995959949155804,
+              0.0009623406731407158
+            ],
+            [
+              0.0004830326834053267,
+              0.0005771038850070909,
+              -0.0007226302623166703,
+              0.9996624960185727
+            ]
+          ],
+          "minimum_singular_value": {
+            "0.0": 0.9999996848072792,
+            "0.5": 0.9999999380558681,
+            "1.0": 1.0000000502509132
+          },
+          "condition_number": {
+            "0.0": 1.0000000373001225,
+            "0.5": 1.0000001428102556,
+            "1.0": 1.00000033150541
+          },
+          "full_rank_fraction_rel_1e6": 1.0,
+          "row_sum_max_error": 1.4901161193847656e-07,
+          "column_sum_max_error": 1.1920928955078125e-07,
+          "orthogonality_max_error": 4.699908744409953e-07,
+          "rank_definition": "Rank of the4x4 coefficient matrix with coefficients held fixed; not the full input-dependent Jacobian",
+          "before": {
+            "mean_token_cosine": [
+              [
+                0.9999999999999999,
+                0.9999999999999999,
+                0.9999999999999999,
+                0.9999999999999999
+              ],
+              [
+                0.9999999999999999,
+                0.9999999999999999,
+                0.9999999999999999,
+                0.9999999999999999
+              ],
+              [
+                0.9999999999999999,
+                0.9999999999999999,
+                0.9999999999999999,
+                0.9999999999999999
+              ],
+              [
+                0.9999999999999999,
+                0.9999999999999999,
+                0.9999999999999999,
+                0.9999999999999999
+              ]
+            ],
+            "stream_difference_energy_fraction": 0.0
+          },
+          "after": {
+            "mean_token_cosine": [
+              [
+                0.9999999999999999,
+                0.9999999999999999,
+                0.9999999999999999,
+                0.9999999999999999
+              ],
+              [
+                0.9999999999999999,
+                0.9999999999999999,
+                0.9999999999999999,
+                0.9999999999999999
+              ],
+              [
+                0.9999999999999999,
+                0.9999999999999999,
+                0.9999999999999999,
+                0.9999999999999999
+              ],
+              [
+                0.9999999999999999,
+                0.9999999999999999,
+                0.9999999999999999,
+                0.9999999999999999
+              ]
+            ],
+            "stream_difference_energy_fraction": 0.0
+          },
+          "stream_difference_energy_retention": null
+        },
+        "after50": {
+          "tokens": 4096,
+          "partition_mixing": "orthogonal",
+          "matrix_mean": [
+            [
+              0.7229817965126131,
+              0.03772965228927205,
+              -0.32862306545939646,
+              0.5679116178798722
+            ],
+            [
+              0.17375019192695618,
+              0.9461400049622171,
+              0.0824361385384691,
+              -0.20232633530031308
+            ],
+            [
+              0.49296137054261635,
+              -0.18560805588276708,
+              0.816201722191181,
+              -0.12355503826620406
+            ],
+            [
+              -0.38969335936781135,
+              0.20173839814742678,
+              0.42998520385299344,
+              0.7579697555702296
+            ]
+          ],
+          "minimum_singular_value": {
+            "0.0": 0.9999997304620111,
+            "0.5": 0.9999999408264502,
+            "1.0": 1.0000000436131375
+          },
+          "condition_number": {
+            "0.0": 1.000000043380725,
+            "0.5": 1.00000013383357,
+            "1.0": 1.0000002908952998
+          },
+          "full_rank_fraction_rel_1e6": 1.0,
+          "row_sum_max_error": 1.7881393432617188e-07,
+          "column_sum_max_error": 1.4901161193847656e-07,
+          "orthogonality_max_error": 4.254593573005394e-07,
+          "rank_definition": "Rank of the4x4 coefficient matrix with coefficients held fixed; not the full input-dependent Jacobian",
+          "before": {
+            "mean_token_cosine": [
+              [
+                1.0,
+                0.9999926706208604,
+                0.9999709270600015,
+                0.9999924871554513
+              ],
+              [
+                0.9999926706208604,
+                0.9999999999999998,
+                0.9999853018370559,
+                0.999996647735944
+              ],
+              [
+                0.9999709270600015,
+                0.9999853018370559,
+                1.0,
+                0.999987609480603
+              ],
+              [
+                0.9999924871554513,
+                0.999996647735944,
+                0.999987609480603,
+                0.9999999999999994
+              ]
+            ],
+            "stream_difference_energy_fraction": 1.2321923734359314e-05
+          },
+          "after": {
+            "mean_token_cosine": [
+              [
+                0.9999999999999999,
+                0.9999912220378923,
+                0.9999885458205854,
+                0.9999906398953842
+              ],
+              [
+                0.9999912220378923,
+                1.0000000000000004,
+                0.9999803495769688,
+                0.9999934206917617
+              ],
+              [
+                0.9999885458205854,
+                0.9999803495769688,
+                1.0,
+                0.9999747702022961
+              ],
+              [
+                0.9999906398953842,
+                0.9999934206917617,
+                0.9999747702022961,
+                0.9999999999999997
+              ]
+            ],
+            "stream_difference_energy_fraction": 1.2960087663970053e-05
+          },
+          "stream_difference_energy_retention": 1.0515977120671127
+        }
+      }
+    }
+  },
+  "trials": {
+    "orthogonal": {
+      "complete": true,
+      "variant": "mhc",
+      "run_id": "99bef825",
+      "steps": 50,
+      "training_tokens": 1638400,
+      "initial_dev_ce": 10.398012399673462,
+      "final_dev_ce": 6.498856544494629,
+      "best_dev_ce": 6.498856544494629,
+      "dev_tokens": 131072,
+      "training_seconds": 14.539245322346687,
+      "elapsed_seconds": 82.49168992973864,
+      "steady_step_seconds": 0.09415630921721459,
+      "gpu": "NVIDIA H100 80GB HBM3",
+      "peak_allocated_bytes": 9337051136,
+      "peak_reserved_bytes": 9699328000,
+      "source": {
+        "commit": "c32b1c90907de1ef65d84b686215ca92b1023a45",
+        "hashes": {
+          "mhc-official-runtime-7546767.tar.gz": "6b927f93021961293e12452b4001a479ff1b54cbc1aae0355e73e75a393d4dc0",
+          "cuda-compat-13-1_590.48.01-1_amd64.deb": "066f24c715f5f8f31bb7e8bd0f9ddc93fe78a82d3be55c6f3e9bbe26fa4fd7be",
+          "transformer_engine_torch-2.20.2-cp311-cp311-linux_x86_64.whl": "9b69f40b34570e3073171dcb231d6dd038092d20a277e501e7da01e6475920de",
+          "source.tar": "21fe16fcd24c2c1bbaf23e6652a382c0239b3cf803eef9446d7bee423e694656"
+        },
+        "steps": 305176,
+        "training_tokens": 10000007168,
+        "purpose": "User-authorized single orthogonal final-mixing10B experiment",
+        "data_uri": "osdf:///chtc/staging/y/yzhong239/nanochat-mhc-10b-data-7560536.tar",
+        "data_split_sha256": {
+          "train": "85ed8668da74daba482f76eee8773748c8e56d38c2cd1ce90120d27d391b2721",
+          "dev": "bd67b90b4386ba6428992864712f56eb10527678ed8b3664ed5f63c1643458a4",
+          "test": "e7d24b6a89155ebc7123afe68bd2c58aeaf159b5087dbdf28e090ce09f293d09"
+        },
+        "data_archive_sha256": "27a247cded8a77f4ef9f37cd19f55ce41df4be937583cc39d15c120ea9fb0702",
+        "gate_data_uri": "osdf:///chtc/staging/y/yzhong239/nanochat-ebt-20261029/data-7444406.tar",
+        "gate_data_archive_sha256": "44ea6ce7f62efda533ef89664da9d399e9361102ae3138229e4b78a7d331c239",
+        "launcher_sha256": "5560f57c487b04f9e89d7446db5123db87bbb3131019a6008bc52b325d0ef412",
+        "gate_launcher_sha256": "833d8bc1223b5ed6bb9be5ac89ebe9ea10e3d76ca6213bb676da3448189fb6ae"
+      },
+      "test_evaluated": false,
+      "checkpoint_files": {
+        "latest.pt": {
+          "bytes": 513636334,
+          "sha256": "70fca1d756d2bf2f4bc108adbacde9d1f9193083db64061a336c897749dcaf2e"
+        },
+        "best.pt": {
+          "bytes": 205059370,
+          "sha256": "2356af13137a4ffcdaf8e0027445f4d310bbf69eb64f38467ffa505fce722c5b"
+        }
+      },
+      "final_stream_mixing": {
+        "tokens": 4096,
+        "partition_mixing": "orthogonal",
+        "matrix_mean": [
+          [
+            0.7497528987732949,
+            0.02768879956784076,
+            -0.3196535214083269,
+            0.5422118227179453
+          ],
+          [
+            0.15544237615176826,
+            0.954662008836749,
+            0.07703455982118612,
+            -0.18713894445681944
+          ],
+          [
+            0.47324324152214103,
+            -0.16851301634233096,
+            0.8315963662025752,
+            -0.1363265917498211
+          ],
+          [
+            -0.37843851574871223,
+            0.1861622076103231,
+            0.41102259605395375,
+            0.7812537140562199
+          ]
+        ],
+        "minimum_singular_value": {
+          "0.0": 0.9999997042010446,
+          "0.5": 0.9999999413009184,
+          "1.0": 1.0000000346206697
+        },
+        "condition_number": {
+          "0.0": 1.000000043590305,
+          "0.5": 1.0000001354811807,
+          "1.0": 1.0000003201329275
+        },
+        "full_rank_fraction_rel_1e6": 1.0,
+        "row_sum_max_error": 2.086162567138672e-07,
+        "column_sum_max_error": 1.4901161193847656e-07,
+        "orthogonality_max_error": 4.0714309967881945e-07,
+        "rank_definition": "Rank of the4x4 coefficient matrix with coefficients held fixed; not the full input-dependent Jacobian",
+        "before": {
+          "mean_token_cosine": [
+            [
+              0.9999999999999996,
+              0.9999927543219638,
+              0.999970616167546,
+              0.9999926977645739
+            ],
+            [
+              0.9999927543219638,
+              1.0000000000000007,
+              0.9999848967266189,
+              0.9999966664833366
+            ],
+            [
+              0.999970616167546,
+              0.9999848967266189,
+              1.0000000000000002,
+              0.9999871252870457
+            ],
+            [
+              0.9999926977645739,
+              0.9999966664833366,
+              0.9999871252870457,
+              1.0000000000000004
+            ]
+          ],
+          "stream_difference_energy_fraction": 1.2478165359478866e-05
+        },
+        "after": {
+          "mean_token_cosine": [
+            [
+              0.9999999999999994,
+              0.9999917430565706,
+              0.9999878210572969,
+              0.9999908293507673
+            ],
+            [
+              0.9999917430565706,
+              1.0000000000000009,
+              0.9999803360775941,
+              0.9999934295038104
+            ],
+            [
+              0.9999878210572969,
+              0.9999803360775941,
+              0.9999999999999999,
+              0.9999741456887403
+            ],
+            [
+              0.9999908293507673,
+              0.9999934295038104,
+              0.9999741456887403,
+              0.9999999999999999
+            ]
+          ],
+          "stream_difference_energy_fraction": 1.3055599931955332e-05
+        },
+        "stream_difference_energy_retention": 1.046094275637081
+      }
+    }
+  },
+  "configs": {
+    "orthogonal": {
+      "logging_backend": "local",
+      "model": {
+        "variant": "mhc",
+        "depth": 8,
+        "width": 512,
+        "heads": 4,
+        "sequence_length": 2048,
+        "vocab_size": 32768,
+        "streams": 4,
+        "sinkhorn_iterations": 20,
+        "activation_checkpoint": false,
+        "connection_backend": "nvidia",
+        "fused_connection_grad": false,
+        "architecture": "vanilla",
+        "window_pattern": "SSSL",
+        "readout": "vocab_partition",
+        "partition_seed": 20261031,
+        "partition_mixing": "orthogonal"
+      },
+      "protocol": {
+        "steps": 50,
+        "schedule_steps": 305176,
+        "batch_tokens": 32768,
+        "microbatch": 16,
+        "grad_accum": 1,
+        "seed": 42,
+        "attention_backend": "sdpa_cudnn",
+        "matched_backbone_init": true,
+        "evaluate_test": false
+      },
+      "data_manifest": {
+        "complete": true,
+        "run_id": "gy1xhvud",
+        "sequence_length": 2048,
+        "dtype": "uint16",
+        "layout": "rows of 2049 token ids; x=row[:-1], y=row[1:]",
+        "batch_tokens": 32768,
+        "training_steps": 30518,
+        "requested_tokens": 1000000000,
+        "training_tokens": 1000013824,
+        "files": {
+          "train": {
+            "rows": 488288,
+            "tokens": 1000013824,
+            "bytes": 2001004224,
+            "sha256": "614ef0ecce77ca839cb7650bfe7da9a8fbb92bbfc8efe461ded57a1f2af315c7",
+            "last_source_state": {
+              "pq_idx": 1,
+              "rg_idx": 630,
+              "epoch": 1
+            }
+          },
+          "dev": {
+            "rows": 64,
+            "tokens": 131072,
+            "bytes": 262272,
+            "sha256": "bd67b90b4386ba6428992864712f56eb10527678ed8b3664ed5f63c1643458a4",
+            "last_source_state": {
+              "pq_idx": 0,
+              "rg_idx": 1,
+              "epoch": 1
+            }
+          },
+          "test": {
+            "rows": 1024,
+            "tokens": 2097152,
+            "bytes": 4196352,
+            "sha256": "e7d24b6a89155ebc7123afe68bd2c58aeaf159b5087dbdf28e090ce09f293d09",
+            "last_source_state": {
+              "pq_idx": 0,
+              "rg_idx": 4,
+              "epoch": 1
+            }
+          }
+        },
+        "tokenizer": {
+          "dataset": "HuggingFaceFW/fineweb-edu",
+          "config": "sample-10BT",
+          "revision": "87f09149ef4734204d70ed1d046ddc9ca3f2b8f9",
+          "full_dataset_bytes": 28518193415,
+          "full_source_gpt2_tokens": 9972918177,
+          "nanochat_commit": "145da40cdd37b9522aa53d26c0c356e9126458bb",
+          "nanochat_source_sha256": "9a39516fc52effabe6bf9b87fc5fc67f7026a95060861be560d3525257bfb3e6",
+          "files": {
+            "token_bytes.pt": {
+              "bytes": 132649,
+              "sha256": "8e6ed9947610b8b329f0aed7e01bf332359331790e61fc6c0c95dc3cff29bdb4"
+            },
+            "tokenizer.pkl": {
+              "bytes": 412696,
+              "sha256": "8d1a5a03421ca24e7acafd1ef68fe8dbc6326dad903bc65cc726ec0601c577de"
+            }
+          },
+          "train_shards": [
+            "000_00000.parquet"
+          ],
+          "validation_shards": [
+            "013_00000.parquet"
+          ],
+          "tokenizer": "native RustBPE 32768 vocab, first 100M capped characters from training shard",
+          "benchmark": "native base_train d8/D512/2K/SSSL, 300 steps x 32768 model tokens; original source unmodified",
+          "vocab_size": 32768,
+          "max_chars": 100000000,
+          "doc_cap": 10000,
+          "purpose": "Throughput pilot tokenizer; native RustBPE; train shard only",
+          "elapsed_seconds": 5.633999116718769,
+          "run_id": "eqnd6jdz"
+        },
+        "dataset_revision": "87f09149ef4734204d70ed1d046ddc9ca3f2b8f9",
+        "train_shards": "000..012",
+        "heldout_shard": "013",
+        "seconds": 1009.9609482300002,
+        "validation": "dev first 64 rows, test next 1024 rows; no shared packed rows"
+      },
+      "source": {
+        "commit": "c32b1c90907de1ef65d84b686215ca92b1023a45",
+        "hashes": {
+          "mhc-official-runtime-7546767.tar.gz": "6b927f93021961293e12452b4001a479ff1b54cbc1aae0355e73e75a393d4dc0",
+          "cuda-compat-13-1_590.48.01-1_amd64.deb": "066f24c715f5f8f31bb7e8bd0f9ddc93fe78a82d3be55c6f3e9bbe26fa4fd7be",
+          "transformer_engine_torch-2.20.2-cp311-cp311-linux_x86_64.whl": "9b69f40b34570e3073171dcb231d6dd038092d20a277e501e7da01e6475920de",
+          "source.tar": "21fe16fcd24c2c1bbaf23e6652a382c0239b3cf803eef9446d7bee423e694656"
+        },
+        "steps": 305176,
+        "training_tokens": 10000007168,
+        "purpose": "User-authorized single orthogonal final-mixing10B experiment",
+        "data_uri": "osdf:///chtc/staging/y/yzhong239/nanochat-mhc-10b-data-7560536.tar",
+        "data_split_sha256": {
+          "train": "85ed8668da74daba482f76eee8773748c8e56d38c2cd1ce90120d27d391b2721",
+          "dev": "bd67b90b4386ba6428992864712f56eb10527678ed8b3664ed5f63c1643458a4",
+          "test": "e7d24b6a89155ebc7123afe68bd2c58aeaf159b5087dbdf28e090ce09f293d09"
+        },
+        "data_archive_sha256": "27a247cded8a77f4ef9f37cd19f55ce41df4be937583cc39d15c120ea9fb0702",
+        "gate_data_uri": "osdf:///chtc/staging/y/yzhong239/nanochat-ebt-20261029/data-7444406.tar",
+        "gate_data_archive_sha256": "44ea6ce7f62efda533ef89664da9d399e9361102ae3138229e4b78a7d331c239",
+        "launcher_sha256": "5560f57c487b04f9e89d7446db5123db87bbb3131019a6008bc52b325d0ef412",
+        "gate_launcher_sha256": "833d8bc1223b5ed6bb9be5ac89ebe9ea10e3d76ca6213bb676da3448189fb6ae"
+      },
+      "checkpoint_transport": {
+        "upload_interval_seconds": 1800,
+        "local_save_every_steps": 500,
+        "method": "exit85 plus scheduler transfer; local save alone is not durable"
+      },
+      "gpu": "NVIDIA H100 80GB HBM3",
+      "torch": "2.10.0+cu130",
+      "cuda": "13.0",
+      "gpu_capability": [
+        9,
+        0
+      ],
+      "explicit_portability_gate": false,
+      "parameters": 59513268,
+      "residual_mixing": "sinkhorn",
+      "applied_sinkhorn_iterations": 20,
+      "optimizer": "native MuonAdamW; connector AdamW at native unembedding LR, no decay",
+      "optimizer_groups": [
+        {
+          "kind": "adamw",
+          "lr": 0.0024494897427831783,
+          "betas": [
+            0.8,
+            0.96
+          ],
+          "eps": 1e-10,
+          "weight_decay": 0.01,
+          "initial_lr": 0.0024494897427831783
+        },
+        {
+          "kind": "adamw",
+          "lr": 0.09185586535436918,
+          "betas": [
+            0.8,
+            0.995
+          ],
+          "eps": 1e-10,
+          "weight_decay": 0.001,
+          "initial_lr": 0.09185586535436918
+        },
+        {
+          "kind": "adamw",
+          "lr": 0.0024494897427831783,
+          "betas": [
+            0.8,
+            0.96
+          ],
+          "eps": 1e-10,
+          "weight_decay": 0.0,
+          "initial_lr": 0.0024494897427831783
+        },
+        {
+          "kind": "muon",
+          "lr": 0.005,
+          "momentum": 0.95,
+          "ns_steps": 5,
+          "beta2": 0.9,
+          "weight_decay": 0.18375000000000002,
+          "initial_lr": 0.005
+        },
+        {
+          "kind": "muon",
+          "lr": 0.005,
+          "momentum": 0.95,
+          "ns_steps": 5,
+          "beta2": 0.9,
+          "weight_decay": 0.18375000000000002,
+          "initial_lr": 0.005
+        },
+        {
+          "kind": "muon",
+          "lr": 0.005,
+          "momentum": 0.95,
+          "ns_steps": 5,
+          "beta2": 0.9,
+          "weight_decay": 0.18375000000000002,
+          "initial_lr": 0.005
+        }
+      ],
+      "loss": "partitioned CCE/LSE combined into ONE global softmax; no gradient filtering",
+      "references": "research/connections/references.json"
+    }
+  },
+  "unique_training_steps_per_variant": 50,
+  "restart": "Orthogonal variant exits85 at25 and restores in a fresh process to50; diagnostics at0/25/50",
+  "scope": "Only final readout mixing changes; all backbone connectors keep Sinkhorn; gate weights stay in worker scratch",
+  "unit_results": {
+    "resume.json": {
+      "model_optimizer_rng_exact": true,
+      "fixed_gradient_next_update_exact": true
+    },
+    "cayley-100.0.json": {
+      "matrix_max_error": 1.2878587085651816e-14,
+      "gradient_max_error": 4.805184028455756e-16,
+      "common_and_contrast_preserved": true
+    },
+    "cayley-1.0.json": {
+      "matrix_max_error": 3.3306690738754696e-16,
+      "gradient_max_error": 1.7763568394002505e-15,
+      "common_and_contrast_preserved": true
+    },
+    "initialization.json": {
+      "shared_parameters_bitwise_equal": true,
+      "optimizer_hyperparameters_equal": true,
+      "parameters": {
+        "none": 59507120,
+        "mhc": 59539905,
+        "orthogonal": 59513268
+      },
+      "orthogonal_added_parameters": 6148,
+      "backbone_sinkhorn_unchanged": true,
+      "orthogonal_config": {
+        "variant": "mhc",
+        "depth": 8,
+        "width": 512,
+        "heads": 4,
+        "sequence_length": 2048,
+        "vocab_size": 32768,
+        "streams": 4,
+        "sinkhorn_iterations": 20,
+        "activation_checkpoint": false,
+        "connection_backend": "nvidia",
+        "fused_connection_grad": false,
+        "architecture": "vanilla",
+        "window_pattern": "SSSL",
+        "readout": "vocab_partition",
+        "partition_seed": 20261031,
+        "partition_mixing": "orthogonal"
+      }
+    },
+    "nvidia-d128.json": {
+      "output": 0.0016770583164990062,
+      "gradients": [
+        0.0024894799356129974,
+        0.000385654941017839,
+        0.00016098343697464878,
+        0.0002990086188986754
+      ],
+      "orthogonality_max_error": 3.944353696994085e-07,
+      "contrast_energy_retention": 0.9999787706042469,
+      "final_sinkhorn_calls": 0
+    },
+    "integration.json": {
+      "causal_tokens": 2048,
+      "cce_loss": 5.54713249206543,
+      "dense_loss": 5.54713249206543,
+      "checkpoint_gradient_relative_errors": {
+        "wte.weight": 0.0,
+        "blocks.0.attn.c_q.weight": 0.0,
+        "blocks.0.attn.c_k.weight": 0.0,
+        "blocks.0.attn.c_v.weight": 0.0,
+        "blocks.0.attn.c_proj.weight": 0.0,
+        "blocks.0.mlp.c_fc.weight": 0.0,
+        "blocks.0.mlp.c_proj.weight": 0.0,
+        "blocks.0.attn_connection.phi": 0.0,
+        "blocks.0.attn_connection.bias": 0.0,
+        "blocks.0.attn_connection.scales": 0.0,
+        "blocks.0.mlp_connection.phi": 0.0,
+        "blocks.0.mlp_connection.bias": 0.0,
+        "blocks.0.mlp_connection.scales": 0.0,
+        "blocks.1.attn.c_q.weight": 0.0,
+        "blocks.1.attn.c_k.weight": 0.0,
+        "blocks.1.attn.c_v.weight": 0.0,
+        "blocks.1.attn.c_proj.weight": 0.0,
+        "blocks.1.mlp.c_fc.weight": 0.0,
+        "blocks.1.mlp.c_proj.weight": 0.0,
+        "blocks.1.attn_connection.phi": 0.0,
+        "blocks.1.attn_connection.bias": 0.0,
+        "blocks.1.attn_connection.scales": 0.0,
+        "blocks.1.mlp_connection.phi": 0.0,
+        "blocks.1.mlp_connection.bias": 0.0,
+        "blocks.1.mlp_connection.scales": 0.0,
+        "lm_head.weight": 0.0,
+        "partition_mixer.phi": 0.0,
+        "partition_mixer.bias": 0.0,
+        "partition_mixer.scale": 0.0
+      }
+    },
+    "cayley-0.01.json": {
+      "matrix_max_error": 4.440892098500626e-16,
+      "gradient_max_error": 3.552713678800501e-15,
+      "common_and_contrast_preserved": true
+    },
+    "cayley-0.0.json": {
+      "matrix_max_error": 0.0,
+      "gradient_max_error": 1.7763568394002505e-15,
+      "common_and_contrast_preserved": true
+    },
+    "nvidia-d512.json": {
+      "output": 0.0016815897938800724,
+      "gradients": [
+        0.0024867282127643484,
+        0.0003696534523798568,
+        0.0003160540943844379,
+        0.0005084427493008979
+      ],
+      "orthogonality_max_error": 2.9065249917969993e-07,
+      "contrast_energy_retention": 1.0000180886534114,
+      "final_sinkhorn_calls": 0
+    }
+  },
+  "gate_job": "7645935.0",
+  "archive_sha256": "a04a1ad082a644993a10e403cce5582ac0b882de343d89e1c98bfb7e9480b2e1"
+}
