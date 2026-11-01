@@ -29,6 +29,7 @@ def main():
     p.add_argument('--architecture', choices=('vanilla', 'native'), default='vanilla')
     p.add_argument('--readout', choices=('collapse', 'vocab_partition'), default='collapse')
     p.add_argument('--partition-seed', type=int, default=20261031)
+    p.add_argument('--partition-mixing', choices=('none', 'mhc'), default='none')
     p.add_argument('--window-pattern', default='SSSL', help='Native backbone only; vanilla always uses full attention')
     p.add_argument('--formal-training', action='store_true', help='Explicitly enable W&B for a formal training run')
     p.add_argument('--wandb-group', default='mhc-official-kernels-20261030')
@@ -64,7 +65,7 @@ def main():
     configure_attention(a.attention_backend)
     seed_all(a.seed)
     c=ConnectionConfig(variant=a.variant,streams=a.streams,sinkhorn_iterations=a.sinkhorn_iterations,
-                       readout=a.readout, partition_seed=a.partition_seed,
+                       readout=a.readout, partition_seed=a.partition_seed, partition_mixing=a.partition_mixing,
                        architecture=a.architecture, window_pattern=a.window_pattern,
                        activation_checkpoint=a.activation_checkpoint,
                        connection_backend=a.connection_backend, fused_connection_grad=a.fused_connection_grad)
@@ -178,6 +179,10 @@ def main():
                     run.finish();return 85
         save()
         test_result={}
+        if c.partition_mixing != 'none':
+            from nanochat.stream_mixing_diagnostics import inspect_stream_mixing
+            diagnostic_ids=torch.tensor(data.arrays['dev'][:2,:-1].copy(),device='cuda',dtype=torch.long)
+            test_result['final_stream_mixing']=inspect_stream_mixing(model,diagnostic_ids)
         if a.evaluate_test:
             final_test,test_tokens=evaluate(model,data,'test',microbatch=a.microbatch)
             selected=torch.load(ckpt/'best.pt',map_location='cpu',weights_only=False)
@@ -185,7 +190,7 @@ def main():
             model.load_state_dict(selected['model'])
             best_test,best_test_tokens=evaluate(model,data,'test',microbatch=a.microbatch)
             assert best_test_tokens==test_tokens
-            test_result=dict(final_test_ce=final_test,best_selected_test_ce=best_test,
+            test_result.update(final_test_ce=final_test,best_selected_test_ce=best_test,
                 best_dev_step=selected['step'],test_tokens=test_tokens)
         checkpoint_files={}
         for name in ('latest.pt','best.pt'):

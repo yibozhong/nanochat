@@ -1,0 +1,132 @@
+{
+  "authorized": true,
+  "budget_confirmed_by_user": "User requested trying final4-to4 layer-style mixing; continue the previously selected10B matched protocol",
+  "variant": "mhc",
+  "architecture": "vanilla",
+  "readout": "vocab_partition",
+  "streams": 4,
+  "width": 512,
+  "depth": 8,
+  "heads": 4,
+  "sequence_length": 2048,
+  "vocab_size": 32768,
+  "vocab_partition": {
+    "method": "torch.randperm on private CPU generator, balanced equal groups",
+    "seed": 20261031,
+    "groups": 4,
+    "size": 8192,
+    "persistent_buffers": true
+  },
+  "head": {
+    "weight_shape": [
+      32768,
+      512
+    ],
+    "parameters": 16777216,
+    "normalization": "parameter-free RMSNorm separately within each D-dimensional stream",
+    "softcap": 15,
+    "objective": "one global full-vocabulary softmax; CCE return_lse with exact differentiable global recombination",
+    "gradient_filtering": false,
+    "final_mixing": {
+      "layout": "[B,T,D,4] -> tokenwise dynamic4x4 Sinkhorn -> [B,T,D,4] -> per-stream RMSNorm -> partitioned global softmax",
+      "phi_shape": [
+        16,
+        2048
+      ],
+      "scale": 0.01,
+      "bias_logits": "identity4x4, same as layer residual mixing",
+      "iterations": 20,
+      "backend": "Unmodified NVIDIA TE projection/scale/Sinkhorn/expand-combine; zero branch, no extra attention/MLP",
+      "optimizer": "same routing AdamW group, default unembedding LR and zero weight decay"
+    }
+  },
+  "model_parameters": 59539905,
+  "ordinary_mhc_parameters": 59515317,
+  "steps": 305176,
+  "tokens": 10000007168,
+  "seed": 42,
+  "microbatch": 16,
+  "gradient_accumulation": 1,
+  "batch_tokens": 32768,
+  "attention_backend": "sdpa_cudnn",
+  "activation_checkpoint": false,
+  "optimizer": "Unchanged native MuonAdamW rules and LR schedule; no LR sweep",
+  "data_uri": "osdf:///chtc/staging/y/yzhong239/nanochat-mhc-10b-data-7560536.tar",
+  "data_sha256": "27a247cded8a77f4ef9f37cd19f55ce41df4be937583cc39d15c120ea9fb0702",
+  "reference": {
+    "job": "7562105.1",
+    "run_id": "048c708c",
+    "steps": 305176,
+    "matched_backbone_init": true,
+    "final_test_ce": 3.0637299493,
+    "role": "Previously completed ordinary mHC control, same data/seed/hyperparameters",
+    "caveat": "New CCE composition changes numerical kernel shapes; per-stream final normalization replaces collapse then normalization. One seed cannot establish a general advantage.",
+    "partition": {
+      "job": "7643585.0",
+      "run_id": "a7ef0469",
+      "readout": "vocab_partition",
+      "partition_mixing": "none",
+      "role": "Existing independently trained10B control; do not modify or restart"
+    }
+  },
+  "motivation": {
+    "claim": "Each vocabulary partition can read a learned mixture of all four final streams while preserving four outputs and a KD dimensional upper bound",
+    "caveats": [
+      "Sinkhorn does not guarantee full rank or well conditioning.",
+      "A fixed full-rank4x4 mix preserves a full-rank block-diagonal linear head; dynamic input Jacobian and RMSNorm are distinct.",
+      "Identical streams remain identical under exact doubly stochastic mixing; this tests learned specialization, not an immediate repair of collapsed features.",
+      "Not an arbitrary dense KD-to-V head: vocabulary rows in each partition share their stream-mixing coefficients."
+    ]
+  },
+  "compute": {
+    "head_flops_relative_to_D_to_V": 1,
+    "head_flops_relative_to_KD_to_V": 0.25,
+    "actual_speed": "Must measure; four CCE calls and layout/gather overhead",
+    "extra_mixing": "Measure actual full-step overhead against unmixed partition on the same GPU"
+  },
+  "prior_work": [
+    {
+      "title": "Strategies for Training Large Vocabulary Neural Language Models",
+      "url": "https://aclanthology.org/P16-1186/",
+      "overlap": "D-Softmax block diagonal output and global normalization",
+      "difference": "2016 feedforward n-gram LM; no persistent multistream Transformer"
+    },
+    {
+      "title": "AltUp",
+      "url": "https://papers.nips.cc/paper_files/paper/2023/file/f2059277ac6ce66e7e5543001afa8bb5-Paper-Conference.pdf",
+      "overlap": "Persistent wide state and expanded dense output",
+      "difference": "Proposed output is block diagonal by stream and vocabulary"
+    },
+    {
+      "title": "Lost in Backpropagation: The LM Head is a Gradient Bottleneck",
+      "url": "https://arxiv.org/html/2603.10145v1",
+      "overlap": "Gradient bottleneck motivation",
+      "difference": "No claim that this paper proves gains for our proposed readout"
+    }
+  ],
+  "novelty": "A controlled extension of the current partition readout; no new literature novelty claim.",
+  "gate": {
+    "tests": 17,
+    "diagnostic_training_steps": 50,
+    "process_restart_at": 25,
+    "profile_steps_each": 50,
+    "wandb": false,
+    "maximum_reserved_bytes": 20761804800.0,
+    "diagnostics": "Independent FP64 final mixer forward/all gradients, equivalent original layer residual coefficients, nonzero single-output-to-all-input-stream gradients, rank counterexample, identical shared initialization, real2K causality/cache/CCE/recompute, exact optimizer/RNG resume, sameGPU mixed/unmixed full-step profiling,25->50 fresh-process restart; matrix singular values and stream statistics at initialization/50/final"
+  },
+  "formal_logging": {
+    "project": "nanochat",
+    "entity": "yibozhong657-none",
+    "group": "mhc-partition-mix-20261031"
+  },
+  "checkpoints": {
+    "latest_every_steps": 500,
+    "latest_overwritten": true,
+    "best_separate": true,
+    "exit85_upload_seconds": 1800,
+    "backfill_allowed": true
+  },
+  "partition_mixing": "mhc",
+  "unmixed_partition_parameters": 59507120,
+  "added_mixer_parameters": 32785
+}

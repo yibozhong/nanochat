@@ -12,7 +12,7 @@ from torch.nn import functional as F
 from torch.utils.checkpoint import checkpoint
 
 from nanochat.gpt import Block, GPTConfig, Linear, norm
-from nanochat.nvidia_connections import NvidiaHyperConnection, NvidiaHyperHead, expand_streams, check_nvidia_device
+from nanochat.nvidia_connections import NvidiaHyperConnection, NvidiaHyperHead, NvidiaStreamMixer, expand_streams, check_nvidia_device
 from nanochat.optim import MuonAdamW
 
 
@@ -33,8 +33,13 @@ class ConnectionConfig:
     window_pattern: str = 'SSSL'  # native only; vanilla is always full attention
     readout: str = 'collapse'
     partition_seed: int = 20261031
+    partition_mixing: str = 'none'
 
     def __post_init__(self):
+        if self.partition_mixing not in ('none', 'mhc'):
+            raise ValueError(f'Unknown partition mixing: {self.partition_mixing}')
+        if self.partition_mixing != 'none' and (self.readout != 'vocab_partition' or self.variant != 'mhc'):
+            raise ValueError('Final mHC mixing requires the mHC partitioned readout')
         if self.readout not in ('collapse', 'vocab_partition'):
             raise ValueError(f'Unknown readout: {self.readout}')
         if self.readout == 'vocab_partition':
@@ -137,6 +142,11 @@ class ConnectionModel(nn.Module):
             ids, inverse = vocab_partition(config.vocab_size, config.streams, config.partition_seed)
             self.register_buffer('partition_ids', ids)
             self.register_buffer('partition_inverse', inverse)
+        self.partition_mixer = None
+        if config.partition_mixing == 'mhc':
+            self.partition_mixer = NvidiaStreamMixer(config.width, config.streams,
+                use_tf32=config.connection_backend == 'nvidia')
+            self.partition_mixer.reset_parameters()
         d = config.width // config.heads
         inv = 1 / (100000 ** (torch.arange(0, d, 2, dtype=torch.float32) / d))
         freq = torch.outer(torch.arange(config.sequence_length, dtype=torch.float32), inv)
@@ -180,6 +190,8 @@ class ConnectionModel(nn.Module):
                 x = fn(x, cos, sin, kv_cache)
         if self.stream_head is not None:
             x = self.stream_head(x)
+        if self.partition_mixer is not None:
+            x = self.partition_mixer(x)
         if self.config.readout == 'vocab_partition':
             # Normalize each D-dimensional stream, never the K stream axis.
             x = x.transpose(-1, -2).contiguous()
@@ -228,6 +240,8 @@ def optimizer_for(model, batch_tokens=32768):
             (routing if '_connection.' in name else matrices).append(p)
     if model.stream_head is not None:
         routing.extend(model.stream_head.parameters())
+    if model.partition_mixer is not None:
+        routing.extend(model.partition_mixer.parameters())
     if routing:
         groups.append(dict(kind='adamw', params=routing, lr=.008*batch_scale*width_scale,
                            betas=(.8, .96), eps=1e-10, weight_decay=0.))
@@ -236,6 +250,11 @@ def optimizer_for(model, batch_tokens=32768):
             lr=.02*batch_scale, momentum=.95, ns_steps=5, beta2=.9, weight_decay=wd))
     ids = [id(p) for g in groups for p in g['params']]
     assert len(ids) == len(set(ids)) and set(ids) == {id(p) for p in model.parameters()}
+    if model.partition_mixer is not None:
+        from torch._dynamo import config as compiler_config
+        signatures = {(tuple(p.shape), p.dtype, tuple(p.stride()), p.device.type)
+                      for g in groups if g['kind'] == 'adamw' for p in g['params']}
+        compiler_config.recompile_limit = max(compiler_config.recompile_limit, 2*len(signatures))
     opt = MuonAdamW(groups)
     for g in opt.param_groups:
         g['initial_lr'] = g['lr']

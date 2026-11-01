@@ -131,3 +131,55 @@ class NvidiaHyperHead(nn.Module):
         pre, _, _ = ops.mhc_fused_scale(raw, alpha, beta, ms, n)
         return ops.mhc_fused_aggregate(x, pre.reshape(b, t, n), n,
             use_tf32=self.use_tf32, fused_grad_x_acc_buffer=None)
+
+
+class NvidiaStreamMixer(nn.Module):
+    """A final tokenwise K-to-K residual mix, without a branch or collapse.
+
+    Uses the same dynamic residual coefficients, initialization and 20-step
+    Sinkhorn as NvidiaHyperConnection. Padding supplies the unused pre/post
+    slots required by TE's scale API; they are not trainable parameters.
+    Doubly stochastic does not imply invertible. Four output streams preserve
+    the KD dimension, but do not guarantee full Jacobian/effective rank.
+    """
+    def __init__(self, width, streams=4, *, use_tf32=True):
+        super().__init__()
+        if streams != 4:
+            raise ValueError('The NVIDIA mixer requires four streams')
+        self.width, self.streams, self.use_tf32 = width, streams, use_tf32
+        self.phi = nn.Parameter(torch.empty(streams*streams, streams*width))
+        self.bias = nn.Parameter(torch.empty(streams*streams))
+        self.scale = nn.Parameter(torch.empty(1))
+
+    @torch.no_grad()
+    def reset_parameters(self):
+        nn.init.normal_(self.phi, std=1/math.sqrt(self.streams*self.width))
+        self.phi.copy_(interleave_phi(self.phi, self.streams))
+        self.bias.view(self.streams, self.streams).copy_(
+            torch.eye(self.streams, device=self.bias.device))
+        self.scale.fill_(.01)
+
+    def mixing_matrix(self, x):
+        check_precision(self.use_tf32)
+        b, t, d, n = x.shape
+        ops = nvidia_ops()
+        # Preserve TE's [pre, post, residual] order and RMS normalization.
+        phi = F.pad(self.phi, (0, 0, 2*n, 0))
+        scales = F.pad(self.scale, (2, 0))
+        bias = F.pad(self.bias, (2*n, 0)).unsqueeze(0)
+        raw, ms = ops.mhc_fused_projection(x.reshape(b*t, d*n), phi,
+            norm_weight=None, use_tf32=self.use_tf32,
+            fused_grad_x_acc_buffer=None, use_split_k=False)
+        _, _, logits = ops.mhc_fused_scale(raw, scales, bias, ms, n)
+        return ops.mhc_fused_sinkhorn(logits.reshape(b, t, n, n), n, iters=20)
+
+    def forward(self, x):
+        x = x.contiguous()
+        b, t, d, n = x.shape
+        matrix = self.mixing_matrix(x)
+        # TE expand/combine computes x @ matrix + branch * post. A zero branch
+        # selects just its residual mixing, including the official backward.
+        branch = x.new_zeros(b, t, d)
+        post = torch.zeros(b, t, n, device=x.device, dtype=torch.float32)
+        return nvidia_ops().mhc_fused_expand_combine(branch, None, post, x,
+            matrix, n, use_tf32=self.use_tf32, fused_grad_x_acc_buffer=None)
