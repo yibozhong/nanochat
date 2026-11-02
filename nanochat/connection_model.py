@@ -31,6 +31,8 @@ class ConnectionConfig:
     fused_connection_grad: bool = False
     architecture: str = 'vanilla'
     window_pattern: str = 'SSSL'  # native only; vanilla is always full attention
+    chunk_size: int = 2048
+    lookback_enabled: bool = True
 
     def __post_init__(self):
         if self.architecture not in ('vanilla', 'native'):
@@ -39,8 +41,12 @@ class ConnectionConfig:
             raise ValueError('window_pattern must contain S and/or L')
         if self.connection_backend not in ('nvidia', 'nvidia_precise'):
             raise ValueError('Only the full NVIDIA mHC implementation is supported')
-        if self.variant not in ('baseline', 'mhc', 'mhc_no_sinkhorn'):
+        if self.variant not in ('baseline', 'mhc', 'mhc_no_sinkhorn', 'lookback'):
             raise ValueError(f'Unknown connection variant: {self.variant}')
+        if self.variant == 'lookback' and self.architecture != 'vanilla':
+            raise ValueError('Lookback uses the vanilla backbone')
+        if self.chunk_size <= 0:
+            raise ValueError('chunk_size must be positive')
         if self.sinkhorn_iterations != 20:
             raise ValueError('The NVIDIA composite API requires 20 Sinkhorn iterations')
         if min(self.depth, self.width, self.heads, self.sequence_length, self.vocab_size, self.streams) < 1:
@@ -49,7 +55,7 @@ class ConnectionConfig:
             raise ValueError('RoPE requires an even integral head dimension')
         if self.sinkhorn_iterations < 1:
             raise ValueError('Sinkhorn needs at least one iteration')
-        if self.variant != 'baseline' and (self.streams != 4 or self.width % 128):
+        if self.variant in ('mhc', 'mhc_no_sinkhorn') and (self.streams != 4 or self.width % 128):
             raise ValueError('NVIDIA mHC kernels require four streams and width divisible by 128')
 
     @classmethod
@@ -96,6 +102,8 @@ class ConnectionBlock(Block):
 class ConnectionModel(nn.Module):
     def __init__(self, config):
         super().__init__()
+        if config.variant == 'lookback':
+            raise ValueError('Use build_connection_model for Lookback')
         if config.architecture != 'vanilla':
             raise ValueError('Use build_connection_model for native nanochat')
         self.config = config
@@ -201,6 +209,8 @@ def optimizer_for(model, batch_tokens=32768):
     for b in model.blocks:
         for name, p in b.named_parameters():
             (routing if '_connection.' in name else matrices).append(p)
+    if c.variant == 'lookback':
+        matrices.extend(model.memory_parameters())
     if model.stream_head is not None:
         routing.extend(model.stream_head.parameters())
     if routing:
@@ -218,6 +228,9 @@ def optimizer_for(model, batch_tokens=32768):
 
 
 def build_connection_model(config):
+    if config.variant == 'lookback':
+        from nanochat.lookback import LookbackModel
+        return LookbackModel(config)
     if config.architecture == 'native':
         from nanochat.native_connection_model import NativeConnectionModel
         return NativeConnectionModel(config)

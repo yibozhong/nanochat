@@ -25,7 +25,10 @@ from nanochat.connection_experiment import configure_attention, match_vanilla_in
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument('--variant', choices=('baseline','mhc','mhc_no_sinkhorn'), required=True)
+    p.add_argument('--variant', choices=('baseline','mhc','mhc_no_sinkhorn','lookback'), required=True)
+    p.add_argument('--sequence-length', type=int, default=2048)
+    p.add_argument('--chunk-size', type=int, default=2048)
+    p.add_argument('--lookback-enabled', action=argparse.BooleanOptionalAction, default=True)
     p.add_argument('--architecture', choices=('vanilla', 'native'), default='vanilla')
     p.add_argument('--window-pattern', default='SSSL', help='Native backbone only; vanilla always uses full attention')
     p.add_argument('--formal-training', action='store_true', help='Explicitly enable W&B for a formal training run')
@@ -53,7 +56,9 @@ def main():
     p.add_argument('--seed', type=int, default=42)
     a = p.parse_args()
     assert torch.cuda.is_available() and torch.cuda.device_count()==1
-    assert a.microbatch>0 and 16%a.microbatch==0
+    assert a.sequence_length>0 and 32768%a.sequence_length==0
+    rows_per_step=32768//a.sequence_length
+    assert a.microbatch>0 and rows_per_step%a.microbatch==0
     assert 0<a.steps<=a.schedule_steps
     out=Path(a.output_dir);out.mkdir(parents=True,exist_ok=True)
     ckpt=Path(a.checkpoint_dir) if a.checkpoint_dir else out/'checkpoints'
@@ -62,12 +67,14 @@ def main():
     configure_attention(a.attention_backend)
     seed_all(a.seed)
     c=ConnectionConfig(variant=a.variant,streams=a.streams,sinkhorn_iterations=a.sinkhorn_iterations,
+                       sequence_length=a.sequence_length,chunk_size=a.chunk_size,
+                       lookback_enabled=a.lookback_enabled,
                        architecture=a.architecture, window_pattern=a.window_pattern,
                        activation_checkpoint=a.activation_checkpoint,
                        connection_backend=a.connection_backend, fused_connection_grad=a.fused_connection_grad)
     data=PackedData(a.data_dir)
     assert data.manifest['sequence_length']==c.sequence_length
-    assert a.steps*16<=len(data.arrays['train'])
+    assert a.steps*rows_per_step<=len(data.arrays['train'])
     for split, info in data.manifest['files'].items():
         digest=hashlib.sha256()
         with Path(a.data_dir,split+'.bin').open('rb') as f:
@@ -83,7 +90,7 @@ def main():
     opt,wd=optimizer_for(model)
     initial_groups=[{k:v for k,v in group.items() if k!='params'} for group in opt.param_groups]
     protocol=dict(steps=a.steps,schedule_steps=a.schedule_steps,batch_tokens=32768,
-                  microbatch=a.microbatch,grad_accum=16//a.microbatch,seed=a.seed,
+                  microbatch=a.microbatch,grad_accum=rows_per_step//a.microbatch,seed=a.seed,
                   attention_backend=a.attention_backend,matched_backbone_init=a.matched_backbone_init,
                   evaluate_test=a.evaluate_test)
     step=0;best=float('inf');training_seconds=0.;prior_elapsed=0.;initial_dev=None
@@ -117,9 +124,15 @@ def main():
         optimizer_groups=initial_groups,
         loss='full-token full-vocabulary CCE; no gradient filtering',
         references='research/connections/references.json')
+    from nanochat.lookback_cost import model_cost
+    cost=model_cost(c,batch=rows_per_step)
+    config['compute_estimate']=cost
+    profile_reference=source.get('profile_reference',{}).get(a.variant)
+    if profile_reference:
+        config['same_gpu_profile_reference']=profile_reference
     kwargs=dict(project='nanochat',entity='yibozhong657-none',group=a.wandb_group,
                 job_type='pretrain' if a.formal_training else 'diagnostic',
-                name=f'{a.architecture}-{a.variant}-{a.steps}steps',id=run_id,resume='allow',config=config)
+                name=f'{a.architecture}-{a.variant}-{c.sequence_length}ctx-{a.steps}steps',id=run_id,resume='allow',config=config)
     run=training_run(formal_training=a.formal_training, local_dir=out/"diagnostics", **kwargs)
     run.define_metric('tokens')
     for metric in ('train/*','dev/*','perf/*'):
@@ -160,7 +173,18 @@ def main():
                 log.write(json.dumps(row)+'\n')
                 if step<=5 or step%10==0:
                     print(json.dumps(row),flush=True)
-                    run.log(dict(step=step,tokens=row['tokens'],**{'train/ce':loss,'perf/step_seconds':duration}))
+                    perf={'train/ce':loss,'perf/step_seconds':duration,'perf/tokens_per_second':32768/duration,
+                          'perf/peak_allocated_bytes':torch.cuda.max_memory_allocated(),
+                          'perf/peak_reserved_bytes':torch.cuda.max_memory_reserved()}
+                    if cost:
+                        perf.update({'perf/estimated_training_flops_per_step':cost['estimated_training_flops'],
+                            'perf/estimated_forward_flops_per_step':cost['estimated_forward_flops'],
+                            'perf/logical_memory_kv_bytes':cost['logical_memory_kv_bytes'],
+                            'perf/logical_previous_hidden_bytes':cost['logical_previous_hidden_bytes']})
+                    if profile_reference and 'additional_peak_allocated_bytes' in profile_reference:
+                        perf['perf/profile_additional_peak_allocated_bytes']=profile_reference['additional_peak_allocated_bytes']
+                        perf['perf/profile_additional_peak_reserved_bytes']=profile_reference['additional_peak_reserved_bytes']
+                    run.log(dict(step=step,tokens=row['tokens'],**perf))
                 if step==50 or step%250==0 or step==a.steps:
                     dev,dev_tokens=evaluate(model,data,microbatch=a.microbatch)
                     assert math.isfinite(dev)
