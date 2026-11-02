@@ -1,4 +1,5 @@
 """Pack fresh16K FineWeb sequences for the matched Lookback10B experiment."""
+import argparse
 import hashlib
 import json
 import os
@@ -25,17 +26,26 @@ def sha(path):
 def main():
     dataset.DATA_DIR=str(Path('raw').resolve())
     T,B,batch_tokens=16384,2,32768
-    requested=10_000_000_000
-    steps=(requested+batch_tokens-1)//batch_tokens
+    parser=argparse.ArgumentParser()
+    parser.add_argument('--training-steps',type=int,default=305176)
+    parser.add_argument('--first-train-shard-only',action='store_true')
+    args=parser.parse_args()
+    steps=args.training_steps
+    assert steps>=128
+    requested=10_000_000_000 if steps==305176 else steps*batch_tokens
     tokenizer=get_tokenizer();assert tokenizer.get_vocab_size()<=65536
     manifest=json.loads(Path('dataset-manifest.json').read_text())
     provenance=json.loads(Path('cache/tokenizer-provenance.json').read_text())
     Path('data').mkdir(exist_ok=True);Path('results').mkdir(exist_ok=True)
     start=time.perf_counter()
-    for item in manifest['files']:
+    selected_files=manifest['files']
+    if args.first_train_shard_only:
+        assert steps==128
+        selected_files=[selected_files[0],selected_files[-1]]
+    for item in selected_files:
         path=Path('raw',item['filename'])
         assert path.stat().st_size==item['bytes'] and sha(path)==item['sha256'],path
-    print('All 14 raw shard SHA-256 checks passed',flush=True)
+    print(f'All {len(selected_files)} selected raw shard SHA-256 checks passed',flush=True)
     assert T*B==batch_tokens
     records={};epochs=[];prefix_sha=None
     for split,paths,counts in [('train',['train'],[steps]),('val',['dev','test'],[4,64])]:
@@ -65,7 +75,7 @@ def main():
         layout='rows of16385 token ids; x=row[:-1], y=row[1:]',batch_tokens=batch_tokens,
         training_steps=steps,requested_tokens=requested,training_tokens=steps*batch_tokens,
         files=records,tokenizer=provenance,native_commit='145da40cdd37b9522aa53d26c0c356e9126458bb',
-        dataset_revision='87f09149ef4734204d70ed1d046ddc9ca3f2b8f9',train_shards='000..012',heldout_shard='013',
+        dataset_revision='87f09149ef4734204d70ed1d046ddc9ca3f2b8f9',train_shards='000 only (validation prefix)' if args.first_train_shard_only else '000..012',heldout_shard='013',
         first_128_steps_sha256=prefix_sha,source_read_epochs=epochs,
         epoch_note='Native loader cycles the entire 13-shard training split. Epoch tracks source reads into the document buffer, not exact consumed unique tokens.',
         seconds=time.perf_counter()-start,validation='dev first8 rows/131072tokens; test next128 rows/2097152tokens; disjoint packed rows and same heldout shard013; not the old2K dev/test examples')

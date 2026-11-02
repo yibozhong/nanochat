@@ -12,7 +12,7 @@ tar -xf tokenizer.tar -C cache
 mv ./*.parquet raw/
 cp /opt/gradformer-environment.txt results/container-environment.txt
 cp prepare-inputs.sha256 results/
-python prepare_data.py
+python prepare_data.py "$@"
 tar -cf data.tar data cache/tokenizer cache/tokenizer-provenance.json
 tar -cf gate-data.tar -C gate-data data
 python - <<'PY'
