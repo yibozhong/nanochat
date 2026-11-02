@@ -71,13 +71,20 @@ def reference_logits(m, idx):
             h=h+linear(attention(q,k,v,mask),block.attn.c_proj)
             h=h+linear(F.relu(linear(rms(h),block.mlp.c_fc)).square(),block.mlp.c_proj)
         outputs.append(rms(h))
+        new_memory=memory(h,start)
         if previous is not None and m.lookback is not None:
             old,old_start=previous;look=m.lookback
             q=project(rms(old),look.c_q,old_start,True)
-            k=project(rms(h),look.c_k,start,True);v=project(rms(h),look.c_v,start)
-            updated=old+linear(attention(q,k,v),look.c_proj)
-            bank[-1]=memory(updated,old_start)
-        bank.append(memory(h,start));previous=(h,start)
+            if m.config.lookback_update=='kv_residual':
+                k,v=new_memory
+                hidden_delta=linear(attention(q,k,v),look.c_proj)
+                dk,dv=memory(hidden_delta,old_start)
+                bank[-1]=(bank[-1][0]+dk,bank[-1][1]+dv)
+            else:
+                k=project(rms(h),look.c_k,start,True);v=project(rms(h),look.c_v,start)
+                updated=old+linear(attention(q,k,v),look.c_proj)
+                bank[-1]=memory(updated,old_start)
+        bank.append(new_memory);previous=(h,start)
     hidden=torch.cat(outputs,dim=1)
     return 15*torch.tanh(linear(hidden,m.lm_head)/15)
 

@@ -62,3 +62,40 @@ hardware counters; report exact exclusions. Logical bank storage is64MiB at
 microbatch2, but end-to-end autograd retains earlier versions. Actual peak
 allocated/reserved and their same-GPU differences are measured separately.
 No inference-memory reduction or quality advantage is assumed.
+
+## KV-residual update (2026-11-02)
+
+The new explicit configuration is `--lookback-update kv_residual`. Legacy
+`hidden` remains available for existing runs and checkpoints. The new update is:
+
+```text
+M2 = SharedKV(H2)
+U1 = W_o Attention(Q(H1), M2.K, M2.V)
+(deltaK1, deltaV1) = SharedKV(U1, positions=C1)
+M1_updated = (M1.K + deltaK1, M1.V + deltaV1)
+C3 reads [M1_updated, M2]
+```
+
+Here U1 is the cross-attention branch output (the user's `H1_updated`), with
+the residual addition placed at the memory output. Query uses the previous
+hidden's RMSNorm, learned Q projection and original-position RoPE/QK norm.
+Current memory K/V are computed first and reused directly: no new K/V
+projection or repeated rotary transformation inside Lookback. Delta projection
+reuses the shared weights and existing input RMSNorm/key RMSNorm/RoPE policy;
+there is no extra normalization after the K/V residual addition. All previous
+causal availability and once-only revision rules remain unchanged. In
+particular H1 is not added a second time inside the delta. Zero initialization
+of W_o produces exact zero delta and preserves the unmodified memory bank.
+
+This removes the two private Lookback K/V matrices, reducing parameters from
+60,293,120 to59,768,832. The query/output and shared memory matrices still use
+native Muon. Checkpoint metadata records the update type; absent metadata means
+legacy `hidden`. Old weights cannot silently load as the new model. Existing
+formal jobs use their immutable old source bundles and remain the old variant.
+
+`kv_workflow.py WORKFLOW_DIRECTORY submit` submits only a bounded validation
+job; `... watch` collects and publishes after success. It checks25 tests,
+profiles hidden/KV-residual in both orders, and verifies the new variant's
+25→exit85→fresh-process50 recovery with the original305176-step LR horizon.
+It never submits or cancels formal training, receives no W&B credentials,
+and returns no test weights.

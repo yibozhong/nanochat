@@ -33,6 +33,7 @@ class ConnectionConfig:
     window_pattern: str = 'SSSL'  # native only; vanilla is always full attention
     chunk_size: int = 2048
     lookback_enabled: bool = True
+    lookback_update: str = 'hidden'
 
     def __post_init__(self):
         if self.architecture not in ('vanilla', 'native'):
@@ -47,6 +48,8 @@ class ConnectionConfig:
             raise ValueError('Lookback uses the vanilla backbone')
         if self.chunk_size <= 0:
             raise ValueError('chunk_size must be positive')
+        if self.lookback_update not in ('hidden', 'kv_residual'):
+            raise ValueError('lookback_update must be hidden or kv_residual')
         if self.sinkhorn_iterations != 20:
             raise ValueError('The NVIDIA composite API requires 20 Sinkhorn iterations')
         if min(self.depth, self.width, self.heads, self.sequence_length, self.vocab_size, self.streams) < 1:
@@ -62,6 +65,8 @@ class ConnectionConfig:
     def from_checkpoint(cls, config):
         """Read pre-cleanup NVIDIA/vanilla metadata; reject retired model weights."""
         config = dict(config)
+        # Old checkpoints revised hidden states and replaced their memory KV.
+        config.setdefault('lookback_update', 'hidden')
         projection = config.pop('projection_backend', 'official')
         if projection != 'official':
             raise ValueError('Projection-only checkpoints belong to a retired implementation')

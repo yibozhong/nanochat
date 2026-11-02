@@ -27,6 +27,7 @@ def main():
     p.add_argument('--variant', choices=('baseline', 'lookback'), required=True)
     p.add_argument('--sequence-length', type=int, choices=(16384,), default=16384)
     p.add_argument('--microbatch', type=int, required=True)
+    p.add_argument('--lookback-update', choices=('hidden','kv_residual'), default='hidden')
     p.add_argument('--repetition', type=int, default=0)
     p.add_argument('--probe', action='store_true')
     p.add_argument('--data-dir', default='../data')
@@ -40,7 +41,7 @@ def main():
     configure_attention('sdpa_cudnn')
     seed_all(42)
     props = torch.cuda.get_device_properties(0)
-    cfg = ConnectionConfig(variant=a.variant, sequence_length=a.sequence_length)
+    cfg = ConnectionConfig(variant=a.variant, sequence_length=a.sequence_length, lookback_update=a.lookback_update)
     record = dict(complete=False, variant=a.variant, sequence_length=a.sequence_length,
         microbatch=a.microbatch, grad_accum=rows//a.microbatch, batch_tokens=BATCH_TOKENS,
         repetition=a.repetition, probe=a.probe, model=asdict(cfg), logging_backend='local',

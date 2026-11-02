@@ -68,6 +68,28 @@ class LookbackAttention(nn.Module):
         return previous+self.c_proj(attend(q, k, v).reshape(b, t, d))
 
 
+class MemoryResidualLookback(nn.Module):
+    """Query the current cached K/V using the previous hidden.
+
+    Returns only the attention branch in hidden coordinates. The caller
+    projects this branch into delta K/V, then adds it to the previous bank.
+    Cached current keys already have RoPE and QK norm; do not apply them again.
+    """
+    def __init__(self, width, heads):
+        super().__init__()
+        self.heads, self.head_dim = heads, width//heads
+        self.c_q = Linear(width, width, bias=False)
+        self.c_proj = Linear(width, width, bias=False)
+        nn.init.uniform_(self.c_q.weight, -math.sqrt(3/width), math.sqrt(3/width))
+        nn.init.zeros_(self.c_proj.weight)
+
+    def forward(self, previous, current_k, current_v, previous_cos, previous_sin):
+        b, t, d = previous.shape
+        q = self.c_q(norm(previous)).view(b, t, self.heads, self.head_dim)
+        q = 1.2*norm(apply_rotary_emb(q, previous_cos, previous_sin))
+        return self.c_proj(attend(q, current_k, current_v).reshape(b, t, d))
+
+
 @dataclass(frozen=True)
 class MemoryBank:
     keys: tuple = ()
@@ -88,7 +110,8 @@ class LookbackModel(ConnectionModel):
             self.memory_v = Linear(config.width, config.width, bias=False)
             for p in (self.memory_k.weight, self.memory_v.weight):
                 nn.init.uniform_(p, -math.sqrt(3/config.width), math.sqrt(3/config.width))
-            self.lookback = LookbackAttention(config.width, config.heads) if config.lookback_enabled else None
+            lookback_class = MemoryResidualLookback if config.lookback_update == 'kv_residual' else LookbackAttention
+            self.lookback = lookback_class(config.width, config.heads) if config.lookback_enabled else None
         self.compiled_chunk = self.compiled_memory = self.compiled_lookback = None
 
     def memory_parameters(self):
@@ -127,6 +150,23 @@ class LookbackModel(ConnectionModel):
         project = self.compiled_memory or self.project_memory
         keys, values = bank.keys, bank.values
         revisions = bank.revisions
+        if self.config.lookback_update == 'kv_residual':
+            # Current memory is computed exactly once, then reused by Lookback
+            # and appended unchanged for subsequent chunks to read.
+            new_k, new_v = project(current, cos, sin)
+            if bank.previous is not None and self.lookback is not None:
+                old_start = bank.previous_start
+                old_end = old_start+bank.previous.shape[1]
+                old_cos, old_sin = self.cos[:, old_start:old_end], self.sin[:, old_start:old_end]
+                update = self.compiled_lookback or self.lookback.forward
+                hidden_delta = update(bank.previous, new_k, new_v, old_cos, old_sin)
+                # The same shared projection (including its existing norm and
+                # RoPE policy) maps the branch to KV at the OLD token positions.
+                delta_k, delta_v = project(hidden_delta, old_cos, old_sin)
+                keys = keys[:-1]+(keys[-1]+delta_k,)
+                values = values[:-1]+(values[-1]+delta_v,)
+                revisions += 1
+            return MemoryBank(keys+(new_k,), values+(new_v,), current, start, end, revisions)
         if bank.previous is not None and self.lookback is not None:
             old_start = bank.previous_start
             old_end = old_start+bank.previous.shape[1]

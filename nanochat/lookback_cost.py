@@ -22,7 +22,9 @@ def model_cost(config, batch=1, activation_bytes=2):
         unused_bank = 4*batch*sizes[-1]*d*d
         if c.lookback_enabled:
             for previous, current in zip(sizes, sizes[1:]):
-                boundary = 4*batch*(previous+current)*d*d+4*batch*d*previous*current
+                # KV residual reuses current shared K/V: only Q and O GEMMs.
+                projection_tokens = previous if c.lookback_update == 'kv_residual' else previous+current
+                boundary = 4*batch*projection_tokens*d*d+4*batch*d*previous*current
                 update += boundary
                 bank += 4*batch*previous*d*d
             if len(sizes)>1:
