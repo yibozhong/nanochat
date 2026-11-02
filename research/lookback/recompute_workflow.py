@@ -97,7 +97,7 @@ def submit():
         command(['condor_submit','-dry-run','gate-dryrun.ad','gate.sub'])
         write(ROOT/'gate-intent.json',dict(source=source,time=time.time()))
         out=command(['condor_submit','-terse','gate.sub']);job=out.split()[0];assert job.endswith('.0'),out
-        state=dict(status='gpu_validation_pending',gate_job=job,source=source,submitted_at=time.time(),
+        state=dict(status='gpu_validation_pending',gate_job=job,source=source,bundle_dir='bundles',submitted_at=time.time(),
             requested_tokens=10000000000,steps=305176,baseline=dict(job='7669762.0',run_id='0bb03c6e'),
             automatic_continuation=True)
         write(ROOT/'state.json',state)
@@ -166,7 +166,10 @@ def submit_training(state):
     assert state['published_commit']==command(['git','rev-parse','HEAD'],REPO)
     report=json.loads((ROOT/'validation.json').read_text());micro=report['selected_microbatch']
     dest=ROOT/'training-bundles';dest.mkdir(exist_ok=True)
-    for name in (WHEEL,'source.tar'):shutil.copy2(ROOT/'bundles'/name,dest/name)
+    # Retry inputs are versioned; never substitute a newer source into an
+    # existing job's bundle or train from the first failed gate's archive.
+    verified_bundle=ROOT/state.get('bundle_dir','bundles')
+    for name in (WHEEL,'source.tar'):shutil.copy2(verified_bundle/name,dest/name)
     shutil.copy2(REPO/'research/lookback/recompute-train.sh',ROOT/'train.sh');(ROOT/'train.sh').chmod(0o755)
     hashes={k:v for k,v in state['source']['hashes'].items() if k!='gate-data.tar'}
     hashes[FULL_ARCHIVE]=FULL_SHA

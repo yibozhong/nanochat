@@ -282,7 +282,9 @@ def test_identical_parameter_initialization_rng_optimizer_and_checkpoint_schema(
     configure_attention('sdpa_cudnn');m=gpu_model();rng=torch.get_rng_state()
     baseline=gpu_model(variant='baseline')
     common={k:v for k,v in m.state_dict().items() if not k.startswith('memory_')}
-    resume_checks.equal_tree(common,baseline.state_dict())
+    # Filtering produces a plain dict; compare equivalent mappings while
+    # retaining exact dtype/shape/value checks for every shared tensor.
+    resume_checks.equal_tree(common,dict(baseline.state_dict()))
     assert torch.equal(rng,torch.get_rng_state())
     assert ConnectionConfig.from_checkpoint(asdict(m.config))==m.config
     a,wd=optimizer_for(m);b,wd2=optimizer_for(baseline)

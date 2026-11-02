@@ -1,0 +1,21 @@
+{
+  "attempts": [
+    {
+      "job": "7677015.0",
+      "source": "12ded5c9d954b7c9abc866492cd82346f250a592",
+      "exit_code": 1,
+      "checks": {
+        "tests": 18,
+        "failures": 1,
+        "errors": 0,
+        "skipped": 0
+      },
+      "failed_test": "test_identical_parameter_initialization_rng_optimizer_and_checkpoint_schema",
+      "cause": "Filtered mapping is dict but state_dict is OrderedDict; strict helper rejected container type before comparing tensors",
+      "fix": "Normalize both outer mappings to dict; tensor dtype/shape/bitwise equality requirements unchanged",
+      "model_training_runtime_changed": false,
+      "profile_and_real_restart_executed": false,
+      "archive_sha256": "4375fd889f0238517d306142cd36da9d043413213501335567920bfbf9f3499e"
+    }
+  ]
+}
