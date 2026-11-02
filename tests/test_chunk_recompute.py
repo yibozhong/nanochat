@@ -73,8 +73,8 @@ def reference_hidden(m,idx):
             z=1.2*rms(torch.cat((left*co+right*si,right*co-left*si),dim=-1))
         return z
     embedding=rms(m.wte(idx))
-    def run(start,end,memories):
-        h=embedding[:,start:end];cache=[]
+    def run(h,start,end,memories):
+        cache=[]
         for layer,block in enumerate(m.blocks):
             z=rms(h);q=projection(z,block.attn.c_q,start,True)
             k=projection(z,block.attn.c_k,start,True);v=projection(z,block.attn.c_v,start,False)
@@ -89,16 +89,16 @@ def reference_hidden(m,idx):
             attention=torch.einsum('bhqk,bkhd->bqhd',weights,values).reshape_as(h)
             h=h+linear(attention,block.attn.c_proj)
             h=h+linear(F.relu(linear(rms(h),block.mlp.c_fc)).square(),block.mlp.c_proj)
-        return rms(h),cache
-    outputs=[];memories=[];positions=[]
+        return h,cache
+    outputs=[];memories=[];positions=[];previous_hidden=None
     for start in range(0,idx.shape[1],m.config.recompute_chunk_size):
         end=min(idx.shape[1],start+m.config.recompute_chunk_size)
-        output,current=run(start,end,memories);outputs.append(output)
+        output,current=run(embedding[:,start:end],start,end,memories);outputs.append(rms(output))
         if memories and m.config.recompute_previous:
             previous_start,previous_end=positions[-1]
-            _,updated=run(previous_start,previous_end,memories[:-1]+[current])
+            _,updated=run(previous_hidden,previous_start,previous_end,memories[:-1]+[current])
             memories[-1]=updated
-        memories.append(current);positions.append((start,end))
+        memories.append(current);positions.append((start,end));previous_hidden=output
     return torch.cat(outputs,dim=1)
 
 
@@ -133,14 +133,23 @@ def test_disabled_recompute_and_single_chunk_equal_full_vanilla_forward_backward
     record('vanilla-equivalence',dict(gradient_relative=errors))
 
 
-def test_once_only_schedule_original_embeddings_and_functional_bank(monkeypatch):
+def test_once_only_schedule_final_hidden_input_and_functional_bank(monkeypatch):
     m=build(sequence_length=16);nonzero_branches(m)
-    embeddings=torch.randn(1,16,16,dtype=torch.float64);calls=[];boundaries=[]
+    embeddings=torch.randn(1,16,16,dtype=torch.float64);calls=[];boundaries=[];original_hidden={}
     run=m.process_chunk;advance=m.advance
-    def spy(embedding,start,history):
-        assert embedding.data_ptr()==embeddings[:,start:start+embedding.shape[1]].data_ptr()
+    def spy(hidden,start,history):
+        rerun=any(c.start>start for c in history)
+        if rerun:
+            assert hidden is original_hidden[start]
+            assert hidden.data_ptr()!=embeddings[:,start:start+hidden.shape[1]].data_ptr()
+        else:
+            assert hidden.data_ptr()==embeddings[:,start:start+hidden.shape[1]].data_ptr()
         calls.append((start,[c.start for c in history]))
-        return run(embedding,start,history)
+        result=run(hidden,start,history)
+        if not rerun:
+            original_hidden[start]=result[0]
+            assert result[1].final_hidden is result[0]
+        return result
     def spy_advance(*args):
         old=args[-1];out,new=advance(*args);boundaries.append((old,new));return out,new
     monkeypatch.setattr(m,'process_chunk',spy);monkeypatch.setattr(m,'advance',spy_advance)
@@ -150,9 +159,12 @@ def test_once_only_schedule_original_embeddings_and_functional_bank(monkeypatch)
     for old,new in boundaries[1:]:
         assert old[-1].revisions==0 and new[-2].revisions==1
         assert all(a is b for a,b in zip(old[:-1],new[:-2]))
-        assert torch.equal(old[-1].kv[0][0],new[-2].kv[0][0])
+        assert not torch.equal(old[-1].kv[0][0],new[-2].kv[0][0])
         assert not torch.equal(old[-1].kv[1][0],new[-2].kv[1][0])
-    record('schedule',dict(passes=calls,functional_replacement=True,first_layer_keys_unchanged=True))
+        assert old[-1].final_hidden is not None and new[-2].final_hidden is None
+    assert bank[-1].final_hidden is original_hidden[12]
+    record('schedule',dict(passes=calls,functional_replacement=True,first_layer_keys_changed=True,
+        rerun_input='original_final_block_output_before_readout_norm',same_tensor_no_norm_no_detach=True))
 
 
 def test_first_two_predictions_unchanged_and_only_later_loss_reaches_revised_cache(monkeypatch):
@@ -187,6 +199,27 @@ def test_revised_previous_can_read_last_successor_token_but_original_predictions
     old_grad=torch.autograd.grad(out[:,:7].square().sum(),h)[0]
     assert torch.count_nonzero(old_grad[:,7:])==0
     record('successor-visible',dict(last_successor_token_gradient=grad[:,-1].norm().item()))
+
+
+def test_later_loss_backpropagates_through_original_final_hidden_into_original_stack(monkeypatch):
+    m=build(sequence_length=12);nonzero_branches(m);run=m.process_chunk;finals={};revised=[]
+    def capture(hidden,start,history):
+        result=run(hidden,start,history)
+        if any(c.start>start for c in history):revised.append(result[1].kv[0][1])
+        else:finals[start]=result[0]
+        return result
+    monkeypatch.setattr(m,'process_chunk',capture)
+    h=torch.randn(1,12,16,dtype=torch.float64,requires_grad=True)
+    out=m.hidden_from_embeddings(h)
+    probe=torch.randn_like(revised[0])
+    # First-layer revised V has ONLY the final-hidden input path: unlike upper
+    # layers it cannot depend on successor attention. This isolates no-detach.
+    g=torch.autograd.grad((revised[0]*probe).sum(),(finals[0],m.blocks[-1].mlp.c_proj.weight,h),retain_graph=True)
+    assert all(v.norm()>0 for v in g) and torch.count_nonzero(g[-1][:,4:])==0
+    late=torch.autograd.grad((out[:,8:]*torch.randn_like(out[:,8:])).sum(),revised[0])[0]
+    assert late.norm()>0
+    record('final-hidden-gradient',dict(original_final_hidden_gradient=g[0].norm().item(),
+        original_last_mlp_gradient=g[1].norm().item(),later_loss_to_revised_first_layer_v=late.norm().item()))
 
 
 def test_mask_arbitrary_partial_chunks_and_standard_cache_rejection():
@@ -260,11 +293,16 @@ def test_analytical_flops_and_logical_bank_accounting():
     assert cost['components_forward']['attention']==base['components_forward']['attention']
     assert cost['estimated_training_flops']>base['estimated_training_flops']
     assert cost['logical_memory_kv_bytes']==512*1024**2
+    assert cost['logical_previous_hidden_bytes']==4*1024**2
     no=model_cost(replace(c,recompute_previous=False),batch=2)
     assert no['estimated_training_flops']==base['estimated_training_flops']
+    assert no['logical_previous_hidden_bytes']==0
     record('cost',dict(recompute=cost,baseline=base))
 
 
 def test_invalid_model_options():
     with pytest.raises(ValueError):ConnectionConfig(variant='lookback_recompute',architecture='native')
     with pytest.raises(ValueError):ConnectionConfig(variant='lookback_recompute',recompute_chunk_size=0)
+    with pytest.raises(ValueError):ConnectionConfig(variant='lookback_recompute',recompute_input='embedding')
+    retired=asdict(ConnectionConfig(variant='lookback_recompute'));retired.pop('recompute_input')
+    with pytest.raises(ValueError,match='retired architecture'):ConnectionConfig.from_checkpoint(retired)

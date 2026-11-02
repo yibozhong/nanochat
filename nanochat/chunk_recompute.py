@@ -1,8 +1,9 @@
 """One retrospective rerun per boundary, reusing the original Transformer.
 
-The state contains each layer's ordinary keys/values, not projections of a
-final hidden. All replacements are functional and are available only after the
-successor's original predictions have been computed. No new learned tensors.
+The preceding chunk's original final block output is the bottom-layer input
+for its rerun. Its state contains ordinary per-layer keys/values. Replacements
+are functional and available only after the successor's original predictions
+have been computed. No new learned tensors, input norm or gradient detach.
 """
 from dataclasses import dataclass, replace
 import math
@@ -44,6 +45,7 @@ class ChunkState:
     start: int
     length: int
     kv: tuple
+    final_hidden: torch.Tensor | None = None
     revisions: int = 0
 
 
@@ -65,9 +67,9 @@ class ChunkRecomputeModel(ConnectionModel):
             self.compiled_chunk=torch.compile(transformer_chunk,dynamic=False,fullgraph=True)
         return self
 
-    def process_chunk(self, embedding, start, history):
-        """One complete pass, starting from original token embeddings."""
-        b,t,d=embedding.shape;x=embedding
+    def process_chunk(self, hidden, start, history):
+        """Run the shared stack from supplied hidden, retaining original positions."""
+        b,t,d=hidden.shape;x=hidden
         cos,sin=self.cos[:,start:start+t],self.sin[:,start:start+t]
         memory_length=sum(chunk.length for chunk in history)
         mask=memory_causal_mask(t,memory_length,x.device)
@@ -84,7 +86,7 @@ class ChunkRecomputeModel(ConnectionModel):
             else:
                 x,k,v=step(block,x,memory_k,memory_v,cos,sin,mask)
             kv.append((k,v))
-        return x,ChunkState(start,t,tuple(kv))
+        return x,ChunkState(start,t,tuple(kv),final_hidden=x)
 
     def advance(self, embeddings, start, end, bank):
         original,current=self.process_chunk(embeddings[:,start:end],start,bank)
@@ -92,12 +94,17 @@ class ChunkRecomputeModel(ConnectionModel):
         if bank and self.config.recompute_previous:
             previous=bank[-1]
             assert previous.revisions==0,'Each chunk may be revised only once'
+            assert previous.final_hidden is not None
             # Exclude the obsolete cache of the chunk being rerun. Preserve all
             # older revised chunks, and add the just-completed successor.
             history=bank[:-1]+(current,)
-            _,revised=self.process_chunk(
-                embeddings[:,previous.start:previous.start+previous.length],previous.start,history)
-            bank=bank[:-1]+(replace(revised,revisions=1),)
+            # Continue from the ORIGINAL final block output, before the readout
+            # RMSNorm. Preserve its graph and scale: no detach, norm or embedding
+            # reinjection. Each chunk crosses this extra stack exactly once.
+            _,revised=self.process_chunk(previous.final_hidden,previous.start,history)
+            bank=bank[:-1]+(replace(revised,revisions=1,final_hidden=None),)
+        if not self.config.recompute_previous:
+            current=replace(current,final_hidden=None)
         return output,bank+(current,)
 
     def hidden_from_embeddings(self, embeddings, *, return_bank=False):

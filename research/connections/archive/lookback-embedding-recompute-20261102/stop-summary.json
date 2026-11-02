@@ -1,0 +1,16 @@
+{
+  "queue": [],
+  "history": [
+    {
+      "ClusterId": 7674729,
+      "ExitCode": 143,
+      "JobStatus": 3,
+      "NumJobStarts": 1,
+      "ProcId": 0
+    }
+  ],
+  "baseline_job": "7669762.0",
+  "baseline_untouched": true,
+  "wandb_deleted": false,
+  "checkpoint_retained": false
+}

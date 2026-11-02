@@ -33,6 +33,7 @@ class ConnectionConfig:
     window_pattern: str = 'SSSL'  # native only; vanilla is always full attention
     recompute_chunk_size: int = 2048
     recompute_previous: bool = True
+    recompute_input: str = 'final_hidden'
 
     def __post_init__(self):
         if self.architecture not in ('vanilla', 'native'):
@@ -47,6 +48,8 @@ class ConnectionConfig:
             raise ValueError('Chunk recomputation uses the vanilla backbone')
         if self.recompute_chunk_size < 1:
             raise ValueError('recompute_chunk_size must be positive')
+        if self.recompute_input != 'final_hidden':
+            raise ValueError('Reruns start from the original final block output')
         if self.sinkhorn_iterations != 20:
             raise ValueError('The NVIDIA composite API requires 20 Sinkhorn iterations')
         if min(self.depth, self.width, self.heads, self.sequence_length, self.vocab_size, self.streams) < 1:
@@ -62,6 +65,8 @@ class ConnectionConfig:
     def from_checkpoint(cls, config):
         """Read pre-cleanup NVIDIA/vanilla metadata; reject retired model weights."""
         config = dict(config)
+        if config.get('variant') == 'lookback_recompute' and config.get('recompute_input') != 'final_hidden':
+            raise ValueError('Embedding-start rerun checkpoints belong to a retired architecture')
         # These fields were inert on core models in the retired Lookback experiment.
         for name in ("chunk_size", "lookback_enabled", "lookback_update"):
             config.pop(name, None)
