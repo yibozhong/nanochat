@@ -1,0 +1,1508 @@
+{
+  "complete": true,
+  "source": {
+    "commit": "38b0c207a9ddf32562bab80fa29f6a130f10d647",
+    "hashes": {
+      "transformer_engine_torch-2.20.2-cp311-cp311-linux_x86_64.whl": "9b69f40b34570e3073171dcb231d6dd038092d20a277e501e7da01e6475920de",
+      "mhc-official-runtime-7546767.tar.gz": "6b927f93021961293e12452b4001a479ff1b54cbc1aae0355e73e75a393d4dc0",
+      "cuda-compat-13-1_590.48.01-1_amd64.deb": "066f24c715f5f8f31bb7e8bd0f9ddc93fe78a82d3be55c6f3e9bbe26fa4fd7be",
+      "gate-data.tar": "e0e94888d697343316e17deca67c4182ad6dd713b477c21c500f795f7f9d9725",
+      "source.tar": "4793446ca1af5b1cd94fb19b481aca400a12151f25baf4a3c42b1e4c55bb80b8"
+    },
+    "purpose": "Final-hidden-start same-Transformer chunk recomputation validation",
+    "formal_training": false,
+    "sequence_length": 16384,
+    "chunk_size": 2048,
+    "new_learned_parameters": 0,
+    "variant": "lookback_recompute",
+    "recompute_input": "final_hidden",
+    "per_layer_kv": true,
+    "launcher_sha256": "02bc6c38a49f30fa22d39c6e46e5551ce5dbc3ac4888c887cfb6878b6c49af46"
+  },
+  "checks": {
+    "tests": 16,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "logging_backend": "local",
+  "selected_microbatch": 2,
+  "grad_accum": 1,
+  "sequence_length": 16384,
+  "chunk_size": 2048,
+  "chunk_attention": "full_causal",
+  "recompute_input": "final_hidden",
+  "shared_kv": false,
+  "per_layer_kv": true,
+  "new_learned_parameters": 0,
+  "probes": [
+    {
+      "complete": true,
+      "variant": "baseline",
+      "sequence_length": 16384,
+      "microbatch": 2,
+      "grad_accum": 1,
+      "batch_tokens": 32768,
+      "repetition": 0,
+      "probe": true,
+      "model": {
+        "variant": "baseline",
+        "depth": 8,
+        "width": 512,
+        "heads": 4,
+        "sequence_length": 16384,
+        "vocab_size": 32768,
+        "streams": 4,
+        "sinkhorn_iterations": 20,
+        "activation_checkpoint": false,
+        "connection_backend": "nvidia",
+        "fused_connection_grad": false,
+        "architecture": "vanilla",
+        "window_pattern": "SSSL",
+        "recompute_chunk_size": 2048,
+        "recompute_previous": true,
+        "recompute_input": "final_hidden"
+      },
+      "logging_backend": "local",
+      "gpu": "NVIDIA H200",
+      "gpu_uuid": "8ca65bdc-4208-329a-d93f-6b9a4013e7ef",
+      "device_total_bytes": 150120759296,
+      "torch": "2.10.0+cu130",
+      "cuda": "13.0",
+      "attention_backend": "sdpa_cudnn",
+      "minimum_gpu_bytes": 23068672000,
+      "memory_limit_bytes": 20761804800,
+      "nvidia_tf32_override": "0",
+      "source": {
+        "commit": "38b0c207a9ddf32562bab80fa29f6a130f10d647",
+        "hashes": {
+          "transformer_engine_torch-2.20.2-cp311-cp311-linux_x86_64.whl": "9b69f40b34570e3073171dcb231d6dd038092d20a277e501e7da01e6475920de",
+          "mhc-official-runtime-7546767.tar.gz": "6b927f93021961293e12452b4001a479ff1b54cbc1aae0355e73e75a393d4dc0",
+          "cuda-compat-13-1_590.48.01-1_amd64.deb": "066f24c715f5f8f31bb7e8bd0f9ddc93fe78a82d3be55c6f3e9bbe26fa4fd7be",
+          "gate-data.tar": "e0e94888d697343316e17deca67c4182ad6dd713b477c21c500f795f7f9d9725",
+          "source.tar": "4793446ca1af5b1cd94fb19b481aca400a12151f25baf4a3c42b1e4c55bb80b8"
+        },
+        "purpose": "Final-hidden-start same-Transformer chunk recomputation validation",
+        "formal_training": false,
+        "sequence_length": 16384,
+        "chunk_size": 2048,
+        "new_learned_parameters": 0,
+        "variant": "lookback_recompute",
+        "recompute_input": "final_hidden",
+        "per_layer_kv": true,
+        "launcher_sha256": "02bc6c38a49f30fa22d39c6e46e5551ce5dbc3ac4888c887cfb6878b6c49af46"
+      },
+      "seed": 42,
+      "data_note": "Fresh native16K packing; same examples for both variants",
+      "timing_includes": "CPU data copy/H2D, CCE, backward, finite checks, MuonAdamW",
+      "warmup_steps": 4,
+      "timed_steps": 0,
+      "input_sha256": "63eae96934c9cfcaa9b1691833014b3c7aecd9f6c25886cc5713393256c7999d",
+      "parameters": 58720256,
+      "compute_estimate": {
+        "estimated_forward_flops": 7147094016000,
+        "estimated_training_flops": 21441282048000,
+        "components_forward": {
+          "backbone_projections": 1649267441664,
+          "vocab_head": 1099511627776,
+          "attention": 4398314946560,
+          "memory_projection": 0,
+          "lookback": 0
+        },
+        "logical_memory_kv_bytes": 0,
+        "logical_previous_hidden_bytes": 0,
+        "accounting": "FMA=2 FLOPs; allowed attention pairs, not masked dense-kernel execution. Includes retrospective chunk reruns; backward approximated as2x consumed forward matrix FLOPs. Excludes softmax/norm/activation/optimizer/activation-checkpoint recomputation and is not measured hardware FLOPs.",
+        "memory_note": "Actual training peak VRAM must be measured separately."
+      },
+      "first_step_including_compilation_seconds": 19.098379239439964,
+      "losses": [
+        10.397482872009277,
+        10.395833015441895,
+        10.38726806640625,
+        10.380091667175293
+      ],
+      "optimizer_updates": 4,
+      "training_tokens": 131072,
+      "peak_allocated_bytes": 5774600704,
+      "peak_reserved_bytes": 5913968640,
+      "fits_minimum_gpu_budget": true,
+      "status": "fits"
+    },
+    {
+      "complete": true,
+      "variant": "lookback_recompute",
+      "sequence_length": 16384,
+      "microbatch": 2,
+      "grad_accum": 1,
+      "batch_tokens": 32768,
+      "repetition": 0,
+      "probe": true,
+      "model": {
+        "variant": "lookback_recompute",
+        "depth": 8,
+        "width": 512,
+        "heads": 4,
+        "sequence_length": 16384,
+        "vocab_size": 32768,
+        "streams": 4,
+        "sinkhorn_iterations": 20,
+        "activation_checkpoint": false,
+        "connection_backend": "nvidia",
+        "fused_connection_grad": false,
+        "architecture": "vanilla",
+        "window_pattern": "SSSL",
+        "recompute_chunk_size": 2048,
+        "recompute_previous": true,
+        "recompute_input": "final_hidden"
+      },
+      "logging_backend": "local",
+      "gpu": "NVIDIA H200",
+      "gpu_uuid": "8ca65bdc-4208-329a-d93f-6b9a4013e7ef",
+      "device_total_bytes": 150120759296,
+      "torch": "2.10.0+cu130",
+      "cuda": "13.0",
+      "attention_backend": "sdpa_cudnn",
+      "minimum_gpu_bytes": 23068672000,
+      "memory_limit_bytes": 20761804800,
+      "nvidia_tf32_override": "0",
+      "source": {
+        "commit": "38b0c207a9ddf32562bab80fa29f6a130f10d647",
+        "hashes": {
+          "transformer_engine_torch-2.20.2-cp311-cp311-linux_x86_64.whl": "9b69f40b34570e3073171dcb231d6dd038092d20a277e501e7da01e6475920de",
+          "mhc-official-runtime-7546767.tar.gz": "6b927f93021961293e12452b4001a479ff1b54cbc1aae0355e73e75a393d4dc0",
+          "cuda-compat-13-1_590.48.01-1_amd64.deb": "066f24c715f5f8f31bb7e8bd0f9ddc93fe78a82d3be55c6f3e9bbe26fa4fd7be",
+          "gate-data.tar": "e0e94888d697343316e17deca67c4182ad6dd713b477c21c500f795f7f9d9725",
+          "source.tar": "4793446ca1af5b1cd94fb19b481aca400a12151f25baf4a3c42b1e4c55bb80b8"
+        },
+        "purpose": "Final-hidden-start same-Transformer chunk recomputation validation",
+        "formal_training": false,
+        "sequence_length": 16384,
+        "chunk_size": 2048,
+        "new_learned_parameters": 0,
+        "variant": "lookback_recompute",
+        "recompute_input": "final_hidden",
+        "per_layer_kv": true,
+        "launcher_sha256": "02bc6c38a49f30fa22d39c6e46e5551ce5dbc3ac4888c887cfb6878b6c49af46"
+      },
+      "seed": 42,
+      "data_note": "Fresh native16K packing; same examples for both variants",
+      "timing_includes": "CPU data copy/H2D, CCE, backward, finite checks, MuonAdamW",
+      "warmup_steps": 4,
+      "timed_steps": 0,
+      "input_sha256": "63eae96934c9cfcaa9b1691833014b3c7aecd9f6c25886cc5713393256c7999d",
+      "parameters": 58720256,
+      "compute_estimate": {
+        "estimated_forward_flops": 12919764942848,
+        "estimated_training_flops": 35202944466944,
+        "components_forward": {
+          "backbone_projections": 1649267441664,
+          "vocab_head": 1099511627776,
+          "attention": 4398314946560,
+          "memory_projection": 0,
+          "lookback": 5772670926848
+        },
+        "logical_memory_kv_bytes": 536870912,
+        "logical_previous_hidden_bytes": 4194304,
+        "accounting": "FMA=2 FLOPs; allowed attention pairs, not masked dense-kernel execution. Includes retrospective chunk reruns; backward approximated as2x consumed forward matrix FLOPs. Excludes softmax/norm/activation/optimizer/activation-checkpoint recomputation and is not measured hardware FLOPs.",
+        "memory_note": "Actual training peak VRAM must be measured separately."
+      },
+      "first_step_including_compilation_seconds": 38.54996966384351,
+      "losses": [
+        10.397482872009277,
+        10.395833969116211,
+        10.38726806640625,
+        10.380091667175293
+      ],
+      "optimizer_updates": 4,
+      "training_tokens": 131072,
+      "peak_allocated_bytes": 19712500224,
+      "peak_reserved_bytes": 19725811712,
+      "fits_minimum_gpu_budget": true,
+      "status": "fits"
+    }
+  ],
+  "trials": [
+    {
+      "complete": true,
+      "variant": "baseline",
+      "sequence_length": 16384,
+      "microbatch": 2,
+      "grad_accum": 1,
+      "batch_tokens": 32768,
+      "repetition": 0,
+      "probe": false,
+      "model": {
+        "variant": "baseline",
+        "depth": 8,
+        "width": 512,
+        "heads": 4,
+        "sequence_length": 16384,
+        "vocab_size": 32768,
+        "streams": 4,
+        "sinkhorn_iterations": 20,
+        "activation_checkpoint": false,
+        "connection_backend": "nvidia",
+        "fused_connection_grad": false,
+        "architecture": "vanilla",
+        "window_pattern": "SSSL",
+        "recompute_chunk_size": 2048,
+        "recompute_previous": true,
+        "recompute_input": "final_hidden"
+      },
+      "logging_backend": "local",
+      "gpu": "NVIDIA H200",
+      "gpu_uuid": "8ca65bdc-4208-329a-d93f-6b9a4013e7ef",
+      "device_total_bytes": 150120759296,
+      "torch": "2.10.0+cu130",
+      "cuda": "13.0",
+      "attention_backend": "sdpa_cudnn",
+      "minimum_gpu_bytes": 23068672000,
+      "memory_limit_bytes": 20761804800,
+      "nvidia_tf32_override": "0",
+      "source": {
+        "commit": "38b0c207a9ddf32562bab80fa29f6a130f10d647",
+        "hashes": {
+          "transformer_engine_torch-2.20.2-cp311-cp311-linux_x86_64.whl": "9b69f40b34570e3073171dcb231d6dd038092d20a277e501e7da01e6475920de",
+          "mhc-official-runtime-7546767.tar.gz": "6b927f93021961293e12452b4001a479ff1b54cbc1aae0355e73e75a393d4dc0",
+          "cuda-compat-13-1_590.48.01-1_amd64.deb": "066f24c715f5f8f31bb7e8bd0f9ddc93fe78a82d3be55c6f3e9bbe26fa4fd7be",
+          "gate-data.tar": "e0e94888d697343316e17deca67c4182ad6dd713b477c21c500f795f7f9d9725",
+          "source.tar": "4793446ca1af5b1cd94fb19b481aca400a12151f25baf4a3c42b1e4c55bb80b8"
+        },
+        "purpose": "Final-hidden-start same-Transformer chunk recomputation validation",
+        "formal_training": false,
+        "sequence_length": 16384,
+        "chunk_size": 2048,
+        "new_learned_parameters": 0,
+        "variant": "lookback_recompute",
+        "recompute_input": "final_hidden",
+        "per_layer_kv": true,
+        "launcher_sha256": "02bc6c38a49f30fa22d39c6e46e5551ce5dbc3ac4888c887cfb6878b6c49af46"
+      },
+      "seed": 42,
+      "data_note": "Fresh native16K packing; same examples for both variants",
+      "timing_includes": "CPU data copy/H2D, CCE, backward, finite checks, MuonAdamW",
+      "warmup_steps": 20,
+      "timed_steps": 30,
+      "input_sha256": "63eae96934c9cfcaa9b1691833014b3c7aecd9f6c25886cc5713393256c7999d",
+      "parameters": 58720256,
+      "compute_estimate": {
+        "estimated_forward_flops": 7147094016000,
+        "estimated_training_flops": 21441282048000,
+        "components_forward": {
+          "backbone_projections": 1649267441664,
+          "vocab_head": 1099511627776,
+          "attention": 4398314946560,
+          "memory_projection": 0,
+          "lookback": 0
+        },
+        "logical_memory_kv_bytes": 0,
+        "logical_previous_hidden_bytes": 0,
+        "accounting": "FMA=2 FLOPs; allowed attention pairs, not masked dense-kernel execution. Includes retrospective chunk reruns; backward approximated as2x consumed forward matrix FLOPs. Excludes softmax/norm/activation/optimizer/activation-checkpoint recomputation and is not measured hardware FLOPs.",
+        "memory_note": "Actual training peak VRAM must be measured separately."
+      },
+      "setup_and_warmup_seconds": 4.182251155376434,
+      "first_step_including_compilation_seconds": 2.488470930606127,
+      "losses": [
+        10.397481918334961,
+        10.395833015441895,
+        10.38726806640625,
+        10.380091667175293,
+        10.361364364624023,
+        10.34634017944336,
+        10.322222709655762,
+        10.291204452514648,
+        10.250810623168945,
+        10.191499710083008,
+        10.115518569946289,
+        9.996539115905762,
+        9.88040542602539,
+        9.654221534729004,
+        9.4522066116333,
+        9.218687057495117,
+        8.857851028442383,
+        8.506254196166992,
+        8.296741485595703,
+        8.04975700378418,
+        7.816239356994629,
+        7.773523807525635,
+        7.641966342926025,
+        7.5927534103393555,
+        7.714081287384033,
+        7.642770767211914,
+        7.325736999511719,
+        7.453334808349609,
+        7.320353984832764,
+        7.296259880065918,
+        7.179255485534668,
+        7.196627140045166,
+        7.056433200836182,
+        7.0835394859313965,
+        7.032683849334717,
+        7.001012802124023,
+        6.843811988830566,
+        6.786638259887695,
+        6.916693687438965,
+        6.907329559326172,
+        6.739553451538086,
+        6.662430286407471,
+        6.624820232391357,
+        6.912322521209717,
+        6.581950664520264,
+        6.604466438293457,
+        6.717073440551758,
+        6.6170430183410645,
+        6.471516132354736,
+        6.5717973709106445
+      ],
+      "optimizer_updates": 50,
+      "training_tokens": 1638400,
+      "peak_allocated_bytes": 5774600704,
+      "peak_reserved_bytes": 5783945216,
+      "fits_minimum_gpu_budget": true,
+      "step_seconds": [
+        0.08292903751134872,
+        0.0849869791418314,
+        0.08252261206507683,
+        0.08389180339872837,
+        0.08448067307472229,
+        0.08586484752595425,
+        0.0829007625579834,
+        0.08251175843179226,
+        0.08369842544198036,
+        0.08472045138478279,
+        0.08594790287315845,
+        0.08405504375696182,
+        0.08385592326521873,
+        0.08578792028129101,
+        0.08498942479491234,
+        0.08516642637550831,
+        0.08296835608780384,
+        0.08568280003964901,
+        0.08546589314937592,
+        0.0838354229927063,
+        0.08277358487248421,
+        0.08264204859733582,
+        0.08536646701395512,
+        0.08667390421032906,
+        0.08345627412199974,
+        0.08301074989140034,
+        0.08371704630553722,
+        0.0855195876210928,
+        0.08430047146975994,
+        0.0839169081300497
+      ],
+      "mean_seconds": 0.08425465021282434,
+      "median_seconds": 0.08398597594350576,
+      "stdev_seconds": 0.0011986205350621659,
+      "tokens_per_second": 388916.21907193447,
+      "estimated_10b_training_hours": 7.142360314819134,
+      "causal_prefix_max_abs": 0.0,
+      "causality_passed": true,
+      "status": "fits"
+    },
+    {
+      "complete": true,
+      "variant": "lookback_recompute",
+      "sequence_length": 16384,
+      "microbatch": 2,
+      "grad_accum": 1,
+      "batch_tokens": 32768,
+      "repetition": 0,
+      "probe": false,
+      "model": {
+        "variant": "lookback_recompute",
+        "depth": 8,
+        "width": 512,
+        "heads": 4,
+        "sequence_length": 16384,
+        "vocab_size": 32768,
+        "streams": 4,
+        "sinkhorn_iterations": 20,
+        "activation_checkpoint": false,
+        "connection_backend": "nvidia",
+        "fused_connection_grad": false,
+        "architecture": "vanilla",
+        "window_pattern": "SSSL",
+        "recompute_chunk_size": 2048,
+        "recompute_previous": true,
+        "recompute_input": "final_hidden"
+      },
+      "logging_backend": "local",
+      "gpu": "NVIDIA H200",
+      "gpu_uuid": "8ca65bdc-4208-329a-d93f-6b9a4013e7ef",
+      "device_total_bytes": 150120759296,
+      "torch": "2.10.0+cu130",
+      "cuda": "13.0",
+      "attention_backend": "sdpa_cudnn",
+      "minimum_gpu_bytes": 23068672000,
+      "memory_limit_bytes": 20761804800,
+      "nvidia_tf32_override": "0",
+      "source": {
+        "commit": "38b0c207a9ddf32562bab80fa29f6a130f10d647",
+        "hashes": {
+          "transformer_engine_torch-2.20.2-cp311-cp311-linux_x86_64.whl": "9b69f40b34570e3073171dcb231d6dd038092d20a277e501e7da01e6475920de",
+          "mhc-official-runtime-7546767.tar.gz": "6b927f93021961293e12452b4001a479ff1b54cbc1aae0355e73e75a393d4dc0",
+          "cuda-compat-13-1_590.48.01-1_amd64.deb": "066f24c715f5f8f31bb7e8bd0f9ddc93fe78a82d3be55c6f3e9bbe26fa4fd7be",
+          "gate-data.tar": "e0e94888d697343316e17deca67c4182ad6dd713b477c21c500f795f7f9d9725",
+          "source.tar": "4793446ca1af5b1cd94fb19b481aca400a12151f25baf4a3c42b1e4c55bb80b8"
+        },
+        "purpose": "Final-hidden-start same-Transformer chunk recomputation validation",
+        "formal_training": false,
+        "sequence_length": 16384,
+        "chunk_size": 2048,
+        "new_learned_parameters": 0,
+        "variant": "lookback_recompute",
+        "recompute_input": "final_hidden",
+        "per_layer_kv": true,
+        "launcher_sha256": "02bc6c38a49f30fa22d39c6e46e5551ce5dbc3ac4888c887cfb6878b6c49af46"
+      },
+      "seed": 42,
+      "data_note": "Fresh native16K packing; same examples for both variants",
+      "timing_includes": "CPU data copy/H2D, CCE, backward, finite checks, MuonAdamW",
+      "warmup_steps": 20,
+      "timed_steps": 30,
+      "input_sha256": "63eae96934c9cfcaa9b1691833014b3c7aecd9f6c25886cc5713393256c7999d",
+      "parameters": 58720256,
+      "compute_estimate": {
+        "estimated_forward_flops": 12919764942848,
+        "estimated_training_flops": 35202944466944,
+        "components_forward": {
+          "backbone_projections": 1649267441664,
+          "vocab_head": 1099511627776,
+          "attention": 4398314946560,
+          "memory_projection": 0,
+          "lookback": 5772670926848
+        },
+        "logical_memory_kv_bytes": 536870912,
+        "logical_previous_hidden_bytes": 4194304,
+        "accounting": "FMA=2 FLOPs; allowed attention pairs, not masked dense-kernel execution. Includes retrospective chunk reruns; backward approximated as2x consumed forward matrix FLOPs. Excludes softmax/norm/activation/optimizer/activation-checkpoint recomputation and is not measured hardware FLOPs.",
+        "memory_note": "Actual training peak VRAM must be measured separately."
+      },
+      "setup_and_warmup_seconds": 9.956099173054099,
+      "first_step_including_compilation_seconds": 5.348790850490332,
+      "losses": [
+        10.397481918334961,
+        10.395833969116211,
+        10.38726806640625,
+        10.380091667175293,
+        10.36136245727539,
+        10.346336364746094,
+        10.322198867797852,
+        10.291067123413086,
+        10.250354766845703,
+        10.189760208129883,
+        10.111749649047852,
+        9.987298965454102,
+        9.862695693969727,
+        9.619707107543945,
+        9.395256042480469,
+        9.137786865234375,
+        8.753691673278809,
+        8.390302658081055,
+        8.195077896118164,
+        7.984519004821777,
+        7.783618927001953,
+        7.7731781005859375,
+        7.675558090209961,
+        7.636711120605469,
+        7.757875442504883,
+        7.690154075622559,
+        7.385964393615723,
+        7.531547546386719,
+        7.406703948974609,
+        7.370911598205566,
+        7.242310523986816,
+        7.261286735534668,
+        7.124393939971924,
+        7.133126258850098,
+        7.077622413635254,
+        7.032461166381836,
+        6.876108169555664,
+        6.810182094573975,
+        6.937305450439453,
+        6.924278736114502,
+        6.756211280822754,
+        6.675989151000977,
+        6.638088226318359,
+        6.919159889221191,
+        6.592598915100098,
+        6.620436668395996,
+        6.726271152496338,
+        6.628848075866699,
+        6.480684280395508,
+        6.582902431488037
+      ],
+      "optimizer_updates": 50,
+      "training_tokens": 1638400,
+      "peak_allocated_bytes": 19712500224,
+      "peak_reserved_bytes": 19734200320,
+      "fits_minimum_gpu_budget": true,
+      "step_seconds": [
+        0.23554091900587082,
+        0.23551179096102715,
+        0.24057390168309212,
+        0.23607133328914642,
+        0.23602003417909145,
+        0.23601366765797138,
+        0.23723973892629147,
+        0.23577715829014778,
+        0.2357935756444931,
+        0.23569952324032784,
+        0.2385904099792242,
+        0.2362050898373127,
+        0.2357329372316599,
+        0.2357249166816473,
+        0.2356646116822958,
+        0.2387547269463539,
+        0.23644161596894264,
+        0.23572196066379547,
+        0.23611284792423248,
+        0.23736683651804924,
+        0.23613894917070866,
+        0.2358197346329689,
+        0.23572059907019138,
+        0.2361387088894844,
+        0.23555365577340126,
+        0.23569532670080662,
+        0.23684001341462135,
+        0.23604310117661953,
+        0.23612406477332115,
+        0.23582432232797146
+      ],
+      "mean_seconds": 0.23634853574136894,
+      "median_seconds": 0.23601685091853142,
+      "stdev_seconds": 0.0011356151868892332,
+      "tokens_per_second": 138642.70365464548,
+      "estimated_10b_training_hours": 20.035527984280005,
+      "causal_prefix_max_abs": 0.0,
+      "causality_passed": true,
+      "status": "fits"
+    },
+    {
+      "complete": true,
+      "variant": "lookback_recompute",
+      "sequence_length": 16384,
+      "microbatch": 2,
+      "grad_accum": 1,
+      "batch_tokens": 32768,
+      "repetition": 1,
+      "probe": false,
+      "model": {
+        "variant": "lookback_recompute",
+        "depth": 8,
+        "width": 512,
+        "heads": 4,
+        "sequence_length": 16384,
+        "vocab_size": 32768,
+        "streams": 4,
+        "sinkhorn_iterations": 20,
+        "activation_checkpoint": false,
+        "connection_backend": "nvidia",
+        "fused_connection_grad": false,
+        "architecture": "vanilla",
+        "window_pattern": "SSSL",
+        "recompute_chunk_size": 2048,
+        "recompute_previous": true,
+        "recompute_input": "final_hidden"
+      },
+      "logging_backend": "local",
+      "gpu": "NVIDIA H200",
+      "gpu_uuid": "8ca65bdc-4208-329a-d93f-6b9a4013e7ef",
+      "device_total_bytes": 150120759296,
+      "torch": "2.10.0+cu130",
+      "cuda": "13.0",
+      "attention_backend": "sdpa_cudnn",
+      "minimum_gpu_bytes": 23068672000,
+      "memory_limit_bytes": 20761804800,
+      "nvidia_tf32_override": "0",
+      "source": {
+        "commit": "38b0c207a9ddf32562bab80fa29f6a130f10d647",
+        "hashes": {
+          "transformer_engine_torch-2.20.2-cp311-cp311-linux_x86_64.whl": "9b69f40b34570e3073171dcb231d6dd038092d20a277e501e7da01e6475920de",
+          "mhc-official-runtime-7546767.tar.gz": "6b927f93021961293e12452b4001a479ff1b54cbc1aae0355e73e75a393d4dc0",
+          "cuda-compat-13-1_590.48.01-1_amd64.deb": "066f24c715f5f8f31bb7e8bd0f9ddc93fe78a82d3be55c6f3e9bbe26fa4fd7be",
+          "gate-data.tar": "e0e94888d697343316e17deca67c4182ad6dd713b477c21c500f795f7f9d9725",
+          "source.tar": "4793446ca1af5b1cd94fb19b481aca400a12151f25baf4a3c42b1e4c55bb80b8"
+        },
+        "purpose": "Final-hidden-start same-Transformer chunk recomputation validation",
+        "formal_training": false,
+        "sequence_length": 16384,
+        "chunk_size": 2048,
+        "new_learned_parameters": 0,
+        "variant": "lookback_recompute",
+        "recompute_input": "final_hidden",
+        "per_layer_kv": true,
+        "launcher_sha256": "02bc6c38a49f30fa22d39c6e46e5551ce5dbc3ac4888c887cfb6878b6c49af46"
+      },
+      "seed": 42,
+      "data_note": "Fresh native16K packing; same examples for both variants",
+      "timing_includes": "CPU data copy/H2D, CCE, backward, finite checks, MuonAdamW",
+      "warmup_steps": 20,
+      "timed_steps": 30,
+      "input_sha256": "63eae96934c9cfcaa9b1691833014b3c7aecd9f6c25886cc5713393256c7999d",
+      "parameters": 58720256,
+      "compute_estimate": {
+        "estimated_forward_flops": 12919764942848,
+        "estimated_training_flops": 35202944466944,
+        "components_forward": {
+          "backbone_projections": 1649267441664,
+          "vocab_head": 1099511627776,
+          "attention": 4398314946560,
+          "memory_projection": 0,
+          "lookback": 5772670926848
+        },
+        "logical_memory_kv_bytes": 536870912,
+        "logical_previous_hidden_bytes": 4194304,
+        "accounting": "FMA=2 FLOPs; allowed attention pairs, not masked dense-kernel execution. Includes retrospective chunk reruns; backward approximated as2x consumed forward matrix FLOPs. Excludes softmax/norm/activation/optimizer/activation-checkpoint recomputation and is not measured hardware FLOPs.",
+        "memory_note": "Actual training peak VRAM must be measured separately."
+      },
+      "setup_and_warmup_seconds": 10.195577235892415,
+      "first_step_including_compilation_seconds": 5.47930564917624,
+      "losses": [
+        10.397482872009277,
+        10.395833015441895,
+        10.38726806640625,
+        10.380090713500977,
+        10.361364364624023,
+        10.346335411071777,
+        10.322196960449219,
+        10.291069030761719,
+        10.250359535217285,
+        10.189839363098145,
+        10.111875534057617,
+        9.987491607666016,
+        9.863014221191406,
+        9.621664047241211,
+        9.39771556854248,
+        9.139069557189941,
+        8.757186889648438,
+        8.395050048828125,
+        8.199615478515625,
+        7.986863613128662,
+        7.784467697143555,
+        7.772772312164307,
+        7.67454195022583,
+        7.635144233703613,
+        7.757192611694336,
+        7.6902241706848145,
+        7.3851318359375,
+        7.530412197113037,
+        7.404488563537598,
+        7.368976593017578,
+        7.2409820556640625,
+        7.259735584259033,
+        7.122522354125977,
+        7.1316375732421875,
+        7.076539039611816,
+        7.031642913818359,
+        6.8753557205200195,
+        6.809685230255127,
+        6.9369001388549805,
+        6.923946380615234,
+        6.7556939125061035,
+        6.675492286682129,
+        6.637907981872559,
+        6.918959617614746,
+        6.592484474182129,
+        6.620327949523926,
+        6.726025581359863,
+        6.628661155700684,
+        6.480413913726807,
+        6.582653045654297
+      ],
+      "optimizer_updates": 50,
+      "training_tokens": 1638400,
+      "peak_allocated_bytes": 19712500224,
+      "peak_reserved_bytes": 19734200320,
+      "fits_minimum_gpu_budget": true,
+      "step_seconds": [
+        0.24003292433917522,
+        0.2403650265187025,
+        0.23993363790214062,
+        0.2401170339435339,
+        0.24084776267409325,
+        0.24321934208273888,
+        0.2410404309630394,
+        0.24209745973348618,
+        0.2427056934684515,
+        0.24106432497501373,
+        0.24144619703292847,
+        0.24073746427893639,
+        0.24063136614859104,
+        0.24039776623249054,
+        0.24052992649376392,
+        0.24054230749607086,
+        0.24039997160434723,
+        0.24256466329097748,
+        0.24128704704344273,
+        0.24024201557040215,
+        0.24306967668235302,
+        0.24031833373010159,
+        0.2400721125304699,
+        0.24397253058850765,
+        0.24071409925818443,
+        0.24035644717514515,
+        0.2400761879980564,
+        0.24126013554632664,
+        0.2413074355572462,
+        0.24030808545649052
+      ],
+      "mean_seconds": 0.24105524687717358,
+      "median_seconds": 0.24067273270338774,
+      "stdev_seconds": 0.0010720499917087204,
+      "tokens_per_second": 135935.6430714677,
+      "estimated_10b_training_hours": 20.4345211169412,
+      "causal_prefix_max_abs": 0.0,
+      "causality_passed": true,
+      "status": "fits"
+    },
+    {
+      "complete": true,
+      "variant": "baseline",
+      "sequence_length": 16384,
+      "microbatch": 2,
+      "grad_accum": 1,
+      "batch_tokens": 32768,
+      "repetition": 1,
+      "probe": false,
+      "model": {
+        "variant": "baseline",
+        "depth": 8,
+        "width": 512,
+        "heads": 4,
+        "sequence_length": 16384,
+        "vocab_size": 32768,
+        "streams": 4,
+        "sinkhorn_iterations": 20,
+        "activation_checkpoint": false,
+        "connection_backend": "nvidia",
+        "fused_connection_grad": false,
+        "architecture": "vanilla",
+        "window_pattern": "SSSL",
+        "recompute_chunk_size": 2048,
+        "recompute_previous": true,
+        "recompute_input": "final_hidden"
+      },
+      "logging_backend": "local",
+      "gpu": "NVIDIA H200",
+      "gpu_uuid": "8ca65bdc-4208-329a-d93f-6b9a4013e7ef",
+      "device_total_bytes": 150120759296,
+      "torch": "2.10.0+cu130",
+      "cuda": "13.0",
+      "attention_backend": "sdpa_cudnn",
+      "minimum_gpu_bytes": 23068672000,
+      "memory_limit_bytes": 20761804800,
+      "nvidia_tf32_override": "0",
+      "source": {
+        "commit": "38b0c207a9ddf32562bab80fa29f6a130f10d647",
+        "hashes": {
+          "transformer_engine_torch-2.20.2-cp311-cp311-linux_x86_64.whl": "9b69f40b34570e3073171dcb231d6dd038092d20a277e501e7da01e6475920de",
+          "mhc-official-runtime-7546767.tar.gz": "6b927f93021961293e12452b4001a479ff1b54cbc1aae0355e73e75a393d4dc0",
+          "cuda-compat-13-1_590.48.01-1_amd64.deb": "066f24c715f5f8f31bb7e8bd0f9ddc93fe78a82d3be55c6f3e9bbe26fa4fd7be",
+          "gate-data.tar": "e0e94888d697343316e17deca67c4182ad6dd713b477c21c500f795f7f9d9725",
+          "source.tar": "4793446ca1af5b1cd94fb19b481aca400a12151f25baf4a3c42b1e4c55bb80b8"
+        },
+        "purpose": "Final-hidden-start same-Transformer chunk recomputation validation",
+        "formal_training": false,
+        "sequence_length": 16384,
+        "chunk_size": 2048,
+        "new_learned_parameters": 0,
+        "variant": "lookback_recompute",
+        "recompute_input": "final_hidden",
+        "per_layer_kv": true,
+        "launcher_sha256": "02bc6c38a49f30fa22d39c6e46e5551ce5dbc3ac4888c887cfb6878b6c49af46"
+      },
+      "seed": 42,
+      "data_note": "Fresh native16K packing; same examples for both variants",
+      "timing_includes": "CPU data copy/H2D, CCE, backward, finite checks, MuonAdamW",
+      "warmup_steps": 20,
+      "timed_steps": 30,
+      "input_sha256": "63eae96934c9cfcaa9b1691833014b3c7aecd9f6c25886cc5713393256c7999d",
+      "parameters": 58720256,
+      "compute_estimate": {
+        "estimated_forward_flops": 7147094016000,
+        "estimated_training_flops": 21441282048000,
+        "components_forward": {
+          "backbone_projections": 1649267441664,
+          "vocab_head": 1099511627776,
+          "attention": 4398314946560,
+          "memory_projection": 0,
+          "lookback": 0
+        },
+        "logical_memory_kv_bytes": 0,
+        "logical_previous_hidden_bytes": 0,
+        "accounting": "FMA=2 FLOPs; allowed attention pairs, not masked dense-kernel execution. Includes retrospective chunk reruns; backward approximated as2x consumed forward matrix FLOPs. Excludes softmax/norm/activation/optimizer/activation-checkpoint recomputation and is not measured hardware FLOPs.",
+        "memory_note": "Actual training peak VRAM must be measured separately."
+      },
+      "setup_and_warmup_seconds": 4.12374484539032,
+      "first_step_including_compilation_seconds": 2.4174714125692844,
+      "losses": [
+        10.397481918334961,
+        10.395833969116211,
+        10.38726806640625,
+        10.380090713500977,
+        10.361364364624023,
+        10.34634017944336,
+        10.322222709655762,
+        10.291202545166016,
+        10.250811576843262,
+        10.191509246826172,
+        10.11551570892334,
+        9.996475219726562,
+        9.880348205566406,
+        9.654895782470703,
+        9.452781677246094,
+        9.219213485717773,
+        8.858358383178711,
+        8.506814002990723,
+        8.2984619140625,
+        8.050917625427246,
+        7.816788196563721,
+        7.773438453674316,
+        7.640999794006348,
+        7.5920023918151855,
+        7.713138580322266,
+        7.641895294189453,
+        7.324701309204102,
+        7.452220916748047,
+        7.319177627563477,
+        7.2952446937561035,
+        7.178221702575684,
+        7.195583343505859,
+        7.055288314819336,
+        7.082942008972168,
+        7.032052040100098,
+        7.000504493713379,
+        6.843373775482178,
+        6.786248207092285,
+        6.916357040405273,
+        6.9071245193481445,
+        6.739285469055176,
+        6.662126541137695,
+        6.624509811401367,
+        6.912121772766113,
+        6.581671714782715,
+        6.6043853759765625,
+        6.71686315536499,
+        6.6167893409729,
+        6.471401214599609,
+        6.571686267852783
+      ],
+      "optimizer_updates": 50,
+      "training_tokens": 1638400,
+      "peak_allocated_bytes": 5774600704,
+      "peak_reserved_bytes": 5783945216,
+      "fits_minimum_gpu_budget": true,
+      "step_seconds": [
+        0.08247076906263828,
+        0.08621206507086754,
+        0.08388163894414902,
+        0.08261597715318203,
+        0.08275908417999744,
+        0.08474368788301945,
+        0.08516836538910866,
+        0.08393929712474346,
+        0.08328486792743206,
+        0.08331659063696861,
+        0.08676015213131905,
+        0.08564204350113869,
+        0.08380919508635998,
+        0.08276824839413166,
+        0.08505983278155327,
+        0.08583866618573666,
+        0.08406510204076767,
+        0.08269085548818111,
+        0.08272647857666016,
+        0.08396391943097115,
+        0.08539087511599064,
+        0.08500987477600574,
+        0.08300747163593769,
+        0.0828106440603733,
+        0.08349323831498623,
+        0.08574172109365463,
+        0.08545026183128357,
+        0.08340874500572681,
+        0.08425810001790524,
+        0.084769107401371
+      ],
+      "mean_seconds": 0.08416856254140535,
+      "median_seconds": 0.0839516082778573,
+      "stdev_seconds": 0.0012348122961943632,
+      "tokens_per_second": 389314.0028841566,
+      "estimated_10b_training_hours": 7.135062567259977,
+      "causal_prefix_max_abs": 0.0,
+      "causality_passed": true,
+      "status": "fits"
+    }
+  ],
+  "summary": {
+    "baseline": {
+      "mean_seconds": 0.08421160637711485,
+      "tokens_per_second": 389115.00931663683,
+      "estimated_10b_training_hours": 7.138711441039556,
+      "peak_reserved_bytes": 5783945216,
+      "peak_allocated_bytes": 5774600704,
+      "parameters": 58720256,
+      "compute_estimate": {
+        "estimated_forward_flops": 7147094016000,
+        "estimated_training_flops": 21441282048000,
+        "components_forward": {
+          "backbone_projections": 1649267441664,
+          "vocab_head": 1099511627776,
+          "attention": 4398314946560,
+          "memory_projection": 0,
+          "lookback": 0
+        },
+        "logical_memory_kv_bytes": 0,
+        "logical_previous_hidden_bytes": 0,
+        "accounting": "FMA=2 FLOPs; allowed attention pairs, not masked dense-kernel execution. Includes retrospective chunk reruns; backward approximated as2x consumed forward matrix FLOPs. Excludes softmax/norm/activation/optimizer/activation-checkpoint recomputation and is not measured hardware FLOPs.",
+        "memory_note": "Actual training peak VRAM must be measured separately."
+      }
+    },
+    "lookback_recompute": {
+      "mean_seconds": 0.23870189130927125,
+      "tokens_per_second": 137275.82894408042,
+      "estimated_10b_training_hours": 20.2350245506106,
+      "peak_reserved_bytes": 19734200320,
+      "peak_allocated_bytes": 19712500224,
+      "parameters": 58720256,
+      "compute_estimate": {
+        "estimated_forward_flops": 12919764942848,
+        "estimated_training_flops": 35202944466944,
+        "components_forward": {
+          "backbone_projections": 1649267441664,
+          "vocab_head": 1099511627776,
+          "attention": 4398314946560,
+          "memory_projection": 0,
+          "lookback": 5772670926848
+        },
+        "logical_memory_kv_bytes": 536870912,
+        "logical_previous_hidden_bytes": 4194304,
+        "accounting": "FMA=2 FLOPs; allowed attention pairs, not masked dense-kernel execution. Includes retrospective chunk reruns; backward approximated as2x consumed forward matrix FLOPs. Excludes softmax/norm/activation/optimizer/activation-checkpoint recomputation and is not measured hardware FLOPs.",
+        "memory_note": "Actual training peak VRAM must be measured separately."
+      },
+      "additional_peak_reserved_bytes": 13950255104,
+      "additional_peak_allocated_bytes": 13937899520
+    }
+  },
+  "resumes": {
+    "lookback_recompute": {
+      "summary": {
+        "complete": true,
+        "variant": "lookback_recompute",
+        "run_id": "f5d12ae7",
+        "steps": 50,
+        "training_tokens": 1638400,
+        "initial_dev_ce": 10.398167371749878,
+        "final_dev_ce": 6.668391823768616,
+        "best_dev_ce": 6.668391823768616,
+        "dev_tokens": 131072,
+        "training_seconds": 19.42760095745325,
+        "elapsed_seconds": 56.36352303251624,
+        "steady_step_seconds": 0.2453172312428554,
+        "gpu": "NVIDIA H200",
+        "peak_allocated_bytes": 19712500224,
+        "peak_reserved_bytes": 19767754752,
+        "source": {
+          "commit": "38b0c207a9ddf32562bab80fa29f6a130f10d647",
+          "hashes": {
+            "transformer_engine_torch-2.20.2-cp311-cp311-linux_x86_64.whl": "9b69f40b34570e3073171dcb231d6dd038092d20a277e501e7da01e6475920de",
+            "mhc-official-runtime-7546767.tar.gz": "6b927f93021961293e12452b4001a479ff1b54cbc1aae0355e73e75a393d4dc0",
+            "cuda-compat-13-1_590.48.01-1_amd64.deb": "066f24c715f5f8f31bb7e8bd0f9ddc93fe78a82d3be55c6f3e9bbe26fa4fd7be",
+            "gate-data.tar": "e0e94888d697343316e17deca67c4182ad6dd713b477c21c500f795f7f9d9725",
+            "source.tar": "4793446ca1af5b1cd94fb19b481aca400a12151f25baf4a3c42b1e4c55bb80b8"
+          },
+          "purpose": "Final-hidden-start same-Transformer chunk recomputation validation",
+          "formal_training": false,
+          "sequence_length": 16384,
+          "chunk_size": 2048,
+          "new_learned_parameters": 0,
+          "variant": "lookback_recompute",
+          "recompute_input": "final_hidden",
+          "per_layer_kv": true,
+          "launcher_sha256": "02bc6c38a49f30fa22d39c6e46e5551ce5dbc3ac4888c887cfb6878b6c49af46"
+        },
+        "test_evaluated": false,
+        "checkpoint_files": {
+          "latest.pt": {
+            "bytes": 503551205,
+            "sha256": "f3c97cc3be451d744841518338b72519e8496effac4db00e36a8100a258010e3"
+          },
+          "best.pt": {
+            "bytes": 201347749,
+            "sha256": "d3c00e79371d4b38dff7081210871cd1b6c6e78dd8476eb89808de4def603e4e"
+          }
+        }
+      },
+      "config": {
+        "logging_backend": "local",
+        "model": {
+          "variant": "lookback_recompute",
+          "depth": 8,
+          "width": 512,
+          "heads": 4,
+          "sequence_length": 16384,
+          "vocab_size": 32768,
+          "streams": 4,
+          "sinkhorn_iterations": 20,
+          "activation_checkpoint": false,
+          "connection_backend": "nvidia",
+          "fused_connection_grad": false,
+          "architecture": "vanilla",
+          "window_pattern": "SSSL",
+          "recompute_chunk_size": 2048,
+          "recompute_previous": true,
+          "recompute_input": "final_hidden"
+        },
+        "protocol": {
+          "steps": 50,
+          "schedule_steps": 305176,
+          "batch_tokens": 32768,
+          "microbatch": 2,
+          "grad_accum": 1,
+          "seed": 42,
+          "attention_backend": "sdpa_cudnn",
+          "matched_backbone_init": true,
+          "evaluate_test": false
+        },
+        "data_manifest": {
+          "complete": true,
+          "logging_backend": "local",
+          "sequence_length": 16384,
+          "dtype": "uint16",
+          "layout": "rows of16385 token ids; x=row[:-1], y=row[1:]",
+          "batch_tokens": 32768,
+          "training_steps": 128,
+          "requested_tokens": 4194304,
+          "training_tokens": 4194304,
+          "files": {
+            "train": {
+              "rows": 256,
+              "tokens": 4194304,
+              "bytes": 8389120,
+              "sha256": "a863dd67ebc38064d58a2f260f48372cb9c80ae70ceb8a7258f957583713e96e",
+              "last_source_state": {
+                "pq_idx": 0,
+                "rg_idx": 4,
+                "epoch": 1
+              }
+            },
+            "dev": {
+              "rows": 8,
+              "tokens": 131072,
+              "bytes": 262160,
+              "sha256": "2219e849a319dafaefe9833a167928dfa7820f5cc2cd32e2cfc890f680d00898",
+              "last_source_state": {
+                "pq_idx": 0,
+                "rg_idx": 1,
+                "epoch": 1
+              }
+            },
+            "test": {
+              "rows": 128,
+              "tokens": 2097152,
+              "bytes": 4194560,
+              "sha256": "f58b64a7fad773101f215ea8100ecdda5f750192943529cfc110568eff2cdeb4",
+              "last_source_state": {
+                "pq_idx": 0,
+                "rg_idx": 2,
+                "epoch": 1
+              }
+            }
+          },
+          "tokenizer": {
+            "dataset": "HuggingFaceFW/fineweb-edu",
+            "config": "sample-10BT",
+            "revision": "87f09149ef4734204d70ed1d046ddc9ca3f2b8f9",
+            "full_dataset_bytes": 28518193415,
+            "full_source_gpt2_tokens": 9972918177,
+            "nanochat_commit": "145da40cdd37b9522aa53d26c0c356e9126458bb",
+            "nanochat_source_sha256": "9a39516fc52effabe6bf9b87fc5fc67f7026a95060861be560d3525257bfb3e6",
+            "files": {
+              "token_bytes.pt": {
+                "bytes": 132649,
+                "sha256": "8e6ed9947610b8b329f0aed7e01bf332359331790e61fc6c0c95dc3cff29bdb4"
+              },
+              "tokenizer.pkl": {
+                "bytes": 412696,
+                "sha256": "8d1a5a03421ca24e7acafd1ef68fe8dbc6326dad903bc65cc726ec0601c577de"
+              }
+            },
+            "train_shards": [
+              "000_00000.parquet"
+            ],
+            "validation_shards": [
+              "013_00000.parquet"
+            ],
+            "tokenizer": "native RustBPE 32768 vocab, first 100M capped characters from training shard",
+            "benchmark": "native base_train d8/D512/2K/SSSL, 300 steps x 32768 model tokens; original source unmodified",
+            "vocab_size": 32768,
+            "max_chars": 100000000,
+            "doc_cap": 10000,
+            "purpose": "Throughput pilot tokenizer; native RustBPE; train shard only",
+            "elapsed_seconds": 5.633999116718769,
+            "run_id": "eqnd6jdz"
+          },
+          "native_commit": "145da40cdd37b9522aa53d26c0c356e9126458bb",
+          "dataset_revision": "87f09149ef4734204d70ed1d046ddc9ca3f2b8f9",
+          "train_shards": "000 only (validation prefix)",
+          "heldout_shard": "013",
+          "first_128_steps_sha256": "a863dd67ebc38064d58a2f260f48372cb9c80ae70ceb8a7258f957583713e96e",
+          "source_read_epochs": [
+            {
+              "batch": 1,
+              "source_state": {
+                "pq_idx": 0,
+                "rg_idx": 1,
+                "epoch": 1
+              }
+            }
+          ],
+          "epoch_note": "Native loader cycles the entire 13-shard training split. Epoch tracks source reads into the document buffer, not exact consumed unique tokens.",
+          "seconds": 5.571401816792786,
+          "validation": "dev first8 rows/131072tokens; test next128 rows/2097152tokens; disjoint packed rows and same heldout shard013; not the old2K dev/test examples"
+        },
+        "source": {
+          "commit": "38b0c207a9ddf32562bab80fa29f6a130f10d647",
+          "hashes": {
+            "transformer_engine_torch-2.20.2-cp311-cp311-linux_x86_64.whl": "9b69f40b34570e3073171dcb231d6dd038092d20a277e501e7da01e6475920de",
+            "mhc-official-runtime-7546767.tar.gz": "6b927f93021961293e12452b4001a479ff1b54cbc1aae0355e73e75a393d4dc0",
+            "cuda-compat-13-1_590.48.01-1_amd64.deb": "066f24c715f5f8f31bb7e8bd0f9ddc93fe78a82d3be55c6f3e9bbe26fa4fd7be",
+            "gate-data.tar": "e0e94888d697343316e17deca67c4182ad6dd713b477c21c500f795f7f9d9725",
+            "source.tar": "4793446ca1af5b1cd94fb19b481aca400a12151f25baf4a3c42b1e4c55bb80b8"
+          },
+          "purpose": "Final-hidden-start same-Transformer chunk recomputation validation",
+          "formal_training": false,
+          "sequence_length": 16384,
+          "chunk_size": 2048,
+          "new_learned_parameters": 0,
+          "variant": "lookback_recompute",
+          "recompute_input": "final_hidden",
+          "per_layer_kv": true,
+          "launcher_sha256": "02bc6c38a49f30fa22d39c6e46e5551ce5dbc3ac4888c887cfb6878b6c49af46"
+        },
+        "checkpoint_transport": {
+          "upload_interval_seconds": 86400.0,
+          "local_save_every_steps": 500,
+          "method": "exit85 plus scheduler transfer; local save alone is not durable"
+        },
+        "gpu": "NVIDIA H200",
+        "torch": "2.10.0+cu130",
+        "cuda": "13.0",
+        "gpu_capability": [
+          9,
+          0
+        ],
+        "explicit_portability_gate": false,
+        "parameters": 58720256,
+        "residual_mixing": "additive",
+        "applied_sinkhorn_iterations": 0,
+        "optimizer": "native MuonAdamW; connector AdamW at native unembedding LR, no decay",
+        "optimizer_groups": [
+          {
+            "kind": "adamw",
+            "lr": 0.0024494897427831783,
+            "betas": [
+              0.8,
+              0.96
+            ],
+            "eps": 1e-10,
+            "weight_decay": 0.01,
+            "initial_lr": 0.0024494897427831783
+          },
+          {
+            "kind": "adamw",
+            "lr": 0.09185586535436918,
+            "betas": [
+              0.8,
+              0.995
+            ],
+            "eps": 1e-10,
+            "weight_decay": 0.001,
+            "initial_lr": 0.09185586535436918
+          },
+          {
+            "kind": "muon",
+            "lr": 0.005,
+            "momentum": 0.95,
+            "ns_steps": 5,
+            "beta2": 0.9,
+            "weight_decay": 0.18375000000000002,
+            "initial_lr": 0.005
+          },
+          {
+            "kind": "muon",
+            "lr": 0.005,
+            "momentum": 0.95,
+            "ns_steps": 5,
+            "beta2": 0.9,
+            "weight_decay": 0.18375000000000002,
+            "initial_lr": 0.005
+          },
+          {
+            "kind": "muon",
+            "lr": 0.005,
+            "momentum": 0.95,
+            "ns_steps": 5,
+            "beta2": 0.9,
+            "weight_decay": 0.18375000000000002,
+            "initial_lr": 0.005
+          }
+        ],
+        "loss": "full-token full-vocabulary CCE; no gradient filtering",
+        "references": "research/connections/references.json",
+        "compute_estimate": {
+          "estimated_forward_flops": 12919764942848,
+          "estimated_training_flops": 35202944466944,
+          "components_forward": {
+            "backbone_projections": 1649267441664,
+            "vocab_head": 1099511627776,
+            "attention": 4398314946560,
+            "memory_projection": 0,
+            "lookback": 5772670926848
+          },
+          "logical_memory_kv_bytes": 536870912,
+          "logical_previous_hidden_bytes": 4194304,
+          "accounting": "FMA=2 FLOPs; allowed attention pairs, not masked dense-kernel execution. Includes retrospective chunk reruns; backward approximated as2x consumed forward matrix FLOPs. Excludes softmax/norm/activation/optimizer/activation-checkpoint recomputation and is not measured hardware FLOPs.",
+          "memory_note": "Actual training peak VRAM must be measured separately."
+        }
+      }
+    }
+  },
+  "formal_training": false,
+  "data_manifest": {
+    "complete": true,
+    "logging_backend": "local",
+    "sequence_length": 16384,
+    "dtype": "uint16",
+    "layout": "rows of16385 token ids; x=row[:-1], y=row[1:]",
+    "batch_tokens": 32768,
+    "training_steps": 128,
+    "requested_tokens": 4194304,
+    "training_tokens": 4194304,
+    "files": {
+      "train": {
+        "rows": 256,
+        "tokens": 4194304,
+        "bytes": 8389120,
+        "sha256": "a863dd67ebc38064d58a2f260f48372cb9c80ae70ceb8a7258f957583713e96e",
+        "last_source_state": {
+          "pq_idx": 0,
+          "rg_idx": 4,
+          "epoch": 1
+        }
+      },
+      "dev": {
+        "rows": 8,
+        "tokens": 131072,
+        "bytes": 262160,
+        "sha256": "2219e849a319dafaefe9833a167928dfa7820f5cc2cd32e2cfc890f680d00898",
+        "last_source_state": {
+          "pq_idx": 0,
+          "rg_idx": 1,
+          "epoch": 1
+        }
+      },
+      "test": {
+        "rows": 128,
+        "tokens": 2097152,
+        "bytes": 4194560,
+        "sha256": "f58b64a7fad773101f215ea8100ecdda5f750192943529cfc110568eff2cdeb4",
+        "last_source_state": {
+          "pq_idx": 0,
+          "rg_idx": 2,
+          "epoch": 1
+        }
+      }
+    },
+    "tokenizer": {
+      "dataset": "HuggingFaceFW/fineweb-edu",
+      "config": "sample-10BT",
+      "revision": "87f09149ef4734204d70ed1d046ddc9ca3f2b8f9",
+      "full_dataset_bytes": 28518193415,
+      "full_source_gpt2_tokens": 9972918177,
+      "nanochat_commit": "145da40cdd37b9522aa53d26c0c356e9126458bb",
+      "nanochat_source_sha256": "9a39516fc52effabe6bf9b87fc5fc67f7026a95060861be560d3525257bfb3e6",
+      "files": {
+        "token_bytes.pt": {
+          "bytes": 132649,
+          "sha256": "8e6ed9947610b8b329f0aed7e01bf332359331790e61fc6c0c95dc3cff29bdb4"
+        },
+        "tokenizer.pkl": {
+          "bytes": 412696,
+          "sha256": "8d1a5a03421ca24e7acafd1ef68fe8dbc6326dad903bc65cc726ec0601c577de"
+        }
+      },
+      "train_shards": [
+        "000_00000.parquet"
+      ],
+      "validation_shards": [
+        "013_00000.parquet"
+      ],
+      "tokenizer": "native RustBPE 32768 vocab, first 100M capped characters from training shard",
+      "benchmark": "native base_train d8/D512/2K/SSSL, 300 steps x 32768 model tokens; original source unmodified",
+      "vocab_size": 32768,
+      "max_chars": 100000000,
+      "doc_cap": 10000,
+      "purpose": "Throughput pilot tokenizer; native RustBPE; train shard only",
+      "elapsed_seconds": 5.633999116718769,
+      "run_id": "eqnd6jdz"
+    },
+    "native_commit": "145da40cdd37b9522aa53d26c0c356e9126458bb",
+    "dataset_revision": "87f09149ef4734204d70ed1d046ddc9ca3f2b8f9",
+    "train_shards": "000 only (validation prefix)",
+    "heldout_shard": "013",
+    "first_128_steps_sha256": "a863dd67ebc38064d58a2f260f48372cb9c80ae70ceb8a7258f957583713e96e",
+    "source_read_epochs": [
+      {
+        "batch": 1,
+        "source_state": {
+          "pq_idx": 0,
+          "rg_idx": 1,
+          "epoch": 1
+        }
+      }
+    ],
+    "epoch_note": "Native loader cycles the entire 13-shard training split. Epoch tracks source reads into the document buffer, not exact consumed unique tokens.",
+    "seconds": 5.571401816792786,
+    "validation": "dev first8 rows/131072tokens; test next128 rows/2097152tokens; disjoint packed rows and same heldout shard013; not the old2K dev/test examples"
+  },
+  "limitations": "Same single GPU timing; analytical FLOPs omit norm/softmax/optimizer. Timing excludes setup/evaluation/checkpoint transfer. No quality conclusion from50-step diagnostic.",
+  "job": "7675394.0",
+  "evidence": {
+    "successor-visible": {
+      "last_successor_token_gradient": 0.027487395437538212
+    },
+    "gradients": {
+      "losses": {
+        "dense": 5.547024250030518,
+        "cce": 5.547024726867676,
+        "compiled": 5.547027111053467,
+        "checkpoint": 5.547027111053467
+      },
+      "relative_errors": {
+        "cce_dense": 1.1744999398378863e-05,
+        "compiled": 0.0036615554852956894,
+        "checkpoint": 3.2948562047841682e-06
+      }
+    },
+    "cost": {
+      "recompute": {
+        "estimated_forward_flops": 12919764942848,
+        "estimated_training_flops": 35202944466944,
+        "components_forward": {
+          "backbone_projections": 1649267441664,
+          "vocab_head": 1099511627776,
+          "attention": 4398314946560,
+          "memory_projection": 0,
+          "lookback": 5772670926848
+        },
+        "logical_memory_kv_bytes": 536870912,
+        "logical_previous_hidden_bytes": 4194304,
+        "accounting": "FMA=2 FLOPs; allowed attention pairs, not masked dense-kernel execution. Includes retrospective chunk reruns; backward approximated as2x consumed forward matrix FLOPs. Excludes softmax/norm/activation/optimizer/activation-checkpoint recomputation and is not measured hardware FLOPs.",
+        "memory_note": "Actual training peak VRAM must be measured separately."
+      },
+      "baseline": {
+        "estimated_forward_flops": 7147094016000,
+        "estimated_training_flops": 21441282048000,
+        "components_forward": {
+          "backbone_projections": 1649267441664,
+          "vocab_head": 1099511627776,
+          "attention": 4398314946560,
+          "memory_projection": 0,
+          "lookback": 0
+        },
+        "logical_memory_kv_bytes": 0,
+        "logical_previous_hidden_bytes": 0,
+        "accounting": "FMA=2 FLOPs; allowed attention pairs, not masked dense-kernel execution. Includes retrospective chunk reruns; backward approximated as2x consumed forward matrix FLOPs. Excludes softmax/norm/activation/optimizer/activation-checkpoint recomputation and is not measured hardware FLOPs.",
+        "memory_note": "Actual training peak VRAM must be measured separately."
+      }
+    },
+    "schedule": {
+      "passes": [
+        [
+          0,
+          []
+        ],
+        [
+          4,
+          [
+            0
+          ]
+        ],
+        [
+          0,
+          [
+            4
+          ]
+        ],
+        [
+          8,
+          [
+            0,
+            4
+          ]
+        ],
+        [
+          4,
+          [
+            0,
+            8
+          ]
+        ],
+        [
+          12,
+          [
+            0,
+            4,
+            8
+          ]
+        ],
+        [
+          8,
+          [
+            0,
+            4,
+            12
+          ]
+        ]
+      ],
+      "functional_replacement": true,
+      "first_layer_keys_changed": true,
+      "rerun_input": "original_final_block_output_before_readout_norm",
+      "same_tensor_no_norm_no_detach": true
+    },
+    "parameters": {
+      "exact_same_parameters_and_initialization": true,
+      "optimizer_identical": true
+    },
+    "production-causality": {
+      "context": 16384,
+      "chunk": 2048,
+      "depth": 8,
+      "passed": true,
+      "parameters": 58720256
+    },
+    "vanilla-equivalence": {
+      "gradient_relative": [
+        1.2326011850673431e-17,
+        0.0,
+        0.0
+      ]
+    },
+    "availability": {
+      "early_predictions_unchanged": true,
+      "revised_cache_gradient": 0.08130335573720882
+    },
+    "fp64-oracle": {
+      "loss_error": 0.0,
+      "gradient_relative": 7.035405095018754e-17
+    },
+    "final-hidden-gradient": {
+      "original_final_hidden_gradient": 9.080471442697409,
+      "original_last_mlp_gradient": 14.441162577175033,
+      "later_loss_to_revised_first_layer_v": 0.07765146506758147
+    }
+  },
+  "archive_sha256": "4178049cbc3c09118178d94b6839b34037437a5a2de68c580fd34e6980b2a259"
+}
