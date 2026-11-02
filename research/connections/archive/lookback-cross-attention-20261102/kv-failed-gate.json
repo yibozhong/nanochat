@@ -1,0 +1,10 @@
+{
+  "job": "7672847.0",
+  "source": "752e6f8e5bbeb1a2d67f4c85881f127af8657242",
+  "exit_code": 1,
+  "tests": 25,
+  "passed": 18,
+  "failed": 7,
+  "reason": "CPU FP64 tests ran after CUDA-only SDPA backend selection; no viable math backend. No full gate pass or formal training.",
+  "decision": "User retired both cross-attention designs; do not retry or resume"
+}

@@ -1,0 +1,46 @@
+{
+  "time": 1793640890.5950744,
+  "lookback_job": "7669762.1",
+  "lookback_history": [
+    {
+      "ClusterId": 7669762,
+      "ExitCode": 143,
+      "JobStatus": 3,
+      "ProcId": 1
+    }
+  ],
+  "kv_gate_job": "7672847.0",
+  "kv_gate_already_exited": 1,
+  "baseline_job": "7669762.0",
+  "baseline_queue": [
+    {
+      "ClusterId": 7669762,
+      "JobStatus": 2,
+      "ProcId": 0,
+      "RemoteHost": "backfill1_4@bhaskargpu4000.chtc.wisc.edu"
+    }
+  ],
+  "baseline_monitor_pid": 751413,
+  "checkpoint": {
+    "files": [
+      {
+        "path": "/home/yzhong239/lookback-16k-10b-20261102/stop-cross-attention-20261102/last-durable-checkpoints.tar",
+        "bytes": 723804160,
+        "sha256": "0d8457bfa214a08b6c3e7f01180e0699c039e1b5dc3dea03624373571fc85c6e"
+      },
+      {
+        "path": "/home/yzhong239/lookback-16k-10b-20261102/stop-cross-attention-20261102/last-durable-results.tar",
+        "bytes": 36167680,
+        "sha256": "091cfd56aa1a55304a6ebc8b9b467afe994869c50e0c0c95c57bc342b2a2a5a1"
+      }
+    ],
+    "checkpoint_step": 109500,
+    "checkpoint_tokens": 3588096000,
+    "run_id": "3884d1d1",
+    "note": "Latest durable snapshot, not cancellation-time worker progress"
+  },
+  "existing_wandb_records": "Not deleted or modified",
+  "scope": "Retire cross-attention Lookback only; preserve vanilla formal training",
+  "new_design": "Same Transformer reruns previous chunk once with successor per-layer KV; revised bank only influences future chunks; no new learned module",
+  "new_design_implemented": false
+}

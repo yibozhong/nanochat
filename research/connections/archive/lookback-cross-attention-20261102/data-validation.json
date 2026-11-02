@@ -1,0 +1,8 @@
+{
+  "complete": true,
+  "full_job": "7667953.0",
+  "prefix_job": "7668046.0",
+  "prefix_train_sha256": "a863dd67ebc38064d58a2f260f48372cb9c80ae70ceb8a7258f957583713e96e",
+  "dev_sha256": "2219e849a319dafaefe9833a167928dfa7820f5cc2cd32e2cfc890f680d00898",
+  "test_sha256": "f58b64a7fad773101f215ea8100ecdda5f750192943529cfc110568eff2cdeb4"
+}

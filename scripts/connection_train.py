@@ -25,11 +25,8 @@ from nanochat.connection_experiment import configure_attention, match_vanilla_in
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument('--variant', choices=('baseline','mhc','mhc_no_sinkhorn','lookback'), required=True)
+    p.add_argument('--variant', choices=('baseline','mhc','mhc_no_sinkhorn'), required=True)
     p.add_argument('--sequence-length', type=int, default=2048)
-    p.add_argument('--chunk-size', type=int, default=2048)
-    p.add_argument('--lookback-enabled', action=argparse.BooleanOptionalAction, default=True)
-    p.add_argument('--lookback-update', choices=('hidden','kv_residual'), default='hidden')
     p.add_argument('--architecture', choices=('vanilla', 'native'), default='vanilla')
     p.add_argument('--window-pattern', default='SSSL', help='Native backbone only; vanilla always uses full attention')
     p.add_argument('--formal-training', action='store_true', help='Explicitly enable W&B for a formal training run')
@@ -68,9 +65,7 @@ def main():
     configure_attention(a.attention_backend)
     seed_all(a.seed)
     c=ConnectionConfig(variant=a.variant,streams=a.streams,sinkhorn_iterations=a.sinkhorn_iterations,
-                       sequence_length=a.sequence_length,chunk_size=a.chunk_size,
-                       lookback_enabled=a.lookback_enabled,
-                       lookback_update=a.lookback_update,
+                       sequence_length=a.sequence_length,
                        architecture=a.architecture, window_pattern=a.window_pattern,
                        activation_checkpoint=a.activation_checkpoint,
                        connection_backend=a.connection_backend, fused_connection_grad=a.fused_connection_grad)
@@ -126,7 +121,7 @@ def main():
         optimizer_groups=initial_groups,
         loss='full-token full-vocabulary CCE; no gradient filtering',
         references='research/connections/references.json')
-    from nanochat.lookback_cost import model_cost
+    from nanochat.connection_cost import model_cost
     cost=model_cost(c,batch=rows_per_step)
     config['compute_estimate']=cost
     profile_reference=source.get('profile_reference',{}).get(a.variant)
@@ -134,7 +129,7 @@ def main():
         config['same_gpu_profile_reference']=profile_reference
     kwargs=dict(project='nanochat',entity='yibozhong657-none',group=a.wandb_group,
                 job_type='pretrain' if a.formal_training else 'diagnostic',
-                name=f'{a.architecture}-{a.variant}'+(f'-{c.lookback_update}' if a.variant=='lookback' else '')+f'-{c.sequence_length}ctx-{a.steps}steps',id=run_id,resume='allow',config=config)
+                name=f'{a.architecture}-{a.variant}-{c.sequence_length}ctx-{a.steps}steps',id=run_id,resume='allow',config=config)
     run=training_run(formal_training=a.formal_training, local_dir=out/"diagnostics", **kwargs)
     run.define_metric('tokens')
     for metric in ('train/*','dev/*','perf/*'):
