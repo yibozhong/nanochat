@@ -10,13 +10,11 @@ def model_cost(config, batch=1, activation_bytes=2):
     head=2*batch*t*d*c.vocab_size
     attention=4*batch*d*depth*(t*(t+1)//2)
     original=projections+head+attention
-    reruns=consumed_reruns=bank_bytes=previous_hidden_bytes=memory=consumed_memory=0
+    reruns=consumed_reruns=bank_bytes=previous_hidden_bytes=previous_local_bytes=0
     if c.variant=='lookback_recompute':
-        bank_bytes=2*batch*t*d*activation_bytes
         sizes=[min(c.recompute_chunk_size,t-i) for i in range(0,t,c.recompute_chunk_size)]
-        memory=4*batch*t*d*d
-        # The final chunk's memory is not consumed by any later NTP prediction.
-        consumed_memory=4*batch*(t-sizes[-1])*d*d
+        previous_local_bytes=2*batch*min(c.recompute_chunk_size,t)*d*(depth-1)*activation_bytes
+        bank_bytes=2*batch*t*d*activation_bytes+previous_local_bytes
         if c.recompute_previous:
             previous_hidden_bytes=batch*min(c.recompute_chunk_size,t)*d*activation_bytes
             prefix=0
@@ -24,17 +22,16 @@ def model_cost(config, batch=1, activation_bytes=2):
                 pairs=previous*(prefix+current)+previous*(previous+1)//2
                 block_flops=24*batch*previous*d*d+4*batch*d*pairs
                 reruns+=depth*block_flops
-                memory+=4*batch*previous*d*d
-                # Earlier reruns now consume the WHOLE last layer, because the
-                # shared cache is projected from its final hidden output.
+                # Later predictions consume all lower blocks plus only the
+                # last attention's K/V projections. Its output/MLP is unused.
                 if i<len(sizes)-2:
-                    consumed_reruns+=depth*block_flops
-                    consumed_memory+=4*batch*previous*d*d
+                    consumed_reruns+=(depth-1)*block_flops+4*batch*previous*d*d
                 prefix+=previous
-    forward=original+reruns+memory
-    return dict(estimated_forward_flops=forward,estimated_training_flops=3*original+reruns+2*consumed_reruns+memory+2*consumed_memory,
+    forward=original+reruns
+    return dict(estimated_forward_flops=forward,estimated_training_flops=3*original+reruns+2*consumed_reruns,
         components_forward=dict(backbone_projections=projections,vocab_head=head,
-            attention=attention,memory_projection=memory,lookback=reruns),
+            attention=attention,memory_projection=0,lookback=reruns),
         logical_memory_kv_bytes=bank_bytes,logical_previous_hidden_bytes=previous_hidden_bytes,
-        accounting='FMA=2 FLOPs; allowed attention pairs, not masked dense-kernel execution. Includes retrospective chunk reruns; backward approximated as2x consumed forward matrix FLOPs. Excludes softmax/norm/activation/optimizer/activation-checkpoint recomputation and is not measured hardware FLOPs.',
+        logical_previous_layer_kv_extra_bytes=previous_local_bytes,
+        accounting='FMA=2 FLOPs; allowed attention pairs, not masked dense-kernel execution. Includes retrospective chunk reruns; backward approximated as2x consumed forward matrix FLOPs. Excludes blending/softmax/norm/activation/optimizer/activation-checkpoint recomputation and is not measured hardware FLOPs.',
         memory_note='Actual training peak VRAM must be measured separately.')

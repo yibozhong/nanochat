@@ -20,7 +20,7 @@ def main():
         '--junitxml=results/recompute-tests.xml'],root/'tests.log')
     suites=ET.parse(root/'recompute-tests.xml').getroot().findall('testsuite')
     checks={k:sum(int(s.attrib.get(k,0)) for s in suites) for k in ('tests','failures','errors','skipped')}
-    assert checks==dict(tests=18,failures=0,errors=0,skipped=0),checks
+    assert checks==dict(tests=21,failures=0,errors=0,skipped=0),checks
     probes=[];trials=[];micro=2
     def profile(variant,micro,repetition=0,probe=False):
         name=f'{variant}-mb{micro}-r{repetition}'+('-probe' if probe else '')
@@ -80,8 +80,8 @@ def main():
     assert not list(root.rglob('*.wandb')) and not (root/'wandb').exists() and not list(root.rglob('*.pt'))
     result=dict(complete=True,source=source,checks=checks,logging_backend='local',
         selected_microbatch=micro,grad_accum=2//micro,sequence_length=16384,chunk_size=2048,
-        chunk_attention='full_causal',recompute_input='final_hidden',recompute_memory='shared_final_hidden',
-        shared_kv=True,per_layer_kv=False,new_learned_parameters=524288,local_self_attention=True,
+        chunk_attention='full_causal',recompute_input='final_hidden',recompute_memory='last_attention_kv_blend',
+        shared_kv=True,per_layer_kv=False,new_learned_parameters=32,previous_layer_kv=True,previous_chunk_blend=True,extra_kv_projection=False,local_self_attention=True,
         probes=probes,trials=trials,summary=summary,resumes=resumes,
         formal_training=False, data_manifest=json.loads(Path('../data/manifest.json').read_text()),
         limitations='Same single GPU timing; analytical FLOPs omit norm/softmax/optimizer. Timing excludes setup/evaluation/checkpoint transfer. No quality conclusion from50-step diagnostic.')

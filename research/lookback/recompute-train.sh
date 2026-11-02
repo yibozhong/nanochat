@@ -113,4 +113,4 @@ python -m scripts.connection_train --variant "$TASK_VARIANT" --connection-backen
     --attention-backend sdpa_cudnn --matched-backbone-init --evaluate-test \
     --no-activation-checkpoint --no-fused-connection-grad --seed 42 \
     --data-dir ../data --output-dir results/train --checkpoint-dir ../checkpoints \
-    --run-id "$TASK_RUN_ID" --formal-training --wandb-group lookback-shared-kv-10b-20261102 --resume auto --segment-seconds "${NANOCHAT_CHECKPOINT_SECONDS:-1800}"
+    --run-id "$TASK_RUN_ID" --formal-training --wandb-group lookback-lastkv-blend-10b-20261102 --resume auto --segment-seconds "${NANOCHAT_CHECKPOINT_SECONDS:-1800}"

@@ -16,8 +16,8 @@ import uuid
 ROOT=Path(sys.argv[1]).resolve()
 REPO=Path(__file__).resolve().parents[2]
 PRIOR=Path('/home/yzhong239/lookback-16k-10b-20261102')
-KEY='lookback-shared-kv-10b-20261102'
-HEADING='## 新授权：末层共享KV的Lookback，保留self-attention，单组10B（2026-11-02）\n'
+KEY='lookback-lastkv-blend-10b-20261102'
+HEADING='## 新授权：复用末层attention KV与前块混合的Lookback，单组10B（2026-11-02）\n'
 ATTRS='ClusterId,ProcId,JobStatus,ExitCode,HoldReason,NumJobStarts,RemoteHost,RecomputeKey,RecomputeRole,RecomputeRunID,TransferInput,SuccessCheckpointExitCode,TransferCheckpoint'
 WHEEL='transformer_engine_torch-2.20.2-cp311-cp311-linux_x86_64.whl'
 FULL_ARCHIVE='nanochat-16k-10b-data-7667953.tar'
@@ -85,10 +85,10 @@ def submit():
         hashes={k:v for k,v in prior['hashes'].items() if k!='source.tar'}
         hashes['source.tar']=sha(bundle/'source.tar')
         for name in (WHEEL,'gate-data.tar'):assert sha(bundle/name)==hashes[name]
-        source=dict(commit=commit,hashes=hashes,purpose='Shared final-hidden memory with local self-attention and one Transformer refinement',
-            formal_training=False,sequence_length=16384,chunk_size=2048,new_learned_parameters=524288,
-            variant='lookback_recompute',recompute_input='final_hidden',recompute_memory='shared_final_hidden',
-            shared_kv=True,per_layer_kv=False,local_self_attention=True,launcher_sha256=sha(ROOT/'validate.sh'))
+        source=dict(commit=commit,hashes=hashes,purpose='Last-attention KV reuse with previous-chunk blending and one Transformer refinement',
+            formal_training=False,sequence_length=16384,chunk_size=2048,new_learned_parameters=32,
+            variant='lookback_recompute',recompute_input='final_hidden',recompute_memory='last_attention_kv_blend',
+            shared_kv=True,per_layer_kv=False,previous_layer_kv=True,previous_chunk_blend=True,extra_kv_projection=False,local_self_attention=True,launcher_sha256=sha(ROOT/'validate.sh'))
         write(bundle/'source.json',source)
         (bundle/'inputs.sha256').write_text(''.join(f'{v}  {k}\n' for k,v in hashes.items()))
         sub=(PRIOR/'gate.sub').read_text().replace('+LookbackKey = "lookback-16k-10b-20261102"',f'+RecomputeKey = "{KEY}"')
@@ -105,7 +105,7 @@ def submit():
         assert rows[0]['RecomputeKey']==KEY and '.netrc' not in rows[0]['TransferInput']
         assert 'file:///staging/y/yzhong239/gradformer/nanochat-uv-v4.sif' in rows[0]['TransferInput']
         baseline_unchanged();write(ROOT/'gate-submission-verified.json',rows)
-        note(f'本地源码{commit}已提交GPU gate{job}，18检查、vanilla/共享memory-only/新版lookback三组两轮同卡profile及新版25→50真实恢复；通过后自动审计/push/提交唯一10B正式任务。workflow {ROOT}，尚未GPU通过或正式训练，已完成vanilla7669762.0保持原inputs/结果。')
+        note(f'本地源码{commit}已提交GPU gate{job}，21检查、vanilla/共享memory-only/新版lookback三组两轮同卡profile及新版25→50真实恢复；通过后自动审计/push/提交唯一10B正式任务。workflow {ROOT}，尚未GPU通过或正式训练，已完成vanilla7669762.0保持原inputs/结果。')
         print(json.dumps(state,indent=2))
 
 
@@ -117,20 +117,21 @@ def collect_gate(state):
         evidence={Path(m.name).stem:json.load(tf.extractfile(m)) for m in tf
             if m.isfile() and m.name.startswith('results/recompute-checks/') and m.name.endswith('.json')}
     assert r['complete'] and r['source']==state['source'] and not r['formal_training']
-    assert r['checks']==dict(tests=18,failures=0,errors=0,skipped=0)
+    assert r['checks']==dict(tests=21,failures=0,errors=0,skipped=0)
     assert r['logging_backend']=='local' and len(r['trials'])==6
-    assert r['new_learned_parameters']==524288 and not r['per_layer_kv'] and r['shared_kv']
-    assert r['local_self_attention'] and r['recompute_memory']=='shared_final_hidden'
+    assert r['new_learned_parameters']==32 and not r['per_layer_kv'] and r['shared_kv']
+    assert r['local_self_attention'] and r['recompute_memory']=='last_attention_kv_blend'
+    assert r['previous_layer_kv'] and r['previous_chunk_blend'] and not r['extra_kv_projection']
     assert r['selected_microbatch'] in (1,2)
     for trial in r['trials']:
         assert trial['status']=='fits' and trial['causality_passed'] and len(trial['step_seconds'])==30
         assert trial['peak_reserved_bytes']<int(.9*22000*1024**2)
-        assert trial['parameters']==(58720256 if trial['variant']=='baseline' else 59244544)
+        assert trial['parameters']==(58720256 if trial['variant']=='baseline' else 58720288)
     resumed=r['resumes']['lookback_recompute']
     assert resumed['summary']['steps']==50 and resumed['summary']['complete']
     assert resumed['config']['model']['recompute_previous']
     assert resumed['config']['model']['recompute_input']=='final_hidden'
-    assert resumed['config']['model']['recompute_memory']=='shared_final_hidden'
+    assert resumed['config']['model']['recompute_memory']=='last_attention_kv_blend'
     assert r['recompute_input']=='final_hidden'
     assert resumed['config']['model']['recompute_chunk_size']==2048
     assert resumed['config']['protocol']['schedule_steps']==305176
@@ -177,9 +178,9 @@ def submit_training(state):
     old=json.loads((PRIOR/'training-bundles/source.json').read_text())
     assert old['hashes'][FULL_ARCHIVE]==FULL_SHA
     source=dict(commit=state['source']['commit'],hashes=hashes,formal_training=True,
-        purpose='User-authorized single10B shared-final-hidden KV and self-attending Transformer refinement',
+        purpose='User-authorized single10B last-attention KV reuse, previous-chunk blend and Transformer refinement',
         sequence_length=16384,chunk_size=2048,variant='lookback_recompute',recompute_input='final_hidden',
-        recompute_memory='shared_final_hidden',per_layer_kv=False,shared_kv=True,new_learned_parameters=524288,local_self_attention=True,
+        recompute_memory='last_attention_kv_blend',per_layer_kv=False,shared_kv=True,new_learned_parameters=32,previous_layer_kv=True,previous_chunk_blend=True,extra_kv_projection=False,local_self_attention=True,
         steps=305176,training_tokens=10000007168,gate_job=state['gate_job'],gate_verified=True,
         report_commit=state['published_commit'],profile_reference=report['summary'],launcher_sha256=sha(ROOT/'train.sh'))
     write(dest/'source.json',source);(dest/'inputs.sha256').write_text(''.join(f'{v}  {k}\n' for k,v in hashes.items()))
@@ -202,7 +203,7 @@ def submit_training(state):
     assert FULL_ARCHIVE in row['TransferInput'] and '.netrc' in row['TransferInput']
     assert 'file:///staging/y/yzhong239/gradformer/nanochat-uv-v4.sif' in row['TransferInput']
     write(ROOT/'training-submission-verified.json',rows);baseline_unchanged()
-    note(f'GPU gate{state["gate_job"]}已exit0，18检查/三组同卡吞吐/25→50恢复通过；实现报告已推送main {state["published_commit"]}。唯一正式10B新任务{job}/W&B{run}已提交，micro{micro}/accum{2//micro}，不是已开跑。已完成vanilla7669762.0未改，不重复提交。')
+    note(f'GPU gate{state["gate_job"]}已exit0，21检查/三组同卡吞吐/25→50恢复通过；实现报告已推送main {state["published_commit"]}。唯一正式10B新任务{job}/W&B{run}已提交，micro{micro}/accum{2//micro}，不是已开跑。已完成vanilla7669762.0未改，不重复提交。')
 
 
 def collect_training(state):

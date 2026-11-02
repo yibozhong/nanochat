@@ -34,7 +34,7 @@ class ConnectionConfig:
     recompute_chunk_size: int = 2048
     recompute_previous: bool = True
     recompute_input: str = 'final_hidden'
-    recompute_memory: str = 'shared_final_hidden'
+    recompute_memory: str = 'last_attention_kv_blend'
 
     def __post_init__(self):
         if self.architecture not in ('vanilla', 'native'):
@@ -51,8 +51,8 @@ class ConnectionConfig:
             raise ValueError('recompute_chunk_size must be positive')
         if self.recompute_input != 'final_hidden':
             raise ValueError('Reruns start from the original final block output')
-        if self.recompute_memory != 'shared_final_hidden':
-            raise ValueError('History uses shared final-hidden K/V projections')
+        if self.recompute_memory != 'last_attention_kv_blend':
+            raise ValueError('History reuses last-attention KV with previous-chunk blending')
         if self.sinkhorn_iterations != 20:
             raise ValueError('The NVIDIA composite API requires 20 Sinkhorn iterations')
         if min(self.depth, self.width, self.heads, self.sequence_length, self.vocab_size, self.streams) < 1:
@@ -70,8 +70,11 @@ class ConnectionConfig:
         config = dict(config)
         if config.get('variant') == 'lookback_recompute' and config.get('recompute_input') != 'final_hidden':
             raise ValueError('Embedding-start rerun checkpoints belong to a retired architecture')
-        if config.get('variant') == 'lookback_recompute' and config.get('recompute_memory') != 'shared_final_hidden':
-            raise ValueError('Per-layer history checkpoints belong to a retired architecture')
+        if config.get('variant') == 'lookback_recompute' and config.get('recompute_memory') != 'last_attention_kv_blend':
+            raise ValueError('Old history/projection checkpoints belong to a retired architecture')
+        if config.get('variant','baseline') != 'lookback_recompute':
+            # This metadata was inert on native/vanilla/mHC checkpoint weights.
+            config.pop('recompute_memory',None)
         # These fields were inert on core models in the retired Lookback experiment.
         for name in ("chunk_size", "lookback_enabled", "lookback_update"):
             config.pop(name, None)
@@ -223,7 +226,7 @@ def optimizer_for(model, batch_tokens=32768):
         for name, p in b.named_parameters():
             (routing if '_connection.' in name else matrices).append(p)
     if c.variant == 'lookback_recompute':
-        matrices.extend(model.memory_parameters())
+        routing.extend(model.memory_parameters())
     if model.stream_head is not None:
         routing.extend(model.stream_head.parameters())
     if routing:

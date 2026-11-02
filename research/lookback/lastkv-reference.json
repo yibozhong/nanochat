@@ -1,0 +1,19 @@
+{
+  "repository": "https://github.com/Zefan-Cai/LastKV",
+  "commit": "b32546dbcc23bf4c3c01066eaf803ec80cafa0ed",
+  "files": {
+    "modeling.py": "b87a21065f389872e08bf5082283310c8a2b092e91eb0dc632f0bfdc073054b0",
+    "configuration.py": "5c72aba4a9320642fb6fe9331c1d36078a46b987ce762e2f45da7b6832934c46",
+    "README.md": "9a02ad816df8cc55ddecd765249d67b801444ce1f06dbda8eb0a972ba729a479"
+  },
+  "adopted": [
+    "reuse last attention K/V",
+    "per-layer per-head sigmoid previous-chunk blend, alpha logits initialized to zero"
+  ],
+  "not_adopted": [
+    "per-layer/head deep V rescaling",
+    "Marin/Llama backbone",
+    "incremental inference API"
+  ],
+  "lookback_policy": "Blend only immediate chronological predecessor in normal pass; rerun successor and older history use shared last-attention KV; local causal self-attention retained"
+}

@@ -1,8 +1,9 @@
 """One retrospective rerun per boundary, reusing the original Transformer.
 
 The preceding chunk's original final block output is the bottom-layer input
-for its rerun. Every completed chunk exposes one shared K/V projection of its
-final hidden to all layers. Local self-attention remains inside every pass.
+for its rerun. Completed chunks expose the LAST ATTENTION layer's existing KV.
+Normal passes blend the immediate predecessor's local/deep KV as in LastKV.
+Reruns read shared deep history, including the successor, plus causal self KV.
 Replacements are functional and available only after successor predictions.
 """
 from dataclasses import dataclass, replace
@@ -14,7 +15,7 @@ from torch.nn import functional as F
 from torch.utils.checkpoint import checkpoint
 
 from nanochat.connection_model import ConnectionModel
-from nanochat.gpt import Linear, apply_rotary_emb, norm
+from nanochat.gpt import apply_rotary_emb, norm
 
 
 def memory_causal_mask(length, memory_length, device):
@@ -37,9 +38,16 @@ def transformer_chunk(block, x, memory_k, memory_v, cos, sin, mask):
         all_v.transpose(1,2),attn_mask=mask,is_causal=False).transpose(1,2).contiguous()
     x=x+block.attn.c_proj(attended.reshape(b,t,d))
     x=x+block.mlp(norm(x))
-    # Local K/V participate in the SAME softmax as shared history. They are
-    # transient activations; only a chunk's final-hidden projection is cached.
-    return x
+    # These are the current layer's ORIGINAL attention KV, computed before its
+    # attention/MLP residual updates. The last layer's pair is the deep cache.
+    return x,k,v
+
+
+def blend_previous(deep_k, deep_v, local_k, local_v, logits):
+    # LastKV's prev_chunk_alphas: one learned sigmoid gate per layer/KV head,
+    # shared by K and V, zero logits => equal local/deep contributions.
+    alpha=logits.sigmoid().to(deep_k.dtype).view(1,1,-1,1)
+    return alpha*deep_k+(1-alpha)*local_k,alpha*deep_v+(1-alpha)*local_v
 
 
 @dataclass(frozen=True)
@@ -47,6 +55,7 @@ class ChunkState:
     start: int
     length: int
     kv: tuple
+    local_kv: tuple | None = None
     final_hidden: torch.Tensor | None = None
     revisions: int = 0
 
@@ -55,24 +64,13 @@ class ChunkRecomputeModel(ConnectionModel):
     def __init__(self, config):
         super().__init__(replace(config,variant='baseline'))
         self.config=config
-        # Preserve every vanilla parameter and the caller's RNG stream exactly.
-        with torch.random.fork_rng(devices=[]):
-            self.memory_k=Linear(config.width,config.width,bias=False)
-            self.memory_v=Linear(config.width,config.width,bias=False)
-            for p in self.memory_parameters():
-                nn.init.uniform_(p,-math.sqrt(3/config.width),math.sqrt(3/config.width))
-        self.compiled_chunk=self.compiled_memory=None
+        # No new projections or RNG draws. Only these D-independent gate logits
+        # are added; all original backbone/head parameters stay bitwise matched.
+        self.prev_chunk_alphas=nn.Parameter(torch.zeros(config.depth,config.heads))
+        self.compiled_chunk=self.compiled_blend=None
 
     def memory_parameters(self):
-        yield self.memory_k.weight
-        yield self.memory_v.weight
-
-    def project_memory(self, hidden, cos, sin):
-        """One shared projection pair for all chunks, layers and pass types."""
-        h=norm(hidden);shape=(*h.shape[:2],self.config.heads,self.config.width//self.config.heads)
-        k=1.2*norm(apply_rotary_emb(self.memory_k(h).view(shape),cos,sin))
-        v=self.memory_v(h).view(shape)
-        return k,v
+        yield self.prev_chunk_alphas
 
     def prepare(self, device='cuda', dtype=torch.bfloat16, compile_blocks=False):
         self.to(device);self.wte.to(dtype=dtype)
@@ -84,7 +82,7 @@ class ChunkRecomputeModel(ConnectionModel):
             compiler_config.recompile_limit=max(compiler_config.recompile_limit,limit)
             compiler_config.accumulated_recompile_limit=max(compiler_config.accumulated_recompile_limit,2*limit)
             self.compiled_chunk=torch.compile(transformer_chunk,dynamic=False,fullgraph=True)
-            self.compiled_memory=torch.compile(self.project_memory,dynamic=False,fullgraph=True)
+            self.compiled_blend=torch.compile(blend_previous,dynamic=False,fullgraph=True)
         return self
 
     def process_chunk(self, hidden, start, history):
@@ -93,22 +91,36 @@ class ChunkRecomputeModel(ConnectionModel):
         cos,sin=self.cos[:,start:start+t],self.sin[:,start:start+t]
         memory_length=sum(chunk.length for chunk in history)
         mask=memory_causal_mask(t,memory_length,x.device)
-        # Concatenate once per stack invocation; every layer reads these exact
-        # shared final-hidden K/V tensors. No per-layer historical cache exists.
-        if history:
-            memory_k=torch.cat([chunk.kv[0] for chunk in history],dim=1)
-            memory_v=torch.cat([chunk.kv[1] for chunk in history],dim=1)
+        # Only the immediate LEFT predecessor of a normal pass is blended.
+        # During Lookback the last history entry is the future successor: it
+        # must remain the same last-layer KV for every layer, never a blend.
+        previous=history[-1] if history and history[-1].start+history[-1].length==start else None
+        shared=history[:-1] if previous is not None else history
+        if previous is not None:
+            assert previous.local_kv is not None
+        if shared:
+            shared_k=torch.cat([chunk.kv[0] for chunk in shared],dim=1)
+            shared_v=torch.cat([chunk.kv[1] for chunk in shared],dim=1)
         else:
             shape=(b,0,self.config.heads,d//self.config.heads)
-            memory_k,memory_v=x.new_empty(shape),x.new_empty(shape)
+            shared_k,shared_v=x.new_empty(shape),x.new_empty(shape)
         step=self.compiled_chunk or transformer_chunk
-        for block in self.blocks:
-            if self.config.activation_checkpoint and self.training and torch.is_grad_enabled():
-                x=checkpoint(step,block,x,memory_k,memory_v,cos,sin,mask,use_reentrant=False)
+        mix=self.compiled_blend or blend_previous
+        layers=[]
+        for i,block in enumerate(self.blocks):
+            if previous is not None:
+                local_k,local_v=previous.local_kv[i]
+                mixed_k,mixed_v=mix(*previous.kv,local_k,local_v,self.prev_chunk_alphas[i])
+                memory_k=torch.cat((shared_k,mixed_k),dim=1)
+                memory_v=torch.cat((shared_v,mixed_v),dim=1)
             else:
-                x=step(block,x,memory_k,memory_v,cos,sin,mask)
-        kv=(self.compiled_memory or self.project_memory)(x,cos,sin)
-        return x,ChunkState(start,t,kv,final_hidden=x)
+                memory_k,memory_v=shared_k,shared_v
+            if self.config.activation_checkpoint and self.training and torch.is_grad_enabled():
+                x,k,v=checkpoint(step,block,x,memory_k,memory_v,cos,sin,mask,use_reentrant=False)
+            else:
+                x,k,v=step(block,x,memory_k,memory_v,cos,sin,mask)
+            layers.append((k,v))
+        return x,ChunkState(start,t,layers[-1],local_kv=tuple(layers),final_hidden=x)
 
     def advance(self, embeddings, start, end, bank):
         original,current=self.process_chunk(embeddings[:,start:end],start,bank)
@@ -124,9 +136,11 @@ class ChunkRecomputeModel(ConnectionModel):
             # RMSNorm. Preserve its graph and scale: no detach, norm or embedding
             # reinjection. Each chunk crosses this extra stack exactly once.
             _,revised=self.process_chunk(previous.final_hidden,previous.start,history)
-            bank=bank[:-1]+(replace(revised,revisions=1,final_hidden=None),)
+            bank=bank[:-1]+(replace(revised,revisions=1,final_hidden=None,local_kv=None),)
         if not self.config.recompute_previous:
             current=replace(current,final_hidden=None)
+            if bank:
+                bank=bank[:-1]+(replace(bank[-1],local_kv=None,final_hidden=None),)
         return output,bank+(current,)
 
     def hidden_from_embeddings(self, embeddings, *, return_bank=False):
