@@ -1,0 +1,1678 @@
+{
+  "complete": true,
+  "source": {
+    "commit": "ff772d50a24645bfafd119a525a3d4d02002b456",
+    "hashes": {
+      "transformer_engine_torch-2.20.2-cp311-cp311-linux_x86_64.whl": "9b69f40b34570e3073171dcb231d6dd038092d20a277e501e7da01e6475920de",
+      "mhc-official-runtime-7546767.tar.gz": "6b927f93021961293e12452b4001a479ff1b54cbc1aae0355e73e75a393d4dc0",
+      "cuda-compat-13-1_590.48.01-1_amd64.deb": "066f24c715f5f8f31bb7e8bd0f9ddc93fe78a82d3be55c6f3e9bbe26fa4fd7be",
+      "source.tar": "ff5242cc0ab260e8770a02b02b7908eec4e865e4520b0991ea8ad3861280469d",
+      "gate-data.tar": "e0e94888d697343316e17deca67c4182ad6dd713b477c21c500f795f7f9d9725"
+    },
+    "purpose": "Lookback16K implementation gate",
+    "formal_training": false,
+    "sequence_length": 16384,
+    "chunk_size": 2048,
+    "chunk_attention": "full_causal",
+    "launcher_sha256": "bd35bf3ab959a161a80672f5678b0c8c28e9ec072b6131c3d8463c59d2c25a79"
+  },
+  "checks": {
+    "tests": 12,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "logging_backend": "local",
+  "selected_microbatch": 2,
+  "grad_accum": 1,
+  "sequence_length": 16384,
+  "chunk_size": 2048,
+  "chunk_attention": "full_causal",
+  "shared_kv": true,
+  "probes": [
+    {
+      "complete": true,
+      "variant": "baseline",
+      "sequence_length": 16384,
+      "microbatch": 2,
+      "grad_accum": 1,
+      "batch_tokens": 32768,
+      "repetition": 0,
+      "probe": true,
+      "model": {
+        "variant": "baseline",
+        "depth": 8,
+        "width": 512,
+        "heads": 4,
+        "sequence_length": 16384,
+        "vocab_size": 32768,
+        "streams": 4,
+        "sinkhorn_iterations": 20,
+        "activation_checkpoint": false,
+        "connection_backend": "nvidia",
+        "fused_connection_grad": false,
+        "architecture": "vanilla",
+        "window_pattern": "SSSL",
+        "chunk_size": 2048,
+        "lookback_enabled": true
+      },
+      "logging_backend": "local",
+      "gpu": "NVIDIA H200",
+      "gpu_uuid": "9e8c2c5b-981d-2965-9214-b584f626b0aa",
+      "device_total_bytes": 150120759296,
+      "torch": "2.10.0+cu130",
+      "cuda": "13.0",
+      "attention_backend": "sdpa_cudnn",
+      "minimum_gpu_bytes": 23068672000,
+      "memory_limit_bytes": 20761804800,
+      "nvidia_tf32_override": "0",
+      "source": {
+        "commit": "ff772d50a24645bfafd119a525a3d4d02002b456",
+        "hashes": {
+          "transformer_engine_torch-2.20.2-cp311-cp311-linux_x86_64.whl": "9b69f40b34570e3073171dcb231d6dd038092d20a277e501e7da01e6475920de",
+          "mhc-official-runtime-7546767.tar.gz": "6b927f93021961293e12452b4001a479ff1b54cbc1aae0355e73e75a393d4dc0",
+          "cuda-compat-13-1_590.48.01-1_amd64.deb": "066f24c715f5f8f31bb7e8bd0f9ddc93fe78a82d3be55c6f3e9bbe26fa4fd7be",
+          "source.tar": "ff5242cc0ab260e8770a02b02b7908eec4e865e4520b0991ea8ad3861280469d",
+          "gate-data.tar": "e0e94888d697343316e17deca67c4182ad6dd713b477c21c500f795f7f9d9725"
+        },
+        "purpose": "Lookback16K implementation gate",
+        "formal_training": false,
+        "sequence_length": 16384,
+        "chunk_size": 2048,
+        "chunk_attention": "full_causal",
+        "launcher_sha256": "bd35bf3ab959a161a80672f5678b0c8c28e9ec072b6131c3d8463c59d2c25a79"
+      },
+      "seed": 42,
+      "data_note": "Fresh native16K packing; same examples for both variants",
+      "timing_includes": "CPU data copy/H2D, CCE, backward, finite checks, MuonAdamW",
+      "warmup_steps": 4,
+      "timed_steps": 0,
+      "input_sha256": "63eae96934c9cfcaa9b1691833014b3c7aecd9f6c25886cc5713393256c7999d",
+      "parameters": 58720256,
+      "compute_estimate": {
+        "estimated_forward_flops": 7147094016000,
+        "estimated_training_flops": 21441282048000,
+        "components_forward": {
+          "backbone_projections": 1649267441664,
+          "vocab_head": 1099511627776,
+          "attention": 4398314946560,
+          "memory_projection": 0,
+          "lookback": 0
+        },
+        "logical_memory_kv_bytes": 0,
+        "logical_previous_hidden_bytes": 0,
+        "accounting": "FMA=2 FLOPs; allowed attention pairs, not masked dense-kernel execution. Backward approximated as2x consumed forward matrix FLOPs. Excludes softmax/norm/activation/optimizer/recomputation and is not measured hardware FLOPs.",
+        "memory_note": "Logical live bank only. Autograd retains earlier versions until backward; this does not imply an equal reduction in training peak VRAM."
+      },
+      "first_step_including_compilation_seconds": 18.775282131507993,
+      "losses": [
+        10.397482872009277,
+        10.395833015441895,
+        10.38726806640625,
+        10.38009262084961
+      ],
+      "optimizer_updates": 4,
+      "training_tokens": 131072,
+      "peak_allocated_bytes": 5774600704,
+      "peak_reserved_bytes": 5913968640,
+      "fits_minimum_gpu_budget": true,
+      "status": "fits"
+    },
+    {
+      "complete": true,
+      "variant": "lookback",
+      "sequence_length": 16384,
+      "microbatch": 2,
+      "grad_accum": 1,
+      "batch_tokens": 32768,
+      "repetition": 0,
+      "probe": true,
+      "model": {
+        "variant": "lookback",
+        "depth": 8,
+        "width": 512,
+        "heads": 4,
+        "sequence_length": 16384,
+        "vocab_size": 32768,
+        "streams": 4,
+        "sinkhorn_iterations": 20,
+        "activation_checkpoint": false,
+        "connection_backend": "nvidia",
+        "fused_connection_grad": false,
+        "architecture": "vanilla",
+        "window_pattern": "SSSL",
+        "chunk_size": 2048,
+        "lookback_enabled": true
+      },
+      "logging_backend": "local",
+      "gpu": "NVIDIA H200",
+      "gpu_uuid": "9e8c2c5b-981d-2965-9214-b584f626b0aa",
+      "device_total_bytes": 150120759296,
+      "torch": "2.10.0+cu130",
+      "cuda": "13.0",
+      "attention_backend": "sdpa_cudnn",
+      "minimum_gpu_bytes": 23068672000,
+      "memory_limit_bytes": 20761804800,
+      "nvidia_tf32_override": "0",
+      "source": {
+        "commit": "ff772d50a24645bfafd119a525a3d4d02002b456",
+        "hashes": {
+          "transformer_engine_torch-2.20.2-cp311-cp311-linux_x86_64.whl": "9b69f40b34570e3073171dcb231d6dd038092d20a277e501e7da01e6475920de",
+          "mhc-official-runtime-7546767.tar.gz": "6b927f93021961293e12452b4001a479ff1b54cbc1aae0355e73e75a393d4dc0",
+          "cuda-compat-13-1_590.48.01-1_amd64.deb": "066f24c715f5f8f31bb7e8bd0f9ddc93fe78a82d3be55c6f3e9bbe26fa4fd7be",
+          "source.tar": "ff5242cc0ab260e8770a02b02b7908eec4e865e4520b0991ea8ad3861280469d",
+          "gate-data.tar": "e0e94888d697343316e17deca67c4182ad6dd713b477c21c500f795f7f9d9725"
+        },
+        "purpose": "Lookback16K implementation gate",
+        "formal_training": false,
+        "sequence_length": 16384,
+        "chunk_size": 2048,
+        "chunk_attention": "full_causal",
+        "launcher_sha256": "bd35bf3ab959a161a80672f5678b0c8c28e9ec072b6131c3d8463c59d2c25a79"
+      },
+      "seed": 42,
+      "data_note": "Fresh native16K packing; same examples for both variants",
+      "timing_includes": "CPU data copy/H2D, CCE, backward, finite checks, MuonAdamW",
+      "warmup_steps": 4,
+      "timed_steps": 0,
+      "input_sha256": "63eae96934c9cfcaa9b1691833014b3c7aecd9f6c25886cc5713393256c7999d",
+      "parameters": 60293120,
+      "compute_estimate": {
+        "estimated_forward_flops": 7391907151872,
+        "estimated_training_flops": 22107001978880,
+        "components_forward": {
+          "backbone_projections": 1649267441664,
+          "vocab_head": 1099511627776,
+          "attention": 4398314946560,
+          "memory_projection": 64424509440,
+          "lookback": 180388626432
+        },
+        "logical_memory_kv_bytes": 67108864,
+        "logical_previous_hidden_bytes": 4194304,
+        "accounting": "FMA=2 FLOPs; allowed attention pairs, not masked dense-kernel execution. Backward approximated as2x consumed forward matrix FLOPs. Excludes softmax/norm/activation/optimizer/recomputation and is not measured hardware FLOPs.",
+        "memory_note": "Logical live bank only. Autograd retains earlier versions until backward; this does not imply an equal reduction in training peak VRAM."
+      },
+      "first_step_including_compilation_seconds": 49.40965788625181,
+      "losses": [
+        10.397482872009277,
+        10.395833969116211,
+        10.38726806640625,
+        10.380094528198242
+      ],
+      "optimizer_updates": 4,
+      "training_tokens": 131072,
+      "peak_allocated_bytes": 10849324544,
+      "peak_reserved_bytes": 11035213824,
+      "fits_minimum_gpu_budget": true,
+      "status": "fits"
+    }
+  ],
+  "trials": [
+    {
+      "complete": true,
+      "variant": "baseline",
+      "sequence_length": 16384,
+      "microbatch": 2,
+      "grad_accum": 1,
+      "batch_tokens": 32768,
+      "repetition": 0,
+      "probe": false,
+      "model": {
+        "variant": "baseline",
+        "depth": 8,
+        "width": 512,
+        "heads": 4,
+        "sequence_length": 16384,
+        "vocab_size": 32768,
+        "streams": 4,
+        "sinkhorn_iterations": 20,
+        "activation_checkpoint": false,
+        "connection_backend": "nvidia",
+        "fused_connection_grad": false,
+        "architecture": "vanilla",
+        "window_pattern": "SSSL",
+        "chunk_size": 2048,
+        "lookback_enabled": true
+      },
+      "logging_backend": "local",
+      "gpu": "NVIDIA H200",
+      "gpu_uuid": "9e8c2c5b-981d-2965-9214-b584f626b0aa",
+      "device_total_bytes": 150120759296,
+      "torch": "2.10.0+cu130",
+      "cuda": "13.0",
+      "attention_backend": "sdpa_cudnn",
+      "minimum_gpu_bytes": 23068672000,
+      "memory_limit_bytes": 20761804800,
+      "nvidia_tf32_override": "0",
+      "source": {
+        "commit": "ff772d50a24645bfafd119a525a3d4d02002b456",
+        "hashes": {
+          "transformer_engine_torch-2.20.2-cp311-cp311-linux_x86_64.whl": "9b69f40b34570e3073171dcb231d6dd038092d20a277e501e7da01e6475920de",
+          "mhc-official-runtime-7546767.tar.gz": "6b927f93021961293e12452b4001a479ff1b54cbc1aae0355e73e75a393d4dc0",
+          "cuda-compat-13-1_590.48.01-1_amd64.deb": "066f24c715f5f8f31bb7e8bd0f9ddc93fe78a82d3be55c6f3e9bbe26fa4fd7be",
+          "source.tar": "ff5242cc0ab260e8770a02b02b7908eec4e865e4520b0991ea8ad3861280469d",
+          "gate-data.tar": "e0e94888d697343316e17deca67c4182ad6dd713b477c21c500f795f7f9d9725"
+        },
+        "purpose": "Lookback16K implementation gate",
+        "formal_training": false,
+        "sequence_length": 16384,
+        "chunk_size": 2048,
+        "chunk_attention": "full_causal",
+        "launcher_sha256": "bd35bf3ab959a161a80672f5678b0c8c28e9ec072b6131c3d8463c59d2c25a79"
+      },
+      "seed": 42,
+      "data_note": "Fresh native16K packing; same examples for both variants",
+      "timing_includes": "CPU data copy/H2D, CCE, backward, finite checks, MuonAdamW",
+      "warmup_steps": 20,
+      "timed_steps": 30,
+      "input_sha256": "63eae96934c9cfcaa9b1691833014b3c7aecd9f6c25886cc5713393256c7999d",
+      "parameters": 58720256,
+      "compute_estimate": {
+        "estimated_forward_flops": 7147094016000,
+        "estimated_training_flops": 21441282048000,
+        "components_forward": {
+          "backbone_projections": 1649267441664,
+          "vocab_head": 1099511627776,
+          "attention": 4398314946560,
+          "memory_projection": 0,
+          "lookback": 0
+        },
+        "logical_memory_kv_bytes": 0,
+        "logical_previous_hidden_bytes": 0,
+        "accounting": "FMA=2 FLOPs; allowed attention pairs, not masked dense-kernel execution. Backward approximated as2x consumed forward matrix FLOPs. Excludes softmax/norm/activation/optimizer/recomputation and is not measured hardware FLOPs.",
+        "memory_note": "Logical live bank only. Autograd retains earlier versions until backward; this does not imply an equal reduction in training peak VRAM."
+      },
+      "setup_and_warmup_seconds": 4.126929167658091,
+      "first_step_including_compilation_seconds": 2.436801340430975,
+      "losses": [
+        10.397482872009277,
+        10.395833969116211,
+        10.38726806640625,
+        10.380091667175293,
+        10.361364364624023,
+        10.34634017944336,
+        10.322225570678711,
+        10.291211128234863,
+        10.250813484191895,
+        10.19153881072998,
+        10.115558624267578,
+        9.996601104736328,
+        9.880471229553223,
+        9.655020713806152,
+        9.453086853027344,
+        9.21957015991211,
+        8.858749389648438,
+        8.507211685180664,
+        8.297690391540527,
+        8.050491333007812,
+        7.816608905792236,
+        7.773373603820801,
+        7.640990257263184,
+        7.59184455871582,
+        7.7132110595703125,
+        7.641975402832031,
+        7.325291633605957,
+        7.453037261962891,
+        7.319583415985107,
+        7.295407772064209,
+        7.178840160369873,
+        7.19643497467041,
+        7.0561442375183105,
+        7.083209037780762,
+        7.032305717468262,
+        7.000730514526367,
+        6.84351921081543,
+        6.786373138427734,
+        6.916534423828125,
+        6.907233238220215,
+        6.739386558532715,
+        6.662292957305908,
+        6.624666213989258,
+        6.912265777587891,
+        6.581831932067871,
+        6.604499816894531,
+        6.716878890991211,
+        6.617074012756348,
+        6.471432685852051,
+        6.571536064147949
+      ],
+      "optimizer_updates": 50,
+      "training_tokens": 1638400,
+      "peak_allocated_bytes": 5774600704,
+      "peak_reserved_bytes": 5783945216,
+      "fits_minimum_gpu_budget": true,
+      "step_seconds": [
+        0.0834564920514822,
+        0.08388150483369827,
+        0.08368322812020779,
+        0.08486557938158512,
+        0.08432253822684288,
+        0.08302121050655842,
+        0.08265682682394981,
+        0.08372546173632145,
+        0.08527179434895515,
+        0.08516121655702591,
+        0.08369702473282814,
+        0.08334551937878132,
+        0.08324569277465343,
+        0.08516048640012741,
+        0.08495521731674671,
+        0.08337733335793018,
+        0.0828038677573204,
+        0.08270079642534256,
+        0.08284288831055164,
+        0.08608760312199593,
+        0.08376518823206425,
+        0.08318514749407768,
+        0.08315463922917843,
+        0.0842524841427803,
+        0.08615176752209663,
+        0.08501504175364971,
+        0.08287661336362362,
+        0.08410469442605972,
+        0.08626077137887478,
+        0.08323939144611359
+      ],
+      "mean_seconds": 0.08400893403838078,
+      "median_seconds": 0.0837112432345748,
+      "stdev_seconds": 0.0010785717800123364,
+      "tokens_per_second": 390053.7529142964,
+      "estimated_10b_training_hours": 7.1215306816935815,
+      "causal_prefix_max_abs": 0.0,
+      "causality_passed": true,
+      "status": "fits"
+    },
+    {
+      "complete": true,
+      "variant": "lookback",
+      "sequence_length": 16384,
+      "microbatch": 2,
+      "grad_accum": 1,
+      "batch_tokens": 32768,
+      "repetition": 0,
+      "probe": false,
+      "model": {
+        "variant": "lookback",
+        "depth": 8,
+        "width": 512,
+        "heads": 4,
+        "sequence_length": 16384,
+        "vocab_size": 32768,
+        "streams": 4,
+        "sinkhorn_iterations": 20,
+        "activation_checkpoint": false,
+        "connection_backend": "nvidia",
+        "fused_connection_grad": false,
+        "architecture": "vanilla",
+        "window_pattern": "SSSL",
+        "chunk_size": 2048,
+        "lookback_enabled": true
+      },
+      "logging_backend": "local",
+      "gpu": "NVIDIA H200",
+      "gpu_uuid": "9e8c2c5b-981d-2965-9214-b584f626b0aa",
+      "device_total_bytes": 150120759296,
+      "torch": "2.10.0+cu130",
+      "cuda": "13.0",
+      "attention_backend": "sdpa_cudnn",
+      "minimum_gpu_bytes": 23068672000,
+      "memory_limit_bytes": 20761804800,
+      "nvidia_tf32_override": "0",
+      "source": {
+        "commit": "ff772d50a24645bfafd119a525a3d4d02002b456",
+        "hashes": {
+          "transformer_engine_torch-2.20.2-cp311-cp311-linux_x86_64.whl": "9b69f40b34570e3073171dcb231d6dd038092d20a277e501e7da01e6475920de",
+          "mhc-official-runtime-7546767.tar.gz": "6b927f93021961293e12452b4001a479ff1b54cbc1aae0355e73e75a393d4dc0",
+          "cuda-compat-13-1_590.48.01-1_amd64.deb": "066f24c715f5f8f31bb7e8bd0f9ddc93fe78a82d3be55c6f3e9bbe26fa4fd7be",
+          "source.tar": "ff5242cc0ab260e8770a02b02b7908eec4e865e4520b0991ea8ad3861280469d",
+          "gate-data.tar": "e0e94888d697343316e17deca67c4182ad6dd713b477c21c500f795f7f9d9725"
+        },
+        "purpose": "Lookback16K implementation gate",
+        "formal_training": false,
+        "sequence_length": 16384,
+        "chunk_size": 2048,
+        "chunk_attention": "full_causal",
+        "launcher_sha256": "bd35bf3ab959a161a80672f5678b0c8c28e9ec072b6131c3d8463c59d2c25a79"
+      },
+      "seed": 42,
+      "data_note": "Fresh native16K packing; same examples for both variants",
+      "timing_includes": "CPU data copy/H2D, CCE, backward, finite checks, MuonAdamW",
+      "warmup_steps": 20,
+      "timed_steps": 30,
+      "input_sha256": "63eae96934c9cfcaa9b1691833014b3c7aecd9f6c25886cc5713393256c7999d",
+      "parameters": 60293120,
+      "compute_estimate": {
+        "estimated_forward_flops": 7391907151872,
+        "estimated_training_flops": 22107001978880,
+        "components_forward": {
+          "backbone_projections": 1649267441664,
+          "vocab_head": 1099511627776,
+          "attention": 4398314946560,
+          "memory_projection": 64424509440,
+          "lookback": 180388626432
+        },
+        "logical_memory_kv_bytes": 67108864,
+        "logical_previous_hidden_bytes": 4194304,
+        "accounting": "FMA=2 FLOPs; allowed attention pairs, not masked dense-kernel execution. Backward approximated as2x consumed forward matrix FLOPs. Excludes softmax/norm/activation/optimizer/recomputation and is not measured hardware FLOPs.",
+        "memory_note": "Logical live bank only. Autograd retains earlier versions until backward; this does not imply an equal reduction in training peak VRAM."
+      },
+      "setup_and_warmup_seconds": 8.643674120306969,
+      "first_step_including_compilation_seconds": 5.5453395415097475,
+      "losses": [
+        10.397482872009277,
+        10.395833969116211,
+        10.38726806640625,
+        10.380094528198242,
+        10.361392974853516,
+        10.346446990966797,
+        10.322653770446777,
+        10.292341232299805,
+        10.253028869628906,
+        10.196081161499023,
+        10.12201976776123,
+        10.006671905517578,
+        9.893670082092285,
+        9.66859245300293,
+        9.46249771118164,
+        9.224623680114746,
+        8.862289428710938,
+        8.503756523132324,
+        8.296565055847168,
+        8.058551788330078,
+        7.830196857452393,
+        7.789218902587891,
+        7.656949996948242,
+        7.597423553466797,
+        7.722325325012207,
+        7.663578510284424,
+        7.357043266296387,
+        7.508410930633545,
+        7.3711018562316895,
+        7.328560829162598,
+        7.197660446166992,
+        7.219000816345215,
+        7.09187650680542,
+        7.112972259521484,
+        7.051796913146973,
+        7.016078948974609,
+        6.854896545410156,
+        6.798159599304199,
+        6.9263811111450195,
+        6.918557643890381,
+        6.7476091384887695,
+        6.66823673248291,
+        6.626574993133545,
+        6.9152374267578125,
+        6.586325645446777,
+        6.609037399291992,
+        6.7207136154174805,
+        6.617551326751709,
+        6.4774627685546875,
+        6.577826499938965
+      ],
+      "optimizer_updates": 50,
+      "training_tokens": 1638400,
+      "peak_allocated_bytes": 10849324544,
+      "peak_reserved_bytes": 11098128384,
+      "fits_minimum_gpu_budget": true,
+      "step_seconds": [
+        0.157099399715662,
+        0.15680746361613274,
+        0.15659212693572044,
+        0.15675119869410992,
+        0.15615447610616684,
+        0.15601031854748726,
+        0.1559658721089363,
+        0.1559310406446457,
+        0.15575052239000797,
+        0.15621131472289562,
+        0.1559114195406437,
+        0.15595712885260582,
+        0.1556518618017435,
+        0.15580222196877003,
+        0.15558049455285072,
+        0.15585173480212688,
+        0.15576741471886635,
+        0.15594616904854774,
+        0.15578791312873363,
+        0.15596926398575306,
+        0.1558431088924408,
+        0.15586934052407742,
+        0.15578174591064453,
+        0.15579466708004475,
+        0.15571334399282932,
+        0.15581114031374454,
+        0.15571522153913975,
+        0.15572643093764782,
+        0.155658308416605,
+        0.15577390044927597
+      ],
+      "mean_seconds": 0.15597288546462854,
+      "median_seconds": 0.15584742184728384,
+      "stdev_seconds": 0.0003683299065419159,
+      "tokens_per_second": 210087.79764756685,
+      "estimated_10b_training_hours": 13.221994804042632,
+      "causal_prefix_max_abs": 0.0,
+      "causality_passed": true,
+      "status": "fits"
+    },
+    {
+      "complete": true,
+      "variant": "lookback",
+      "sequence_length": 16384,
+      "microbatch": 2,
+      "grad_accum": 1,
+      "batch_tokens": 32768,
+      "repetition": 1,
+      "probe": false,
+      "model": {
+        "variant": "lookback",
+        "depth": 8,
+        "width": 512,
+        "heads": 4,
+        "sequence_length": 16384,
+        "vocab_size": 32768,
+        "streams": 4,
+        "sinkhorn_iterations": 20,
+        "activation_checkpoint": false,
+        "connection_backend": "nvidia",
+        "fused_connection_grad": false,
+        "architecture": "vanilla",
+        "window_pattern": "SSSL",
+        "chunk_size": 2048,
+        "lookback_enabled": true
+      },
+      "logging_backend": "local",
+      "gpu": "NVIDIA H200",
+      "gpu_uuid": "9e8c2c5b-981d-2965-9214-b584f626b0aa",
+      "device_total_bytes": 150120759296,
+      "torch": "2.10.0+cu130",
+      "cuda": "13.0",
+      "attention_backend": "sdpa_cudnn",
+      "minimum_gpu_bytes": 23068672000,
+      "memory_limit_bytes": 20761804800,
+      "nvidia_tf32_override": "0",
+      "source": {
+        "commit": "ff772d50a24645bfafd119a525a3d4d02002b456",
+        "hashes": {
+          "transformer_engine_torch-2.20.2-cp311-cp311-linux_x86_64.whl": "9b69f40b34570e3073171dcb231d6dd038092d20a277e501e7da01e6475920de",
+          "mhc-official-runtime-7546767.tar.gz": "6b927f93021961293e12452b4001a479ff1b54cbc1aae0355e73e75a393d4dc0",
+          "cuda-compat-13-1_590.48.01-1_amd64.deb": "066f24c715f5f8f31bb7e8bd0f9ddc93fe78a82d3be55c6f3e9bbe26fa4fd7be",
+          "source.tar": "ff5242cc0ab260e8770a02b02b7908eec4e865e4520b0991ea8ad3861280469d",
+          "gate-data.tar": "e0e94888d697343316e17deca67c4182ad6dd713b477c21c500f795f7f9d9725"
+        },
+        "purpose": "Lookback16K implementation gate",
+        "formal_training": false,
+        "sequence_length": 16384,
+        "chunk_size": 2048,
+        "chunk_attention": "full_causal",
+        "launcher_sha256": "bd35bf3ab959a161a80672f5678b0c8c28e9ec072b6131c3d8463c59d2c25a79"
+      },
+      "seed": 42,
+      "data_note": "Fresh native16K packing; same examples for both variants",
+      "timing_includes": "CPU data copy/H2D, CCE, backward, finite checks, MuonAdamW",
+      "warmup_steps": 20,
+      "timed_steps": 30,
+      "input_sha256": "63eae96934c9cfcaa9b1691833014b3c7aecd9f6c25886cc5713393256c7999d",
+      "parameters": 60293120,
+      "compute_estimate": {
+        "estimated_forward_flops": 7391907151872,
+        "estimated_training_flops": 22107001978880,
+        "components_forward": {
+          "backbone_projections": 1649267441664,
+          "vocab_head": 1099511627776,
+          "attention": 4398314946560,
+          "memory_projection": 64424509440,
+          "lookback": 180388626432
+        },
+        "logical_memory_kv_bytes": 67108864,
+        "logical_previous_hidden_bytes": 4194304,
+        "accounting": "FMA=2 FLOPs; allowed attention pairs, not masked dense-kernel execution. Backward approximated as2x consumed forward matrix FLOPs. Excludes softmax/norm/activation/optimizer/recomputation and is not measured hardware FLOPs.",
+        "memory_note": "Logical live bank only. Autograd retains earlier versions until backward; this does not imply an equal reduction in training peak VRAM."
+      },
+      "setup_and_warmup_seconds": 8.590071009472013,
+      "first_step_including_compilation_seconds": 5.486832717433572,
+      "losses": [
+        10.397481918334961,
+        10.395833969116211,
+        10.38726806640625,
+        10.380094528198242,
+        10.361392974853516,
+        10.346446990966797,
+        10.322653770446777,
+        10.292341232299805,
+        10.253026008605957,
+        10.196083068847656,
+        10.122028350830078,
+        10.006742477416992,
+        9.89391803741455,
+        9.668997764587402,
+        9.463102340698242,
+        9.225170135498047,
+        8.862886428833008,
+        8.503494262695312,
+        8.296655654907227,
+        8.058862686157227,
+        7.830285549163818,
+        7.789394855499268,
+        7.657136917114258,
+        7.597424507141113,
+        7.722506046295166,
+        7.663339614868164,
+        7.356446266174316,
+        7.507613182067871,
+        7.371027946472168,
+        7.328526496887207,
+        7.197442054748535,
+        7.218712329864502,
+        7.091628551483154,
+        7.112735748291016,
+        7.051576137542725,
+        7.015981674194336,
+        6.854821681976318,
+        6.798060894012451,
+        6.926367282867432,
+        6.918509483337402,
+        6.747495174407959,
+        6.668171405792236,
+        6.626613616943359,
+        6.915213584899902,
+        6.586384296417236,
+        6.609000205993652,
+        6.720609188079834,
+        6.617290496826172,
+        6.477436065673828,
+        6.5777740478515625
+      ],
+      "optimizer_updates": 50,
+      "training_tokens": 1638400,
+      "peak_allocated_bytes": 10849324544,
+      "peak_reserved_bytes": 11098128384,
+      "fits_minimum_gpu_budget": true,
+      "step_seconds": [
+        0.15811382606625557,
+        0.15683802776038647,
+        0.15672949515283108,
+        0.1566423587501049,
+        0.15650615841150284,
+        0.1561213005334139,
+        0.15622744895517826,
+        0.15645336918532848,
+        0.1565430536866188,
+        0.1562158353626728,
+        0.15631474182009697,
+        0.15688295103609562,
+        0.15679391473531723,
+        0.15824625082314014,
+        0.15643388591706753,
+        0.15662712417542934,
+        0.15612373873591423,
+        0.15605402179062366,
+        0.15645831264555454,
+        0.1566073391586542,
+        0.15627357922494411,
+        0.15624448284506798,
+        0.15615416131913662,
+        0.1562881786376238,
+        0.1561083998531103,
+        0.15629716217517853,
+        0.15640607103705406,
+        0.15628530830144882,
+        0.15620772540569305,
+        0.15632913634181023
+      ],
+      "mean_seconds": 0.1565175786614418,
+      "median_seconds": 0.15636760368943214,
+      "stdev_seconds": 0.0005058601436435636,
+      "tokens_per_second": 209356.67597362606,
+      "estimated_10b_training_hours": 13.268169051551157,
+      "causal_prefix_max_abs": 0.0,
+      "causality_passed": true,
+      "status": "fits"
+    },
+    {
+      "complete": true,
+      "variant": "baseline",
+      "sequence_length": 16384,
+      "microbatch": 2,
+      "grad_accum": 1,
+      "batch_tokens": 32768,
+      "repetition": 1,
+      "probe": false,
+      "model": {
+        "variant": "baseline",
+        "depth": 8,
+        "width": 512,
+        "heads": 4,
+        "sequence_length": 16384,
+        "vocab_size": 32768,
+        "streams": 4,
+        "sinkhorn_iterations": 20,
+        "activation_checkpoint": false,
+        "connection_backend": "nvidia",
+        "fused_connection_grad": false,
+        "architecture": "vanilla",
+        "window_pattern": "SSSL",
+        "chunk_size": 2048,
+        "lookback_enabled": true
+      },
+      "logging_backend": "local",
+      "gpu": "NVIDIA H200",
+      "gpu_uuid": "9e8c2c5b-981d-2965-9214-b584f626b0aa",
+      "device_total_bytes": 150120759296,
+      "torch": "2.10.0+cu130",
+      "cuda": "13.0",
+      "attention_backend": "sdpa_cudnn",
+      "minimum_gpu_bytes": 23068672000,
+      "memory_limit_bytes": 20761804800,
+      "nvidia_tf32_override": "0",
+      "source": {
+        "commit": "ff772d50a24645bfafd119a525a3d4d02002b456",
+        "hashes": {
+          "transformer_engine_torch-2.20.2-cp311-cp311-linux_x86_64.whl": "9b69f40b34570e3073171dcb231d6dd038092d20a277e501e7da01e6475920de",
+          "mhc-official-runtime-7546767.tar.gz": "6b927f93021961293e12452b4001a479ff1b54cbc1aae0355e73e75a393d4dc0",
+          "cuda-compat-13-1_590.48.01-1_amd64.deb": "066f24c715f5f8f31bb7e8bd0f9ddc93fe78a82d3be55c6f3e9bbe26fa4fd7be",
+          "source.tar": "ff5242cc0ab260e8770a02b02b7908eec4e865e4520b0991ea8ad3861280469d",
+          "gate-data.tar": "e0e94888d697343316e17deca67c4182ad6dd713b477c21c500f795f7f9d9725"
+        },
+        "purpose": "Lookback16K implementation gate",
+        "formal_training": false,
+        "sequence_length": 16384,
+        "chunk_size": 2048,
+        "chunk_attention": "full_causal",
+        "launcher_sha256": "bd35bf3ab959a161a80672f5678b0c8c28e9ec072b6131c3d8463c59d2c25a79"
+      },
+      "seed": 42,
+      "data_note": "Fresh native16K packing; same examples for both variants",
+      "timing_includes": "CPU data copy/H2D, CCE, backward, finite checks, MuonAdamW",
+      "warmup_steps": 20,
+      "timed_steps": 30,
+      "input_sha256": "63eae96934c9cfcaa9b1691833014b3c7aecd9f6c25886cc5713393256c7999d",
+      "parameters": 58720256,
+      "compute_estimate": {
+        "estimated_forward_flops": 7147094016000,
+        "estimated_training_flops": 21441282048000,
+        "components_forward": {
+          "backbone_projections": 1649267441664,
+          "vocab_head": 1099511627776,
+          "attention": 4398314946560,
+          "memory_projection": 0,
+          "lookback": 0
+        },
+        "logical_memory_kv_bytes": 0,
+        "logical_previous_hidden_bytes": 0,
+        "accounting": "FMA=2 FLOPs; allowed attention pairs, not masked dense-kernel execution. Backward approximated as2x consumed forward matrix FLOPs. Excludes softmax/norm/activation/optimizer/recomputation and is not measured hardware FLOPs.",
+        "memory_note": "Logical live bank only. Autograd retains earlier versions until backward; this does not imply an equal reduction in training peak VRAM."
+      },
+      "setup_and_warmup_seconds": 4.169903391972184,
+      "first_step_including_compilation_seconds": 2.439068468287587,
+      "losses": [
+        10.397482872009277,
+        10.395833015441895,
+        10.38726806640625,
+        10.380091667175293,
+        10.361364364624023,
+        10.34634017944336,
+        10.322223663330078,
+        10.291204452514648,
+        10.250802040100098,
+        10.191530227661133,
+        10.115507125854492,
+        9.996469497680664,
+        9.880232810974121,
+        9.654365539550781,
+        9.452369689941406,
+        9.21851921081543,
+        8.857542037963867,
+        8.505904197692871,
+        8.297921180725098,
+        8.050617218017578,
+        7.816672325134277,
+        7.773379325866699,
+        7.640926361083984,
+        7.591646194458008,
+        7.713092803955078,
+        7.641999244689941,
+        7.324942588806152,
+        7.452376365661621,
+        7.318734169006348,
+        7.295452117919922,
+        7.178413391113281,
+        7.195374965667725,
+        7.0549774169921875,
+        7.082707405090332,
+        7.031929016113281,
+        7.000427722930908,
+        6.843262672424316,
+        6.7862982749938965,
+        6.91634464263916,
+        6.9070658683776855,
+        6.739232063293457,
+        6.662173271179199,
+        6.624528884887695,
+        6.912148952484131,
+        6.581779956817627,
+        6.6043925285339355,
+        6.716949939727783,
+        6.617048263549805,
+        6.471498489379883,
+        6.571732044219971
+      ],
+      "optimizer_updates": 50,
+      "training_tokens": 1638400,
+      "peak_allocated_bytes": 5774600704,
+      "peak_reserved_bytes": 5783945216,
+      "fits_minimum_gpu_budget": true,
+      "step_seconds": [
+        0.08318679966032505,
+        0.08402671106159687,
+        0.08626923710107803,
+        0.08669782429933548,
+        0.08339610882103443,
+        0.08346565626561642,
+        0.08302334696054459,
+        0.08479365892708302,
+        0.08604868873953819,
+        0.08321897685527802,
+        0.08356791734695435,
+        0.08496111631393433,
+        0.08575385622680187,
+        0.08378134109079838,
+        0.08263930305838585,
+        0.08429775945842266,
+        0.08575529046356678,
+        0.0842569600790739,
+        0.08442230522632599,
+        0.0828308891505003,
+        0.08509045280516148,
+        0.0850598607212305,
+        0.08406682498753071,
+        0.08298709988594055,
+        0.08411580696702003,
+        0.08633370138704777,
+        0.08493901789188385,
+        0.08400415442883968,
+        0.08273351192474365,
+        0.08604125678539276
+      ],
+      "mean_seconds": 0.08439218116303285,
+      "median_seconds": 0.08418638352304697,
+      "stdev_seconds": 0.0012011221983883162,
+      "tokens_per_second": 388282.41607711517,
+      "estimated_10b_training_hours": 7.154018966280475,
+      "causal_prefix_max_abs": 0.0,
+      "causality_passed": true,
+      "status": "fits"
+    }
+  ],
+  "summary": {
+    "baseline": {
+      "mean_seconds": 0.08420055760070681,
+      "tokens_per_second": 389166.0688922199,
+      "estimated_10b_training_hours": 7.137774823987029,
+      "peak_reserved_bytes": 5783945216,
+      "peak_allocated_bytes": 5774600704,
+      "parameters": 58720256,
+      "compute_estimate": {
+        "estimated_forward_flops": 7147094016000,
+        "estimated_training_flops": 21441282048000,
+        "components_forward": {
+          "backbone_projections": 1649267441664,
+          "vocab_head": 1099511627776,
+          "attention": 4398314946560,
+          "memory_projection": 0,
+          "lookback": 0
+        },
+        "logical_memory_kv_bytes": 0,
+        "logical_previous_hidden_bytes": 0,
+        "accounting": "FMA=2 FLOPs; allowed attention pairs, not masked dense-kernel execution. Backward approximated as2x consumed forward matrix FLOPs. Excludes softmax/norm/activation/optimizer/recomputation and is not measured hardware FLOPs.",
+        "memory_note": "Logical live bank only. Autograd retains earlier versions until backward; this does not imply an equal reduction in training peak VRAM."
+      }
+    },
+    "lookback": {
+      "mean_seconds": 0.15624523206303517,
+      "tokens_per_second": 209721.59961194952,
+      "estimated_10b_training_hours": 13.245081927796896,
+      "peak_reserved_bytes": 11098128384,
+      "peak_allocated_bytes": 10849324544,
+      "parameters": 60293120,
+      "compute_estimate": {
+        "estimated_forward_flops": 7391907151872,
+        "estimated_training_flops": 22107001978880,
+        "components_forward": {
+          "backbone_projections": 1649267441664,
+          "vocab_head": 1099511627776,
+          "attention": 4398314946560,
+          "memory_projection": 64424509440,
+          "lookback": 180388626432
+        },
+        "logical_memory_kv_bytes": 67108864,
+        "logical_previous_hidden_bytes": 4194304,
+        "accounting": "FMA=2 FLOPs; allowed attention pairs, not masked dense-kernel execution. Backward approximated as2x consumed forward matrix FLOPs. Excludes softmax/norm/activation/optimizer/recomputation and is not measured hardware FLOPs.",
+        "memory_note": "Logical live bank only. Autograd retains earlier versions until backward; this does not imply an equal reduction in training peak VRAM."
+      },
+      "additional_peak_reserved_bytes": 5314183168,
+      "additional_peak_allocated_bytes": 5074723840
+    }
+  },
+  "resumes": {
+    "baseline": {
+      "summary": {
+        "complete": true,
+        "variant": "baseline",
+        "run_id": "6d98bbe6",
+        "steps": 50,
+        "training_tokens": 1638400,
+        "initial_dev_ce": 10.398167610168457,
+        "final_dev_ce": 6.656511187553406,
+        "best_dev_ce": 6.656511187553406,
+        "dev_tokens": 131072,
+        "training_seconds": 6.325139472261071,
+        "elapsed_seconds": 19.590036008507013,
+        "steady_step_seconds": 0.0841177549213171,
+        "gpu": "NVIDIA H200",
+        "peak_allocated_bytes": 5774600704,
+        "peak_reserved_bytes": 5783945216,
+        "source": {
+          "commit": "ff772d50a24645bfafd119a525a3d4d02002b456",
+          "hashes": {
+            "transformer_engine_torch-2.20.2-cp311-cp311-linux_x86_64.whl": "9b69f40b34570e3073171dcb231d6dd038092d20a277e501e7da01e6475920de",
+            "mhc-official-runtime-7546767.tar.gz": "6b927f93021961293e12452b4001a479ff1b54cbc1aae0355e73e75a393d4dc0",
+            "cuda-compat-13-1_590.48.01-1_amd64.deb": "066f24c715f5f8f31bb7e8bd0f9ddc93fe78a82d3be55c6f3e9bbe26fa4fd7be",
+            "source.tar": "ff5242cc0ab260e8770a02b02b7908eec4e865e4520b0991ea8ad3861280469d",
+            "gate-data.tar": "e0e94888d697343316e17deca67c4182ad6dd713b477c21c500f795f7f9d9725"
+          },
+          "purpose": "Lookback16K implementation gate",
+          "formal_training": false,
+          "sequence_length": 16384,
+          "chunk_size": 2048,
+          "chunk_attention": "full_causal",
+          "launcher_sha256": "bd35bf3ab959a161a80672f5678b0c8c28e9ec072b6131c3d8463c59d2c25a79"
+        },
+        "test_evaluated": false,
+        "checkpoint_files": {
+          "latest.pt": {
+            "bytes": 503550949,
+            "sha256": "656b89b42c9be287bfb3d7221aaeab2af5a82950983841476f86d421155a2394"
+          },
+          "best.pt": {
+            "bytes": 201347493,
+            "sha256": "12bda3b523680a1db3831882616d2d13b0db7b835b5ccb6e719dc8708aa08913"
+          }
+        }
+      },
+      "config": {
+        "logging_backend": "local",
+        "model": {
+          "variant": "baseline",
+          "depth": 8,
+          "width": 512,
+          "heads": 4,
+          "sequence_length": 16384,
+          "vocab_size": 32768,
+          "streams": 4,
+          "sinkhorn_iterations": 20,
+          "activation_checkpoint": false,
+          "connection_backend": "nvidia",
+          "fused_connection_grad": false,
+          "architecture": "vanilla",
+          "window_pattern": "SSSL",
+          "chunk_size": 2048,
+          "lookback_enabled": true
+        },
+        "protocol": {
+          "steps": 50,
+          "schedule_steps": 305176,
+          "batch_tokens": 32768,
+          "microbatch": 2,
+          "grad_accum": 1,
+          "seed": 42,
+          "attention_backend": "sdpa_cudnn",
+          "matched_backbone_init": true,
+          "evaluate_test": false
+        },
+        "data_manifest": {
+          "complete": true,
+          "logging_backend": "local",
+          "sequence_length": 16384,
+          "dtype": "uint16",
+          "layout": "rows of16385 token ids; x=row[:-1], y=row[1:]",
+          "batch_tokens": 32768,
+          "training_steps": 128,
+          "requested_tokens": 4194304,
+          "training_tokens": 4194304,
+          "files": {
+            "train": {
+              "rows": 256,
+              "tokens": 4194304,
+              "bytes": 8389120,
+              "sha256": "a863dd67ebc38064d58a2f260f48372cb9c80ae70ceb8a7258f957583713e96e",
+              "last_source_state": {
+                "pq_idx": 0,
+                "rg_idx": 4,
+                "epoch": 1
+              }
+            },
+            "dev": {
+              "rows": 8,
+              "tokens": 131072,
+              "bytes": 262160,
+              "sha256": "2219e849a319dafaefe9833a167928dfa7820f5cc2cd32e2cfc890f680d00898",
+              "last_source_state": {
+                "pq_idx": 0,
+                "rg_idx": 1,
+                "epoch": 1
+              }
+            },
+            "test": {
+              "rows": 128,
+              "tokens": 2097152,
+              "bytes": 4194560,
+              "sha256": "f58b64a7fad773101f215ea8100ecdda5f750192943529cfc110568eff2cdeb4",
+              "last_source_state": {
+                "pq_idx": 0,
+                "rg_idx": 2,
+                "epoch": 1
+              }
+            }
+          },
+          "tokenizer": {
+            "dataset": "HuggingFaceFW/fineweb-edu",
+            "config": "sample-10BT",
+            "revision": "87f09149ef4734204d70ed1d046ddc9ca3f2b8f9",
+            "full_dataset_bytes": 28518193415,
+            "full_source_gpt2_tokens": 9972918177,
+            "nanochat_commit": "145da40cdd37b9522aa53d26c0c356e9126458bb",
+            "nanochat_source_sha256": "9a39516fc52effabe6bf9b87fc5fc67f7026a95060861be560d3525257bfb3e6",
+            "files": {
+              "token_bytes.pt": {
+                "bytes": 132649,
+                "sha256": "8e6ed9947610b8b329f0aed7e01bf332359331790e61fc6c0c95dc3cff29bdb4"
+              },
+              "tokenizer.pkl": {
+                "bytes": 412696,
+                "sha256": "8d1a5a03421ca24e7acafd1ef68fe8dbc6326dad903bc65cc726ec0601c577de"
+              }
+            },
+            "train_shards": [
+              "000_00000.parquet"
+            ],
+            "validation_shards": [
+              "013_00000.parquet"
+            ],
+            "tokenizer": "native RustBPE 32768 vocab, first 100M capped characters from training shard",
+            "benchmark": "native base_train d8/D512/2K/SSSL, 300 steps x 32768 model tokens; original source unmodified",
+            "vocab_size": 32768,
+            "max_chars": 100000000,
+            "doc_cap": 10000,
+            "purpose": "Throughput pilot tokenizer; native RustBPE; train shard only",
+            "elapsed_seconds": 5.633999116718769,
+            "run_id": "eqnd6jdz"
+          },
+          "native_commit": "145da40cdd37b9522aa53d26c0c356e9126458bb",
+          "dataset_revision": "87f09149ef4734204d70ed1d046ddc9ca3f2b8f9",
+          "train_shards": "000 only (validation prefix)",
+          "heldout_shard": "013",
+          "first_128_steps_sha256": "a863dd67ebc38064d58a2f260f48372cb9c80ae70ceb8a7258f957583713e96e",
+          "source_read_epochs": [
+            {
+              "batch": 1,
+              "source_state": {
+                "pq_idx": 0,
+                "rg_idx": 1,
+                "epoch": 1
+              }
+            }
+          ],
+          "epoch_note": "Native loader cycles the entire 13-shard training split. Epoch tracks source reads into the document buffer, not exact consumed unique tokens.",
+          "seconds": 5.571401816792786,
+          "validation": "dev first8 rows/131072tokens; test next128 rows/2097152tokens; disjoint packed rows and same heldout shard013; not the old2K dev/test examples"
+        },
+        "source": {
+          "commit": "ff772d50a24645bfafd119a525a3d4d02002b456",
+          "hashes": {
+            "transformer_engine_torch-2.20.2-cp311-cp311-linux_x86_64.whl": "9b69f40b34570e3073171dcb231d6dd038092d20a277e501e7da01e6475920de",
+            "mhc-official-runtime-7546767.tar.gz": "6b927f93021961293e12452b4001a479ff1b54cbc1aae0355e73e75a393d4dc0",
+            "cuda-compat-13-1_590.48.01-1_amd64.deb": "066f24c715f5f8f31bb7e8bd0f9ddc93fe78a82d3be55c6f3e9bbe26fa4fd7be",
+            "source.tar": "ff5242cc0ab260e8770a02b02b7908eec4e865e4520b0991ea8ad3861280469d",
+            "gate-data.tar": "e0e94888d697343316e17deca67c4182ad6dd713b477c21c500f795f7f9d9725"
+          },
+          "purpose": "Lookback16K implementation gate",
+          "formal_training": false,
+          "sequence_length": 16384,
+          "chunk_size": 2048,
+          "chunk_attention": "full_causal",
+          "launcher_sha256": "bd35bf3ab959a161a80672f5678b0c8c28e9ec072b6131c3d8463c59d2c25a79"
+        },
+        "checkpoint_transport": {
+          "upload_interval_seconds": 86400.0,
+          "local_save_every_steps": 500,
+          "method": "exit85 plus scheduler transfer; local save alone is not durable"
+        },
+        "gpu": "NVIDIA H200",
+        "torch": "2.10.0+cu130",
+        "cuda": "13.0",
+        "gpu_capability": [
+          9,
+          0
+        ],
+        "explicit_portability_gate": false,
+        "parameters": 58720256,
+        "residual_mixing": "additive",
+        "applied_sinkhorn_iterations": 0,
+        "optimizer": "native MuonAdamW; connector AdamW at native unembedding LR, no decay",
+        "optimizer_groups": [
+          {
+            "kind": "adamw",
+            "lr": 0.0024494897427831783,
+            "betas": [
+              0.8,
+              0.96
+            ],
+            "eps": 1e-10,
+            "weight_decay": 0.01,
+            "initial_lr": 0.0024494897427831783
+          },
+          {
+            "kind": "adamw",
+            "lr": 0.09185586535436918,
+            "betas": [
+              0.8,
+              0.995
+            ],
+            "eps": 1e-10,
+            "weight_decay": 0.001,
+            "initial_lr": 0.09185586535436918
+          },
+          {
+            "kind": "muon",
+            "lr": 0.005,
+            "momentum": 0.95,
+            "ns_steps": 5,
+            "beta2": 0.9,
+            "weight_decay": 0.18375000000000002,
+            "initial_lr": 0.005
+          },
+          {
+            "kind": "muon",
+            "lr": 0.005,
+            "momentum": 0.95,
+            "ns_steps": 5,
+            "beta2": 0.9,
+            "weight_decay": 0.18375000000000002,
+            "initial_lr": 0.005
+          },
+          {
+            "kind": "muon",
+            "lr": 0.005,
+            "momentum": 0.95,
+            "ns_steps": 5,
+            "beta2": 0.9,
+            "weight_decay": 0.18375000000000002,
+            "initial_lr": 0.005
+          }
+        ],
+        "loss": "full-token full-vocabulary CCE; no gradient filtering",
+        "references": "research/connections/references.json",
+        "compute_estimate": {
+          "estimated_forward_flops": 7147094016000,
+          "estimated_training_flops": 21441282048000,
+          "components_forward": {
+            "backbone_projections": 1649267441664,
+            "vocab_head": 1099511627776,
+            "attention": 4398314946560,
+            "memory_projection": 0,
+            "lookback": 0
+          },
+          "logical_memory_kv_bytes": 0,
+          "logical_previous_hidden_bytes": 0,
+          "accounting": "FMA=2 FLOPs; allowed attention pairs, not masked dense-kernel execution. Backward approximated as2x consumed forward matrix FLOPs. Excludes softmax/norm/activation/optimizer/recomputation and is not measured hardware FLOPs.",
+          "memory_note": "Logical live bank only. Autograd retains earlier versions until backward; this does not imply an equal reduction in training peak VRAM."
+        }
+      }
+    },
+    "lookback": {
+      "summary": {
+        "complete": true,
+        "variant": "lookback",
+        "run_id": "9c2521a9",
+        "steps": 50,
+        "training_tokens": 1638400,
+        "initial_dev_ce": 10.398167610168457,
+        "final_dev_ce": 6.661475658416748,
+        "best_dev_ce": 6.661475658416748,
+        "dev_tokens": 131072,
+        "training_seconds": 16.057080695405602,
+        "elapsed_seconds": 35.26653173007071,
+        "steady_step_seconds": 0.15722532930473487,
+        "gpu": "NVIDIA H200",
+        "peak_allocated_bytes": 10849324544,
+        "peak_reserved_bytes": 11104419840,
+        "source": {
+          "commit": "ff772d50a24645bfafd119a525a3d4d02002b456",
+          "hashes": {
+            "transformer_engine_torch-2.20.2-cp311-cp311-linux_x86_64.whl": "9b69f40b34570e3073171dcb231d6dd038092d20a277e501e7da01e6475920de",
+            "mhc-official-runtime-7546767.tar.gz": "6b927f93021961293e12452b4001a479ff1b54cbc1aae0355e73e75a393d4dc0",
+            "cuda-compat-13-1_590.48.01-1_amd64.deb": "066f24c715f5f8f31bb7e8bd0f9ddc93fe78a82d3be55c6f3e9bbe26fa4fd7be",
+            "source.tar": "ff5242cc0ab260e8770a02b02b7908eec4e865e4520b0991ea8ad3861280469d",
+            "gate-data.tar": "e0e94888d697343316e17deca67c4182ad6dd713b477c21c500f795f7f9d9725"
+          },
+          "purpose": "Lookback16K implementation gate",
+          "formal_training": false,
+          "sequence_length": 16384,
+          "chunk_size": 2048,
+          "chunk_attention": "full_causal",
+          "launcher_sha256": "bd35bf3ab959a161a80672f5678b0c8c28e9ec072b6131c3d8463c59d2c25a79"
+        },
+        "test_evaluated": false,
+        "checkpoint_files": {
+          "latest.pt": {
+            "bytes": 516147917,
+            "sha256": "531a8483a847b840132859869ccc7a3809267957ffe9c378550834f65499f9ab"
+          },
+          "best.pt": {
+            "bytes": 207640705,
+            "sha256": "eb7295fb167f26226dabc4133ade4083b24b350dbf8cf2d04420dc708114d4b3"
+          }
+        }
+      },
+      "config": {
+        "logging_backend": "local",
+        "model": {
+          "variant": "lookback",
+          "depth": 8,
+          "width": 512,
+          "heads": 4,
+          "sequence_length": 16384,
+          "vocab_size": 32768,
+          "streams": 4,
+          "sinkhorn_iterations": 20,
+          "activation_checkpoint": false,
+          "connection_backend": "nvidia",
+          "fused_connection_grad": false,
+          "architecture": "vanilla",
+          "window_pattern": "SSSL",
+          "chunk_size": 2048,
+          "lookback_enabled": true
+        },
+        "protocol": {
+          "steps": 50,
+          "schedule_steps": 305176,
+          "batch_tokens": 32768,
+          "microbatch": 2,
+          "grad_accum": 1,
+          "seed": 42,
+          "attention_backend": "sdpa_cudnn",
+          "matched_backbone_init": true,
+          "evaluate_test": false
+        },
+        "data_manifest": {
+          "complete": true,
+          "logging_backend": "local",
+          "sequence_length": 16384,
+          "dtype": "uint16",
+          "layout": "rows of16385 token ids; x=row[:-1], y=row[1:]",
+          "batch_tokens": 32768,
+          "training_steps": 128,
+          "requested_tokens": 4194304,
+          "training_tokens": 4194304,
+          "files": {
+            "train": {
+              "rows": 256,
+              "tokens": 4194304,
+              "bytes": 8389120,
+              "sha256": "a863dd67ebc38064d58a2f260f48372cb9c80ae70ceb8a7258f957583713e96e",
+              "last_source_state": {
+                "pq_idx": 0,
+                "rg_idx": 4,
+                "epoch": 1
+              }
+            },
+            "dev": {
+              "rows": 8,
+              "tokens": 131072,
+              "bytes": 262160,
+              "sha256": "2219e849a319dafaefe9833a167928dfa7820f5cc2cd32e2cfc890f680d00898",
+              "last_source_state": {
+                "pq_idx": 0,
+                "rg_idx": 1,
+                "epoch": 1
+              }
+            },
+            "test": {
+              "rows": 128,
+              "tokens": 2097152,
+              "bytes": 4194560,
+              "sha256": "f58b64a7fad773101f215ea8100ecdda5f750192943529cfc110568eff2cdeb4",
+              "last_source_state": {
+                "pq_idx": 0,
+                "rg_idx": 2,
+                "epoch": 1
+              }
+            }
+          },
+          "tokenizer": {
+            "dataset": "HuggingFaceFW/fineweb-edu",
+            "config": "sample-10BT",
+            "revision": "87f09149ef4734204d70ed1d046ddc9ca3f2b8f9",
+            "full_dataset_bytes": 28518193415,
+            "full_source_gpt2_tokens": 9972918177,
+            "nanochat_commit": "145da40cdd37b9522aa53d26c0c356e9126458bb",
+            "nanochat_source_sha256": "9a39516fc52effabe6bf9b87fc5fc67f7026a95060861be560d3525257bfb3e6",
+            "files": {
+              "token_bytes.pt": {
+                "bytes": 132649,
+                "sha256": "8e6ed9947610b8b329f0aed7e01bf332359331790e61fc6c0c95dc3cff29bdb4"
+              },
+              "tokenizer.pkl": {
+                "bytes": 412696,
+                "sha256": "8d1a5a03421ca24e7acafd1ef68fe8dbc6326dad903bc65cc726ec0601c577de"
+              }
+            },
+            "train_shards": [
+              "000_00000.parquet"
+            ],
+            "validation_shards": [
+              "013_00000.parquet"
+            ],
+            "tokenizer": "native RustBPE 32768 vocab, first 100M capped characters from training shard",
+            "benchmark": "native base_train d8/D512/2K/SSSL, 300 steps x 32768 model tokens; original source unmodified",
+            "vocab_size": 32768,
+            "max_chars": 100000000,
+            "doc_cap": 10000,
+            "purpose": "Throughput pilot tokenizer; native RustBPE; train shard only",
+            "elapsed_seconds": 5.633999116718769,
+            "run_id": "eqnd6jdz"
+          },
+          "native_commit": "145da40cdd37b9522aa53d26c0c356e9126458bb",
+          "dataset_revision": "87f09149ef4734204d70ed1d046ddc9ca3f2b8f9",
+          "train_shards": "000 only (validation prefix)",
+          "heldout_shard": "013",
+          "first_128_steps_sha256": "a863dd67ebc38064d58a2f260f48372cb9c80ae70ceb8a7258f957583713e96e",
+          "source_read_epochs": [
+            {
+              "batch": 1,
+              "source_state": {
+                "pq_idx": 0,
+                "rg_idx": 1,
+                "epoch": 1
+              }
+            }
+          ],
+          "epoch_note": "Native loader cycles the entire 13-shard training split. Epoch tracks source reads into the document buffer, not exact consumed unique tokens.",
+          "seconds": 5.571401816792786,
+          "validation": "dev first8 rows/131072tokens; test next128 rows/2097152tokens; disjoint packed rows and same heldout shard013; not the old2K dev/test examples"
+        },
+        "source": {
+          "commit": "ff772d50a24645bfafd119a525a3d4d02002b456",
+          "hashes": {
+            "transformer_engine_torch-2.20.2-cp311-cp311-linux_x86_64.whl": "9b69f40b34570e3073171dcb231d6dd038092d20a277e501e7da01e6475920de",
+            "mhc-official-runtime-7546767.tar.gz": "6b927f93021961293e12452b4001a479ff1b54cbc1aae0355e73e75a393d4dc0",
+            "cuda-compat-13-1_590.48.01-1_amd64.deb": "066f24c715f5f8f31bb7e8bd0f9ddc93fe78a82d3be55c6f3e9bbe26fa4fd7be",
+            "source.tar": "ff5242cc0ab260e8770a02b02b7908eec4e865e4520b0991ea8ad3861280469d",
+            "gate-data.tar": "e0e94888d697343316e17deca67c4182ad6dd713b477c21c500f795f7f9d9725"
+          },
+          "purpose": "Lookback16K implementation gate",
+          "formal_training": false,
+          "sequence_length": 16384,
+          "chunk_size": 2048,
+          "chunk_attention": "full_causal",
+          "launcher_sha256": "bd35bf3ab959a161a80672f5678b0c8c28e9ec072b6131c3d8463c59d2c25a79"
+        },
+        "checkpoint_transport": {
+          "upload_interval_seconds": 86400.0,
+          "local_save_every_steps": 500,
+          "method": "exit85 plus scheduler transfer; local save alone is not durable"
+        },
+        "gpu": "NVIDIA H200",
+        "torch": "2.10.0+cu130",
+        "cuda": "13.0",
+        "gpu_capability": [
+          9,
+          0
+        ],
+        "explicit_portability_gate": false,
+        "parameters": 60293120,
+        "residual_mixing": "additive",
+        "applied_sinkhorn_iterations": 0,
+        "optimizer": "native MuonAdamW; connector AdamW at native unembedding LR, no decay",
+        "optimizer_groups": [
+          {
+            "kind": "adamw",
+            "lr": 0.0024494897427831783,
+            "betas": [
+              0.8,
+              0.96
+            ],
+            "eps": 1e-10,
+            "weight_decay": 0.01,
+            "initial_lr": 0.0024494897427831783
+          },
+          {
+            "kind": "adamw",
+            "lr": 0.09185586535436918,
+            "betas": [
+              0.8,
+              0.995
+            ],
+            "eps": 1e-10,
+            "weight_decay": 0.001,
+            "initial_lr": 0.09185586535436918
+          },
+          {
+            "kind": "muon",
+            "lr": 0.005,
+            "momentum": 0.95,
+            "ns_steps": 5,
+            "beta2": 0.9,
+            "weight_decay": 0.18375000000000002,
+            "initial_lr": 0.005
+          },
+          {
+            "kind": "muon",
+            "lr": 0.005,
+            "momentum": 0.95,
+            "ns_steps": 5,
+            "beta2": 0.9,
+            "weight_decay": 0.18375000000000002,
+            "initial_lr": 0.005
+          },
+          {
+            "kind": "muon",
+            "lr": 0.005,
+            "momentum": 0.95,
+            "ns_steps": 5,
+            "beta2": 0.9,
+            "weight_decay": 0.18375000000000002,
+            "initial_lr": 0.005
+          }
+        ],
+        "loss": "full-token full-vocabulary CCE; no gradient filtering",
+        "references": "research/connections/references.json",
+        "compute_estimate": {
+          "estimated_forward_flops": 7391907151872,
+          "estimated_training_flops": 22107001978880,
+          "components_forward": {
+            "backbone_projections": 1649267441664,
+            "vocab_head": 1099511627776,
+            "attention": 4398314946560,
+            "memory_projection": 64424509440,
+            "lookback": 180388626432
+          },
+          "logical_memory_kv_bytes": 67108864,
+          "logical_previous_hidden_bytes": 4194304,
+          "accounting": "FMA=2 FLOPs; allowed attention pairs, not masked dense-kernel execution. Backward approximated as2x consumed forward matrix FLOPs. Excludes softmax/norm/activation/optimizer/recomputation and is not measured hardware FLOPs.",
+          "memory_note": "Logical live bank only. Autograd retains earlier versions until backward; this does not imply an equal reduction in training peak VRAM."
+        }
+      }
+    }
+  },
+  "data_manifest": {
+    "complete": true,
+    "logging_backend": "local",
+    "sequence_length": 16384,
+    "dtype": "uint16",
+    "layout": "rows of16385 token ids; x=row[:-1], y=row[1:]",
+    "batch_tokens": 32768,
+    "training_steps": 128,
+    "requested_tokens": 4194304,
+    "training_tokens": 4194304,
+    "files": {
+      "train": {
+        "rows": 256,
+        "tokens": 4194304,
+        "bytes": 8389120,
+        "sha256": "a863dd67ebc38064d58a2f260f48372cb9c80ae70ceb8a7258f957583713e96e",
+        "last_source_state": {
+          "pq_idx": 0,
+          "rg_idx": 4,
+          "epoch": 1
+        }
+      },
+      "dev": {
+        "rows": 8,
+        "tokens": 131072,
+        "bytes": 262160,
+        "sha256": "2219e849a319dafaefe9833a167928dfa7820f5cc2cd32e2cfc890f680d00898",
+        "last_source_state": {
+          "pq_idx": 0,
+          "rg_idx": 1,
+          "epoch": 1
+        }
+      },
+      "test": {
+        "rows": 128,
+        "tokens": 2097152,
+        "bytes": 4194560,
+        "sha256": "f58b64a7fad773101f215ea8100ecdda5f750192943529cfc110568eff2cdeb4",
+        "last_source_state": {
+          "pq_idx": 0,
+          "rg_idx": 2,
+          "epoch": 1
+        }
+      }
+    },
+    "tokenizer": {
+      "dataset": "HuggingFaceFW/fineweb-edu",
+      "config": "sample-10BT",
+      "revision": "87f09149ef4734204d70ed1d046ddc9ca3f2b8f9",
+      "full_dataset_bytes": 28518193415,
+      "full_source_gpt2_tokens": 9972918177,
+      "nanochat_commit": "145da40cdd37b9522aa53d26c0c356e9126458bb",
+      "nanochat_source_sha256": "9a39516fc52effabe6bf9b87fc5fc67f7026a95060861be560d3525257bfb3e6",
+      "files": {
+        "token_bytes.pt": {
+          "bytes": 132649,
+          "sha256": "8e6ed9947610b8b329f0aed7e01bf332359331790e61fc6c0c95dc3cff29bdb4"
+        },
+        "tokenizer.pkl": {
+          "bytes": 412696,
+          "sha256": "8d1a5a03421ca24e7acafd1ef68fe8dbc6326dad903bc65cc726ec0601c577de"
+        }
+      },
+      "train_shards": [
+        "000_00000.parquet"
+      ],
+      "validation_shards": [
+        "013_00000.parquet"
+      ],
+      "tokenizer": "native RustBPE 32768 vocab, first 100M capped characters from training shard",
+      "benchmark": "native base_train d8/D512/2K/SSSL, 300 steps x 32768 model tokens; original source unmodified",
+      "vocab_size": 32768,
+      "max_chars": 100000000,
+      "doc_cap": 10000,
+      "purpose": "Throughput pilot tokenizer; native RustBPE; train shard only",
+      "elapsed_seconds": 5.633999116718769,
+      "run_id": "eqnd6jdz"
+    },
+    "native_commit": "145da40cdd37b9522aa53d26c0c356e9126458bb",
+    "dataset_revision": "87f09149ef4734204d70ed1d046ddc9ca3f2b8f9",
+    "train_shards": "000 only (validation prefix)",
+    "heldout_shard": "013",
+    "first_128_steps_sha256": "a863dd67ebc38064d58a2f260f48372cb9c80ae70ceb8a7258f957583713e96e",
+    "source_read_epochs": [
+      {
+        "batch": 1,
+        "source_state": {
+          "pq_idx": 0,
+          "rg_idx": 1,
+          "epoch": 1
+        }
+      }
+    ],
+    "epoch_note": "Native loader cycles the entire 13-shard training split. Epoch tracks source reads into the document buffer, not exact consumed unique tokens.",
+    "seconds": 5.571401816792786,
+    "validation": "dev first8 rows/131072tokens; test next128 rows/2097152tokens; disjoint packed rows and same heldout shard013; not the old2K dev/test examples"
+  },
+  "limitations": "Same single GPU timing; analytical FLOPs omit norm/softmax/optimizer. Timing excludes setup/evaluation/checkpoint transfer. No quality conclusion from50-step diagnostic.",
+  "job": "7668053.0",
+  "evidence": {
+    "gradients": {
+      "losses": {
+        "dense": 5.547285556793213,
+        "cce": 5.547286033630371,
+        "compiled": 5.547280788421631,
+        "recomputed": 5.547280788421631
+      },
+      "relative_errors": {
+        "cce_dense": 2.1071372914533704e-05,
+        "compiled_eager": 0.0036682328943622327,
+        "recomputed": 6.471679032136046e-11
+      }
+    },
+    "fp64-oracle": {
+      "loss_error": 0.0,
+      "gradient_relative": 4.84362379495937e-17,
+      "partial_last_chunk": true
+    },
+    "availability": {
+      "first_two_chunks_unchanged": true,
+      "later_gradient_to_lookback": 0.819631761969333,
+      "full_cross_chunk_autograd": true
+    },
+    "cost": {
+      "lookback": {
+        "estimated_forward_flops": 7391907151872,
+        "estimated_training_flops": 22107001978880,
+        "components_forward": {
+          "backbone_projections": 1649267441664,
+          "vocab_head": 1099511627776,
+          "attention": 4398314946560,
+          "memory_projection": 64424509440,
+          "lookback": 180388626432
+        },
+        "logical_memory_kv_bytes": 67108864,
+        "logical_previous_hidden_bytes": 4194304,
+        "accounting": "FMA=2 FLOPs; allowed attention pairs, not masked dense-kernel execution. Backward approximated as2x consumed forward matrix FLOPs. Excludes softmax/norm/activation/optimizer/recomputation and is not measured hardware FLOPs.",
+        "memory_note": "Logical live bank only. Autograd retains earlier versions until backward; this does not imply an equal reduction in training peak VRAM."
+      },
+      "baseline": {
+        "estimated_forward_flops": 7147094016000,
+        "estimated_training_flops": 21441282048000,
+        "components_forward": {
+          "backbone_projections": 1649267441664,
+          "vocab_head": 1099511627776,
+          "attention": 4398314946560,
+          "memory_projection": 0,
+          "lookback": 0
+        },
+        "logical_memory_kv_bytes": 0,
+        "logical_previous_hidden_bytes": 0,
+        "accounting": "FMA=2 FLOPs; allowed attention pairs, not masked dense-kernel execution. Backward approximated as2x consumed forward matrix FLOPs. Excludes softmax/norm/activation/optimizer/recomputation and is not measured hardware FLOPs.",
+        "memory_note": "Logical live bank only. Autograd retains earlier versions until backward; this does not imply an equal reduction in training peak VRAM."
+      }
+    },
+    "state": {
+      "chunks": 4,
+      "revisions": 3,
+      "same_bank_all_layers": true,
+      "functional_replacement": true
+    },
+    "production-causality": {
+      "sequence_length": 16384,
+      "chunk_size": 2048,
+      "depth": 8,
+      "passed": true
+    }
+  }
+}
