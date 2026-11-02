@@ -1,0 +1,30 @@
+{
+  "queue": [],
+  "history": [
+    {
+      "ClusterId": 7675499,
+      "ExitCode": 143,
+      "JobStatus": 3,
+      "NumJobStarts": 2,
+      "ProcId": 0
+    }
+  ],
+  "baseline_untouched": true,
+  "wandb_deleted": false,
+  "durable_step": 7039,
+  "durable_tokens": 230653952,
+  "retained_archives": [
+    {
+      "source": "/var/lib/condor/spool/5499/0/cluster7675499.proc0.subproc0/checkpoints.tar",
+      "target": "/home/yzhong239/lookback-final-hidden-10b-20261102/stop-shared-kv-20261102/last-durable-checkpoints.tar",
+      "sha256": "3efd2f26fd7d486d6705efcfa9752aba689cb6b60290e82af625d6620b776000",
+      "bytes": 704911360
+    },
+    {
+      "source": "/var/lib/condor/spool/5499/0/cluster7675499.proc0.subproc0/results.tar",
+      "target": "/home/yzhong239/lookback-final-hidden-10b-20261102/stop-shared-kv-20261102/last-durable-results.tar",
+      "sha256": "0bec9d556264e1d1695371159b3992e88ce0ff6f68cffdce634ea09a75d6f1bb",
+      "bytes": 3450880
+    }
+  ]
+}

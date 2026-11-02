@@ -1,19 +1,20 @@
 """One retrospective rerun per boundary, reusing the original Transformer.
 
 The preceding chunk's original final block output is the bottom-layer input
-for its rerun. Its state contains ordinary per-layer keys/values. Replacements
-are functional and available only after the successor's original predictions
-have been computed. No new learned tensors, input norm or gradient detach.
+for its rerun. Every completed chunk exposes one shared K/V projection of its
+final hidden to all layers. Local self-attention remains inside every pass.
+Replacements are functional and available only after successor predictions.
 """
 from dataclasses import dataclass, replace
 import math
 
 import torch
+from torch import nn
 from torch.nn import functional as F
 from torch.utils.checkpoint import checkpoint
 
 from nanochat.connection_model import ConnectionModel
-from nanochat.gpt import apply_rotary_emb, norm
+from nanochat.gpt import Linear, apply_rotary_emb, norm
 
 
 def memory_causal_mask(length, memory_length, device):
@@ -36,8 +37,9 @@ def transformer_chunk(block, x, memory_k, memory_v, cos, sin, mask):
         all_v.transpose(1,2),attn_mask=mask,is_causal=False).transpose(1,2).contiguous()
     x=x+block.attn.c_proj(attended.reshape(b,t,d))
     x=x+block.mlp(norm(x))
-    # Ordinary per-layer cache: K/V of the block's INPUT, exactly as vanilla.
-    return x,k,v
+    # Local K/V participate in the SAME softmax as shared history. They are
+    # transient activations; only a chunk's final-hidden projection is cached.
+    return x
 
 
 @dataclass(frozen=True)
@@ -53,7 +55,24 @@ class ChunkRecomputeModel(ConnectionModel):
     def __init__(self, config):
         super().__init__(replace(config,variant='baseline'))
         self.config=config
-        self.compiled_chunk=None
+        # Preserve every vanilla parameter and the caller's RNG stream exactly.
+        with torch.random.fork_rng(devices=[]):
+            self.memory_k=Linear(config.width,config.width,bias=False)
+            self.memory_v=Linear(config.width,config.width,bias=False)
+            for p in self.memory_parameters():
+                nn.init.uniform_(p,-math.sqrt(3/config.width),math.sqrt(3/config.width))
+        self.compiled_chunk=self.compiled_memory=None
+
+    def memory_parameters(self):
+        yield self.memory_k.weight
+        yield self.memory_v.weight
+
+    def project_memory(self, hidden, cos, sin):
+        """One shared projection pair for all chunks, layers and pass types."""
+        h=norm(hidden);shape=(*h.shape[:2],self.config.heads,self.config.width//self.config.heads)
+        k=1.2*norm(apply_rotary_emb(self.memory_k(h).view(shape),cos,sin))
+        v=self.memory_v(h).view(shape)
+        return k,v
 
     def prepare(self, device='cuda', dtype=torch.bfloat16, compile_blocks=False):
         self.to(device);self.wte.to(dtype=dtype)
@@ -65,6 +84,7 @@ class ChunkRecomputeModel(ConnectionModel):
             compiler_config.recompile_limit=max(compiler_config.recompile_limit,limit)
             compiler_config.accumulated_recompile_limit=max(compiler_config.accumulated_recompile_limit,2*limit)
             self.compiled_chunk=torch.compile(transformer_chunk,dynamic=False,fullgraph=True)
+            self.compiled_memory=torch.compile(self.project_memory,dynamic=False,fullgraph=True)
         return self
 
     def process_chunk(self, hidden, start, history):
@@ -73,20 +93,22 @@ class ChunkRecomputeModel(ConnectionModel):
         cos,sin=self.cos[:,start:start+t],self.sin[:,start:start+t]
         memory_length=sum(chunk.length for chunk in history)
         mask=memory_causal_mask(t,memory_length,x.device)
-        kv=[];step=self.compiled_chunk or transformer_chunk
-        for layer,block in enumerate(self.blocks):
-            if history:
-                memory_k=torch.cat([chunk.kv[layer][0] for chunk in history],dim=1)
-                memory_v=torch.cat([chunk.kv[layer][1] for chunk in history],dim=1)
-            else:
-                shape=(b,0,self.config.heads,d//self.config.heads)
-                memory_k,memory_v=x.new_empty(shape),x.new_empty(shape)
+        # Concatenate once per stack invocation; every layer reads these exact
+        # shared final-hidden K/V tensors. No per-layer historical cache exists.
+        if history:
+            memory_k=torch.cat([chunk.kv[0] for chunk in history],dim=1)
+            memory_v=torch.cat([chunk.kv[1] for chunk in history],dim=1)
+        else:
+            shape=(b,0,self.config.heads,d//self.config.heads)
+            memory_k,memory_v=x.new_empty(shape),x.new_empty(shape)
+        step=self.compiled_chunk or transformer_chunk
+        for block in self.blocks:
             if self.config.activation_checkpoint and self.training and torch.is_grad_enabled():
-                x,k,v=checkpoint(step,block,x,memory_k,memory_v,cos,sin,mask,use_reentrant=False)
+                x=checkpoint(step,block,x,memory_k,memory_v,cos,sin,mask,use_reentrant=False)
             else:
-                x,k,v=step(block,x,memory_k,memory_v,cos,sin,mask)
-            kv.append((k,v))
-        return x,ChunkState(start,t,tuple(kv),final_hidden=x)
+                x=step(block,x,memory_k,memory_v,cos,sin,mask)
+        kv=(self.compiled_memory or self.project_memory)(x,cos,sin)
+        return x,ChunkState(start,t,kv,final_hidden=x)
 
     def advance(self, embeddings, start, end, bank):
         original,current=self.process_chunk(embeddings[:,start:end],start,bank)

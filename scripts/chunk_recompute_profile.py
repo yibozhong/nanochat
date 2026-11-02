@@ -24,7 +24,7 @@ MIN_GPU_BYTES = 22000 * 1024**2
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument('--variant', choices=('baseline', 'lookback_recompute'), required=True)
+    p.add_argument('--variant', choices=('baseline', 'memory_only', 'lookback_recompute'), required=True)
     p.add_argument('--sequence-length', type=int, choices=(16384,), default=16384)
     p.add_argument('--microbatch', type=int, required=True)
     p.add_argument('--repetition', type=int, default=0)
@@ -40,7 +40,8 @@ def main():
     configure_attention('sdpa_cudnn')
     seed_all(42)
     props = torch.cuda.get_device_properties(0)
-    cfg = ConnectionConfig(variant=a.variant, sequence_length=a.sequence_length)
+    cfg = ConnectionConfig(variant='lookback_recompute' if a.variant=='memory_only' else a.variant,
+        recompute_previous=a.variant!='memory_only',sequence_length=a.sequence_length)
     record = dict(complete=False, variant=a.variant, sequence_length=a.sequence_length,
         microbatch=a.microbatch, grad_accum=rows//a.microbatch, batch_tokens=BATCH_TOKENS,
         repetition=a.repetition, probe=a.probe, model=asdict(cfg), logging_backend='local',

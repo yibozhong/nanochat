@@ -20,7 +20,7 @@ def main():
         '--junitxml=results/recompute-tests.xml'],root/'tests.log')
     suites=ET.parse(root/'recompute-tests.xml').getroot().findall('testsuite')
     checks={k:sum(int(s.attrib.get(k,0)) for s in suites) for k in ('tests','failures','errors','skipped')}
-    assert checks==dict(tests=16,failures=0,errors=0,skipped=0),checks
+    assert checks==dict(tests=18,failures=0,errors=0,skipped=0),checks
     probes=[];trials=[];micro=2
     def profile(variant,micro,repetition=0,probe=False):
         name=f'{variant}-mb{micro}-r{repetition}'+('-probe' if probe else '')
@@ -31,12 +31,12 @@ def main():
         execute(cmd,root/(name+'.log'))
         return json.loads(out.read_text())
     while micro:
-        pair=[profile(v,micro,probe=True) for v in ('baseline','lookback_recompute')]
+        pair=[profile(v,micro,probe=True) for v in ('baseline','memory_only','lookback_recompute')]
         probes.extend(pair)
         if all(p['status']=='fits' for p in pair):break
         micro//=2
     assert micro,'Neither common microbatch satisfies22GB budget; architecture unchanged, no automatic launch'
-    for repeat,order in enumerate((('baseline','lookback_recompute'),('lookback_recompute','baseline'))):
+    for repeat,order in enumerate((('baseline','memory_only','lookback_recompute'),('lookback_recompute','memory_only','baseline'))):
         for variant in order:
             trial=profile(variant,micro,repeat)
             assert trial['status']=='fits' and trial['causality_passed']
@@ -44,7 +44,7 @@ def main():
             trials.append(trial)
     assert len({x['gpu_uuid'] for x in probes+trials})==1
     summary={}
-    for variant in ('baseline','lookback_recompute'):
+    for variant in ('baseline','memory_only','lookback_recompute'):
         selected=[x for x in trials if x['variant']==variant]
         times=[v for x in selected for v in x['step_seconds']]
         summary[variant]=dict(mean_seconds=statistics.mean(times),tokens_per_second=32768/statistics.mean(times),
@@ -80,7 +80,9 @@ def main():
     assert not list(root.rglob('*.wandb')) and not (root/'wandb').exists() and not list(root.rglob('*.pt'))
     result=dict(complete=True,source=source,checks=checks,logging_backend='local',
         selected_microbatch=micro,grad_accum=2//micro,sequence_length=16384,chunk_size=2048,
-        chunk_attention='full_causal',recompute_input='final_hidden',shared_kv=False, per_layer_kv=True, new_learned_parameters=0,probes=probes,trials=trials,summary=summary,resumes=resumes,
+        chunk_attention='full_causal',recompute_input='final_hidden',recompute_memory='shared_final_hidden',
+        shared_kv=True,per_layer_kv=False,new_learned_parameters=524288,local_self_attention=True,
+        probes=probes,trials=trials,summary=summary,resumes=resumes,
         formal_training=False, data_manifest=json.loads(Path('../data/manifest.json').read_text()),
         limitations='Same single GPU timing; analytical FLOPs omit norm/softmax/optimizer. Timing excludes setup/evaluation/checkpoint transfer. No quality conclusion from50-step diagnostic.')
     (root/'recompute-gate.json').write_text(json.dumps(result,indent=2)+'\n')
