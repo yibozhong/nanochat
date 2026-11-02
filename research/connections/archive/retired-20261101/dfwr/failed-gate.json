@@ -1,0 +1,14 @@
+{
+  "gate": "7662010.0",
+  "source": "832dcea938e4782bf401fedf955d34f8ec3134ba",
+  "exit_code": 1,
+  "checks": 13,
+  "passed": 12,
+  "failure": "test_compiled_checkpointed_gradients",
+  "global_relative_error": 0.2708109156708465,
+  "threshold": 0.03,
+  "profile_executed": false,
+  "resume_executed": false,
+  "formal_held": true,
+  "diagnostic": "7666445.0"
+}

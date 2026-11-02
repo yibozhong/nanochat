@@ -1,0 +1,23 @@
+{
+  "nonlinear_lmhead": {
+    "steps": 305176,
+    "training_tokens": 10000007168,
+    "final_dev_ce": 3.222939670085907,
+    "final_test_ce": 3.2025113999843597,
+    "best_selected_test_ce": 3.2025113962590694,
+    "gpu": "NVIDIA H100 80GB HBM3",
+    "wandb_verified": true,
+    "checkpoint_archive": "/home/yzhong239/nonlinear-lmhead-10b-20261101/results/nonlinear_lmhead-7648727.0-checkpoints.tar"
+  },
+  "nonlinear_residual_lmhead": {
+    "steps": 305176,
+    "training_tokens": 10000007168,
+    "final_dev_ce": 3.198412597179413,
+    "final_test_ce": 3.17577913030982,
+    "best_selected_test_ce": 3.1757791191339493,
+    "gpu": "NVIDIA H200",
+    "wandb_verified": true,
+    "checkpoint_archive": "/home/yzhong239/nonlinear-lmhead-10b-20261101/results/nonlinear_residual_lmhead-7648728.0-checkpoints.tar"
+  },
+  "linear_vanilla_reference_test_ce": 3.1600228808820248
+}

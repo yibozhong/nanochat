@@ -25,20 +25,8 @@ from nanochat.connection_experiment import configure_attention, match_vanilla_in
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument('--variant', choices=('baseline','mhc','mhc_no_sinkhorn','dfwr'), required=True)
-    p.add_argument('--fw-bottleneck',type=int,default=32)
-    p.add_argument('--fw-inner-lr',type=float,default=.01)
-    p.add_argument('--fw-momentum',type=float,default=.95)
-    p.add_argument('--fw-ns-steps',type=int,default=5)
-    p.add_argument('--fw-ns-eps',type=float,default=1e-7)
-    p.add_argument('--fw-ns-bf16',action=argparse.BooleanOptionalAction,default=False)
-    p.add_argument('--fw-learnable-lr',action=argparse.BooleanOptionalAction,default=True)
+    p.add_argument('--variant', choices=('baseline','mhc','mhc_no_sinkhorn'), required=True)
     p.add_argument('--architecture', choices=('vanilla', 'native'), default='vanilla')
-    p.add_argument('--readout', choices=('collapse', 'vocab_partition', 'channel_partition', 'dense_expanded'), default='collapse')
-    p.add_argument('--lm-head-transform', choices=('linear', 'nonlinear_lmhead', 'nonlinear_residual_lmhead'), default='linear')
-    p.add_argument('--partition-seed', type=int, default=20261031)
-    p.add_argument('--partition-mixing', choices=('none', 'mhc', 'orthogonal'), default='none')
-    p.add_argument('--inspect-stream-mixing', action='store_true', help='Fixed-dev stream/matrix diagnostics at validation steps')
     p.add_argument('--window-pattern', default='SSSL', help='Native backbone only; vanilla always uses full attention')
     p.add_argument('--formal-training', action='store_true', help='Explicitly enable W&B for a formal training run')
     p.add_argument('--wandb-group', default='mhc-official-kernels-20261030')
@@ -74,11 +62,6 @@ def main():
     configure_attention(a.attention_backend)
     seed_all(a.seed)
     c=ConnectionConfig(variant=a.variant,streams=a.streams,sinkhorn_iterations=a.sinkhorn_iterations,
-                       readout=a.readout, partition_seed=a.partition_seed, partition_mixing=a.partition_mixing,
-                       lm_head_transform=a.lm_head_transform,
-                       fw_bottleneck=a.fw_bottleneck,fw_inner_lr=a.fw_inner_lr,fw_momentum=a.fw_momentum,
-                       fw_ns_steps=a.fw_ns_steps,fw_ns_eps=a.fw_ns_eps,fw_ns_bf16=a.fw_ns_bf16,
-                       fw_learnable_lr=a.fw_learnable_lr,
                        architecture=a.architecture, window_pattern=a.window_pattern,
                        activation_checkpoint=a.activation_checkpoint,
                        connection_backend=a.connection_backend, fused_connection_grad=a.fused_connection_grad)
@@ -126,27 +109,20 @@ def main():
         gpu_capability=list(torch.cuda.get_device_capability()),
         explicit_portability_gate=os.environ.get('NANOCHAT_MHC_TEST_PORTABILITY')=='1',
         parameters=sum(p.numel() for p in model.parameters()),
-        residual_mixing=('depth_fast_weight_no_residual' if a.variant=='dfwr' else 'sinkhorn' if a.variant=='mhc' else
+        residual_mixing=('sinkhorn' if a.variant=='mhc' else
                          'unconstrained_raw' if a.variant=='mhc_no_sinkhorn' else
                          'additive'),
         applied_sinkhorn_iterations=c.sinkhorn_iterations if a.variant=='mhc' else 0,
-        optimizer=('native MuonAdamW; shared FW initial matrices and Q/K use Muon; log inner rates use unembedding AdamW without decay'
-                   if a.variant=='dfwr' else 'native MuonAdamW; gate/up use existing Muon group, W_vocab uses original unembedding AdamW'
-                   if a.lm_head_transform!='linear' else
-                   'native MuonAdamW; connector AdamW at native unembedding LR, no decay'),
+        optimizer='native MuonAdamW; connector AdamW at native unembedding LR, no decay',
         optimizer_groups=initial_groups,
-        loss=('partitioned CCE/LSE combined into ONE global softmax; no gradient filtering'
-              if a.readout in ('vocab_partition', 'channel_partition') else 'full-token full-vocabulary CCE; no gradient filtering'),
+        loss='full-token full-vocabulary CCE; no gradient filtering',
         references='research/connections/references.json')
-    mixing_label=f'-mix-{a.partition_mixing}' if a.readout=='vocab_partition' else ''
-    head_label=f'-{a.lm_head_transform}' if a.lm_head_transform!='linear' else ''
-    fw_label=f'-r{a.fw_bottleneck}' if a.variant=='dfwr' else ''
     kwargs=dict(project='nanochat',entity='yibozhong657-none',group=a.wandb_group,
                 job_type='pretrain' if a.formal_training else 'diagnostic',
-                name=f'{a.architecture}-{a.variant}{fw_label}-{a.readout}{mixing_label}{head_label}-{a.steps}steps',id=run_id,resume='allow',config=config)
+                name=f'{a.architecture}-{a.variant}-{a.steps}steps',id=run_id,resume='allow',config=config)
     run=training_run(formal_training=a.formal_training, local_dir=out/"diagnostics", **kwargs)
     run.define_metric('tokens')
-    for metric in ('train/*','dev/*','perf/*','stream/*','mix/*'):
+    for metric in ('train/*','dev/*','perf/*'):
         run.define_metric(metric,step_metric='tokens')
     json_write(out/'config.json',config)
     stop=False;begin=time.perf_counter()
@@ -165,19 +141,6 @@ def main():
     def save_best(dev):
         atomic_save(dict(model=model.state_dict(),config=asdict(c),protocol=protocol,source=source,
             run_id=run_id,step=step,dev_ce=dev,data_manifest=data.manifest),ckpt/'best.pt')
-    def inspect_mixing():
-        from nanochat.stream_mixing_diagnostics import inspect_stream_mixing
-        diagnostic_ids=torch.tensor(data.arrays['dev'][:2,:-1].copy(),device='cuda',dtype=torch.long)
-        value=inspect_stream_mixing(model,diagnostic_ids)
-        with (out/'stream-mixing.jsonl').open('a') as handle:
-            handle.write(json.dumps(dict(step=step,training_tokens=step*32768,**value))+'\n')
-        run.log(dict(step=step,tokens=step*32768,**{
-            'stream/before_difference_fraction':value['before']['stream_difference_energy_fraction'],
-            'stream/after_difference_fraction':value['after']['stream_difference_energy_fraction'],
-            'mix/difference_energy_retention':value['stream_difference_energy_retention'],
-            'mix/minimum_singular_value':value['minimum_singular_value']['0.0'],
-            'mix/median_condition_number':value['condition_number']['0.5'],
-            'mix/orthogonality_max_error':value['orthogonality_max_error']}))
     try:
         torch.cuda.reset_peak_memory_stats()
         dev,dev_tokens=evaluate(model,data,microbatch=a.microbatch)
@@ -185,7 +148,6 @@ def main():
         if step==0:
             best=dev;save_best(dev);save()
         run.log(dict(step=step,tokens=step*32768,**{'dev/ce':dev}))
-        if a.inspect_stream_mixing and c.readout!='collapse':inspect_mixing()
         durations=[]
         with (out/'steps.jsonl').open('a',buffering=1) as log:
             while step<a.steps:
@@ -205,7 +167,6 @@ def main():
                     if dev<best:
                         best=dev;save_best(dev)
                     run.log(dict(step=step,tokens=step*32768,**{'dev/ce':dev,'dev/tokens':dev_tokens}))
-                    if a.inspect_stream_mixing and c.readout!='collapse':inspect_mixing()
                 if step==50 or step%500==0 or step==a.steps or stop:save()
                 if step<a.steps and (stop or time.perf_counter()-begin>=a.segment_seconds
                                       or a.segment_steps and step-start_step>=a.segment_steps):
@@ -213,10 +174,6 @@ def main():
                     run.finish();return 85
         save()
         test_result={}
-        if c.readout != 'collapse':
-            from nanochat.stream_mixing_diagnostics import inspect_stream_mixing
-            diagnostic_ids=torch.tensor(data.arrays['dev'][:2,:-1].copy(),device='cuda',dtype=torch.long)
-            test_result['final_stream_mixing']=inspect_stream_mixing(model,diagnostic_ids)
         if a.evaluate_test:
             final_test,test_tokens=evaluate(model,data,'test',microbatch=a.microbatch)
             selected=torch.load(ckpt/'best.pt',map_location='cpu',weights_only=False)
@@ -224,7 +181,7 @@ def main():
             model.load_state_dict(selected['model'])
             best_test,best_test_tokens=evaluate(model,data,'test',microbatch=a.microbatch)
             assert best_test_tokens==test_tokens
-            test_result.update(final_test_ce=final_test,best_selected_test_ce=best_test,
+            test_result=dict(final_test_ce=final_test,best_selected_test_ce=best_test,
                 best_dev_step=selected['step'],test_tokens=test_tokens)
         checkpoint_files={}
         for name in ('latest.pt','best.pt'):
@@ -232,7 +189,7 @@ def main():
             with path.open('rb') as handle:
                 while chunk:=handle.read(8*1024*1024):digest.update(chunk)
             checkpoint_files[name]=dict(bytes=path.stat().st_size,sha256=digest.hexdigest())
-        result=dict(complete=True,variant=a.variant,lm_head_transform=a.lm_head_transform,run_id=run_id,steps=step,training_tokens=step*32768,
+        result=dict(complete=True,variant=a.variant,run_id=run_id,steps=step,training_tokens=step*32768,
             initial_dev_ce=initial_dev,final_dev_ce=dev,best_dev_ce=best,dev_tokens=dev_tokens,
             training_seconds=training_seconds,elapsed_seconds=prior_elapsed+time.perf_counter()-begin,
             steady_step_seconds=sum(durations[10:])/len(durations[10:]) if len(durations)>10 else None,

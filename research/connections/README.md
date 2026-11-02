@@ -1,5 +1,28 @@
 # Official mHC kernels in nanochat
 
+## Supported configurations after cleanup (2026-11-01)
+
+The active model and training code is restored byte-for-byte to `d7c3036`,
+the verified native/vanilla/NVIDIA mHC implementation before the experimental
+readouts. Choose `--architecture native|vanilla` and
+`--variant baseline|mhc|mhc_no_sinkhorn`. Native retains nanochat's SSSL pattern
+and native additions; vanilla uses full attention without those additions.
+Both use the ordinary linear vocabulary head. The complete NVIDIA backend,
+no-Sinkhorn ablation, formal-only W&B logging, and checkpoint/resume remain.
+
+DFWR, nonlinear SwiGLU heads, vocabulary/channel partitioning, expanded heads,
+and final stream mixers have been removed from the model, CLI, tests, and
+submission entrypoints. Historical reports and protocols are in
+[the retired research archive](archive/retired-20261101/README.md); they are not
+current configurations. Completed vanilla/mHC 10B controls are recorded in
+[pretrain results](pretrain/results.json). Native baseline completed 10B; its
+mHC/no-Sinkhorn counterparts were stopped early and are not final 10B results.
+
+Shared data preparation assets now live in
+`/home/yzhong239/datasets/fineweb-edu-10bt/prepare-assets`, independently of the
+removed EBT workspace. Existing FineWeb data/cache paths and runtime images stay
+valid. The cleanup starts no new training or profiling and creates no W&B runs.
+
 ## Scheduling and checkpoint transport defaults (2026-10-31)
 
 New jobs allow both the public GPU Lab and research-group backfill
@@ -573,12 +596,9 @@ fixed-gradient optimizer update were verified exactly. This does not claim
 bitwise equality of independent floating-point backward trajectories.
 The parent and both training-smoke W&B runs are finished and API-verified.
 
-Formal training has **not** been submitted: the user's reference to "10B"
-is awaiting clarification between the sample-10BT dataset with the prior
-1B-token training budget, and 10B training tokens per model. The submission
-workflow requires the user budget, data readiness, and both verified gates;
-it then submits the two independent single-GPU jobs without another approval.
-The short gate is not a quality comparison or formal pretraining result.
+The subsequent formal vanilla and mHC runs each completed 10B training tokens;
+see [the completed comparison](pretrain/results.json). The short restart gate
+reported above establishes recovery correctness, not language-model quality.
 
 - [Restart results](pretrain/gate-results.json), [planned protocol](pretrain/protocol.json).
 - [W&B restart gate](https://wandb.ai/yibozhong657-none/nanochat/runs/f4830805).

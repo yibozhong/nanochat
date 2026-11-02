@@ -9,7 +9,7 @@ import sys
 
 ROOT=Path(sys.argv[1]).resolve()
 REPO=Path(__file__).resolve().parents[3]
-OLD=Path('/home/yzhong239/nanochat-ebt')
+ASSETS=Path('/home/yzhong239/datasets/fineweb-edu-10bt/prepare-assets')
 
 
 def command(args,cwd=ROOT):
@@ -27,8 +27,8 @@ def main():
         assert not json.loads(command(['condor_q','yzhong239','-constraint','MHCDataKey == "mhc-10b-20261030"','-json']) or '[]')
         bundle=ROOT/'data-bundles';bundle.mkdir(exist_ok=True)
         for name in ('nanochat-145da40.tar','tokenizer.tar'):
-            shutil.copy2(OLD/'bundles'/name,bundle/name)
-        shutil.copy2(OLD/'dataset-manifest.json',bundle/'dataset-manifest.json')
+            shutil.copy2(ASSETS/name,bundle/name)
+        shutil.copy2(ASSETS/'dataset-manifest.json',bundle/'dataset-manifest.json')
         for name in ('prepare_data.py','prepare_data.sh'):
             shutil.copy2(REPO/'research/connections/pretrain'/name,bundle/name)
         hashes={p.name:hashlib.sha256(p.read_bytes()).hexdigest() for p in bundle.iterdir() if p.name!='prepare-inputs.sha256'}

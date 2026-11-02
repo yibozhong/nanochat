@@ -1,0 +1,123 @@
+{
+  "complete": true,
+  "steps": 305176,
+  "training_tokens_per_run": 10000007168,
+  "trials": {
+    "nonlinear_lmhead": {
+      "complete": true,
+      "variant": "baseline",
+      "lm_head_transform": "nonlinear_lmhead",
+      "run_id": "82d9528c",
+      "steps": 305176,
+      "training_tokens": 10000007168,
+      "initial_dev_ce": 10.397509574890137,
+      "final_dev_ce": 3.222939670085907,
+      "best_dev_ce": 3.222939670085907,
+      "dev_tokens": 131072,
+      "training_seconds": 19902.54683147557,
+      "elapsed_seconds": 23985.07608481869,
+      "steady_step_seconds": 0.06541122674291559,
+      "gpu": "NVIDIA H100 80GB HBM3",
+      "peak_allocated_bytes": 5876840960,
+      "peak_reserved_bytes": 6085935104,
+      "source": {
+        "commit": "25333e82ca15ec3beb604efc062d4a698c84f9f7",
+        "hashes": {
+          "mhc-official-runtime-7546767.tar.gz": "6b927f93021961293e12452b4001a479ff1b54cbc1aae0355e73e75a393d4dc0",
+          "cuda-compat-13-1_590.48.01-1_amd64.deb": "066f24c715f5f8f31bb7e8bd0f9ddc93fe78a82d3be55c6f3e9bbe26fa4fd7be",
+          "transformer_engine_torch-2.20.2-cp311-cp311-linux_x86_64.whl": "9b69f40b34570e3073171dcb231d6dd038092d20a277e501e7da01e6475920de",
+          "source.tar": "9a3ed65cee2ef67af3c2a026328d4e322b0b048bfcafa491eb9f17c51ea32291"
+        },
+        "steps": 305176,
+        "training_tokens": 10000007168,
+        "purpose": "User-authorized nonlinear and residual nonlinear LM-head10B experiments",
+        "data_uri": "osdf:///chtc/staging/y/yzhong239/nanochat-mhc-10b-data-7560536.tar",
+        "data_split_sha256": {
+          "train": "85ed8668da74daba482f76eee8773748c8e56d38c2cd1ce90120d27d391b2721",
+          "dev": "bd67b90b4386ba6428992864712f56eb10527678ed8b3664ed5f63c1643458a4",
+          "test": "e7d24b6a89155ebc7123afe68bd2c58aeaf159b5087dbdf28e090ce09f293d09"
+        },
+        "data_archive_sha256": "27a247cded8a77f4ef9f37cd19f55ce41df4be937583cc39d15c120ea9fb0702",
+        "gate_data_uri": "osdf:///chtc/staging/y/yzhong239/nanochat-ebt-20261029/data-7444406.tar",
+        "gate_data_archive_sha256": "44ea6ce7f62efda533ef89664da9d399e9361102ae3138229e4b78a7d331c239",
+        "launcher_sha256": "1b96784f67fe81f72d939e48706254f3b863382045b6009dd5d538990ade8bf0",
+        "gate_launcher_sha256": "292cb48630cc12784f54d1c57243cf1cbefc7277e02c2417a620cbc02f0a08c0"
+      },
+      "test_evaluated": true,
+      "checkpoint_files": {
+        "latest.pt": {
+          "bytes": 507750813,
+          "sha256": "d398c6392f4f8f1c8ac8f61657ab6d8f337a13b60862628b1a480188d3db110f"
+        },
+        "best.pt": {
+          "bytes": 203446041,
+          "sha256": "e620b3d423a6cf2b446231e48042715a8cb00013772b565f052669f675e6d398"
+        }
+      },
+      "final_test_ce": 3.2025113999843597,
+      "best_selected_test_ce": 3.2025113962590694,
+      "best_dev_step": 305176,
+      "test_tokens": 2097152,
+      "wandb_verified": true,
+      "checkpoint_archive": "/home/yzhong239/nonlinear-lmhead-10b-20261101/results/nonlinear_lmhead-7648727.0-checkpoints.tar"
+    },
+    "nonlinear_residual_lmhead": {
+      "complete": true,
+      "variant": "baseline",
+      "lm_head_transform": "nonlinear_residual_lmhead",
+      "run_id": "96172e10",
+      "steps": 305176,
+      "training_tokens": 10000007168,
+      "initial_dev_ce": 10.398312330245972,
+      "final_dev_ce": 3.198412597179413,
+      "best_dev_ce": 3.198412597179413,
+      "dev_tokens": 131072,
+      "training_seconds": 18625.211996326223,
+      "elapsed_seconds": 23153.015406245366,
+      "steady_step_seconds": 0.06156924308578032,
+      "gpu": "NVIDIA H200",
+      "peak_allocated_bytes": 5910526464,
+      "peak_reserved_bytes": 5926551552,
+      "source": {
+        "commit": "25333e82ca15ec3beb604efc062d4a698c84f9f7",
+        "hashes": {
+          "mhc-official-runtime-7546767.tar.gz": "6b927f93021961293e12452b4001a479ff1b54cbc1aae0355e73e75a393d4dc0",
+          "cuda-compat-13-1_590.48.01-1_amd64.deb": "066f24c715f5f8f31bb7e8bd0f9ddc93fe78a82d3be55c6f3e9bbe26fa4fd7be",
+          "transformer_engine_torch-2.20.2-cp311-cp311-linux_x86_64.whl": "9b69f40b34570e3073171dcb231d6dd038092d20a277e501e7da01e6475920de",
+          "source.tar": "9a3ed65cee2ef67af3c2a026328d4e322b0b048bfcafa491eb9f17c51ea32291"
+        },
+        "steps": 305176,
+        "training_tokens": 10000007168,
+        "purpose": "User-authorized nonlinear and residual nonlinear LM-head10B experiments",
+        "data_uri": "osdf:///chtc/staging/y/yzhong239/nanochat-mhc-10b-data-7560536.tar",
+        "data_split_sha256": {
+          "train": "85ed8668da74daba482f76eee8773748c8e56d38c2cd1ce90120d27d391b2721",
+          "dev": "bd67b90b4386ba6428992864712f56eb10527678ed8b3664ed5f63c1643458a4",
+          "test": "e7d24b6a89155ebc7123afe68bd2c58aeaf159b5087dbdf28e090ce09f293d09"
+        },
+        "data_archive_sha256": "27a247cded8a77f4ef9f37cd19f55ce41df4be937583cc39d15c120ea9fb0702",
+        "gate_data_uri": "osdf:///chtc/staging/y/yzhong239/nanochat-ebt-20261029/data-7444406.tar",
+        "gate_data_archive_sha256": "44ea6ce7f62efda533ef89664da9d399e9361102ae3138229e4b78a7d331c239",
+        "launcher_sha256": "1b96784f67fe81f72d939e48706254f3b863382045b6009dd5d538990ade8bf0",
+        "gate_launcher_sha256": "292cb48630cc12784f54d1c57243cf1cbefc7277e02c2417a620cbc02f0a08c0"
+      },
+      "test_evaluated": true,
+      "checkpoint_files": {
+        "latest.pt": {
+          "bytes": 507750813,
+          "sha256": "e7b8d9bf0588ed5b3e5389ad4c116d73b78b00d6ea96ac3905c2e0445b570735"
+        },
+        "best.pt": {
+          "bytes": 203446041,
+          "sha256": "10fd1ac2d15ff54ed4ee1f74f5423d493fafbeede73a738efdec41bec1e9d28a"
+        }
+      },
+      "final_test_ce": 3.17577913030982,
+      "best_selected_test_ce": 3.1757791191339493,
+      "best_dev_step": 305176,
+      "test_tokens": 2097152,
+      "wandb_verified": true,
+      "checkpoint_archive": "/home/yzhong239/nonlinear-lmhead-10b-20261101/results/nonlinear_residual_lmhead-7648728.0-checkpoints.tar"
+    }
+  }
+}

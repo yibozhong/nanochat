@@ -1,0 +1,74 @@
+{
+  "summary": {
+    "complete": true,
+    "home_paths": 22,
+    "home_bytes_removed": 7610747142,
+    "staging_files": 12,
+    "staging_bytes_removed": 12416081920,
+    "protected_files_unchanged": 166,
+    "own_asset_manifest_rewritten_with_identical_content": [
+      "/home/yzhong239/datasets/fineweb-edu-10bt/prepare-assets/assets.sha256"
+    ],
+    "reports_preserved": 2287,
+    "cancelled_jobs": [
+      {
+        "ClusterId": 7666445,
+        "ExitCode": 143,
+        "JobStatus": 3,
+        "NumJobStarts": 1,
+        "ProcId": 0
+      },
+      {
+        "ClusterId": 7662009,
+        "JobStatus": 3,
+        "NumJobStarts": 0,
+        "ProcId": 0
+      }
+    ],
+    "wandb": "unchanged",
+    "finished_at": 1793587981.9251294
+  },
+  "validation": {
+    "passed": true,
+    "exact_runtime_reference": "d7c303620f94b37a8c76e9dfafd1c9d65643a67b",
+    "exact_runtime_files": 52,
+    "python_ast_files": 77,
+    "supported": [
+      [
+        "native",
+        "baseline"
+      ],
+      [
+        "native",
+        "mhc"
+      ],
+      [
+        "native",
+        "mhc_no_sinkhorn"
+      ],
+      [
+        "vanilla",
+        "baseline"
+      ],
+      [
+        "vanilla",
+        "mhc"
+      ],
+      [
+        "vanilla",
+        "mhc_no_sinkhorn"
+      ]
+    ],
+    "removed_options_rejected": true,
+    "new_gpu_run": false,
+    "gpu_evidence": "Restored exact prior validated runtime; no numerical changes or fresh GPU test claimed"
+  },
+  "runtime_reference": "d7c303620f94b37a8c76e9dfafd1c9d65643a67b",
+  "preserved_core_workflows": [
+    "mhc-pretrain-20261030",
+    "mhc-no-sinkhorn-20261031",
+    "mhc-native-pretrain-20261031"
+  ],
+  "local_audit": "/home/yzhong239/research-cleanup-20261101",
+  "online_wandb_modified": false
+}

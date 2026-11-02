@@ -12,7 +12,7 @@ from torch.nn import functional as F
 from torch.utils.checkpoint import checkpoint
 
 from nanochat.gpt import Block, GPTConfig, Linear, norm
-from nanochat.nvidia_connections import NvidiaHyperConnection, NvidiaHyperHead, NvidiaStreamMixer, NvidiaOrthogonalStreamMixer, expand_streams, check_nvidia_device
+from nanochat.nvidia_connections import NvidiaHyperConnection, NvidiaHyperHead, expand_streams, check_nvidia_device
 from nanochat.optim import MuonAdamW
 
 
@@ -31,49 +31,15 @@ class ConnectionConfig:
     fused_connection_grad: bool = False
     architecture: str = 'vanilla'
     window_pattern: str = 'SSSL'  # native only; vanilla is always full attention
-    readout: str = 'collapse'
-    partition_seed: int = 20261031
-    partition_mixing: str = 'none'
-    lm_head_transform: str = 'linear'
-    fw_bottleneck: int = 32
-    fw_inner_lr: float = .01
-    fw_momentum: float = .95
-    fw_ns_steps: int = 5
-    fw_ns_eps: float = 1e-7
-    fw_ns_bf16: bool = False
-    fw_learnable_lr: bool = True
 
     def __post_init__(self):
-        if self.variant == 'dfwr' and (self.architecture != 'vanilla' or self.readout != 'collapse'
-                                      or self.lm_head_transform != 'linear'):
-            raise ValueError('DFWR initially uses vanilla branches and the ordinary linear LM head')
-        if min(self.fw_bottleneck,self.fw_inner_lr,self.fw_ns_steps,self.fw_ns_eps)<=0 or not 0<=self.fw_momentum<1:
-            raise ValueError('Invalid DFWR dimensions or Inner Muon settings')
-        if self.lm_head_transform not in ('linear', 'nonlinear_lmhead', 'nonlinear_residual_lmhead'):
-            raise ValueError(f'Unknown LM-head transform: {self.lm_head_transform}')
-        if self.lm_head_transform != 'linear' and (self.architecture != 'vanilla' or self.readout != 'collapse'):
-            raise ValueError('Nonlinear LM heads require the vanilla backbone and a D-wide collapsed readout')
-        if self.partition_mixing not in ('none', 'mhc', 'orthogonal'):
-            raise ValueError(f'Unknown partition mixing: {self.partition_mixing}')
-        if self.partition_mixing != 'none' and (self.readout != 'vocab_partition' or self.variant != 'mhc'):
-            raise ValueError('Final mHC mixing requires the mHC partitioned readout')
-        if self.readout not in ('collapse', 'vocab_partition', 'channel_partition', 'dense_expanded'):
-            raise ValueError(f'Unknown readout: {self.readout}')
-        if self.readout != 'collapse':
-            if self.architecture != 'vanilla' or self.variant == 'baseline':
-                raise ValueError('Multistream readouts currently require vanilla multistream mHC')
-        if self.readout in ('vocab_partition', 'channel_partition'):
-            if self.streams < 1 or self.vocab_size % self.streams:
-                raise ValueError('Vocabulary must divide evenly across streams')
-        if self.readout == 'channel_partition' and self.width % self.streams:
-            raise ValueError('Channel partition requires width divisible by streams')
         if self.architecture not in ('vanilla', 'native'):
             raise ValueError(f'Unknown backbone architecture: {self.architecture}')
         if not self.window_pattern or any(c not in 'SL' for c in self.window_pattern):
             raise ValueError('window_pattern must contain S and/or L')
         if self.connection_backend not in ('nvidia', 'nvidia_precise'):
             raise ValueError('Only the full NVIDIA mHC implementation is supported')
-        if self.variant not in ('baseline', 'mhc', 'mhc_no_sinkhorn', 'dfwr'):
+        if self.variant not in ('baseline', 'mhc', 'mhc_no_sinkhorn'):
             raise ValueError(f'Unknown connection variant: {self.variant}')
         if self.sinkhorn_iterations != 20:
             raise ValueError('The NVIDIA composite API requires 20 Sinkhorn iterations')
@@ -83,7 +49,7 @@ class ConnectionConfig:
             raise ValueError('RoPE requires an even integral head dimension')
         if self.sinkhorn_iterations < 1:
             raise ValueError('Sinkhorn needs at least one iteration')
-        if self.variant in ('mhc','mhc_no_sinkhorn') and (self.streams != 4 or self.width % 128):
+        if self.variant != 'baseline' and (self.streams != 4 or self.width % 128):
             raise ValueError('NVIDIA mHC kernels require four streams and width divisible by 128')
 
     @classmethod
@@ -132,8 +98,6 @@ class ConnectionModel(nn.Module):
         super().__init__()
         if config.architecture != 'vanilla':
             raise ValueError('Use build_connection_model for native nanochat')
-        if config.variant == 'dfwr':
-            raise ValueError('Use build_connection_model for DFWR')
         self.config = config
         native = GPTConfig(sequence_len=config.sequence_length, vocab_size=config.vocab_size,
             n_layer=config.depth, n_head=config.heads, n_kv_head=config.heads,
@@ -153,44 +117,18 @@ class ConnectionModel(nn.Module):
         if config.variant != 'baseline':
             for b in self.blocks:
                 b.attn_connection.reset_parameters(); b.mlp_connection.reset_parameters()
-        if config.variant == 'baseline' or config.readout != 'collapse':
+        if config.variant == 'baseline':
             self.stream_head = None
         else:
             self.stream_head = NvidiaHyperHead(config.width, config.streams, use_tf32=config.connection_backend == 'nvidia')
         if self.stream_head is not None:
             self.stream_head.reset_parameters()
-        if config.readout in ('vocab_partition', 'channel_partition'):
-            from nanochat.partitioned_readout import vocab_partition
-            ids, inverse = vocab_partition(config.vocab_size, config.streams, config.partition_seed)
-            self.register_buffer('partition_ids', ids)
-            self.register_buffer('partition_inverse', inverse)
-        self.partition_mixer = None
-        if config.partition_mixing in ('mhc','orthogonal'):
-            mixer_type=NvidiaStreamMixer if config.partition_mixing=='mhc' else NvidiaOrthogonalStreamMixer
-            self.partition_mixer = mixer_type(config.width, config.streams,
-                use_tf32=config.connection_backend == 'nvidia')
-            self.partition_mixer.reset_parameters()
         d = config.width // config.heads
         inv = 1 / (100000 ** (torch.arange(0, d, 2, dtype=torch.float32) / d))
         freq = torch.outer(torch.arange(config.sequence_length, dtype=torch.float32), inv)
         self.register_buffer('cos', freq.cos()[None, :, None, :], persistent=False)
         self.register_buffer('sin', freq.sin()[None, :, None, :], persistent=False)
         self.compiled_steps = None
-        if config.readout == 'dense_expanded':
-            # Build after all shared parameters, without advancing their RNG
-            # stream. Wider fan-in gets matched initial logit variance.
-            with torch.random.fork_rng(devices=[]):
-                self.lm_head = Linear(config.streams*config.width, config.vocab_size, bias=False)
-                nn.init.normal_(self.lm_head.weight, std=.001/math.sqrt(config.streams))
-        self.lm_head_features = None
-        self.compiled_head_features = None
-        if config.lm_head_transform != 'linear':
-            from nanochat.nonlinear_lmhead import NonlinearLMHeadFeatures
-            # Preserve all shared initialization and the caller's RNG stream.
-            # Both nonlinear variants start with identical gate/up matrices.
-            with torch.random.fork_rng(devices=[]):
-                self.lm_head_features = NonlinearLMHeadFeatures(config.width,
-                    residual=config.lm_head_transform == 'nonlinear_residual_lmhead')
 
     def prepare(self, device='cuda', dtype=torch.bfloat16, compile_blocks=False):
         if self.config.variant != 'baseline':
@@ -208,13 +146,9 @@ class ConnectionModel(nn.Module):
             for b in self.blocks:
                 b.compiled_attention = torch.compile(b.attention_branch, dynamic=False, fullgraph=True)
                 b.compiled_mlp = torch.compile(b.mlp_branch, dynamic=False, fullgraph=True)
-        if compile_blocks and self.lm_head_features is not None:
-            self.compiled_head_features = torch.compile(self.lm_head_features.forward, dynamic=False, fullgraph=True)
         return self
 
-    def hidden(self, idx, kv_cache=None, *, return_streams=False):
-        if return_streams and self.config.readout == 'collapse':
-            raise ValueError('Raw stream diagnostics require a multistream readout')
+    def hidden(self, idx, kv_cache=None):
         start = 0 if kv_cache is None else kv_cache.get_pos()
         if start + idx.shape[1] > self.config.sequence_length:
             raise ValueError('Input exceeds configured context length')
@@ -230,39 +164,13 @@ class ConnectionModel(nn.Module):
                 x = checkpoint(fn, x, cos, sin, use_reentrant=False)
             else:
                 x = fn(x, cos, sin, kv_cache)
-        before_mixing = x if return_streams else None
         if self.stream_head is not None:
             x = self.stream_head(x)
-        if self.partition_mixer is not None:
-            x = self.partition_mixer(x)
-        if return_streams:
-            # Explicit observation also works when blocks invoke .forward
-            # directly, which bypasses nn.Module forward hooks.
-            return before_mixing, x
-        if self.config.readout != 'collapse':
-            # Normalize each D-dimensional stream, never the K stream axis.
-            x = norm(x.transpose(-1, -2).contiguous())
-            if self.config.readout == 'channel_partition':
-                from nanochat.partitioned_readout import channel_partition_hidden
-                return channel_partition_hidden(x)
-            if self.config.readout == 'dense_expanded':
-                return x.flatten(-2)
-            return x
         return norm(x)
 
     def forward(self, idx, targets=None, dense=False, kv_cache=None):
         h = self.hidden(idx, kv_cache)
-        if self.lm_head_features is not None:
-            h = (self.compiled_head_features or self.lm_head_features)(h)
         w = self.lm_head.weight.to(h.dtype)
-        if self.config.readout in ('vocab_partition', 'channel_partition'):
-            from nanochat.partitioned_readout import partitioned_logits, partitioned_cross_entropy
-            if targets is None or dense:
-                logits = partitioned_logits(h, w, self.partition_ids, self.partition_inverse)
-                if targets is None:
-                    return logits
-                return F.cross_entropy(logits.flatten(0, 1), targets.flatten())
-            return partitioned_cross_entropy(h, w, targets, self.partition_ids, self.partition_inverse)
         if targets is None or dense:
             logits = 15 * torch.tanh(F.linear(h, w).float() / 15)
             if targets is None:
@@ -295,13 +203,6 @@ def optimizer_for(model, batch_tokens=32768):
             (routing if '_connection.' in name else matrices).append(p)
     if model.stream_head is not None:
         routing.extend(model.stream_head.parameters())
-    if model.partition_mixer is not None:
-        routing.extend(model.partition_mixer.parameters())
-    if model.lm_head_features is not None:
-        matrices.extend(model.lm_head_features.parameters())
-    if c.variant == 'dfwr':
-        for name,p in model.depth_memory.named_parameters():
-            (routing if name=='log_learning_rates' else matrices).append(p)
     if routing:
         groups.append(dict(kind='adamw', params=routing, lr=.008*batch_scale*width_scale,
                            betas=(.8, .96), eps=1e-10, weight_decay=0.))
@@ -310,11 +211,6 @@ def optimizer_for(model, batch_tokens=32768):
             lr=.02*batch_scale, momentum=.95, ns_steps=5, beta2=.9, weight_decay=wd))
     ids = [id(p) for g in groups for p in g['params']]
     assert len(ids) == len(set(ids)) and set(ids) == {id(p) for p in model.parameters()}
-    if model.partition_mixer is not None or c.readout == 'dense_expanded' or c.variant=='dfwr':
-        from torch._dynamo import config as compiler_config
-        signatures = {(tuple(p.shape), p.dtype, tuple(p.stride()), p.device.type)
-                      for g in groups if g['kind'] == 'adamw' for p in g['params']}
-        compiler_config.recompile_limit = max(compiler_config.recompile_limit, 2*len(signatures))
     opt = MuonAdamW(groups)
     for g in opt.param_groups:
         g['initial_lr'] = g['lr']
@@ -322,9 +218,6 @@ def optimizer_for(model, batch_tokens=32768):
 
 
 def build_connection_model(config):
-    if config.variant == 'dfwr':
-        from nanochat.dfwr_model import DFWRModel
-        return DFWRModel(config)
     if config.architecture == 'native':
         from nanochat.native_connection_model import NativeConnectionModel
         return NativeConnectionModel(config)
