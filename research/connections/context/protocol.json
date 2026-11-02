@@ -1,0 +1,49 @@
+{
+  "authorized": "User requested 4K,8K,16K training throughput and memory tests",
+  "variants": [
+    "baseline",
+    "mhc"
+  ],
+  "architecture": "vanilla",
+  "sequence_lengths": [
+    2048,
+    4096,
+    8192,
+    16384
+  ],
+  "model": {
+    "depth": 8,
+    "width": 512,
+    "heads": 4,
+    "vocab_size": 32768,
+    "streams": 4
+  },
+  "batch_tokens": 32768,
+  "desired_microbatches": [
+    16,
+    8,
+    4,
+    2
+  ],
+  "activation_checkpoint": false,
+  "capacity": {
+    "probe_steps": 4,
+    "fallback": "Halve common microbatch down to1; keep global tokens fixed; report infeasible if neither fits",
+    "memory_limit_bytes": 20761804800
+  },
+  "repetitions": 2,
+  "warmup_steps": 20,
+  "timed_steps": 40,
+  "reverse_order_second_repetition": true,
+  "seed": 42,
+  "schedule_steps": 305176,
+  "matched_backbone_init": true,
+  "attention": "cuDNN SDPA only; full causal attention",
+  "optimizer": "Existing native MuonAdamW scaling/default LR",
+  "data_uri": "osdf:///chtc/staging/y/yzhong239/nanochat-ebt-20261029/data-7444406.tar",
+  "data_sha256": "44ea6ce7f62efda533ef89664da9d399e9361102ae3138229e4b78a7d331c239",
+  "data_policy": "Read-only existing packed FineWeb tokens, resegmented in memory; not long-document training data or a quality comparison",
+  "logging": "local JSON only; no credentials, no W&B, no checkpoint output",
+  "scheduling": "one complete Hopper>=22000MiB; public soft preference, backfill allowed",
+  "limitations": "Measurements and 10B compute extrapolations exclude job setup, compilation, evaluation and checkpoint transfers; no new pretraining authorized"
+}
