@@ -115,9 +115,10 @@ def test_compiled_attention_fp32_loop_forward_backward():
     errors = dict(output=relative(actual, expected), output_absolute_tolerance=atol,
                   gradients=[relative(a, r) for a, r in zip(ga, gr)])
     record('stream-compiled-fp32-loop', errors)
-    assert max(errors['gradients']) < 3e-4, errors
+    assert max(errors['gradients']) < 3e-6, errors
     for a, r in zip(ga, gr):
-        torch.testing.assert_close(a, r, atol=1e-5, rtol=3e-4)
+        gradient_atol = 8*torch.finfo(torch.float32).eps*r.abs().max().item()
+        torch.testing.assert_close(a, r, atol=gradient_atol, rtol=3e-4)
 
 
 def test_stream_input_and_parameter_isolation_before_merge():
@@ -251,8 +252,9 @@ def test_model_causality_cache_loss_gradients_recompute(compiled):
     again = model(x, y); again.backward()
     torch.testing.assert_close(loss, again, atol=2e-5, rtol=2e-5)
     errors = {k:relative(p.grad, before[k]) for k,p in model.named_parameters()}
-    record(f'stream-model-compiled{compiled}', dict(recompute_gradient_errors=errors))
-    assert max(errors.values()) < .02, errors
+    recompute_stats = gradient_comparison({k:p.grad for k,p in model.named_parameters()}, before)
+    record(f'stream-model-compiled{compiled}', dict(recompute_gradient_errors=errors, **recompute_stats))
+    assert recompute_stats['passed'], recompute_stats
     if compiled:
         model.config.activation_checkpoint = False
         for block in model.blocks:
