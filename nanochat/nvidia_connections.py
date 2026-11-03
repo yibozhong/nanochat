@@ -99,6 +99,28 @@ class NvidiaHyperConnection(nn.Module):
             output.contiguous(), None, post, residual, comb, self.streams,
             use_tf32=self.use_tf32, fused_grad_x_acc_buffer=buffer)
 
+    def routing(self, x):
+        """Generate original coefficients without merging the input streams.
+
+        For post-attention aggregation the activation paths no longer follow
+        TE's fused gradient-buffer ordering. Use its ordinary custom backwards.
+        Existing read()/write() calls are unchanged.
+        """
+        if self.fused_grad_acc:
+            raise ValueError('Post-attention merge does not support fused gradient accumulation')
+        check_precision(self.use_tf32)
+        x = x.contiguous()
+        b, t, d, n = x.shape
+        ops = nvidia_ops()
+        raw, ms = ops.mhc_fused_projection(x.view(b*t, d*n), self.phi,
+            norm_weight=None, use_tf32=self.use_tf32,
+            fused_grad_x_acc_buffer=None, use_split_k=False)
+        pre, post, comb = ops.mhc_fused_scale(raw, self.scales, self.bias.unsqueeze(0), ms, n)
+        comb = comb.view(b, t, n, n)
+        if self.sinkhorn:
+            comb = ops.mhc_fused_sinkhorn(comb, n, iters=self.iterations)
+        return pre.view(b, t, n), x, (post.view(b, t, n), comb, None)
+
 
 class NvidiaHyperHead(nn.Module):
     def __init__(self, width, streams, *, use_tf32=True):

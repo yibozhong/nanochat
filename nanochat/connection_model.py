@@ -31,6 +31,7 @@ class ConnectionConfig:
     fused_connection_grad: bool = False
     architecture: str = 'vanilla'
     window_pattern: str = 'SSSL'  # native only; vanilla is always full attention
+    attention_mode: str = 'shared'  # per_stream moves mHC aggregation after attention
 
     def __post_init__(self):
         if self.architecture not in ('vanilla', 'native'):
@@ -51,6 +52,15 @@ class ConnectionConfig:
             raise ValueError('Sinkhorn needs at least one iteration')
         if self.variant != 'baseline' and (self.streams != 4 or self.width % 128):
             raise ValueError('NVIDIA mHC kernels require four streams and width divisible by 128')
+        if self.attention_mode not in ('shared', 'per_stream'):
+            raise ValueError(f'Unknown attention mode: {self.attention_mode}')
+        if self.attention_mode == 'per_stream':
+            if self.architecture != 'vanilla' or self.variant == 'baseline':
+                raise ValueError('Per-stream attention initially supports vanilla mHC/no-Sinkhorn only')
+            if self.heads % self.streams:
+                raise ValueError('Per-stream attention requires heads divisible by streams')
+            if self.fused_connection_grad:
+                raise ValueError('Per-stream attention requires unfused connection gradient accumulation')
 
     @classmethod
     def from_checkpoint(cls, config):
@@ -76,6 +86,7 @@ class ConnectionBlock(Block):
         super().__init__(native, index)
         self.attn.ve_gate = None
         self.variant = config.variant
+        self.attention_mode = config.attention_mode
         self.compiled_attention = self.compiled_mlp = None
         if self.variant != 'baseline':
             kwargs = dict(use_tf32=config.connection_backend == 'nvidia', fused_grad_acc=config.fused_connection_grad,
@@ -83,7 +94,9 @@ class ConnectionBlock(Block):
             self.attn_connection = NvidiaHyperConnection(config.width, config.streams, 2*index, config.sinkhorn_iterations, **kwargs)
             self.mlp_connection = NvidiaHyperConnection(config.width, config.streams, 2*index+1, config.sinkhorn_iterations, **kwargs)
 
-    def attention_branch(self, h, cos, sin, kv_cache=None):
+    def attention_branch(self, h, cos, sin, kv_cache=None, pre=None):
+        if self.attention_mode == 'per_stream':
+            return self.attn(h, pre, (cos, sin), kv_cache)
         return self.attn(norm(h), None, (cos, sin), (-1, 0), kv_cache)
 
     def mlp_branch(self, h):
@@ -92,8 +105,12 @@ class ConnectionBlock(Block):
     def forward(self, x, cos, sin, kv_cache=None):
         if self.variant == 'baseline':
             return super().forward(x, None, (cos, sin), (-1, 0), kv_cache)
-        h, skip, post = self.attn_connection.read(x)
-        y = (self.compiled_attention or self.attention_branch)(h, cos, sin, kv_cache)
+        if self.attention_mode == 'per_stream':
+            pre, skip, post = self.attn_connection.routing(x)
+            y = (self.compiled_attention or self.attention_branch)(skip, cos, sin, kv_cache, pre)
+        else:
+            h, skip, post = self.attn_connection.read(x)
+            y = (self.compiled_attention or self.attention_branch)(h, cos, sin, kv_cache)
         x = self.attn_connection.write(y, skip, post)
         h, skip, post = self.mlp_connection.read(x)
         y = (self.compiled_mlp or self.mlp_branch)(h)
@@ -136,6 +153,15 @@ class ConnectionModel(nn.Module):
         self.register_buffer('cos', freq.cos()[None, :, None, :], persistent=False)
         self.register_buffer('sin', freq.sin()[None, :, None, :], persistent=False)
         self.compiled_steps = None
+        if config.attention_mode == 'per_stream':
+            from nanochat.stream_attention import StreamAttention
+            # Preserve the shared model's complete RNG sequence and connector
+            # initialization. Disjoint slices become independent Muon matrices.
+            with torch.random.fork_rng(devices=[]):
+                for i, b in enumerate(self.blocks):
+                    attn = StreamAttention(config.width, config.heads, config.streams, i)
+                    attn.copy_from_dense(b.attn)
+                    b.attn = attn
 
     def prepare(self, device='cuda', dtype=torch.bfloat16, compile_blocks=False):
         if self.config.variant != 'baseline':

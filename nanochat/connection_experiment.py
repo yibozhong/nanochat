@@ -34,10 +34,16 @@ def match_vanilla_initialization(model, seed):
         # connector weights, so the same seed already matches all parameters.
         return
     options = asdict(model.config)
-    options.update(variant='baseline', fused_connection_grad=False)
+    options.update(variant='baseline', fused_connection_grad=False, attention_mode='shared')
     with torch.random.fork_rng(devices=list(range(torch.cuda.device_count()))):
         torch.manual_seed(seed)
         reference = ConnectionModel(ConnectionConfig(**options))
-    missing, unexpected = model.load_state_dict(reference.state_dict(), strict=False)
+    weights = reference.state_dict()
+    if model.config.attention_mode == 'per_stream':
+        for i, block in enumerate(model.blocks):
+            block.attn.copy_from_dense(reference.blocks[i].attn)
+        weights = {k: v for k, v in weights.items() if '.attn.' not in k}
+    missing, unexpected = model.load_state_dict(weights, strict=False)
     assert not unexpected
-    assert all('_connection.' in name or name.startswith('stream_head.') for name in missing)
+    assert all('_connection.' in name or name.startswith('stream_head.') or
+               (model.config.attention_mode == 'per_stream' and '.attn.' in name) for name in missing)
