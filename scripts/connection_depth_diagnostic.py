@@ -159,8 +159,10 @@ def zero_branch_oracle(model, layer):
 
 def fingerprint(model):
     digest = hashlib.sha256()
-    for name, tensor in model.state_dict().items():
-        digest.update(name.encode()); digest.update(tensor.detach().cpu().contiguous().view(torch.uint8).numpy().tobytes())
+    # Include nonpersistent buffers (e.g. RoPE lookup tables) as well as weights.
+    tensors = list(model.named_parameters()) + list(model.named_buffers())
+    for name, tensor in tensors:
+        digest.update(name.encode()); digest.update(tensor.detach().cpu().contiguous().reshape(-1).view(torch.uint8).numpy().tobytes())
     return digest.hexdigest()
 
 
@@ -187,6 +189,7 @@ def main():
         attention_backend='sdpa_cudnn', formal_training=False, logging_backend='local', models={})
     started = time.time()
     for name, spec in specs.items():
+        print(json.dumps(dict(model=name,phase='load_checkpoint_and_verify')),flush=True)
         state = torch.load(spec['checkpoint'], map_location='cpu', weights_only=False)
         cfg = ConnectionConfig.from_checkpoint(state['config'])
         assert cfg.depth == 8 and cfg.sequence_length == 2048

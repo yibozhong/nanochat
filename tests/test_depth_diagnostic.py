@@ -24,7 +24,8 @@ def test_known_ratios_cosines_and_decomposition():
 def test_nonidentity_routing_is_preserved_when_branch_disabled():
     class Routing:
         def read(self, x):
-            return x.sum(-1), x, None
+            post = torch.tensor([.25,.75]).expand(*x.shape[:2],2)
+            return x.sum(-1), x, (post, None, None)
         def write(self, y, x, mixes):
             return x.flip(-1) + y.unsqueeze(-1)*torch.tensor([.25,.75])
     x = torch.tensor([[[[1.,3.],[2.,5.]]]])

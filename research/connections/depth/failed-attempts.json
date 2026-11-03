@@ -1,0 +1,11 @@
+[
+  {
+    "job": "7770051.0",
+    "source": "c3b1b6ab0dcf650b9606c961aca88edad9e61ff0",
+    "exit_code": 1,
+    "tests_passed": 3,
+    "tests_failed": 1,
+    "reason": "Synthetic routing fixture omitted the post coefficients required by analytic write comparison; failed before checkpoint evaluation",
+    "fix": "Return explicit post coefficients in fake routing tuple. Production model code and numerical tolerances unchanged."
+  }
+]
