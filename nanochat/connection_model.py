@@ -257,6 +257,15 @@ def optimizer_for(model, batch_tokens=32768):
             lr=.02*batch_scale, momentum=.95, ns_steps=5, beta2=.9, weight_decay=wd))
     ids = [id(p) for g in groups for p in g['params']]
     assert len(ids) == len(set(ids)) and set(ids) == {id(p) for p in model.parameters()}
+    if c.attention_mode == 'per_stream_independent':
+        # Removing unused H_pre rows adds post-only connector shapes. Like
+        # native GPT.setup_optimizer, reserve bounded compile-cache entries
+        # for the actual AdamW signatures; do not change optimizer math.
+        from torch._dynamo import config as compiler_config
+        signatures = {(tuple(p.shape), p.dtype, tuple(p.stride()), p.device.type)
+                      for group in groups if group['kind'] == 'adamw'
+                      for p in group['params']}
+        compiler_config.recompile_limit = max(compiler_config.recompile_limit, 2*len(signatures))
     opt = MuonAdamW(groups)
     for g in opt.param_groups:
         g['initial_lr'] = g['lr']

@@ -61,3 +61,8 @@ best separately, durable exit85 every1800s; public soft preference with
 backfill allowed. Do not restart the old run or reuse its optimizer state.
 
 Status: implementation prepared; GPU validation and formal submission pending.
+
+First gate7757250.0:34/36 passed. Both failures hit the default8-entry
+AdamW compile limit; the post-only attention connector introduces new shapes.
+Reuse the native GPT shape-count-based bounded cache budget in this new path.
+No optimizer equations or tolerances changed. Retry pending.

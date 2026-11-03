@@ -126,6 +126,10 @@ def test_no_unused_attention_pre_parameters_and_explicit_checkpoint_mode():
     assert ConnectionConfig.from_checkpoint(config).attention_mode == 'per_stream_independent'
     assert ConnectionConfig.from_checkpoint(asdict(old.config)).attention_mode == 'per_stream'
     opt, _ = optimizer_for(new)
+    from torch._dynamo import config as compiler_config
+    signatures = {(tuple(p.shape), p.dtype, tuple(p.stride()), p.device.type)
+                  for g in opt.param_groups if g['kind']=='adamw' for p in g['params']}
+    assert len(signatures) > 8 and compiler_config.recompile_limit >= 2*len(signatures)
     grouped = [id(p) for g in opt.param_groups for p in g['params']]
     assert len(grouped) == len(set(grouped)) == len(list(new.parameters()))
     with pytest.raises(RuntimeError): new.load_state_dict(old.state_dict())
