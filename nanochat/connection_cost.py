@@ -13,8 +13,8 @@ def model_cost(config, batch=1, activation_bytes=2):
     extra = {}
     if c.attention_statistic != 'none':
         # Current reference executes dense masked matrices, recomputes QK and
-        # first moment (variance only), and checkpoints the statistics branch.
-        stat_matmuls = 3 if c.attention_statistic == 'variance' else 2
+        # first moment (variance/Jensen), and checkpoints the statistics branch.
+        stat_matmuls = 2 if c.attention_statistic == 'second_moment' else 3
         stat_dense = stat_matmuls*2*batch*depth*t*t*d
         stat_proj = 2*batch*t*depth*d*d
         forward += stat_dense + stat_proj

@@ -1,0 +1,44 @@
+# SiLU Jensen Gap Attention
+
+User-confirmed first configuration: phi(x)=SiLU(x) with no MLP, alpha fixed at 1.
+The nonlinear function has no parameters. The value projection and independent
+output projection W_j remain learnable. This is not yet a learned-phi variant.
+
+    mu = A V
+    J = A SiLU(V) - SiLU(A V)
+    output = W_o mu + W_j J
+
+`--attention-statistic jensen_silu` in `scripts.connection_train` selects this
+configuration for vanilla full-attention models. Existing Q/K/V, attention
+temperature, RoPE, QK norm and causal support are preserved. Both occurrences
+of phi are identical elementwise SiLU. SiLU is not globally convex, so J may
+be negative: never clamp it as a variance. No detach or auxiliary loss.
+
+Reuse the moment-attention reference: original efficient BF16 mean attention,
+FP32 causal probabilities and both nonlinear terms in a compiled statistics
+branch, query tiles256 with activation recomputation, then BF16 projection.
+Mathematical attention weights are shared; rounded intermediate probabilities
+are recomputed and need not match cuDNN bitwise. No new custom kernel or MLP.
+
+W_j is stored as `attn.c_stat.weight`, shape D x D, zero-initialized without
+consuming RNG, using the existing Muon group. Alpha1 and W_j0 preserve the
+baseline at initialization and allow nonzero W_j gradients. Existing W_o also
+uses the baseline's zero initialization. Shared weights and initial RNG match
+exactly. D512 x8 adds2097152 parameters, total60817408, identical to variance.
+Statistical-branch matrix FLOPs equal the reference variance branch; SiLU
+pointwise cost is additional and excluded from matrix-only FLOP accounting.
+
+Scope: implementation and bounded GPU validation, not a third formal 10B run.
+The two existing second-moment/variance jobs keep their immutable inputs.
+Validation25 checks: eight new SiLU tests plus the17 retained checks, including
+FP64 formula/VJP, compiled FP32 VJP, positive/negative/zero gaps, nonzero
+projection gradients, live2K causality/cache, compile/recompute parity,
+optimizer/RNG recovery and config compatibility. Same-card mean/variance/SiLU
+profiles (20 warmup+30 measured steps), and25 -> exit85 ->50 fresh-process
+recovery with the305176-step horizon. No W&B, credentials or returned weights.
+
+Run `python research/connections/jensen/workflow.py ROOT submit`, then `... ROOT
+monitor`. The monitor collects and audits, publishes source/results, and exits.
+It never launches formal training. GPU validation is pending until
+`validation.json` is published. Reuse existing runtime/data and the single
+Hopper>=22GB/public-soft-priority/backfill resource policy.

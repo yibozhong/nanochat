@@ -35,7 +35,7 @@ class ConnectionConfig:
     moment_query_chunk: int = 256
 
     def __post_init__(self):
-        if self.attention_statistic not in ('none', 'second_moment', 'variance'):
+        if self.attention_statistic not in ('none', 'second_moment', 'variance', 'jensen_silu'):
             raise ValueError('Unknown attention statistic')
         if self.moment_query_chunk < 1:
             raise ValueError('moment_query_chunk must be positive')

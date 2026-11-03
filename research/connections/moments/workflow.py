@@ -45,7 +45,8 @@ def common_submit():
     return 'universe = vanilla\ncontainer_image = file:///staging/y/yzhong239/gradformer/nanochat-uv-v4.sif\n'+text[start:end]
 
 
-def submit(root):
+def submit(root, experiment_dir=None):
+    experiment_dir = experiment_dir or REPO/'research/connections/moments'
     root.mkdir(parents=True,exist_ok=True)
     with (root/'submit.lock').open('a') as lock:
         fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
@@ -66,7 +67,7 @@ def submit(root):
                        'gate-data.tar':ready['gate_archive']['sha256']})
         source=dict(commit=commit,hashes=hashes,formal_training=False,purpose=KEY+' correctness/profile/restart')
         inputs(bundle,source)
-        shutil.copy2(REPO/'research/connections/moments/validate.sh',root/'validate.sh')
+        shutil.copy2(experiment_dir/'validate.sh',root/'validate.sh')
         files=[str(p.relative_to(root)) for p in sorted(bundle.iterdir())]+[RUNTIME,COMPAT]
         text=common_submit()+f'''executable = validate.sh
 transfer_input_files = {','.join(files)}
