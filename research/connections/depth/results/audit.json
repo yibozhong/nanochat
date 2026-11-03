@@ -1,0 +1,53 @@
+{
+  "job": "7777460.0",
+  "source": {
+    "commit": "86cc14f6b0d39d08fc98d5e986e57f1837c2f55d",
+    "formal_training": false,
+    "purpose": "Read-only 2K depth utilization; vanilla/native/vanilla+mHC at matched 10B"
+  },
+  "device": {
+    "gpu": "NVIDIA H200",
+    "capability": [
+      9,
+      0
+    ],
+    "torch": "2.10.0+cu130"
+  },
+  "tests": {
+    "name": "pytest",
+    "errors": "0",
+    "failures": "0",
+    "skipped": "0",
+    "tests": "5",
+    "time": "5.301",
+    "timestamp": "2026-11-03T13:21:32.003990-06:00",
+    "hostname": "mrudolphgpu4000"
+  },
+  "checkpoints": {
+    "vanilla": {
+      "checkpoint": "../checkpoints/vanilla.pt",
+      "archive": "baseline-7562105.0-checkpoints.tar",
+      "checkpoint_sha256": "246eff2c939f37617b57d5f54b34fbfeb67aa85e61c3f5a63ed1c044bca39ee4",
+      "historical_dev_ce": 3.181308090686798
+    },
+    "mhc": {
+      "checkpoint": "../checkpoints/mhc.pt",
+      "archive": "mhc-7562105.1-checkpoints.tar",
+      "checkpoint_sha256": "6dc8e854e40a5c59844f5cd064bb963b59d6b185bd53adb5a41b3b2706bd4706",
+      "historical_dev_ce": 3.0828843116760254
+    },
+    "native": {
+      "checkpoint": "../checkpoints/native.pt",
+      "archive": "baseline-7638116.0-checkpoints.tar",
+      "checkpoint_sha256": "26bb940320373f3d25d0ca35e7fe66aa43481b2cbdef88e0f1742991236c039f",
+      "historical_dev_ce": 3.0384092926979065
+    }
+  },
+  "exit_code": 0,
+  "diagnostic_code_matches_verified_commit": true,
+  "production_code_unchanged_from": "f9e5b3d78918bbfbb7e98e1f41ac0af255f0c341",
+  "weights_exported": false,
+  "wandb_logging": false,
+  "model_checks": "See results.json: all 3 original forwards and all 24 skip-oracle forwards exact, parameters/buffers unchanged",
+  "historical_train_dev_test_hashes_match": true
+}
