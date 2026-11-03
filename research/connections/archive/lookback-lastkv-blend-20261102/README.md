@@ -1,3 +1,5 @@
+> Retired on 2026-11-02 at the user's request. This is a historical report, not an active workflow. Executable code was removed; use Git history for reproduction.
+
 # Last-attention KV reuse and previous-chunk blending with Lookback
 
 This replaces the stopped independent shared-projection model. History now

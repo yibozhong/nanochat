@@ -31,10 +31,6 @@ class ConnectionConfig:
     fused_connection_grad: bool = False
     architecture: str = 'vanilla'
     window_pattern: str = 'SSSL'  # native only; vanilla is always full attention
-    recompute_chunk_size: int = 2048
-    recompute_previous: bool = True
-    recompute_input: str = 'final_hidden'
-    recompute_memory: str = 'last_attention_kv_blend'
 
     def __post_init__(self):
         if self.architecture not in ('vanilla', 'native'):
@@ -43,16 +39,8 @@ class ConnectionConfig:
             raise ValueError('window_pattern must contain S and/or L')
         if self.connection_backend not in ('nvidia', 'nvidia_precise'):
             raise ValueError('Only the full NVIDIA mHC implementation is supported')
-        if self.variant not in ('baseline', 'mhc', 'mhc_no_sinkhorn', 'lookback_recompute'):
+        if self.variant not in ('baseline', 'mhc', 'mhc_no_sinkhorn'):
             raise ValueError(f'Unknown connection variant: {self.variant}')
-        if self.variant == 'lookback_recompute' and self.architecture != 'vanilla':
-            raise ValueError('Chunk recomputation uses the vanilla backbone')
-        if self.recompute_chunk_size < 1:
-            raise ValueError('recompute_chunk_size must be positive')
-        if self.recompute_input != 'final_hidden':
-            raise ValueError('Reruns start from the original final block output')
-        if self.recompute_memory != 'last_attention_kv_blend':
-            raise ValueError('History reuses last-attention KV with previous-chunk blending')
         if self.sinkhorn_iterations != 20:
             raise ValueError('The NVIDIA composite API requires 20 Sinkhorn iterations')
         if min(self.depth, self.width, self.heads, self.sequence_length, self.vocab_size, self.streams) < 1:
@@ -61,22 +49,19 @@ class ConnectionConfig:
             raise ValueError('RoPE requires an even integral head dimension')
         if self.sinkhorn_iterations < 1:
             raise ValueError('Sinkhorn needs at least one iteration')
-        if self.variant in ('mhc', 'mhc_no_sinkhorn') and (self.streams != 4 or self.width % 128):
+        if self.variant != 'baseline' and (self.streams != 4 or self.width % 128):
             raise ValueError('NVIDIA mHC kernels require four streams and width divisible by 128')
 
     @classmethod
     def from_checkpoint(cls, config):
         """Read pre-cleanup NVIDIA/vanilla metadata; reject retired model weights."""
         config = dict(config)
-        if config.get('variant') == 'lookback_recompute' and config.get('recompute_input') != 'final_hidden':
-            raise ValueError('Embedding-start rerun checkpoints belong to a retired architecture')
-        if config.get('variant') == 'lookback_recompute' and config.get('recompute_memory') != 'last_attention_kv_blend':
-            raise ValueError('Old history/projection checkpoints belong to a retired architecture')
-        if config.get('variant','baseline') != 'lookback_recompute':
-            # This metadata was inert on native/vanilla/mHC checkpoint weights.
-            config.pop('recompute_memory',None)
-        # These fields were inert on core models in the retired Lookback experiment.
-        for name in ("chunk_size", "lookback_enabled", "lookback_update"):
+        if config.get('variant', 'baseline') not in ('baseline', 'mhc', 'mhc_no_sinkhorn'):
+            raise ValueError('Checkpoint belongs to a retired model variant')
+        # Legacy metadata was inert on the retained native/vanilla/mHC models.
+        for name in ("chunk_size", "lookback_enabled", "lookback_update",
+                     "recompute_chunk_size", "recompute_previous", "recompute_input",
+                     "recompute_memory"):
             config.pop(name, None)
         projection = config.pop('projection_backend', 'official')
         if projection != 'official':
@@ -118,8 +103,6 @@ class ConnectionBlock(Block):
 class ConnectionModel(nn.Module):
     def __init__(self, config):
         super().__init__()
-        if config.variant == 'lookback_recompute':
-            raise ValueError('Use build_connection_model for chunk recomputation')
         if config.architecture != 'vanilla':
             raise ValueError('Use build_connection_model for native nanochat')
         self.config = config
@@ -225,8 +208,6 @@ def optimizer_for(model, batch_tokens=32768):
     for b in model.blocks:
         for name, p in b.named_parameters():
             (routing if '_connection.' in name else matrices).append(p)
-    if c.variant == 'lookback_recompute':
-        routing.extend(model.memory_parameters())
     if model.stream_head is not None:
         routing.extend(model.stream_head.parameters())
     if routing:
@@ -244,9 +225,6 @@ def optimizer_for(model, batch_tokens=32768):
 
 
 def build_connection_model(config):
-    if config.variant == 'lookback_recompute':
-        from nanochat.chunk_recompute import ChunkRecomputeModel
-        return ChunkRecomputeModel(config)
     if config.architecture == 'native':
         from nanochat.native_connection_model import NativeConnectionModel
         return NativeConnectionModel(config)

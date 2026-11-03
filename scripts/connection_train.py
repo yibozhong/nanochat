@@ -25,10 +25,8 @@ from nanochat.connection_experiment import configure_attention, match_vanilla_in
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument('--variant', choices=('baseline','mhc','mhc_no_sinkhorn','lookback_recompute'), required=True)
+    p.add_argument('--variant', choices=('baseline','mhc','mhc_no_sinkhorn'), required=True)
     p.add_argument('--sequence-length', type=int, default=2048)
-    p.add_argument('--recompute-chunk-size', type=int, default=2048)
-    p.add_argument('--recompute-previous', action=argparse.BooleanOptionalAction, default=True)
     p.add_argument('--architecture', choices=('vanilla', 'native'), default='vanilla')
     p.add_argument('--window-pattern', default='SSSL', help='Native backbone only; vanilla always uses full attention')
     p.add_argument('--formal-training', action='store_true', help='Explicitly enable W&B for a formal training run')
@@ -68,7 +66,6 @@ def main():
     seed_all(a.seed)
     c=ConnectionConfig(variant=a.variant,streams=a.streams,sinkhorn_iterations=a.sinkhorn_iterations,
                        sequence_length=a.sequence_length,
-                       recompute_chunk_size=a.recompute_chunk_size,recompute_previous=a.recompute_previous,
                        architecture=a.architecture, window_pattern=a.window_pattern,
                        activation_checkpoint=a.activation_checkpoint,
                        connection_backend=a.connection_backend, fused_connection_grad=a.fused_connection_grad)
@@ -178,9 +175,7 @@ def main():
                           'perf/peak_reserved_bytes':torch.cuda.max_memory_reserved()}
                     if cost:
                         perf.update({'perf/estimated_training_flops_per_step':cost['estimated_training_flops'],
-                            'perf/estimated_forward_flops_per_step':cost['estimated_forward_flops'],
-                            'perf/logical_memory_kv_bytes':cost['logical_memory_kv_bytes'],
-                            'perf/logical_previous_hidden_bytes':cost['logical_previous_hidden_bytes']})
+                            'perf/estimated_forward_flops_per_step':cost['estimated_forward_flops']})
                     if profile_reference and 'additional_peak_allocated_bytes' in profile_reference:
                         perf['perf/profile_additional_peak_allocated_bytes']=profile_reference['additional_peak_allocated_bytes']
                         perf['perf/profile_additional_peak_reserved_bytes']=profile_reference['additional_peak_reserved_bytes']

@@ -27,6 +27,27 @@ def test_checkpoint_config_migration_and_removed_options():
     with pytest.raises(TypeError):ConnectionConfig(projection_backend='official')
 
 
+def test_retained_checkpoint_metadata_after_chunk_experiment_removal():
+    inert = dict(chunk_size=2048, lookback_enabled=True, lookback_update='hidden',
+                 recompute_chunk_size=2048, recompute_previous=True,
+                 recompute_input='final_hidden', recompute_memory='last_attention_kv_blend')
+    for architecture in ('vanilla', 'native'):
+        for variant in ('baseline', 'mhc', 'mhc_no_sinkhorn'):
+            clean = ConnectionConfig(architecture=architecture, variant=variant,
+                                     sequence_length=16384)
+            legacy = dict(asdict(clean), **inert)
+            original = dict(legacy)
+            assert ConnectionConfig.from_checkpoint(legacy) == clean
+            assert legacy == original  # Reading metadata must not mutate it.
+    for variant in ('lookback', 'lookback_recompute'):
+        with pytest.raises(ValueError, match='retired'):
+            ConnectionConfig.from_checkpoint(dict(variant=variant, **inert))
+        with pytest.raises(ValueError):
+            ConnectionConfig(variant=variant)
+    with pytest.raises(TypeError):
+        ConnectionConfig(recompute_chunk_size=2048)
+
+
 @pytest.mark.parametrize('variant',['baseline','mhc'])
 def test_699dcf2_initialization_forward_backward_parity(variant):
     path=Path(os.environ['NANOCHAT_CLEANUP_GOLDEN'])/(variant+'.pt')

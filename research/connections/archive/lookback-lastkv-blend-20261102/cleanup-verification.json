@@ -1,0 +1,32 @@
+{
+  "passed": true,
+  "python_ast_files": 82,
+  "json_files": 81,
+  "shell_syntax": true,
+  "diff_whitespace": true,
+  "retained_config_migration_cases": 6,
+  "removed_variants_rejected": true,
+  "actual_completed_vanilla16k_metadata_readable": true,
+  "model_math_ast_equal_to_commit": "73c0a2d",
+  "model_math_nodes": [
+    "ConnectionBlock",
+    "ConnectionModel",
+    "optimizer_for",
+    "build_connection_model",
+    "schedule"
+  ],
+  "byte_identical_math_files": [
+    "nanochat/gpt.py",
+    "nanochat/native_connection_model.py",
+    "nanochat/nvidia_connections.py",
+    "nanochat/optim.py",
+    "nanochat/flash_attention.py",
+    "nanochat/packed_training.py",
+    "nanochat/connection_experiment.py"
+  ],
+  "vanilla16k_flops_unchanged": true,
+  "packing_code_ast_identical_except_docstring": true,
+  "gpu_tests_run": false,
+  "reason_no_gpu_tests": "No retained model math or optimizer changes; static comparison to previously validated code plus standalone metadata checks.",
+  "login_node_torch_imported": false
+}

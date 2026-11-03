@@ -1,0 +1,64 @@
+{
+  "retired": true,
+  "reason": "User requested only native, vanilla and NVIDIA mHC implementations",
+  "training_job": "7678934.0",
+  "run_id": "260ce3e9",
+  "job_history": [
+    {
+      "ClusterId": 7678934,
+      "CompletionDate": 1793675953,
+      "ExitCode": 1,
+      "JobStatus": 4,
+      "NumJobStarts": 2,
+      "ProcId": 0
+    }
+  ],
+  "job_failed_before_retirement": true,
+  "failure": "W&B resume initialization: run ID 260ce3e9 is in use",
+  "automatic_continuation": false,
+  "training_complete": false,
+  "retained_progress": {
+    "step": 64003,
+    "tokens": 2097250304,
+    "best_dev_ce": 3.7260124683380127,
+    "training_seconds": 15715.740460699424
+  },
+  "checkpoint_progress_source": "Returned results/train/progress.json paired with existing checkpoint archive; not a fresh GPU weight load",
+  "retained_archives": [
+    {
+      "path": "/home/yzhong239/lookback-lastkv-blend-10b-20261102/results/lookback_recompute-7678934.0-checkpoints.tar",
+      "bytes": 704911360,
+      "sha256": "75e3ee528e762c056b9b9dfd0adbebbc295b082063a82b054be5de35b9681a1e"
+    },
+    {
+      "path": "/home/yzhong239/lookback-lastkv-blend-10b-20261102/results/lookback_recompute-7678934.0.tar",
+      "bytes": 22353920,
+      "sha256": "326d0f20de8258eac26979b910fbd75dd025665803c3d456296113076c57b918"
+    }
+  ],
+  "baseline": {
+    "job": "7669762.0",
+    "run_id": "0bb03c6e",
+    "complete": true,
+    "inputs_unchanged": true
+  },
+  "removed_code": [
+    "nanochat/chunk_recompute.py",
+    "scripts/chunk_recompute_gate.py",
+    "scripts/chunk_recompute_profile.py",
+    "tests/test_chunk_recompute.py",
+    "research/lookback/baseline_watch.py",
+    "research/lookback/recompute-train.sh",
+    "research/lookback/recompute-validate.sh",
+    "research/lookback/recompute_workflow.py"
+  ],
+  "edit_loss_implemented": false,
+  "wandb": {
+    "run_id": "260ce3e9",
+    "deleted_by_this_cleanup": false,
+    "recreated": false,
+    "online_retention_verified": false,
+    "read_only_api_error": "Could not find run yibozhong657-none/nanochat/260ce3e9",
+    "local_wandb_logs_retained": true
+  }
+}

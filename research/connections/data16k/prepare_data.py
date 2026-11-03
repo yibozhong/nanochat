@@ -1,4 +1,4 @@
-"""Pack fresh16K FineWeb sequences for the matched Lookback10B experiment."""
+"""Pack 16K FineWeb sequences for native, vanilla and mHC pretraining."""
 import argparse
 import hashlib
 import json
