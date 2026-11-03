@@ -1,5 +1,8 @@
 # 2K depth utilization diagnostic
 
+Completed: GPU job 7777460.0 exited 0. [Chinese findings report](REPORT.md),
+[numerical results](results/results.json), and [exportable plots](results/comparison.pdf).
+
 Read-only evaluation of the completed 10B-token vanilla (6a07f085), native
 (84ed009b), and vanilla+mHC (048c708c) **latest** checkpoints, all step 305176.
 No fine-tuning, optimizer, auxiliary objective, or W&B run. Production model code
