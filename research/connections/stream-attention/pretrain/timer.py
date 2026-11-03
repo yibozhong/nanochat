@@ -54,6 +54,8 @@ def main():
                 status.update(data_job=job_state('7685535.0'),gate_job=job_state(gs['job']),
                     cache_ready=bool(cache and cache.get('ready')),gate_status=gs['status'],
                     data_progress=last_progress(DATA/'logs/data.7685535.0.out'))
+                if gs['status']=='complete' and not (GATE/'published.json').exists():
+                    subprocess.run([sys.executable,str(REPO/'research/connections/stream-attention/pretrain/publish.py'),str(GATE)],cwd=REPO,check=True,timeout=240)
                 if status['cache_ready'] and gs['status']=='complete' and (GATE/'published.json').exists() and not (ROOT/'state.json').exists():
                     subprocess.run([sys.executable,str(REPO/'research/connections/stream-attention/pretrain/launch.py'),str(ROOT)],cwd=REPO,check=True,timeout=180)
                 train=read(ROOT/'state.json')
