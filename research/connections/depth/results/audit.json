@@ -49,5 +49,6 @@
   "weights_exported": false,
   "wandb_logging": false,
   "model_checks": "See results.json: all 3 original forwards and all 24 skip-oracle forwards exact, parameters/buffers unchanged",
-  "historical_train_dev_test_hashes_match": true
+  "historical_train_dev_test_hashes_match": true,
+  "artifact_normalization": "CSV line endings CRLF to LF for Git; all parsed cells verified unchanged. Raw worker archive retained."
 }
