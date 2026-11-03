@@ -30,12 +30,23 @@ def sha(path):
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def submit(root):
+def submit(root, packing='native', profile_report=None):
     with (root / 'state.lock').open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         assert not (root / 'STOPPED.json').exists()
         assert not (root / 'state.json').exists(), 'Existing workflow must not be resubmitted'
-        ads = json.loads(command(['condor_q', '-constraint', f'NanochatDataKey == "{KEY}"', '-json'], root) or '[]')
+        key = KEY if packing == 'native' else root.name
+        threads = 8 if packing == 'indexed8' else 4
+        profile = None
+        if packing != 'native':
+            assert profile_report is not None, 'Validate performance and exact outputs before switching'
+            profile = json.loads(profile_report.read_text())
+            assert profile['complete'] and profile['byte_and_source_state_parity']
+            assert profile['speedup_vs_native'][packing] > 1.1
+            assert len(profile['trials']) == 8
+            tested_hash = profile['input_sha256']['fast_pack.py']
+            assert sha(REPO / 'research/connections/data2k/fast_pack.py') == tested_hash
+        ads = json.loads(command(['condor_q', '-constraint', f'NanochatDataKey == "{key}"', '-json'], root) or '[]')
         assert not ads, ads
         assert not (root / 'submission-intent.json').exists(), 'Inspect previous submission before retrying'
         for name in ('bundles', 'logs', 'results'):
@@ -45,6 +56,10 @@ def submit(root):
             shutil.copy2(ASSETS / name, bundle / name)
         for name in ('prepare_data.py', 'prepare_data.sh'):
             shutil.copy2(REPO / 'research/connections/pretrain' / name, bundle / name)
+        if packing != 'native':
+            (bundle / 'prepare_data.py').rename(bundle / 'prepare_native.py')
+            shutil.copy2(REPO / 'research/connections/data2k/prepare_indexed.py', bundle / 'prepare_data.py')
+            shutil.copy2(REPO / 'research/connections/data2k/fast_pack.py', bundle / 'fast_pack.py')
         for name in ('run.sh', 'finish_data.py'):
             shutil.copy2(REPO / 'research/connections/data2k' / name, bundle / name)
         shutil.copy2('/home/yzhong239/mhc-pretrain-20261030/data.json', bundle / 'expected-data.json')
@@ -53,15 +68,19 @@ def submit(root):
         raw = json.loads((bundle / 'dataset-manifest.json').read_text())
         inputs = [str(p.relative_to(root)) for p in sorted(bundle.iterdir())]
         inputs += [item['osdf_uri'] for item in raw['files']]
+        preferred_host = None if profile is None else profile['trials'][0]['hostname']
+        rank = '0' if preferred_host is None else f'ifThenElse(TARGET.Machine == {json.dumps(preferred_host)}, 1, 0)'
         text = f'''universe = vanilla
 container_image = file:///staging/y/yzhong239/gradformer/nanochat-uv-v4.sif
 executable = bundles/run.sh
+arguments = {threads}
 should_transfer_files = YES
 when_to_transfer_output = ON_EXIT
 stream_output = True
 stream_error = True
 requirements = (HasCHTCStaging == true)
-request_cpus = 4
+rank = {rank}
+request_cpus = {threads}
 request_memory = 16GB
 request_disk = 90GB
 transfer_input_files = {','.join(inputs)}
@@ -71,7 +90,7 @@ log = logs/data.$(Cluster).$(Process).log
 output = logs/data.$(Cluster).$(Process).out
 error = logs/data.$(Cluster).$(Process).err
 +JobBatchName = "nanochat-fineweb-2k-cache"
-+NanochatDataKey = "{KEY}"
++NanochatDataKey = "{key}"
 queue 1
 '''
         (root / 'prepare.sub').write_text(text)
@@ -85,11 +104,14 @@ queue 1
         state = dict(status='submitted', job=cluster + '.0', source_commit=source,
                      input_sha256=hashes, sequence_length=2048, training_tokens=10000007168,
                      data_uri=f'osdf:///chtc/staging/y/yzhong239/nanochat-2k-10b-data-{cluster}.tar',
-                     formal_training=False, automatic_training=False, submitted_at=time.time())
+                     formal_training=False, automatic_training=False, submitted_at=time.time(),
+                     packing_backend=packing, tokenizer_threads=threads,
+                     preferred_host=preferred_host,
+                     profile_reference=None if profile is None else str(profile_report.resolve()))
         write(root / 'state.json', state)
         attrs = 'ClusterId,ProcId,JobStatus,NumJobStarts,TransferInput,TransferOutputRemaps,RequestCpus,RequestMemory,RequestDisk,RequestGpus,NanochatDataKey'
         ads = json.loads(command(['condor_q', state['job'], '-json', '-attributes', attrs], root) or '[]')
-        assert len(ads) == 1 and ads[0]['NanochatDataKey'] == KEY
+        assert len(ads) == 1 and ads[0]['NanochatDataKey'] == key
         assert ads[0].get('RequestGpus', 0) == 0
         assert '.netrc' not in ads[0]['TransferInput'] and 'nanochat-uv-v4.sif' in ads[0]['TransferInput']
         write(root / 'submission-verified.json', ads[0])
@@ -180,7 +202,12 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('root', type=Path)
     parser.add_argument('action', choices=('submit', 'watch'))
+    parser.add_argument('--packing', choices=('native', 'indexed4', 'indexed8'), default='native')
+    parser.add_argument('--profile-report', type=Path)
     args = parser.parse_args()
     args.root = args.root.resolve()
     args.root.mkdir(exist_ok=True)
-    (submit if args.action == 'submit' else watch)(args.root)
+    if args.action == 'submit':
+        submit(args.root, args.packing, args.profile_report)
+    else:
+        watch(args.root)
