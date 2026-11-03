@@ -7,5 +7,13 @@
     "tests_failed": 1,
     "reason": "Synthetic routing fixture omitted the post coefficients required by analytic write comparison; failed before checkpoint evaluation",
     "fix": "Return explicit post coefficients in fake routing tuple. Production model code and numerical tolerances unchanged."
+  },
+  {
+    "job": "7774732.0",
+    "source": "47b2fd32d8c7ca0de37a0276fb1ead2acce417bb",
+    "exit_code": 1,
+    "tests_passed": 4,
+    "reason": "Vanilla evaluation completed but aggregation found 128 NaN sequence/sub-layer cosine summaries: zero per-token update makes cosine undefined; ordinary mean propagated NaN",
+    "fix": "Exclude only undefined cosines, save valid token/sequence counts, return null for no valid samples; non-cosine finite checks unchanged; add independent zero-vector aggregation test."
   }
 ]

@@ -50,8 +50,8 @@ readout/backout. Flatten [D,K] for mHC; never collapse streams for these metrics
 
 ## Validation
 
-Four independent synthetic checks cover full-stream norm, known ratios/cosines,
-nonidentity routing with disabled compute, and identity skip for additive residuals.
+Five independent synthetic checks cover full-stream norm, known ratios/cosines,
+nonidentity routing with disabled compute, identity skip for additive residuals, and explicit undefined-cosine handling.
 For each real checkpoint: exact hidden parity with the original eager forward;
 all eight skipped forwards equal an independent module-output-zeroing hook oracle;
 disabled branches are not called; layer decomposition identity; full-dev CCE

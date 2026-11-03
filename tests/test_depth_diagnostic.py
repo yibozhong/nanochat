@@ -1,6 +1,6 @@
 """Small independent oracles; real-checkpoint forward/skip checks run in the diagnostic."""
 import torch
-from scripts.connection_depth_diagnostic import vectors, cosine, measurements, sublayer
+from scripts.connection_depth_diagnostic import vectors, cosine, measurements, sublayer, sequence_statistics, summarized
 
 
 def test_full_stream_norm_does_not_collapse_opposite_streams():
@@ -45,3 +45,14 @@ def test_plain_skip_is_identity():
     out, info = sublayer(x,None,lambda h:1/0,True,True)
     assert torch.equal(out,x)
     assert info[0].count_nonzero()==info[1].count_nonzero()==0
+
+
+def test_undefined_cosine_is_excluded_and_counted_not_zero_imputed():
+    rows=[dict(update_residual_cosine=torch.tensor([[float('nan'),1.,-1.],[float('nan')]*3]),
+               total_ratio=torch.zeros(2,3))]
+    result=sequence_statistics(rows)
+    assert result['update_residual_cosine_valid_tokens'][:,0].tolist()==[2,0]
+    assert result['update_residual_cosine'][0,0]==0
+    stats=summarized(result['update_residual_cosine'][:,0])
+    assert stats['valid_sequences']==1 and stats['mean']==0
+    assert summarized(result['update_residual_cosine'][1:,0])['mean'] is None

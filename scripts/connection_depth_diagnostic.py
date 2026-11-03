@@ -33,6 +33,22 @@ def cosine(a, b):
     return torch.where(den > 1e-20, (a*b).sum(-1)/den.clamp_min(1e-20), torch.nan)
 
 
+def sequence_statistics(rows):
+    """Mean over tokens, excluding undefined cosine ONLY; retain token counts."""
+    packed = {}
+    for key in rows[0]:
+        values = torch.stack([r[key] for r in rows], dim=-1)
+        if key.endswith('cosine'):
+            assert not bool(torch.isinf(values).any())
+            counts = torch.isfinite(values).sum(1)
+            packed[key] = torch.nanmean(values, dim=1).cpu().numpy()
+            packed[key+'_valid_tokens'] = counts.cpu().numpy()
+        else:
+            assert bool(torch.isfinite(values).all()), key
+            packed[key] = values.mean(1).cpu().numpy()
+    return packed
+
+
 def measurements(before, after, compute, routing):
     h, total, c, r = map(vectors, (before, after.float()-before.float(), compute, routing))
     hn = h.norm(dim=-1)
@@ -125,13 +141,12 @@ def traced_hidden(model, idx, skip=None, observe=False):
     if not observe:
         return norm(x), None
     # Each sequence is one statistical unit, rather than 2048 independent tokens.
-    pack = lambda rows: {k: torch.stack([r[k].mean(1) for r in rows], dim=1).cpu().numpy() for k in rows[0]}
     adjacent = {}
     for name, us in [('total', updates), ('compute', branch_updates)]:
         cs = torch.stack([cosine(us[i], us[i+1]) for i in range(len(us)-1)], dim=-1)
         adjacent[name] = torch.nanmean(cs, dim=1).cpu().numpy()
         adjacent[name+'_valid_tokens'] = torch.isfinite(cs).sum(1).cpu().numpy()
-    return norm(x), dict(layer=pack(metrics), sublayer=pack(submetrics), adjacent=adjacent,
+    return norm(x), dict(layer=sequence_statistics(metrics), sublayer=sequence_statistics(submetrics), adjacent=adjacent,
                         decomposition_max_abs=max(errors), native_backout_ratio=final_extra)
 
 
@@ -168,8 +183,11 @@ def fingerprint(model):
 
 def summarized(values):
     a = np.asarray(values, dtype=np.float64)
-    assert np.isfinite(a).all()
-    return dict(mean=float(a.mean()), sequence_se=float(a.std(ddof=1)/np.sqrt(len(a))),
+    assert not np.isinf(a).any()
+    a = a[np.isfinite(a)]
+    if len(a)<2:
+        return dict(mean=float(a[0]) if len(a) else None,sequence_se=None,ci95=None,valid_sequences=len(a))
+    return dict(mean=float(a.mean()), sequence_se=float(a.std(ddof=1)/np.sqrt(len(a))), valid_sequences=len(a),
                 ci95=[float(x) for x in np.quantile(a[np.random.default_rng(42).integers(0,len(a),(4000,len(a)))].mean(1),[.025,.975])])
 
 
