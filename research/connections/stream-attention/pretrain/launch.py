@@ -11,7 +11,7 @@ import uuid
 
 REPO = Path(__file__).resolve().parents[4]
 ROOT = Path(sys.argv[1]).resolve()
-GATE = Path('/home/yzhong239/mhc-stream-attention-20261103/retry-2')
+ACTIVE = Path('/home/yzhong239/mhc-stream-attention-20261103/ACTIVE.json')
 KEY = 'mhc-attn-multistream-10b-20261103'
 
 
@@ -24,6 +24,7 @@ def write(path, value):
 
 
 def main():
+    GATE=Path(json.loads(ACTIVE.read_text())['workflow'])
     ROOT.mkdir(parents=True, exist_ok=True)
     with (ROOT/'submit.lock').open('a') as lock:
         fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
@@ -49,7 +50,7 @@ def main():
         shutil.copy2(REPO/'research/connections/stream-attention/pretrain/train.sh',ROOT/'train.sh')
         hashes=dict(gate['source']['hashes'])
         data_name=ready['data_uri'].rsplit('/',1)[-1];hashes[data_name]=ready['archive']['sha256']
-        source=dict(commit=gate['source']['commit'],hashes=hashes,gate_job='7689738.0',
+        source=dict(commit=gate['source']['commit'],hashes=hashes,gate_job=published['job'],
             purpose=KEY,formal_training=True,steps=305176,training_tokens=305176*32768,
             architecture='vanilla',variant='mhc',attention_mode='per_stream',
             data_uri=ready['data_uri'],launcher_sha256=hashlib.sha256((ROOT/'train.sh').read_bytes()).hexdigest())

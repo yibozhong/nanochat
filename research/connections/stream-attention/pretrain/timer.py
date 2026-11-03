@@ -10,7 +10,7 @@ import time
 
 REPO=Path(__file__).resolve().parents[4]
 ROOT=Path(sys.argv[1]).resolve()
-GATE=Path('/home/yzhong239/mhc-stream-attention-20261103/retry-2')
+ACTIVE=Path('/home/yzhong239/mhc-stream-attention-20261103/ACTIVE.json')
 DATA=Path('/home/yzhong239/nanochat-data-2k-fast-20261102')
 
 
@@ -49,6 +49,7 @@ def main():
         while not (ROOT/'STOPPED.json').exists():
             status=dict(timestamp=time.time(),pid=os.getpid(),interval_seconds=300)
             try:
+                GATE=Path(read(ACTIVE)['workflow'])
                 cache=read(Path('/home/yzhong239/datasets/fineweb-edu-10bt/current-packed-cache.json'))
                 gs=read(GATE/'state.json')
                 status.update(data_job=job_state('7685535.0'),gate_job=job_state(gs['job']),
