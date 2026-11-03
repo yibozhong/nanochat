@@ -39,7 +39,7 @@ def main():
             d=diagnostics[name]
             assert d['passed'] and d['global_relative_l2']<.02
             assert all(p['finite'] and p['mixed_l2_ratio']<=1 for p in d['parameters'].values())
-        assert max(diagnostics['stream-compiled-fp32-loop']['gradients'])<3e-4
+        assert max(diagnostics['stream-compiled-fp32-loop']['gradients'])<3e-6
         assert not command(['git','status','--porcelain'])
         # Current changes may only add orchestration/reporting; GPU-tested model,
         # training loop and dependency versions must still be the same.
