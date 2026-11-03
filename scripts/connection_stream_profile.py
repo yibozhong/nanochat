@@ -29,7 +29,7 @@ class SyntheticData:
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--mode', choices=('baseline', 'shared', 'per_stream'), required=True)
+    parser.add_argument('--mode', choices=('baseline', 'shared', 'per_stream', 'per_stream_independent'), required=True)
     parser.add_argument('--repetition', type=int, required=True)
     parser.add_argument('--output', required=True)
     args = parser.parse_args()
@@ -37,7 +37,7 @@ def main():
     torch.set_num_threads(2); torch.backends.cuda.matmul.allow_tf32 = False
     configure_attention('sdpa_cudnn'); seed_all(42)
     config = ConnectionConfig(variant='baseline' if args.mode=='baseline' else 'mhc',
-        attention_mode='per_stream' if args.mode=='per_stream' else 'shared')
+        attention_mode=args.mode if args.mode!='baseline' else 'shared')
     model = ConnectionModel(config).prepare(compile_blocks=True)
     match_vanilla_initialization(model, 42)
     opt, wd = optimizer_for(model)

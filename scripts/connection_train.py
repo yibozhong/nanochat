@@ -28,7 +28,7 @@ def main():
     p.add_argument('--variant', choices=('baseline','mhc','mhc_no_sinkhorn'), required=True)
     p.add_argument('--sequence-length', type=int, default=2048)
     p.add_argument('--architecture', choices=('vanilla', 'native'), default='vanilla')
-    p.add_argument('--attention-mode', choices=('shared', 'per_stream'), default='shared')
+    p.add_argument('--attention-mode', choices=('shared', 'per_stream', 'per_stream_independent'), default='shared')
     p.add_argument('--window-pattern', default='SSSL', help='Native backbone only; vanilla always uses full attention')
     p.add_argument('--formal-training', action='store_true', help='Explicitly enable W&B for a formal training run')
     p.add_argument('--wandb-group', default='mhc-official-kernels-20261030')
@@ -125,12 +125,15 @@ def main():
     from nanochat.connection_cost import model_cost
     cost=model_cost(c,batch=rows_per_step)
     config['compute_estimate']=cost
+    config['attention_optimizer_geometry'] = ('dense_D_by_D_with_disjoint_stream_slices'
+        if c.attention_mode=='per_stream_independent' else
+        'separate_rectangular_matrices' if c.attention_mode=='per_stream' else 'original_dense')
     profile_reference=source.get('profile_reference',{}).get(a.variant)
     if profile_reference:
         config['same_gpu_profile_reference']=profile_reference
     kwargs=dict(project='nanochat',entity='yibozhong657-none',group=a.wandb_group,
                 job_type='pretrain' if a.formal_training else 'diagnostic',
-                name=f'{a.architecture}-{a.variant}'+('-per_stream' if c.attention_mode=='per_stream' else '')+
+                name=f'{a.architecture}-{a.variant}'+(f'-{c.attention_mode}' if c.attention_mode!='shared' else '')+
                      f'-{c.sequence_length}ctx-{a.steps}steps',id=run_id,resume='allow',config=config)
     run=training_run(formal_training=a.formal_training, local_dir=out/"diagnostics", **kwargs)
     run.define_metric('tokens')

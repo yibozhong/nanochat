@@ -31,21 +31,28 @@ def rotary(q, cos, sin):
     return torch.cat([a*cos + b*sin, b*cos - a*sin], dim=-1)
 
 
-def reference_attention(module, x, pre, cos, sin):
+def reference_attention(module, x, pre, cos, sin, *, return_streams=False):
     """Literal stream loop and materialized causal attention, independent of bmm."""
     b, t, d, k = x.shape
     outputs = []
     for s in range(k):
         h = F.rms_norm(x[..., s], (d,))
-        q, key, value = [F.linear(h, layers[s].weight).reshape(
-            b, t, module.stream_heads, module.head_dim) for layers in (module.c_q, module.c_k, module.c_v)]
+        weights = [layer.weight[s*module.stream_width:(s+1)*module.stream_width]
+                   if module.dense_parameters else layer[s].weight
+                   for layer in (module.c_q, module.c_k, module.c_v)]
+        q, key, value = [F.linear(h, weight).reshape(
+            b, t, module.stream_heads, module.head_dim) for weight in weights]
         q = F.rms_norm(rotary(q, cos, sin), (module.head_dim,)) * 1.2
         key = F.rms_norm(rotary(key, cos, sin), (module.head_dim,)) * 1.2
         score = torch.einsum('bthd,buhd->bhtu', q, key) / math.sqrt(module.head_dim)
         mask = torch.ones(t, t, dtype=torch.bool, device=x.device).triu(1)
         prob = score.masked_fill(mask, -torch.inf).softmax(-1)
         attended = torch.einsum('bhtu,buhd->bthd', prob, value).reshape(b, t, -1)
-        outputs.append(F.linear(attended, module.c_proj[s].weight))
+        output_weight = (module.c_proj.weight[:, s*module.stream_width:(s+1)*module.stream_width]
+                         if module.dense_parameters else module.c_proj[s].weight)
+        outputs.append(F.linear(attended, output_weight))
+    if return_streams:
+        return torch.stack(outputs, dim=-1)
     return sum(y * (module.streams * pre[..., s:s+1]) for s, y in enumerate(outputs))
 
 
@@ -73,48 +80,53 @@ def gradient_comparison(actual, expected):
 
 
 @pytest.mark.parametrize('heads', [4, 8])
-def test_grouped_attention_fp64_loop_forward_backward(heads):
+@pytest.mark.parametrize('return_streams', [False, True])
+@pytest.mark.parametrize('dense_parameters', [False, True])
+def test_grouped_attention_fp64_loop_forward_backward(heads, return_streams, dense_parameters):
     seed_all(102)
-    module = StreamAttention(256, heads, 4, 0).cuda().double()
+    module = StreamAttention(256, heads, 4, 0, dense_parameters=dense_parameters).cuda().double()
     x = torch.randn(2, 11, 256, 4, device='cuda', dtype=torch.float64, requires_grad=True)
     pre = torch.randn(2, 11, 4, device='cuda', dtype=torch.float64, requires_grad=True)
     angle = torch.randn(1, 11, 1, 128//heads, device='cuda', dtype=torch.float64)
     cos, sin = angle.cos(), angle.sin()
     # FP64 oracle must retain FP64 in the weighted-merge multiplication too.
     with sdpa_kernel(SDPBackend.MATH):
-        actual = module(x, pre, (cos, sin))
-    expected = reference_attention(module, x, pre, cos, sin)
+        actual = module(x, pre, (cos, sin), return_streams=return_streams)
+    expected = reference_attention(module, x, pre, cos, sin, return_streams=return_streams)
     torch.testing.assert_close(actual, expected, atol=2e-12, rtol=2e-12)
     probe = torch.randn_like(actual)
-    targets = (x, pre, *module.parameters())
+    targets = (x, *module.parameters()) if return_streams else (x, pre, *module.parameters())
     ga = torch.autograd.grad((actual*probe).sum(), targets)
     gr = torch.autograd.grad((expected*probe).sum(), targets)
     for a, r in zip(ga, gr):
         torch.testing.assert_close(a, r, atol=2e-11, rtol=2e-10)
-    record(f'stream-loop-h{heads}', dict(output=relative(actual, expected),
+    record(f'stream-loop-h{heads}-independent{return_streams}-dense{dense_parameters}', dict(output=relative(actual, expected),
         max_gradient_error=max(relative(a, r) for a, r in zip(ga, gr))))
 
 
-def test_compiled_attention_fp32_loop_forward_backward():
+@pytest.mark.parametrize('return_streams', [False, True])
+@pytest.mark.parametrize('dense_parameters', [False, True])
+def test_compiled_attention_fp32_loop_forward_backward(return_streams, dense_parameters):
     seed_all(102)
-    module = StreamAttention(128, 4, 4, 0).cuda()
+    module = StreamAttention(128, 4, 4, 0, dense_parameters=dense_parameters).cuda()
     x = torch.randn(2, 17, 128, 4, device='cuda', requires_grad=True)
     pre = torch.randn(2, 17, 4, device='cuda', requires_grad=True)
     angle = torch.randn(1, 17, 1, 16, device='cuda'); cos, sin = angle.cos(), angle.sin()
     with sdpa_kernel(SDPBackend.MATH):
-        actual = torch.compile(module.forward, fullgraph=True, dynamic=False)(x, pre, (cos, sin))
-        expected = reference_attention(module, x, pre, cos, sin)
+        actual = torch.compile(module.forward, fullgraph=True, dynamic=False)(x, pre, (cos, sin), return_streams=return_streams)
+        expected = reference_attention(module, x, pre, cos, sin, return_streams=return_streams)
         # Grouped output GEMM sums 128 terms, the oracle sums four 32-term
         # projections. Cancellation near zero needs a scale-aware FP32 floor.
         atol = 8*torch.finfo(torch.float32).eps*expected.abs().max().item()
         torch.testing.assert_close(actual, expected, atol=atol, rtol=3e-4)
         assert relative(actual, expected) < 3e-6
         probe = torch.randn_like(actual)
-        ga = torch.autograd.grad((actual*probe).sum(), (x, pre, *module.parameters()))
-        gr = torch.autograd.grad((expected*probe).sum(), (x, pre, *module.parameters()))
+        targets = (x, *module.parameters()) if return_streams else (x, pre, *module.parameters())
+        ga = torch.autograd.grad((actual*probe).sum(), targets)
+        gr = torch.autograd.grad((expected*probe).sum(), targets)
     errors = dict(output=relative(actual, expected), output_absolute_tolerance=atol,
                   gradients=[relative(a, r) for a, r in zip(ga, gr)])
-    record('stream-compiled-fp32-loop', errors)
+    record(f'stream-compiled-fp32-loop-independent{return_streams}-dense{dense_parameters}', errors)
     assert max(errors['gradients']) < 3e-6, errors
     for a, r in zip(ga, gr):
         gradient_atol = 8*torch.finfo(torch.float32).eps*r.abs().max().item()
@@ -219,12 +231,16 @@ def test_parameter_budget_matching_optimizer_and_config_compatibility():
 
 
 @pytest.mark.parametrize('compiled', [False, True])
-def test_model_causality_cache_loss_gradients_recompute(compiled):
+@pytest.mark.parametrize('mode', ['per_stream', 'per_stream_independent'])
+def test_model_causality_cache_loss_gradients_recompute(compiled, mode):
     configure_attention('sdpa_cudnn')
-    model = build(compiled=compiled)
+    model = build(mode=mode, compiled=compiled)
     with torch.no_grad():
         for block in model.blocks:
-            for p in block.attn.c_proj: p.weight.normal_(std=.015)
+            if block.attn.dense_parameters:
+                block.attn.c_proj.weight.normal_(std=.015)
+            else:
+                for p in block.attn.c_proj: p.weight.normal_(std=.015)
             block.mlp.c_proj.weight.normal_(std=.015)
     ids = torch.randint(0, 256, (2, 2048), device='cuda')
     changed = ids.clone(); changed[0, 1024:] = (changed[0, 1024:]+19)%256
@@ -253,17 +269,18 @@ def test_model_causality_cache_loss_gradients_recompute(compiled):
     torch.testing.assert_close(loss, again, atol=2e-5, rtol=2e-5)
     errors = {k:relative(p.grad, before[k]) for k,p in model.named_parameters()}
     recompute_stats = gradient_comparison({k:p.grad for k,p in model.named_parameters()}, before)
-    record(f'stream-model-compiled{compiled}', dict(recompute_gradient_errors=errors, **recompute_stats))
+    record(f'{mode}-model-compiled{compiled}', dict(recompute_gradient_errors=errors, **recompute_stats))
     assert recompute_stats['passed'], recompute_stats
     if compiled:
         model.config.activation_checkpoint = False
         for block in model.blocks:
             block.compiled_attention = None; block.compiled_mlp = None
+            if mode == 'per_stream_independent': block.attn_connection.compiled_diagonal = None
         model.zero_grad(set_to_none=True)
         eager = model(x, y); eager.backward()
         torch.testing.assert_close(loss, eager, atol=2e-4, rtol=2e-4)
         stats = gradient_comparison({k:p.grad for k,p in model.named_parameters()}, before)
-        record('stream-eager-compiled', dict(loss_compiled=loss.item(), loss_eager=eager.item(), **stats))
+        record(f'{mode}-eager-compiled', dict(loss_compiled=loss.item(), loss_eager=eager.item(), **stats))
         assert stats['passed'], stats
 
 
@@ -291,9 +308,10 @@ def test_shared_mhc_eager_compiled_numerical_control():
     assert stats['passed'] and repeated['passed'], stats
 
 
-def test_optimizer_checkpoint_fixed_gradient_next_update(tmp_path):
+@pytest.mark.parametrize('mode', ['per_stream', 'per_stream_independent'])
+def test_optimizer_checkpoint_fixed_gradient_next_update(tmp_path, mode):
     configure_attention('sdpa_cudnn')
-    model = build(length=128); opt, wd = optimizer_for(model)
+    model = build(mode=mode, length=128); opt, wd = optimizer_for(model)
     x = torch.randint(0, 256, (2, 128), device='cuda'); y = (x+1)%256
     for step in range(4):
         schedule(opt, step, 305176, wd); opt.zero_grad(set_to_none=True)
@@ -304,7 +322,7 @@ def test_optimizer_checkpoint_fixed_gradient_next_update(tmp_path):
     path = tmp_path/'checkpoint.pt'
     torch.save(snapshot(model, opt, 4, config=asdict(model.config)), path)
     loaded = torch.load(path, map_location='cpu', weights_only=False)
-    other = build(length=128); other_opt, _ = optimizer_for(other)
+    other = build(mode=mode, length=128); other_opt, _ = optimizer_for(other)
     other.load_state_dict(loaded['model']); other_opt.load_state_dict(loaded['optimizer'])
     equal_tree(model.state_dict(), other.state_dict()); equal_tree(opt.state_dict(), other_opt.state_dict())
     restore_rng(loaded['rng']); expected = torch.rand(8, device='cuda')

@@ -1,6 +1,11 @@
 # Independent attention per mHC stream
 
-Status: implementation awaiting GPU verification. No formal pretraining submitted.
+Status: legacy merged-write experiment. Gate7691122.0 passed17 checks and the
+10B run7701979.0/f2850c69 started, but the user later clarified that attention
+outputs must remain separate through residual writeback. The old run is stopped
+and its checkpoints deleted; its results do not test that intended architecture.
+See ../stream-independent/README.md for the corrected path. The attempt notes
+below are historical, not the current validation status.
 
 First GPU attempt 7688765.0 (source e027e86) passed 14/15 tests. The compiled
 versus eager full-model check failed its pure per-parameter 2% relative bound:

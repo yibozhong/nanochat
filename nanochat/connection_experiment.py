@@ -39,11 +39,11 @@ def match_vanilla_initialization(model, seed):
         torch.manual_seed(seed)
         reference = ConnectionModel(ConnectionConfig(**options))
     weights = reference.state_dict()
-    if model.config.attention_mode == 'per_stream':
+    if model.config.attention_mode != 'shared':
         for i, block in enumerate(model.blocks):
             block.attn.copy_from_dense(reference.blocks[i].attn)
         weights = {k: v for k, v in weights.items() if '.attn.' not in k}
     missing, unexpected = model.load_state_dict(weights, strict=False)
     assert not unexpected
     assert all('_connection.' in name or name.startswith('stream_head.') or
-               (model.config.attention_mode == 'per_stream' and '.attn.' in name) for name in missing)
+               (model.config.attention_mode != 'shared' and '.attn.' in name) for name in missing)
