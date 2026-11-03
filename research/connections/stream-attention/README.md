@@ -95,3 +95,14 @@ attention matrix FLOPs do not guarantee equal elapsed time.
 The workflow submits only a bounded diagnostic GPU job, without W&B or weight
 exports, and does not depend on the concurrently rebuilding 2K FineWeb cache.
 It never automatically submits formal training.
+
+Second attempt 7689738.0 passed 15/17: new and original mHC global
+gradient discrepancies were 0.003530 and 0.003510. Only new stream_head.scale
+exceeded the mixed criterion (reference2.032e-6, difference1.482e-6).
+The FP32 forward oracle had one cancellation-sensitive element with1.907e-6
+error, so its backward was not reached. The next revision preserves intermediate
+BF16 casts for per_stream compiled attention/MLP via PyTorch2.10
+`emulate_precision_casts=True` (shared baseline unchanged), retaining all gradient
+tolerances. The FP32 forward uses8eps*maxabs absolute floor plus global relative
+error<3e-6. Official behavior: https://raw.githubusercontent.com/pytorch/pytorch/v2.10.0/torch/_inductor/config.py
+This changes compiler numerics, not model equations; throughput must be remeasured.

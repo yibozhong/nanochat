@@ -177,8 +177,9 @@ class ConnectionModel(nn.Module):
             # NVIDIA TE supplies its own kernels and custom backward.
             # Compile only the unchanged attention/MLP branches with Inductor.
             for b in self.blocks:
-                b.compiled_attention = torch.compile(b.attention_branch, dynamic=False, fullgraph=True)
-                b.compiled_mlp = torch.compile(b.mlp_branch, dynamic=False, fullgraph=True)
+                options = {'emulate_precision_casts': True} if self.config.attention_mode == 'per_stream' else {}
+                b.compiled_attention = torch.compile(b.attention_branch, dynamic=False, fullgraph=True, options=options)
+                b.compiled_mlp = torch.compile(b.mlp_branch, dynamic=False, fullgraph=True, options=options)
         return self
 
     def hidden(self, idx, kv_cache=None):

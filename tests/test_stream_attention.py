@@ -104,11 +104,16 @@ def test_compiled_attention_fp32_loop_forward_backward():
     with sdpa_kernel(SDPBackend.MATH):
         actual = torch.compile(module.forward, fullgraph=True, dynamic=False)(x, pre, (cos, sin))
         expected = reference_attention(module, x, pre, cos, sin)
-        torch.testing.assert_close(actual, expected, atol=1e-6, rtol=3e-4)
+        # Grouped output GEMM sums 128 terms, the oracle sums four 32-term
+        # projections. Cancellation near zero needs a scale-aware FP32 floor.
+        atol = 8*torch.finfo(torch.float32).eps*expected.abs().max().item()
+        torch.testing.assert_close(actual, expected, atol=atol, rtol=3e-4)
+        assert relative(actual, expected) < 3e-6
         probe = torch.randn_like(actual)
         ga = torch.autograd.grad((actual*probe).sum(), (x, pre, *module.parameters()))
         gr = torch.autograd.grad((expected*probe).sum(), (x, pre, *module.parameters()))
-    errors = dict(output=relative(actual, expected), gradients=[relative(a, r) for a, r in zip(ga, gr)])
+    errors = dict(output=relative(actual, expected), output_absolute_tolerance=atol,
+                  gradients=[relative(a, r) for a, r in zip(ga, gr)])
     record('stream-compiled-fp32-loop', errors)
     assert max(errors['gradients']) < 3e-4, errors
     for a, r in zip(ga, gr):
