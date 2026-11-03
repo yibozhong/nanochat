@@ -31,8 +31,16 @@ class ConnectionConfig:
     fused_connection_grad: bool = False
     architecture: str = 'vanilla'
     window_pattern: str = 'SSSL'  # native only; vanilla is always full attention
+    attention_statistic: str = 'none'
+    moment_query_chunk: int = 256
 
     def __post_init__(self):
+        if self.attention_statistic not in ('none', 'second_moment', 'variance'):
+            raise ValueError('Unknown attention statistic')
+        if self.moment_query_chunk < 1:
+            raise ValueError('moment_query_chunk must be positive')
+        if self.attention_statistic != 'none' and (self.architecture != 'vanilla' or self.variant != 'baseline'):
+            raise ValueError('Value moments initially support vanilla baseline only')
         if self.architecture not in ('vanilla', 'native'):
             raise ValueError(f'Unknown backbone architecture: {self.architecture}')
         if not self.window_pattern or any(c not in 'SL' for c in self.window_pattern):
@@ -136,6 +144,10 @@ class ConnectionModel(nn.Module):
         self.register_buffer('cos', freq.cos()[None, :, None, :], persistent=False)
         self.register_buffer('sin', freq.sin()[None, :, None, :], persistent=False)
         self.compiled_steps = None
+        if config.attention_statistic != 'none':
+            from nanochat.moment_attention import MomentAttention
+            for block in self.blocks:
+                block.attn = MomentAttention(block.attn, config.attention_statistic, config.moment_query_chunk)
 
     def prepare(self, device='cuda', dtype=torch.bfloat16, compile_blocks=False):
         if self.config.variant != 'baseline':

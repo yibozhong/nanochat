@@ -10,8 +10,20 @@ def model_cost(config, batch=1, activation_bytes=2):
     head=2*batch*t*d*c.vocab_size
     attention=4*batch*d*depth*(t*(t+1)//2)
     forward=projections+head+attention
-    return dict(estimated_forward_flops=forward,estimated_training_flops=3*forward,
+    extra = {}
+    if c.attention_statistic != 'none':
+        # Current reference executes dense masked matrices, recomputes QK and
+        # first moment (variance only), and checkpoints the statistics branch.
+        stat_matmuls = 3 if c.attention_statistic == 'variance' else 2
+        stat_dense = stat_matmuls*2*batch*depth*t*t*d
+        stat_proj = 2*batch*t*depth*d*d
+        forward += stat_dense + stat_proj
+        extra = dict(statistics_dense_matmuls=stat_dense, statistics_projection=stat_proj)
+    else:
+        stat_dense = 0
+    return dict(estimated_forward_flops=forward,estimated_training_flops=3*forward+stat_dense,
         components_forward=dict(backbone_projections=projections,vocab_head=head,
-            attention=attention),
+            attention=attention, **extra),
         accounting='FMA=2 FLOPs; allowed attention pairs, not masked dense-kernel execution. Backward approximated as2x consumed forward matrix FLOPs. Excludes softmax/norm/activation/optimizer/recomputation and is not measured hardware FLOPs.',
+        statistics_note='Statistics use full masked FP32 matrices; extra forward matmuls counted once more for activation recomputation. Excludes softmax and pointwise squares/centering. This is the reference implementation cost, not an optimized shared-softmax kernel.',
         memory_note='Actual training peak VRAM must be measured separately.')
