@@ -2,6 +2,22 @@
 
 Status: implementation awaiting GPU verification. No formal pretraining submitted.
 
+First GPU attempt 7688765.0 (source e027e86) passed 14/15 tests. The compiled
+versus eager full-model check failed its pure per-parameter 2% relative bound:
+attention matrices were within 1.15%, but final stream-head parameters were
+69–79%. These ratios alone did not record absolute gradient sizes, and do not
+establish a model defect or harmlessness. Compile/recompute, causality, cache,
+FP64 loop derivatives (~1e-15), and optimizer restoration passed. Timing was
+not run after the test failure.
+
+The next gate keeps model/training code unchanged, adds a compiled FP32
+attention/loop gradient oracle and an ordinary-mHC compiled/eager control,
+and records absolute gradient errors and norms for every parameter. The
+comparison retains the 2% relative bound and adds the existing repository
+parity suite's 1e-6 absolute floor plus a 2% global gradient bound. This is a
+correction to the numerical test criterion, not an implementation fix; it
+must still pass the added checks. The complete gate now has 17 tests.
+
 The user requested independent attention on each mHC stream, reducing each
 stream's head budget to preserve the total attention FLOPs, and merging only
 after attention. The MLP keeps the original shared mHC path. The user selected

@@ -20,7 +20,7 @@ def main():
         '-v', '-s', '--junitxml=results/stream-tests.xml'], root/'tests.log')
     suites = ET.parse(root/'stream-tests.xml').getroot().findall('testsuite')
     checks = {k:sum(int(s.attrib.get(k, 0)) for s in suites) for k in ('tests', 'failures', 'errors', 'skipped')}
-    assert checks == dict(tests=15, failures=0, errors=0, skipped=0), checks
+    assert checks == dict(tests=17, failures=0, errors=0, skipped=0), checks
     trials = []
     for repetition in range(2):
         modes = ('baseline', 'shared', 'per_stream') if repetition==0 else ('per_stream', 'shared', 'baseline')

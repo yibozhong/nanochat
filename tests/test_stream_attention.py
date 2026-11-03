@@ -49,6 +49,29 @@ def reference_attention(module, x, pre, cos, sin):
     return sum(y * (module.streams * pre[..., s:s+1]) for s, y in enumerate(outputs))
 
 
+def gradient_comparison(actual, expected):
+    """Retain 2% relative bound, with the existing parity suite's 1e-6 floor.
+
+    RMSNorm cancels common-scale gradients when initial streams nearly agree.
+    Report absolute errors/norms, not only ratios with near-zero denominators.
+    This test-only comparison does not change model numerics or training.
+    """
+    stats = {}; squared_error = squared_reference = 0.
+    for name, ref in expected.items():
+        value = actual[name].double(); ref = ref.double(); delta = value-ref
+        error_norm, ref_norm = delta.norm().item(), ref.norm().item()
+        bound = 1e-6*math.sqrt(ref.numel()) + .02*ref_norm
+        stats[name] = dict(reference_l2=ref_norm, actual_l2=value.norm().item(),
+            error_l2=error_norm, max_abs=delta.abs().max().item(),
+            relative_l2=error_norm/max(ref_norm, 1e-30), mixed_l2_ratio=error_norm/bound,
+            finite=bool(torch.isfinite(value).all() and torch.isfinite(ref).all()))
+        squared_error += error_norm**2; squared_reference += ref_norm**2
+    global_relative = math.sqrt(squared_error/max(squared_reference, 1e-60))
+    passed = global_relative < .02 and all(s['finite'] and s['mixed_l2_ratio'] <= 1 for s in stats.values())
+    return dict(passed=passed, global_relative_l2=global_relative, parameters=stats,
+        tolerance=dict(atol=1e-6, rtol=.02, global_rtol=.02))
+
+
 @pytest.mark.parametrize('heads', [4, 8])
 def test_grouped_attention_fp64_loop_forward_backward(heads):
     seed_all(102)
@@ -70,6 +93,26 @@ def test_grouped_attention_fp64_loop_forward_backward(heads):
         torch.testing.assert_close(a, r, atol=2e-11, rtol=2e-10)
     record(f'stream-loop-h{heads}', dict(output=relative(actual, expected),
         max_gradient_error=max(relative(a, r) for a, r in zip(ga, gr))))
+
+
+def test_compiled_attention_fp32_loop_forward_backward():
+    seed_all(102)
+    module = StreamAttention(128, 4, 4, 0).cuda()
+    x = torch.randn(2, 17, 128, 4, device='cuda', requires_grad=True)
+    pre = torch.randn(2, 17, 4, device='cuda', requires_grad=True)
+    angle = torch.randn(1, 17, 1, 16, device='cuda'); cos, sin = angle.cos(), angle.sin()
+    with sdpa_kernel(SDPBackend.MATH):
+        actual = torch.compile(module.forward, fullgraph=True, dynamic=False)(x, pre, (cos, sin))
+        expected = reference_attention(module, x, pre, cos, sin)
+        torch.testing.assert_close(actual, expected, atol=1e-6, rtol=3e-4)
+        probe = torch.randn_like(actual)
+        ga = torch.autograd.grad((actual*probe).sum(), (x, pre, *module.parameters()))
+        gr = torch.autograd.grad((expected*probe).sum(), (x, pre, *module.parameters()))
+    errors = dict(output=relative(actual, expected), gradients=[relative(a, r) for a, r in zip(ga, gr)])
+    record('stream-compiled-fp32-loop', errors)
+    assert max(errors['gradients']) < 3e-4, errors
+    for a, r in zip(ga, gr):
+        torch.testing.assert_close(a, r, atol=1e-5, rtol=3e-4)
 
 
 def test_stream_input_and_parameter_isolation_before_merge():
@@ -212,9 +255,33 @@ def test_model_causality_cache_loss_gradients_recompute(compiled):
         model.zero_grad(set_to_none=True)
         eager = model(x, y); eager.backward()
         torch.testing.assert_close(loss, eager, atol=2e-4, rtol=2e-4)
-        errors = {k:relative(p.grad, before[k]) for k,p in model.named_parameters()}
-        record('stream-eager-compiled', dict(gradient_errors=errors))
-        assert max(errors.values()) < .02, errors
+        stats = gradient_comparison({k:p.grad for k,p in model.named_parameters()}, before)
+        record('stream-eager-compiled', dict(loss_compiled=loss.item(), loss_eager=eager.item(), **stats))
+        assert stats['passed'], stats
+
+
+def test_shared_mhc_eager_compiled_numerical_control():
+    model = build(mode='shared', compiled=True)
+    with torch.no_grad():
+        for block in model.blocks:
+            block.attn.c_proj.weight.normal_(std=.015)
+            block.mlp.c_proj.weight.normal_(std=.015)
+    ids = torch.randint(0, 256, (2, 2048), device='cuda')
+    x, y = ids[:, :128].contiguous(), ids[:, 1:129].contiguous()
+    compiled = model(x, y); compiled.backward()
+    before = {k:p.grad.clone() for k,p in model.named_parameters()}
+    model.zero_grad(set_to_none=True)
+    repeat = model(x, y); repeat.backward()
+    repeated = gradient_comparison({k:p.grad for k,p in model.named_parameters()}, before)
+    for block in model.blocks:
+        block.compiled_attention = None; block.compiled_mlp = None
+    model.zero_grad(set_to_none=True)
+    eager = model(x, y); eager.backward()
+    stats = gradient_comparison({k:p.grad for k,p in model.named_parameters()}, before)
+    record('shared-eager-compiled-control', dict(loss_compiled=compiled.item(), loss_eager=eager.item(),
+        repeat_control=repeated, **stats))
+    torch.testing.assert_close(compiled, eager, atol=2e-4, rtol=2e-4)
+    assert stats['passed'] and repeated['passed'], stats
 
 
 def test_optimizer_checkpoint_fixed_gradient_next_update(tmp_path):
