@@ -12,7 +12,7 @@ from torch.nn import functional as F
 from torch.utils.checkpoint import checkpoint
 
 from nanochat.gpt import Block, GPTConfig, Linear, norm
-from nanochat.nvidia_connections import NvidiaHyperConnection, NvidiaHyperHead, NvidiaStreamConnection, diagonal_post_write, expand_streams, check_nvidia_device
+from nanochat.nvidia_connections import NvidiaHyperConnection, NvidiaHyperHead, expand_streams, check_nvidia_device
 from nanochat.optim import MuonAdamW
 
 
@@ -31,7 +31,6 @@ class ConnectionConfig:
     fused_connection_grad: bool = False
     architecture: str = 'vanilla'
     window_pattern: str = 'SSSL'  # native only; vanilla is always full attention
-    attention_mode: str = 'shared'  # per_stream is the legacy merged-write experiment
 
     def __post_init__(self):
         if self.architecture not in ('vanilla', 'native'):
@@ -52,15 +51,6 @@ class ConnectionConfig:
             raise ValueError('Sinkhorn needs at least one iteration')
         if self.variant != 'baseline' and (self.streams != 4 or self.width % 128):
             raise ValueError('NVIDIA mHC kernels require four streams and width divisible by 128')
-        if self.attention_mode not in ('shared', 'per_stream', 'per_stream_independent'):
-            raise ValueError(f'Unknown attention mode: {self.attention_mode}')
-        if self.attention_mode != 'shared':
-            if self.architecture != 'vanilla' or self.variant == 'baseline':
-                raise ValueError('Per-stream attention initially supports vanilla mHC/no-Sinkhorn only')
-            if self.heads % self.streams:
-                raise ValueError('Per-stream attention requires heads divisible by streams')
-            if self.fused_connection_grad:
-                raise ValueError('Per-stream attention requires unfused connection gradient accumulation')
 
     @classmethod
     def from_checkpoint(cls, config):
@@ -86,7 +76,6 @@ class ConnectionBlock(Block):
         super().__init__(native, index)
         self.attn.ve_gate = None
         self.variant = config.variant
-        self.attention_mode = config.attention_mode
         self.compiled_attention = self.compiled_mlp = None
         if self.variant != 'baseline':
             kwargs = dict(use_tf32=config.connection_backend == 'nvidia', fused_grad_acc=config.fused_connection_grad,
@@ -94,11 +83,7 @@ class ConnectionBlock(Block):
             self.attn_connection = NvidiaHyperConnection(config.width, config.streams, 2*index, config.sinkhorn_iterations, **kwargs)
             self.mlp_connection = NvidiaHyperConnection(config.width, config.streams, 2*index+1, config.sinkhorn_iterations, **kwargs)
 
-    def attention_branch(self, h, cos, sin, kv_cache=None, pre=None):
-        if self.attention_mode == 'per_stream_independent':
-            return self.attn(h, None, (cos, sin), kv_cache, return_streams=True)
-        if self.attention_mode == 'per_stream':
-            return self.attn(h, pre, (cos, sin), kv_cache)
+    def attention_branch(self, h, cos, sin, kv_cache=None):
         return self.attn(norm(h), None, (cos, sin), (-1, 0), kv_cache)
 
     def mlp_branch(self, h):
@@ -107,15 +92,8 @@ class ConnectionBlock(Block):
     def forward(self, x, cos, sin, kv_cache=None):
         if self.variant == 'baseline':
             return super().forward(x, None, (cos, sin), (-1, 0), kv_cache)
-        if self.attention_mode == 'per_stream_independent':
-            skip, post = self.attn_connection.routing(x)
-            y = (self.compiled_attention or self.attention_branch)(skip, cos, sin, kv_cache)
-        elif self.attention_mode == 'per_stream':
-            pre, skip, post = self.attn_connection.routing(x)
-            y = (self.compiled_attention or self.attention_branch)(skip, cos, sin, kv_cache, pre)
-        else:
-            h, skip, post = self.attn_connection.read(x)
-            y = (self.compiled_attention or self.attention_branch)(h, cos, sin, kv_cache)
+        h, skip, post = self.attn_connection.read(x)
+        y = (self.compiled_attention or self.attention_branch)(h, cos, sin, kv_cache)
         x = self.attn_connection.write(y, skip, post)
         h, skip, post = self.mlp_connection.read(x)
         y = (self.compiled_mlp or self.mlp_branch)(h)
@@ -158,19 +136,6 @@ class ConnectionModel(nn.Module):
         self.register_buffer('cos', freq.cos()[None, :, None, :], persistent=False)
         self.register_buffer('sin', freq.sin()[None, :, None, :], persistent=False)
         self.compiled_steps = None
-        if config.attention_mode != 'shared':
-            from nanochat.stream_attention import StreamAttention
-            # Preserve the shared model's complete RNG sequence and connector
-            # initialization. The corrected mode keeps dense Parameters for
-            # baseline-equivalent Muon; only its forward uses stream slices.
-            with torch.random.fork_rng(devices=[]):
-                for i, b in enumerate(self.blocks):
-                    attn = StreamAttention(config.width, config.heads, config.streams, i,
-                        dense_parameters=config.attention_mode == 'per_stream_independent')
-                    attn.copy_from_dense(b.attn)
-                    b.attn = attn
-                    if config.attention_mode == 'per_stream_independent':
-                        b.attn_connection = NvidiaStreamConnection(b.attn_connection)
 
     def prepare(self, device='cuda', dtype=torch.bfloat16, compile_blocks=False):
         if self.config.variant != 'baseline':
@@ -186,12 +151,8 @@ class ConnectionModel(nn.Module):
             # NVIDIA TE supplies its own kernels and custom backward.
             # Compile only the unchanged attention/MLP branches with Inductor.
             for b in self.blocks:
-                options = {'emulate_precision_casts': True} if self.config.attention_mode != 'shared' else {}
-                b.compiled_attention = torch.compile(b.attention_branch, dynamic=False, fullgraph=True, options=options)
-                b.compiled_mlp = torch.compile(b.mlp_branch, dynamic=False, fullgraph=True, options=options)
-                if self.config.attention_mode == 'per_stream_independent':
-                    b.attn_connection.compiled_diagonal = torch.compile(diagonal_post_write,
-                        dynamic=False, fullgraph=True, options=options)
+                b.compiled_attention = torch.compile(b.attention_branch, dynamic=False, fullgraph=True)
+                b.compiled_mlp = torch.compile(b.mlp_branch, dynamic=False, fullgraph=True)
         return self
 
     def hidden(self, idx, kv_cache=None):
@@ -257,15 +218,6 @@ def optimizer_for(model, batch_tokens=32768):
             lr=.02*batch_scale, momentum=.95, ns_steps=5, beta2=.9, weight_decay=wd))
     ids = [id(p) for g in groups for p in g['params']]
     assert len(ids) == len(set(ids)) and set(ids) == {id(p) for p in model.parameters()}
-    if c.attention_mode == 'per_stream_independent':
-        # Removing unused H_pre rows adds post-only connector shapes. Like
-        # native GPT.setup_optimizer, reserve bounded compile-cache entries
-        # for the actual AdamW signatures; do not change optimizer math.
-        from torch._dynamo import config as compiler_config
-        signatures = {(tuple(p.shape), p.dtype, tuple(p.stride()), p.device.type)
-                      for group in groups if group['kind'] == 'adamw'
-                      for p in group['params']}
-        compiler_config.recompile_limit = max(compiler_config.recompile_limit, 2*len(signatures))
     opt = MuonAdamW(groups)
     for g in opt.param_groups:
         g['initial_lr'] = g['lr']
