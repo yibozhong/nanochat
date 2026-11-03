@@ -1,0 +1,79 @@
+{
+  "requested_at": "2026-11-03T05:22:51.076225+00:00",
+  "queue_verified_empty": true,
+  "raw_14_shards_and_tokenizer_retained": true,
+  "files": [
+    {
+      "path": "/home/yzhong239/lookback-16k-10b-20261102/bundles/gate-data.tar",
+      "bytes": 13404160,
+      "sequence_length": 16384,
+      "train_sha256": "a863dd67ebc38064d58a2f260f48372cb9c80ae70ceb8a7258f957583713e96e",
+      "deleted": true
+    },
+    {
+      "path": "/home/yzhong239/lookback-16k-10b-20261102/results/data-7667953.0-gate.tar",
+      "bytes": 12861440,
+      "sequence_length": 16384,
+      "train_sha256": "a863dd67ebc38064d58a2f260f48372cb9c80ae70ceb8a7258f957583713e96e",
+      "deleted": true
+    },
+    {
+      "path": "/home/yzhong239/lookback-16k-10b-20261102/results/gate-data-7668046.0-cache.tar",
+      "bytes": 13404160,
+      "sequence_length": 16384,
+      "train_sha256": "a863dd67ebc38064d58a2f260f48372cb9c80ae70ceb8a7258f957583713e96e",
+      "deleted": true
+    },
+    {
+      "path": "/home/yzhong239/lookback-final-hidden-10b-20261102/bundles/gate-data.tar",
+      "bytes": 13404160,
+      "sequence_length": 16384,
+      "train_sha256": "a863dd67ebc38064d58a2f260f48372cb9c80ae70ceb8a7258f957583713e96e",
+      "deleted": true
+    },
+    {
+      "path": "/home/yzhong239/lookback-kv-residual-20261102/bundles/gate-data.tar",
+      "bytes": 13404160,
+      "sequence_length": 16384,
+      "train_sha256": "a863dd67ebc38064d58a2f260f48372cb9c80ae70ceb8a7258f957583713e96e",
+      "deleted": true
+    },
+    {
+      "path": "/home/yzhong239/lookback-lastkv-blend-10b-20261102/bundles/gate-data.tar",
+      "bytes": 13404160,
+      "sequence_length": 16384,
+      "train_sha256": "a863dd67ebc38064d58a2f260f48372cb9c80ae70ceb8a7258f957583713e96e",
+      "deleted": true
+    },
+    {
+      "path": "/home/yzhong239/lookback-recompute-10b-20261102/bundles/gate-data.tar",
+      "bytes": 13404160,
+      "sequence_length": 16384,
+      "train_sha256": "a863dd67ebc38064d58a2f260f48372cb9c80ae70ceb8a7258f957583713e96e",
+      "deleted": true
+    },
+    {
+      "path": "/home/yzhong239/lookback-shared-kv-10b-20261102/bundles/gate-data.tar",
+      "bytes": 13404160,
+      "sequence_length": 16384,
+      "train_sha256": "a863dd67ebc38064d58a2f260f48372cb9c80ae70ceb8a7258f957583713e96e",
+      "deleted": true
+    },
+    {
+      "path": "/home/yzhong239/lookback-shared-kv-10b-20261102/bundles-retry2/gate-data.tar",
+      "bytes": 13404160,
+      "sequence_length": 16384,
+      "train_sha256": "a863dd67ebc38064d58a2f260f48372cb9c80ae70ceb8a7258f957583713e96e",
+      "deleted": true
+    },
+    {
+      "path": "/staging/y/yzhong239/nanochat-16k-10b-data-7667953.tar",
+      "bytes": 20006256640,
+      "sequence_length": 16384,
+      "train_sha256": "d1d48340b7f2637bb7c7da7cbf7990516843a710e348f6488a5c1c96fd887c1c",
+      "deleted": true
+    }
+  ],
+  "complete": true,
+  "total_bytes": 20126351360
+}

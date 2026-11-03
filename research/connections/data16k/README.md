@@ -1,9 +1,12 @@
 # Packed 16K FineWeb-Edu data
 
+The 16K token archives were deleted on 2026-11-02 at the user's request. The
+default is now 2K; see `../data2k/README.md`. The information below documents
+the former cache and its reproducible packing tools, not an available archive.
+
 These shared data tools support native nanochat, full-attention vanilla and
 NVIDIA mHC. `prepare_data.py` and `prepare_data.sh` were moved here without
-changing packing, tokenization or split selection. The existing cache is retained;
-no data regeneration is required by the model cleanup.
+changing packing, tokenization or split selection.
 
 The validated cache contains 305176 updates of 32768 tokens, with 16384-token
 contexts. It uses FineWeb-Edu sample-10BT shards 000–012 for training and shard
