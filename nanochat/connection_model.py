@@ -34,8 +34,15 @@ class ConnectionConfig:
     attention_kernel: str = 'original'
     attention_statistic: str = 'none'
     moment_query_chunk: int = 256
+    innovation_residual: bool = False
+    innovation_warmup_steps: int = 40
+    innovation_predictor_lr: float = .001
 
     def __post_init__(self):
+        if self.innovation_warmup_steps < 2 or not math.isfinite(self.innovation_predictor_lr) or self.innovation_predictor_lr <= 0:
+            raise ValueError('Innovation warmup must be >=2 and predictor LR positive and finite')
+        if self.innovation_residual and (self.architecture != 'vanilla' or self.variant != 'baseline' or self.attention_statistic != 'none'):
+            raise ValueError('Innovation residual initially supports vanilla baseline without attention statistics')
         if self.attention_kernel not in ('original','fla_triton'):
             raise ValueError('Unknown attention kernel')
         if self.attention_kernel == 'fla_triton' and (self.architecture != 'vanilla' or self.variant != 'baseline'):
@@ -102,6 +109,13 @@ class ConnectionBlock(Block):
     def mlp_branch(self, h):
         return self.mlp(norm(h))
 
+    def innovation_forward(self, x, cos, sin, beta, kv_cache=None, local_loss=False, collect_statistics=False):
+        residual = self.attention_branch(x, cos, sin, kv_cache)
+        x, attn_loss, attn_stats = self.attn_innovation(x, residual, beta, local_loss, collect_statistics)
+        residual = self.mlp_branch(x)
+        x, mlp_loss, mlp_stats = self.mlp_innovation(x, residual, beta, local_loss, collect_statistics)
+        return x, attn_loss + mlp_loss, torch.stack((attn_stats, mlp_stats))
+
     def forward(self, x, cos, sin, kv_cache=None):
         if self.variant == 'baseline':
             return super().forward(x, None, (cos, sin), (-1, 0), kv_cache)
@@ -153,6 +167,18 @@ class ConnectionModel(nn.Module):
             from nanochat.moment_attention import MomentAttention
             for block in self.blocks:
                 block.attn = MomentAttention(block.attn, config.attention_statistic, config.moment_query_chunk, config.attention_kernel)
+        if config.innovation_residual:
+            from nanochat.innovation_residual import InnovationResidual
+            # Add only after ALL shared weights are initialized; consume no RNG.
+            for block in self.blocks:
+                block.attn_innovation = InnovationResidual(config.width)
+                block.mlp_innovation = InnovationResidual(config.width)
+            self.register_buffer('innovation_beta', torch.tensor(0.))
+
+    @torch.no_grad()
+    def set_innovation_step(self, step):
+        if self.config.innovation_residual:
+            self.innovation_beta.fill_(min(max(step, 0)/(self.config.innovation_warmup_steps-1), 1.))
 
     def prepare(self, device='cuda', dtype=torch.bfloat16, compile_blocks=False):
         if self.config.variant != 'baseline':
@@ -163,7 +189,8 @@ class ConnectionModel(nn.Module):
         self.wte.to(dtype=dtype)
         self.cos = self.cos.to(dtype); self.sin = self.sin.to(dtype)
         if compile_blocks and self.config.variant == 'baseline':
-            self.compiled_steps = [torch.compile(b.forward, dynamic=False, fullgraph=True) for b in self.blocks]
+            self.compiled_steps = [torch.compile(b.innovation_forward if self.config.innovation_residual else b.forward,
+                                                dynamic=False, fullgraph=True) for b in self.blocks]
         elif compile_blocks:
             # NVIDIA TE supplies its own kernels and custom backward.
             # Compile only the unchanged attention/MLP branches with Inductor.
@@ -172,7 +199,9 @@ class ConnectionModel(nn.Module):
                 b.compiled_mlp = torch.compile(b.mlp_branch, dynamic=False, fullgraph=True)
         return self
 
-    def hidden(self, idx, kv_cache=None):
+    def hidden(self, idx, kv_cache=None, return_innovation=False, collect_statistics=False):
+        if (return_innovation or collect_statistics) and not self.config.innovation_residual:
+            raise ValueError('Innovation diagnostics require innovation_residual=True')
         start = 0 if kv_cache is None else kv_cache.get_pos()
         if start + idx.shape[1] > self.config.sequence_length:
             raise ValueError('Input exceeds configured context length')
@@ -180,7 +209,22 @@ class ConnectionModel(nn.Module):
         if self.config.variant != 'baseline':
             x = expand_streams(x, self.config.streams)
         cos, sin = self.cos[:, start:start+idx.shape[1]], self.sin[:, start:start+idx.shape[1]]
+        auxiliary = x.new_zeros((), dtype=torch.float32) if self.config.innovation_residual else None
+        statistics = []
         for i, b in enumerate(self.blocks):
+            if self.config.innovation_residual:
+                fn = self.compiled_steps[i] if self.compiled_steps is not None else b.innovation_forward
+                args = (x, cos, sin, self.innovation_beta, kv_cache,
+                        return_innovation and self.training and torch.is_grad_enabled(), collect_statistics)
+                if self.config.activation_checkpoint and self.training and torch.is_grad_enabled():
+                    if kv_cache is not None:
+                        raise ValueError('Activation checkpointing cannot mutate a KV cache')
+                    x, local, stats = checkpoint(fn, *args, use_reentrant=False)
+                else:
+                    x, local, stats = fn(*args)
+                auxiliary = auxiliary + local
+                statistics.append(stats)
+                continue
             fn = self.compiled_steps[i] if self.compiled_steps is not None else b.forward
             if self.config.activation_checkpoint and self.training and torch.is_grad_enabled():
                 if kv_cache is not None:
@@ -190,20 +234,26 @@ class ConnectionModel(nn.Module):
                 x = fn(x, cos, sin, kv_cache)
         if self.stream_head is not None:
             x = self.stream_head(x)
+        if return_innovation:
+            return norm(x), auxiliary, torch.cat(statistics)
         return norm(x)
 
-    def forward(self, idx, targets=None, dense=False, kv_cache=None):
-        h = self.hidden(idx, kv_cache)
+    def forward(self, idx, targets=None, dense=False, kv_cache=None, return_innovation=False, collect_statistics=False):
+        hidden = self.hidden(idx, kv_cache, return_innovation, collect_statistics)
+        h, auxiliary, statistics = hidden if return_innovation else (hidden, None, None)
         w = self.lm_head.weight.to(h.dtype)
         if targets is None or dense:
             logits = 15 * torch.tanh(F.linear(h, w).float() / 15)
             if targets is None:
-                return logits
-            return F.cross_entropy(logits.flatten(0, 1), targets.flatten())
-        from cut_cross_entropy import linear_cross_entropy
-        return linear_cross_entropy(h, w, targets, softcap=15., shift=0,
-            reduction='mean', filter_eps=None, filter_e_grad=False, filter_c_grad=False,
-            accum_e_fp32=True, accum_c_fp32=True)
+                result = logits
+            else:
+                result = F.cross_entropy(logits.flatten(0, 1), targets.flatten())
+        else:
+            from cut_cross_entropy import linear_cross_entropy
+            result = linear_cross_entropy(h, w, targets, softcap=15., shift=0,
+                reduction='mean', filter_eps=None, filter_e_grad=False, filter_c_grad=False,
+                accum_e_fp32=True, accum_c_fp32=True)
+        return (result, auxiliary, statistics) if return_innovation else result
 
 
 def optimizer_for(model, batch_tokens=32768):
@@ -221,15 +271,18 @@ def optimizer_for(model, batch_tokens=32768):
              betas=(.8, .96), eps=1e-10, weight_decay=.01),
         dict(kind='adamw', params=[model.wte.weight], lr=.3*batch_scale*width_scale,
              betas=(.8, .995), eps=1e-10, weight_decay=.001)]
-    matrices, routing = [], []
+    matrices, routing, predictors = [], [], []
     for b in model.blocks:
         for name, p in b.named_parameters():
-            (routing if '_connection.' in name else matrices).append(p)
+            (predictors if '_innovation.' in name else routing if '_connection.' in name else matrices).append(p)
     if model.stream_head is not None:
         routing.extend(model.stream_head.parameters())
     if routing:
         groups.append(dict(kind='adamw', params=routing, lr=.008*batch_scale*width_scale,
                            betas=(.8, .96), eps=1e-10, weight_decay=0.))
+    if predictors:
+        groups.append(dict(kind='adamw', params=predictors, lr=c.innovation_predictor_lr,
+                           betas=(.9, .99), eps=1e-8, weight_decay=0., local_predictor=True))
     for shape in sorted({p.shape for p in matrices}):
         groups.append(dict(kind='muon', params=[p for p in matrices if p.shape == shape],
             lr=.02*batch_scale, momentum=.95, ns_steps=5, beta2=.9, weight_decay=wd))

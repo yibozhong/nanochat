@@ -1,0 +1,76 @@
+{
+  "name": "Innovation Residual",
+  "optional": true,
+  "enabled_architecture": "vanilla full-attention, no attention statistics",
+  "formula": "h_next = h + F(norm(h)) - beta * (W h + b)",
+  "gradient_contract": {
+    "ntp": "W and b detached, h live",
+    "local": "mean MSE per branch; h and residual detached; sum across branches",
+    "evaluation": "frozen predictors, no optimizer updates"
+  },
+  "predictors": {
+    "count": 16,
+    "shape": [
+      512,
+      512
+    ],
+    "bias": true,
+    "initialization": "0.001 I, zero bias; no RNG consumption; full rank at initialization only",
+    "optimizer": "AdamW within existing combined optimizer, local MSE gradients only",
+    "lr": 0.001,
+    "betas": [
+      0.9,
+      0.99
+    ],
+    "eps": 1e-08,
+    "weight_decay": 0,
+    "lr_schedule": "same multiplier as backbone"
+  },
+  "beta": {
+    "warmup_steps": 40,
+    "formula": "min(zero_based_step / 39, 1)",
+    "persistent_buffer": true
+  },
+  "comparison": {
+    "baseline_run": "46bd7320",
+    "baseline_job": "7802254.0",
+    "baseline_steps": 305176,
+    "baseline_parameters": 58720256,
+    "new_parameters": 62922752,
+    "extra_parameters": 4202496
+  },
+  "training": {
+    "steps": 305176,
+    "tokens": 10000007168,
+    "seed": 42,
+    "batch_tokens": 32768,
+    "microbatch": 16,
+    "grad_accum": 1,
+    "sequence_length": 2048,
+    "width": 512,
+    "depth": 8,
+    "heads": 4,
+    "vocab_size": 32768,
+    "attention_kernel": "fla_triton",
+    "data": "existing packed FineWeb-Edu 10B, same dev/test and token order",
+    "outer_optimizer": "unchanged MuonAdamW and default LR schedule"
+  },
+  "diagnostics": {
+    "correctness": "14 new GPU tests + 4 retained-backend regressions",
+    "profiles": "baseline/innovation twice in reversed order, each 20 warmup + 30 measured full training steps",
+    "resume": "25 -> exit85 -> fresh process to 50, horizon remains305176",
+    "r_squared": "variance-weighted 1-SSE/SST, feature-wise centering over same full dev set; undefined zero SST",
+    "evaluation": "every250steps plus50 and end; all16 branches, beta, MSE, raw/predicted/innovation relative norms"
+  },
+  "interpretation": [
+    "Online MSE predictor need not reach the least-squares solution.",
+    "Linear unpredictability does not imply task usefulness or functional novelty.",
+    "NTP can compensate for the subtraction; this is not a capacity increase.",
+    "One seed and one predictor learning rate; no claim of optimal hyperparameters."
+  ],
+  "operations": {
+    "wandb": "formal training only; nanochat/innovation-residual-10b-20261104",
+    "checkpoint": "latest500 overwrite, best separate, exit85 every1800seconds",
+    "monitor": "publish after GPU gate, submit one10B, stop at first finite NTP step"
+  }
+}

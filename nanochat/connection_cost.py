@@ -22,9 +22,17 @@ def model_cost(config, batch=1, activation_bytes=2):
         extra = dict(statistics_dense_matmuls=stat_dense, statistics_projection=stat_proj)
     else:
         stat_dense = 0
-    return dict(estimated_forward_flops=forward,estimated_training_flops=3*forward+(stat_dense if c.attention_kernel == 'original' else 0),
+    training=3*forward+(stat_dense if c.attention_kernel == 'original' else 0)
+    if c.innovation_residual:
+        # Per branch: inference P(h), detached-input local P(h), dH and dW.
+        predictor=4*batch*t*depth*d*d
+        forward+=predictor
+        training+=4*predictor
+        extra.update(innovation_predictor_inference=predictor)
+    return dict(estimated_forward_flops=forward,estimated_training_flops=training,
         components_forward=dict(backbone_projections=projections,vocab_head=head,
             attention=attention, **extra),
         accounting='FMA=2 FLOPs; allowed attention pairs, not masked dense-kernel execution. Backward approximated as2x consumed forward matrix FLOPs. Excludes softmax/norm/activation/optimizer/recomputation and is not measured hardware FLOPs.',
         statistics_note=('FLA fused backend shares QK/softmax; one extra P@phi(V) for variance or SiLU Jensen. Excludes nonlinear pointwise work and FlashAttention backward probability recomputation.' if c.attention_kernel == 'fla_triton' else 'Reference uses masked FP32 matrices and additional checkpoint recomputation; excludes pointwise operations.'),
+        innovation_note='When enabled: forward counts inference only; training adds two predictor forwards plus dH for NTP and dW for local MSE; no other predictor gradients.',
         memory_note='Actual training peak VRAM must be measured separately.')
