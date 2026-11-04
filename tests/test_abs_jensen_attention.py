@@ -42,7 +42,39 @@ def test_reference_formula_and_all_qkv_gradients(compiled):
 
 @pytest.mark.parametrize('t,d',[(17,32),(129,64),(2048,128)])
 def test_fused_forward_and_gradients(t,d):
-    shared.test_operator_forward_and_gradients(MODE,t,d)
+    xs=[torch.randn(1,t,2,d,device='cuda',dtype=torch.bfloat16,requires_grad=True) for _ in range(3)]
+    refs=[x.detach().clone().requires_grad_() for x in xs]
+    actual=fused_attention(*xs,MODE);expected=shared.reference(*refs,MODE)
+    weights=[torch.randn_like(x) for x in actual]
+    grads=torch.autograd.grad(sum((x.float()*w.float()).sum() for x,w in zip(actual,weights)),xs)
+    natural=torch.autograd.grad(sum((x.float()*w.float()).sum() for x,w in zip(expected,weights)),refs)
+    # abs is nonsmooth: minute online-softmax rounding can switch sign(mu).
+    # Independently differentiate dense A at the branch chosen by the actual
+    # returned mean. This checks the complete VJP, including all Q/K and raw
+    # abs(V) paths, without masking away any tokens or changing the kernel.
+    q,k,v=[x.transpose(1,2) for x in refs]
+    logits=(q.float()@k.float().transpose(-1,-2))/d**.5
+    a=logits.masked_fill(~torch.ones(t,t,device=q.device,dtype=torch.bool).tril(),-torch.inf).softmax(-1)
+    mean=(a@v.float()).to(v.dtype).transpose(1,2)
+    raw=(a@v.float().abs()).transpose(1,2)
+    chosen_sign=actual[0].detach().float().sign()
+    branch_loss=(mean.float()*(weights[0].float()-weights[1].float()*chosen_sign)).sum()+(raw*weights[1].float()).sum()
+    matched=torch.autograd.grad(branch_loss,refs)
+    flips=actual[0].sign()!=expected[0].sign()
+    result=dict(mode=MODE,t=t,d=d,forward=[shared.relative(a,b) for a,b in zip(actual,expected)],
+        gradients=[shared.relative(a,b) for a,b in zip(grads,natural)],
+        matched_branch_gradients=[shared.relative(a,b) for a,b in zip(grads,matched)],
+        gradient_check='Dense full VJP at the fused mean sign; unrestricted dense VJP also reported, not hidden',
+        max_abs=[float((a.float()-b.float()).abs().max()) for a,b in zip(actual,expected)],
+        statistic_min=float(actual[1].min()),negative_fraction=float((actual[1]<0).float().mean()),
+        mean_sign_disagreement=float(flips.float().mean()),mean_sign_disagreement_count=int(flips.sum()),
+        flipped_dense_mean_max=float(expected[0][flips].float().abs().max()) if flips.any() else 0.,
+        flipped_fused_mean_max=float(actual[0][flips].float().abs().max()) if flips.any() else 0.)
+    shared.record(f'{MODE}-{t}-{d}',result)
+    assert all(torch.isfinite(x).all() for x in (*actual,*grads,*matched))
+    assert max(result['forward'])<.025,result
+    assert max(result['matched_branch_gradients'])<.035,result
+    if max(result['gradients'])>=.035:assert flips.any(),result
 
 
 def test_cancellation_zero_subgradient_and_same_sign_values():

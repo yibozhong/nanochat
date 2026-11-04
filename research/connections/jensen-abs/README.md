@@ -28,8 +28,20 @@ independent FP64/compiled FP32 formula/VJPs, BF16 fused forward and Q/K/V VJPs a
 same-sign zero gap, causal prefix/no future gradients, shared initialization,
 zero-Wj gradient/Muon membership, compiled full-model updates, and optimizer/RNG
 restoration. Together with the 17 existing kernel regressions there are 28 checks.
-The existing bounds remain output relative L2 <2.5%, gradients <3.5%, and
-full-model compile/eager gradient <2%, loss difference <.002.
+The output relative L2 bound is <2.5%; full-model compile/eager gradient <2%,
+loss difference <.002. The first gate failed one of 28 checks: at T17/D32,
+one of 1088 mean signs differed between online BF16 and dense attention,
+giving 5.47% Q-gradient and 5.32% K-gradient relative error (2K maximum 2.38%).
+That unrestricted dense-VJP failure is retained in `failed-attempts.json`.
+
+The revised abs-only check independently differentiates dense attention at the
+sign selected by the fused returned mean, requiring full Q/K/V VJP relative L2
+<3.5% without dropping any tokens. It also records the unrestricted dense VJP,
+sign-disagreement count/magnitudes, and negative roundoff; it does not assert
+uniform <3.5% agreement when the two forwards cross the abs kink. Explicit
+zero-subgradient tests remain. Production kernels and all other-mode thresholds
+are unchanged. This separates backward correctness from nonsmooth sensitivity;
+it does not eliminate that sensitivity or prove it harmless for training.
 
 The bounded H200 gate also traces operator launches, profiles baseline/SiLU/abs
 in two reversed rounds (2K, micro16, 20 warmup +30 timed steps), and validates

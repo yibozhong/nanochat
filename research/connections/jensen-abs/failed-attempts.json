@@ -1,0 +1,83 @@
+[
+  {
+    "job": "7805125.0",
+    "source": "6e5aca4afaf6165576671cf1a2d3ae6e7abd1059",
+    "passed": 27,
+    "failed": 1,
+    "test": "test_fused_forward_and_gradients[17-32]",
+    "numerics": {
+      "jensen_abs-129-64": {
+        "mode": "jensen_abs",
+        "t": 129,
+        "d": 64,
+        "forward": [
+          0.0018877165857702494,
+          0.0017162961885333061
+        ],
+        "gradients": [
+          0.023504698649048805,
+          0.022782523185014725,
+          0.020094718784093857
+        ],
+        "max_abs": [
+          0.0078125,
+          0.0078125
+        ],
+        "statistic_min": -0.00384521484375,
+        "negative_fraction": 0.004057655110955238,
+        "mean_sign_disagreement": 0.00042393410694785416
+      },
+      "model-jensen_abs": {
+        "losses": [
+          5.544488906860352,
+          5.544492721557617
+        ],
+        "gradient_relative": 0.0026215394027531147
+      },
+      "jensen_abs-2048-128": {
+        "mode": "jensen_abs",
+        "t": 2048,
+        "d": 128,
+        "forward": [
+          0.002137974137440324,
+          0.0009285581763833761
+        ],
+        "gradients": [
+          0.023585425689816475,
+          0.023770706728100777,
+          0.020163429901003838
+        ],
+        "max_abs": [
+          0.0078125,
+          0.0078125
+        ],
+        "statistic_min": -0.00390625,
+        "negative_fraction": 0.0002307891845703125,
+        "mean_sign_disagreement": 0.000499725341796875
+      },
+      "jensen_abs-17-32": {
+        "mode": "jensen_abs",
+        "t": 17,
+        "d": 32,
+        "forward": [
+          0.0016682498389855027,
+          0.0025518855545669794
+        ],
+        "gradients": [
+          0.054709285497665405,
+          0.05322134494781494,
+          0.02771432138979435
+        ],
+        "max_abs": [
+          0.0078125,
+          0.0078125
+        ],
+        "statistic_min": -0.002777099609375,
+        "negative_fraction": 0.03400735184550285,
+        "mean_sign_disagreement": 0.0009191176504828036
+      }
+    },
+    "interpretation": "One mean sign mismatch at the abs kink; new same-branch dense VJP control pending. No production-kernel changes.",
+    "change": "Keep raw numerical errors and add a full matched-branch dense VJP bound; other modes unchanged. No formal training."
+  }
+]
