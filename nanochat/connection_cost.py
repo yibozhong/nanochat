@@ -12,13 +12,14 @@ def model_cost(config, batch=1, activation_bytes=2):
     forward=projections+head+attention
     extra = {}
     if c.attention_statistic != 'none':
+        branches = 2 if c.attention_statistic == 'variance_third' else 1
         # Current reference executes dense masked matrices, recomputes QK and
         # first moment (variance/Jensen), and checkpoints the statistics branch.
         stat_matmuls = 2 if c.attention_statistic == 'second_moment' else 3
         stat_dense = stat_matmuls*2*batch*depth*t*t*d
         if c.attention_kernel == 'fla_triton':
-            stat_dense = 2*batch*depth*d*(t*(t+1)//2)
-        stat_proj = 2*batch*t*depth*d*d
+            stat_dense = branches*2*batch*depth*d*(t*(t+1)//2)
+        stat_proj = branches*2*batch*t*depth*d*d
         forward += stat_dense + stat_proj
         extra = dict(statistics_dense_matmuls=stat_dense, statistics_projection=stat_proj)
     else:
@@ -27,5 +28,5 @@ def model_cost(config, batch=1, activation_bytes=2):
         components_forward=dict(backbone_projections=projections,vocab_head=head,
             attention=attention, **extra),
         accounting='FMA=2 FLOPs; allowed attention pairs, not masked dense-kernel execution. Backward approximated as2x consumed forward matrix FLOPs. Excludes softmax/norm/activation/optimizer/recomputation and is not measured hardware FLOPs.',
-        statistics_note=('FLA fused backend shares QK/softmax and adds only one P@phi(V) matmul per allowed pair; excludes nonlinear pointwise work and FlashAttention backward probability recomputation.' if c.attention_kernel == 'fla_triton' else 'Reference uses masked FP32 matrices and additional checkpoint recomputation; excludes pointwise operations.'),
+        statistics_note=('FLA fused backend shares QK/softmax; one extra P@phi(V) for a single statistic, two for variance_third. Excludes nonlinear pointwise work and FlashAttention backward probability recomputation.' if c.attention_kernel == 'fla_triton' else 'Reference uses masked FP32 matrices and additional checkpoint recomputation; excludes pointwise operations.'),
         memory_note='Actual training peak VRAM must be measured separately.')

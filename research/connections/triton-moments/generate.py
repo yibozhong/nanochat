@@ -95,3 +95,68 @@ def moment_preprocess(O, R, S, DO, DS, DM, DZ, Delta, D: tl.constexpr, BD: tl.co
 
 '''
 (root/'nanochat/moment_attention_kernels.py').write_text(header+phi+fwd+bwd)
+
+# Three simultaneous value streams: V, V^2, V^3. Keep the validated two-stream
+# kernels above byte-for-byte unchanged; the new variant has its own launches.
+third_fwd=fwd.replace('moment_fwd_kernel','third_fwd_kernel')
+third_fwd=third_fwd.replace('    stat,\n','    stat,\n    third,\n    raw3,\n')
+third_fwd=third_fwd.replace('    b_z = tl.zeros([BT, BV], dtype=tl.float32)',
+    '    b_z = tl.zeros([BT, BV], dtype=tl.float32)\n    b_z3 = tl.zeros([BT, BV], dtype=tl.float32)')
+needle='        b_z = b_z * b_r[:, None] + tl.dot(b_p.to(b_q.dtype), phi(b_v, MODE).to(b_v.dtype))'
+assert third_fwd.count(needle)==2
+third_fwd=third_fwd.replace(needle,needle+'\n        b_z3 = b_z3 * b_r[:, None] + tl.dot(b_p.to(b_q.dtype), cube(b_v).to(b_v.dtype))')
+third_fwd=third_fwd.replace('    b_m += log2(b_acc)', '''    b_z3 = b_z3 / b_acc[:, None]
+    mu = b_mean.to(tl.float32)
+    b_third = b_z3 - 3. * mu * b_z + 2. * mu * mu * mu
+    offs = (bos * HQ + i_hq) * V + o_q[:, None] * (HQ*V) + o_v[None, :]
+    tl.store(third + offs, b_third, mask=m_q[:, None] & (o_v[None, :] < V))
+    tl.store(raw3 + offs, b_z3, mask=m_q[:, None] & (o_v[None, :] < V))
+    b_m += log2(b_acc)''')
+third_bwd=bwd.replace('moment_bwd_kernel_', 'third_bwd_kernel_').replace('    dz,\n','    dz,\n    dz3,\n')
+needle='b_dz = tl.load(dz + (bos * HQ + i_hq) * V + o_q[:, None] * (HQ*V) + o_v[None, :], mask=m_q[:, None] & (o_v[None, :] < V), other=0.).to(v.dtype.element_ty)'
+lines=[]
+for line in third_bwd.splitlines():
+    lines.append(line)
+    if line.strip()==needle:
+        lines.append(line.replace('b_dz =','b_dz3 =').replace('tl.load(dz +','tl.load(dz3 +'))
+third_bwd='\n'.join(lines)+'\n'
+third_bwd=third_bwd.replace('tl.dot(b_dz, phi(b_v, MODE).to(b_v.dtype))',
+    'tl.dot(b_dz, phi(b_v, MODE).to(b_v.dtype)) + tl.dot(b_dz3, cube(b_v).to(b_v.dtype))')
+third_bwd=third_bwd.replace('tl.dot(phi(b_v, MODE).to(b_v.dtype), tl.trans(b_dz))',
+    'tl.dot(phi(b_v, MODE).to(b_v.dtype), tl.trans(b_dz)) + tl.dot(cube(b_v).to(b_v.dtype), tl.trans(b_dz3))')
+third_bwd=third_bwd.replace('    b_dzv = tl.zeros([BT, BV], dtype=tl.float32)',
+    '    b_dzv = tl.zeros([BT, BV], dtype=tl.float32)\n    b_dzv3 = tl.zeros([BT, BV], dtype=tl.float32)')
+needle='        b_dzv = tl.dot(b_p.to(b_do.dtype), b_dz, b_dzv)'
+assert third_bwd.count(needle)==2
+third_bwd=third_bwd.replace(needle,needle+'\n        b_dzv3 = tl.dot(b_p.to(b_do.dtype), b_dz3, b_dzv3)')
+third_bwd=third_bwd.replace('    b_dv += b_dzv * phi_grad(b_v, MODE)',
+    '    b_dv += b_dzv * phi_grad(b_v, MODE) + b_dzv3 * (3. * b_v.to(tl.float32) * b_v.to(tl.float32))')
+third_helpers=phi[:phi.index('@triton.jit\ndef moment_preprocess')]+'''@triton.jit
+def cube(x):
+    x = x.to(tl.float32)
+    return x * x * x
+
+@triton.jit
+def third_preprocess(O, R2, R3, S, DO, DS, DT, DM, D2, D3, Delta, D: tl.constexpr, BD: tl.constexpr):
+    row = tl.program_id(0)
+    d = tl.arange(0, BD)
+    mu = tl.load(O + row*D+d, d<D, 0).to(tl.float32)
+    r2 = tl.load(R2 + row*D+d, d<D, 0).to(tl.float32)
+    r3 = tl.load(R3 + row*D+d, d<D, 0).to(tl.float32)
+    gs = tl.load(DS + row*D+d, d<D, 0).to(tl.float32)
+    stat = tl.load(S + row*D+d, d<D, 0)
+    gs = tl.where(stat > 0, gs, 0.)
+    gt = tl.load(DT + row*D+d, d<D, 0).to(tl.float32)
+    gm = tl.load(DO + row*D+d, d<D, 0).to(tl.float32)
+    gm = gm - 2. * mu * gs + (6. * mu * mu - 3. * r2) * gt
+    g2 = gs - 3. * mu * gt
+    gm = gm.to(DM.dtype.element_ty)
+    g2 = g2.to(D2.dtype.element_ty)
+    gt = gt.to(D3.dtype.element_ty)
+    tl.store(DM + row*D+d, gm, d<D)
+    tl.store(D2 + row*D+d, g2, d<D)
+    tl.store(D3 + row*D+d, gt, d<D)
+    tl.store(Delta+row, tl.sum(mu*gm.to(tl.float32) + r2*g2.to(tl.float32) + r3*gt.to(tl.float32)))
+
+'''
+(root/'nanochat/third_moment_attention_kernels.py').write_text(header+third_helpers+third_fwd+third_bwd)

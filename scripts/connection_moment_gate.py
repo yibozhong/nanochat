@@ -37,6 +37,23 @@ def profile(mode, out, kernel="original"):
         warmup_steps=20,timed_steps=30,schedule_steps=305176,losses=losses,
         parameters=sum(p.numel() for p in model.parameters()),gpu=torch.cuda.get_device_name(),
         peak_allocated_bytes=torch.cuda.max_memory_allocated(),peak_reserved_bytes=torch.cuda.max_memory_reserved())
+    if mode=='variance_third':
+        # Scale probe is outside all timing/peak-memory samples. Observe actual
+        # 50-update activations and last-step parameter gradients, without norm.
+        rows=[];handles=[];model.compiled_steps=None
+        for layer,b in enumerate(model.blocks):
+            for name in ('c_proj','c_stat','c_third'):
+                module=getattr(b.attn,name)
+                def capture(m,args,output,layer=layer,name=name):
+                    x=args[0].detach().float();y=output.detach().float()
+                    rows.append(dict(layer=layer,branch=name,input_rms=float(x.square().mean().sqrt()),
+                        input_max=float(x.abs().max()),first_token_max=float(x[:,0].abs().max()),
+                        output_rms=float(y.square().mean().sqrt()),
+                        weight_gradient_norm=float(m.weight.grad.float().norm())))
+                handles.append(module.register_forward_hook(capture))
+        with torch.no_grad():model(data.batch('train',0,1)[0])
+        for h in handles:h.remove()
+        result['branch_scales_after_50_updates']=rows
     json_write(out,result)
     assert result['peak_reserved_bytes'] < .9*22000*1024**2, result
 
