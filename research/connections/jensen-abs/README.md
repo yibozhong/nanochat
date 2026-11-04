@@ -1,3 +1,5 @@
+> Archived on 2026-11-04 by user request. Implementation and launchers have been removed; the text below records the historical experiment only. No automatic continuation.
+
 # Absolute Jensen gap attention
 
 `--attention-kernel fla_triton --attention-statistic jensen_abs` computes

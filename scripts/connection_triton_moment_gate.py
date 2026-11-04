@@ -6,7 +6,7 @@ from scripts.connection_moment_gate import execute
 from nanochat.packed_training import json_write
 from nanochat.triton_moment_attention import fused_attention
 
-def operator_profile(modes=('none','second_moment','variance','jensen_silu')):
+def operator_profile(modes=('none','variance','jensen_silu')):
     from torch.profiler import profile,ProfilerActivity
     rows=[]
     for mode in modes:
@@ -32,7 +32,7 @@ def main():
     execute([sys.executable,'-m','pytest','tests/test_triton_moments.py','-v','--junitxml=results/triton-tests.xml'],'triton-tests')
     operator_profile()
     profiles=[]
-    for repeat,order in enumerate([('none','variance','jensen_silu','second_moment'),('second_moment','jensen_silu','variance','none')]):
+    for repeat,order in enumerate([('none','variance','jensen_silu'),('jensen_silu','variance','none')]):
         for mode in order:
             name=f'profile-{repeat}-'+mode
             execute([sys.executable,'-m','scripts.connection_moment_gate','--profile',mode,'--kernel','fla_triton','--output','results/'+name+'.json'],name)

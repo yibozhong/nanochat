@@ -50,4 +50,4 @@ Path('results/device.json').write_text(json.dumps(dict(gpu=torch.cuda.get_device
 print('NVIDIA-only runtime verified; GPU:',torch.cuda.get_device_name(),flush=True)
 PY
 export NVIDIA_TF32_OVERRIDE=0
-python -m scripts.connection_third_moment_gate
+python -m scripts.connection_statistics_cleanup_gate

@@ -1,3 +1,5 @@
+> Current supported attention statistics: `none`, `variance`, `jensen_silu`. Other statistics are retired as of 2026-11-04. Older modes/results below are historical. This research direction is closed unless explicitly reopened.
+
 # Attention value moments, 2K / 10B
 
 The experiment tests whether explicitly retaining value dispersion improves NTP

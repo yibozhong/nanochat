@@ -28,7 +28,7 @@ def monitor(root):
                     with tarfile.open(root/'results'/f'gate-{state["job"]}.tar') as tf:
                         result=json.load(tf.extractfile('results/jensen-gate.json'))
                         assert result['complete'] and result['source']==state['source']
-                        assert result['checks']==dict(tests=25,failures=0,errors=0,skipped=0)
+                        assert result['checks']==dict(tests=20,failures=0,errors=0,skipped=0)
                         assert not result['formal_training'] and not result['weights_returned']
                         assert len(result['profiles'])==3
                         assert {r['mode'] for r in result['profiles']}=={'none','variance','jensen_silu'}

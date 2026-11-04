@@ -21,7 +21,7 @@ def setup():
     seed_all(42)
 
 
-def oracle(q, k, v, centered, offset=0):
+def oracle(q, k, v, offset=0):
     # Deliberately use sum a*(v-mean)^2, NOT E[v^2]-E[v]^2.
     result = []
     for i in range(q.shape[1]):
@@ -30,15 +30,14 @@ def oracle(q, k, v, centered, offset=0):
         logits = torch.einsum('bhd,bshd->bhs', q[:, i], keys) / q.shape[-1]**.5
         a = logits.softmax(-1).transpose(1, 2).unsqueeze(-1)
         mean = (a*vals).sum(1, keepdim=True)
-        result.append((a*(vals-mean if centered else vals).square()).sum(1))
+        result.append((a*(vals-mean).square()).sum(1))
     return torch.stack(result, dim=1)
 
 
-@pytest.mark.parametrize('centered', [False, True])
-def test_fp64_formula_gradients_and_tiling(centered):
+def test_fp64_formula_gradients_and_tiling():
     xs = [torch.randn(2, 11, 2, 8, device='cuda', dtype=torch.float64, requires_grad=True) for _ in range(3)]
-    expected = oracle(*xs, centered)
-    actual = value_moments(*xs, centered=centered, query_chunk=4)
+    expected = oracle(*xs)
+    actual = value_moments(*xs, query_chunk=4)
     torch.testing.assert_close(actual, expected, atol=2e-12, rtol=2e-12)
     upstream = torch.randn_like(actual)
     ga = torch.autograd.grad((actual*upstream).sum(), xs, retain_graph=True)
@@ -47,13 +46,12 @@ def test_fp64_formula_gradients_and_tiling(centered):
         torch.testing.assert_close(a, e, atol=3e-12, rtol=3e-12)
 
 
-@pytest.mark.parametrize('centered', [False, True])
-def test_compiled_fp32_forward_backward(centered):
+def test_compiled_fp32_forward_backward():
     xs = [torch.randn(2, 32, 2, 16, device='cuda', requires_grad=True) for _ in range(3)]
     fn = torch.compile(value_moments, fullgraph=True, dynamic=False)
-    actual = fn(*xs, centered=centered, query_chunk=16)
+    actual = fn(*xs, query_chunk=16)
     ref_x = [x.detach().double().requires_grad_() for x in xs]
-    expected = oracle(*ref_x, centered)
+    expected = oracle(*ref_x)
     torch.testing.assert_close(actual.double(), expected, atol=3e-6, rtol=3e-6)
     up = torch.randn_like(actual)
     ga = torch.autograd.grad((actual*up).sum(), xs)
@@ -65,10 +63,10 @@ def test_compiled_fp32_forward_backward(centered):
 def test_variance_not_entropy_constant_values_and_mean_collision():
     q = k = torch.zeros(1, 2, 1, 2, device='cuda', dtype=torch.float64)
     v = torch.tensor([-1.,1.], device='cuda', dtype=torch.float64).view(1,2,1,1).expand_as(q)
-    s = value_moments(q,k,v,centered=True)
+    s = value_moments(q,k,v)
     torch.testing.assert_close(s[:,0], torch.zeros_like(s[:,0]), atol=0, rtol=0)
     torch.testing.assert_close(s[:,1], torch.ones_like(s[:,1]), atol=0, rtol=0)
-    torch.testing.assert_close(value_moments(q,k,torch.ones_like(v)*3,centered=True),torch.zeros_like(v),atol=0,rtol=0)
+    torch.testing.assert_close(value_moments(q,k,torch.ones_like(v)*3),torch.zeros_like(v),atol=0,rtol=0)
 
 
 def build(mode, *, compiled=False, length=128):
@@ -78,7 +76,7 @@ def build(mode, *, compiled=False, length=128):
     return ConnectionModel(c).prepare(compile_blocks=compiled)
 
 
-@pytest.mark.parametrize('mode', ['second_moment', 'variance'])
+@pytest.mark.parametrize('mode', ['variance'])
 def test_matched_initialization_zero_branch_and_optimizer(mode):
     base = build('none'); before = torch.get_rng_state().clone()
     model = build(mode)
@@ -106,7 +104,7 @@ def activate(model):
                 weight.normal_(std=.02)
 
 
-@pytest.mark.parametrize('mode', ['second_moment', 'variance'])
+@pytest.mark.parametrize('mode', ['variance'])
 def test_live_2k_causality_and_cache(mode):
     model=build(mode,length=2048);activate(model);model.eval()
     x=torch.randint(0,256,(1,2048),device='cuda')
@@ -127,7 +125,7 @@ def test_live_2k_causality_and_cache(mode):
     finally:handle.remove()
 
 
-@pytest.mark.parametrize('mode', ['second_moment', 'variance'])
+@pytest.mark.parametrize('mode', ['variance'])
 def test_live_compiled_loss_gradients_and_recompute(mode):
     eager=build(mode);activate(eager)
     compiled=build(mode,compiled=True);compiled.load_state_dict(eager.state_dict())
@@ -150,7 +148,7 @@ def test_live_compiled_loss_gradients_and_recompute(mode):
         assert (p.grad.float()-grads[1][n]).norm() <= 1e-6 + .02*grads[1][n].norm()
 
 
-@pytest.mark.parametrize('mode', ['second_moment', 'variance'])
+@pytest.mark.parametrize('mode', ['variance'])
 def test_checkpoint_optimizer_rng_and_same_gradient_next_update(mode,tmp_path):
     model=build(mode);opt,wd=optimizer_for(model)
     x=torch.randint(0,256,(2,128),device='cuda');y=(x+1)%256
@@ -175,3 +173,11 @@ def test_new_config_is_explicit_old_checkpoint_defaults_and_scope():
     assert ConnectionConfig.from_checkpoint({'variant':'baseline'}).attention_statistic=='none'
     for changes in ({'variant':'mhc'},{'architecture':'native'}):
         with pytest.raises(ValueError):ConnectionConfig(attention_statistic='variance',**changes)
+
+
+def test_retired_statistics_are_rejected():
+    for mode in ('second_moment','jensen_abs','variance_third','variance_support'):
+        with pytest.raises(ValueError,match='Unknown attention statistic'):
+            ConnectionConfig(attention_statistic=mode)
+        with pytest.raises(ValueError,match='Unknown attention statistic'):
+            ConnectionConfig.from_checkpoint({'attention_statistic':mode})

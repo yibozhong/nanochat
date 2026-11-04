@@ -16,7 +16,7 @@ REPO=Path(__file__).resolve().parents[3]
 KEY='attention-moments-10b-20261103'
 PRIOR=Path('/home/yzhong239/mhc-stream-independent-20261103/retry-2')
 READY=Path('/home/yzhong239/datasets/fineweb-edu-10bt/current-packed-cache.json')
-MODES=('second_moment','variance')
+MODES=('variance','jensen_silu')
 WHEEL='transformer_engine_torch-2.20.2-cp311-cp311-linux_x86_64.whl'
 RUNTIME='osdf:///chtc/staging/y/yzhong239/mhc-official-runtime-7546767.tar.gz'
 COMPAT='https://developer.download.nvidia.com/compute/cuda/repos/debian12/x86_64/cuda-compat-13-1_590.48.01-1_amd64.deb'
@@ -103,7 +103,7 @@ def audit_publish(root,state):
     with tarfile.open(archive) as tf:
         result=json.load(tf.extractfile('results/gate.json'))
         assert result['complete'] and result['source']==state['source']
-        assert result['checks']==dict(tests=17,failures=0,errors=0,skipped=0)
+        assert result['checks']==dict(tests=12,failures=0,errors=0,skipped=0)
         assert not result['formal_training'] and not result['weights_returned']
         assert len(result['profiles'])==6
         assert len({r['gpu'] for r in result['profiles']})==1

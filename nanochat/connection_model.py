@@ -40,10 +40,8 @@ class ConnectionConfig:
             raise ValueError('Unknown attention kernel')
         if self.attention_kernel == 'fla_triton' and (self.architecture != 'vanilla' or self.variant != 'baseline'):
             raise ValueError('Initial FLA port supports vanilla baseline backbone only')
-        if self.attention_statistic not in ('none', 'second_moment', 'variance', 'jensen_silu', 'jensen_abs', 'variance_third', 'variance_support'):
+        if self.attention_statistic not in ('none', 'variance', 'jensen_silu'):
             raise ValueError('Unknown attention statistic')
-        if self.attention_statistic in ('variance_third', 'variance_support') and self.attention_kernel != 'fla_triton':
-            raise ValueError('This attention statistic requires the fused Triton backend')
         if self.moment_query_chunk < 1:
             raise ValueError('moment_query_chunk must be positive')
         if self.attention_statistic != 'none' and (self.architecture != 'vanilla' or self.variant != 'baseline'):
@@ -226,7 +224,7 @@ def optimizer_for(model, batch_tokens=32768):
     matrices, routing = [], []
     for b in model.blocks:
         for name, p in b.named_parameters():
-            (routing if '_connection.' in name or '.support_gate.' in name else matrices).append(p)
+            (routing if '_connection.' in name else matrices).append(p)
     if model.stream_head is not None:
         routing.extend(model.stream_head.parameters())
     if routing:

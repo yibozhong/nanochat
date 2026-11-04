@@ -1,3 +1,5 @@
+> Archived on 2026-11-04 by user request. Implementation and launchers have been removed; the text below records the historical experiment only. No automatic continuation.
+
 # Mean + variance + third central moment attention
 
 User authorized implementation, GPU validation, and then one formal 10B run.

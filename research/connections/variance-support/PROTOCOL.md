@@ -1,3 +1,5 @@
+> Archived on 2026-11-04 by user request. Implementation and launchers have been removed; the text below records the historical experiment only. No automatic continuation.
+
 # Effective Support Gated Variance Attention
 
 One authorized 10B run, `attention_statistic=variance_support`, using the fused

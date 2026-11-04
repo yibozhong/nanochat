@@ -15,7 +15,7 @@ def main():
         'tests/test_connection_training_resume.py','-v','--junitxml=results/jensen-tests.xml'],'tests')
     suites=ET.parse('results/jensen-tests.xml').getroot().findall('testsuite')
     checks={k:sum(int(s.attrib.get(k,0)) for s in suites) for k in ('tests','failures','errors','skipped')}
-    assert checks==dict(tests=25,failures=0,errors=0,skipped=0),checks
+    assert checks==dict(tests=20,failures=0,errors=0,skipped=0),checks
     profiles=[]
     for mode in ('none','variance','jensen_silu'):
         name='profile-'+mode

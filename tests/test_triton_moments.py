@@ -21,10 +21,10 @@ def reference(q,k,v,mode):
     a=a.masked_fill(~torch.ones(t,t,device=q.device,dtype=torch.bool).tril(),-torch.inf).softmax(-1)
     mu=(a@v.float()).to(v.dtype)
     if mode=='none':return mu.transpose(1,2),torch.empty(0,device=q.device)
-    nonlinear={'jensen_silu':F.silu,'jensen_abs':torch.abs}
+    nonlinear={'jensen_silu':F.silu}
     phi=lambda x:nonlinear.get(mode,torch.square)(x.float()).to(v.dtype).float()
     raw=a@phi(v)
-    stat=raw if mode=='second_moment' else raw-phi(mu)
+    stat=raw-phi(mu)
     if mode=='variance':stat=stat.clamp_min(0)
     return mu.transpose(1,2),stat.to(v.dtype).transpose(1,2)
 
@@ -34,7 +34,7 @@ def record(name,result):
 
 def relative(a,b):return float((a.float()-b.float()).norm()/b.float().norm().clamp_min(1e-9))
 
-@pytest.mark.parametrize('mode',['none','second_moment','variance','jensen_silu'])
+@pytest.mark.parametrize('mode',['none','variance','jensen_silu'])
 @pytest.mark.parametrize('t,d',[(17,32),(129,64),(2048,128)])
 def test_operator_forward_and_gradients(mode,t,d):
     xs=[torch.randn(1,t,2,d,device='cuda',dtype=torch.bfloat16,requires_grad=True) for _ in range(3)]
@@ -47,10 +47,6 @@ def test_operator_forward_and_gradients(mode,t,d):
     result=dict(mode=mode,t=t,d=d,forward=[relative(a,b) for a,b in zip(out,expected)],
         gradients=[relative(a,b) for a,b in zip(grads,rgrads)],
         max_abs=[float((a.float()-b.float()).abs().max()) if a.numel() else 0 for a,b in zip(out,expected)])
-    if mode=='jensen_abs':
-        result.update(statistic_min=float(out[1].min()),
-            negative_fraction=float((out[1]<0).float().mean()),
-            mean_sign_disagreement=float((out[0].sign()!=expected[0].sign()).float().mean()))
     record(f'{mode}-{t}-{d}',result)
     assert all(torch.isfinite(x).all() for x in (*out,*grads))
     assert max(result['forward'])<.025,result

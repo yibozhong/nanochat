@@ -1,0 +1,7 @@
+{
+  "retired_on": "2026-11-04",
+  "reason": "User retains only variance and SiLU Jensen; no further statistics experiments",
+  "implementation_removed": true,
+  "reports_retained": true,
+  "automatic_continuation": false
+}

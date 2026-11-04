@@ -27,7 +27,7 @@ def test_formula_and_all_qkv_gradients(compiled):
     dtype=torch.float32 if compiled else torch.float64
     xs=[torch.randn(2,16,2,8,device='cuda',dtype=dtype,requires_grad=True) for _ in range(3)]
     fn=torch.compile(value_moments,fullgraph=True,dynamic=False) if compiled else value_moments
-    actual=fn(*xs,centered=False,query_chunk=4,nonlinearity='silu')
+    actual=fn(*xs,query_chunk=4,nonlinearity='silu')
     refs=[x.detach().double().requires_grad_() for x in xs]
     expected=oracle(*refs)
     tol=3e-6 if compiled else 3e-12
@@ -43,15 +43,15 @@ def test_signed_gap_and_zero_gap_cases():
     q=k=torch.zeros(1,2,1,2,device='cuda',dtype=torch.float64)
     # SiLU curvature is positive around zero, negative in this positive tail.
     v=torch.tensor([[-1.,3.],[1.,5.]],device='cuda',dtype=torch.float64).view(1,2,1,2)
-    actual=value_moments(q,k,v,centered=False,nonlinearity='silu')
+    actual=value_moments(q,k,v,nonlinearity='silu')
     assert actual[0,1,0,0]>0 and actual[0,1,0,1]<0
     torch.testing.assert_close(actual,oracle(q,k,v),atol=3e-12,rtol=3e-12)
     assert actual[:,0].abs().max()<1e-12
     same=torch.ones_like(v)*3
-    assert value_moments(q,k,same,centered=False,nonlinearity='silu').abs().max()<1e-12
+    assert value_moments(q,k,same,nonlinearity='silu').abs().max()<1e-12
     # Constant values annihilate the gap and gradients, even for nonuniform A.
     q=torch.randn_like(q).requires_grad_();k=torch.randn_like(k).requires_grad_()
-    gap=value_moments(q,k,same,centered=False,nonlinearity='silu')
+    gap=value_moments(q,k,same,nonlinearity='silu')
     assert gap.abs().max()<3e-12
     for grad in torch.autograd.grad(gap.sum(),(q,k)):assert grad.abs().max()<3e-12
 
@@ -81,5 +81,4 @@ def test_config_roundtrip_and_old_path_values():
     assert model_cost(c)==model_cost(ConnectionConfig(attention_statistic='variance'))
     # The default path continues to implement square moments, never SiLU.
     xs=[torch.randn(1,9,1,8,device='cuda',dtype=torch.float64) for _ in range(3)]
-    for centered in (False,True):
-        torch.testing.assert_close(value_moments(*xs,centered=centered),shared.oracle(*xs,centered),atol=3e-12,rtol=3e-12)
+    torch.testing.assert_close(value_moments(*xs),shared.oracle(*xs),atol=3e-12,rtol=3e-12)

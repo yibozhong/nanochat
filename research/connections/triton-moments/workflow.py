@@ -29,8 +29,8 @@ def monitor(root):
                         result=json.load(tf.extractfile('results/triton-gate.json'))
                         assert result['complete'] and result['source']==state['source']
                         assert not result['formal_training'] and not result['weights_returned']
-                        assert len(result['profiles'])==11
-                        assert {r['mode'] for r in result['profiles']}=={'none','variance','jensen_silu','second_moment'}
+                        assert len(result['profiles'])==9
+                        assert {r['mode'] for r in result['profiles']}=={'none','variance','jensen_silu'}
                         for row in result['profiles']:
                             assert row['peak_reserved_bytes']<.9*22000*1024**2 and len(row['samples_seconds'])==30
                         for m in tf.getmembers():

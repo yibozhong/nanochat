@@ -1,3 +1,5 @@
+> Current supported attention statistics: `none`, `variance`, `jensen_silu`. Other statistics are retired as of 2026-11-04. Older modes/results below are historical. This research direction is closed unless explicitly reopened.
+
 # FLA-derived BF16 causal attention and fused moments
 
 Upstream: https://github.com/fla-org/flash-linear-attention/blob/cf9f520fcfef873534132e65e61e12d36b77ab62/fla/ops/attn/parallel.py

@@ -26,8 +26,6 @@ def phi(x, MODE: tl.constexpr):
     x = x.to(tl.float32)
     if MODE == 3:
         return x * tl.sigmoid(x)
-    if MODE == 4:
-        return tl.abs(x)
     return x * x
 
 @triton.jit
@@ -36,9 +34,6 @@ def phi_grad(x, MODE: tl.constexpr):
     if MODE == 3:
         s = tl.sigmoid(x)
         return s * (1. + x * (1. - s))
-    if MODE == 4:
-        # Match torch.abs: the chosen subgradient at zero is zero.
-        return tl.where(x > 0., 1., tl.where(x < 0., -1., 0.))
     return 2. * x
 
 @triton.jit
@@ -52,8 +47,7 @@ def moment_preprocess(O, R, S, DO, DS, DM, DZ, Delta, D: tl.constexpr, BD: tl.co
         stat = tl.load(S + row*D+d, d<D, 0)
         gs = tl.where(stat > 0, gs, 0.)
     gm = tl.load(DO + row*D+d, d<D, 0).to(tl.float32)
-    if MODE != 1:
-        gm -= gs * phi_grad(mu, MODE)
+    gm -= gs * phi_grad(mu, MODE)
     # Dot-product inputs have the original activation dtype.
     gm = gm.to(DM.dtype.element_ty)
     gs = gs.to(DZ.dtype.element_ty)
@@ -232,12 +226,9 @@ def moment_fwd_kernel(
     # Center with the same BF16 phi evaluation as the V side. Keep the
     # accumulators on chip until centering; no BF16 raw-moment subtraction.
     b_mean = b_o.to(o.dtype.element_ty)
-    if MODE == 1:
-        b_stat = b_z
-    else:
-        b_stat = b_z - phi(b_mean, MODE).to(b_mean.dtype).to(tl.float32)
-        if MODE == 2:
-            b_stat = tl.maximum(b_stat, 0.)
+    b_stat = b_z - phi(b_mean, MODE).to(b_mean.dtype).to(tl.float32)
+    if MODE == 2:
+        b_stat = tl.maximum(b_stat, 0.)
     p_stat = stat + (bos * HQ + i_hq) * V + o_q[:, None] * (HQ*V) + o_v[None, :]
     p_raw = raw + (bos * HQ + i_hq) * V + o_q[:, None] * (HQ*V) + o_v[None, :]
     tl.store(p_stat, b_stat, mask=m_q[:, None] & (o_v[None, :] < V))

@@ -15,7 +15,7 @@ from torch.utils.checkpoint import checkpoint
 from nanochat.gpt import Linear, apply_rotary_emb, norm, flash_attn
 
 
-def moment_tile(q, k, v, query_start, centered, nonlinearity='square'):
+def moment_tile(q, k, v, query_start, nonlinearity='square'):
     """BHSD inputs; FP64 remains FP64 for independent numerical checks."""
     dtype = torch.float64 if q.dtype == torch.float64 else torch.float32
     q, k, v = q.to(dtype), k.to(dtype), v.to(dtype)
@@ -27,14 +27,8 @@ def moment_tile(q, k, v, query_start, centered, nonlinearity='square'):
         # SiLU is not globally convex: signed gaps are intentional. Both terms
         # use the same phi, values and mathematical attention distribution.
         return a @ F.silu(v) - F.silu(a @ v)
-    if nonlinearity == 'abs':
-        # Direct Jensen difference, without an added clamp. torch.abs uses
-        # subgradient zero at zero, as does the fused Triton backward.
-        return a @ v.abs() - (a @ v).abs()
     assert nonlinearity == 'square'
     second = a @ v.square()
-    if not centered:
-        return second
     mean = a @ v
     variance = second - mean.square()
     # Exact variance is nonnegative. FP32 cancellation may produce small
@@ -42,12 +36,12 @@ def moment_tile(q, k, v, query_start, centered, nonlinearity='square'):
     return variance.clamp_min(0)
 
 
-def value_moments(q, k, v, *, centered, query_chunk=256, offset=0, recompute=True, nonlinearity='square'):
+def value_moments(q, k, v, *, query_chunk=256, offset=0, recompute=True, nonlinearity='square'):
     """BTHD -> BTHD, including prefix-cache queries at absolute `offset`."""
     q, k, v = (x.transpose(1, 2) for x in (q, k, v))
     pieces = []
     for start in range(0, q.shape[-2], query_chunk):
-        args = (q[:, :, start:start+query_chunk], k, v, offset+start, centered, nonlinearity)
+        args = (q[:, :, start:start+query_chunk], k, v, offset+start, nonlinearity)
         if recompute and torch.is_grad_enabled():
             y = checkpoint(moment_tile, *args, use_reentrant=False, preserve_rng_state=False)
         else:
@@ -61,25 +55,12 @@ class ZeroLinear(Linear):
         nn.init.zeros_(self.weight)
 
 
-class SupportGate(nn.Module):
-    """Per-head support gate; identity at initialization, no detach or /length."""
-    def __init__(self, heads, device):
-        super().__init__()
-        self.a=nn.Parameter(torch.zeros(heads,device=device,dtype=torch.float32))
-        self.b=nn.Parameter(torch.zeros(heads,device=device,dtype=torch.float32))
-
-    def coefficients(self, log_support):
-        return 2. * torch.sigmoid(log_support.float() * self.a + self.b)
-
-    def forward(self, variance, log_support):
-        return (variance.float() * self.coefficients(log_support).unsqueeze(-1)).to(variance.dtype)
-
 
 class MomentAttention(nn.Module):
     """Retain all existing Q/K/V/O Parameters, adding only a zero D x D W_s."""
     def __init__(self, original, mode, query_chunk, backend="original"):
         super().__init__()
-        assert mode in ('second_moment', 'variance', 'jensen_silu', 'jensen_abs', 'variance_third', 'variance_support') or (mode == 'none' and backend == 'fla_triton')
+        assert mode in ('variance', 'jensen_silu') or (mode == 'none' and backend == 'fla_triton')
         for name in ('layer_idx', 'n_head', 'n_kv_head', 'n_embd', 'head_dim',
                      'c_q', 'c_k', 'c_v', 'c_proj', 've_gate_channels', 've_gate'):
             setattr(self, name, getattr(original, name))
@@ -88,10 +69,6 @@ class MomentAttention(nn.Module):
         # Construct without consuming RNG so ALL old initial weights/RNG match.
         self.c_stat = ZeroLinear(self.n_embd, self.n_embd, bias=False,
             device=self.c_proj.weight.device, dtype=self.c_proj.weight.dtype) if mode != 'none' else None
-        self.c_third = ZeroLinear(self.n_embd, self.n_embd, bias=False,
-            device=self.c_proj.weight.device, dtype=self.c_proj.weight.dtype) if mode == 'variance_third' else None
-
-        self.support_gate = SupportGate(self.n_head, self.c_proj.weight.device) if mode == 'variance_support' else None
 
     def forward(self, x, ve, cos_sin, window_size, kv_cache):
         assert ve is None and window_size == (-1, 0)
@@ -108,13 +85,9 @@ class MomentAttention(nn.Module):
             from nanochat.triton_moment_attention import fused_attention
             moments = fused_attention(q, k, v, self.mode)
             mean, stats = moments[:2]
-            if self.support_gate is not None:
-                stats = self.support_gate(stats, moments[2])
             output = self.c_proj(mean.reshape(b, t, self.n_embd))
             if self.c_stat is not None:
                 output = output + self.c_stat(stats.reshape(b, t, self.n_embd))
-            if self.c_third is not None:
-                output = output + self.c_third(moments[2].reshape(b, t, self.n_embd))
             return output
         offset = 0
         if kv_cache is None:
@@ -127,9 +100,9 @@ class MomentAttention(nn.Module):
             k, v = kc[:, :offset+t], vc[:, :offset+t]
             if self.layer_idx == kv_cache.n_layers - 1:
                 kv_cache.advance(t)
-        stats = value_moments(q, k, v, centered=self.mode == 'variance',
+        stats = value_moments(q, k, v,
                              query_chunk=self.query_chunk, offset=offset,
-                             nonlinearity={'jensen_silu':'silu','jensen_abs':'abs'}.get(self.mode, 'square'))
+                             nonlinearity='silu' if self.mode == 'jensen_silu' else 'square')
         mean = mean.contiguous().view(b, t, self.n_embd)
         stats = stats.contiguous().view(b, t, self.n_embd).to(mean.dtype)
         return self.c_proj(mean) + self.c_stat(stats)

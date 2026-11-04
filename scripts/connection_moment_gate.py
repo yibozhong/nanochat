@@ -37,41 +37,6 @@ def profile(mode, out, kernel="original"):
         warmup_steps=20,timed_steps=30,schedule_steps=305176,losses=losses,
         parameters=sum(p.numel() for p in model.parameters()),gpu=torch.cuda.get_device_name(),
         peak_allocated_bytes=torch.cuda.max_memory_allocated(),peak_reserved_bytes=torch.cuda.max_memory_reserved())
-    if mode=='variance_third':
-        # Scale probe is outside all timing/peak-memory samples. Observe actual
-        # 50-update activations and last-step parameter gradients, without norm.
-        rows=[];handles=[];model.compiled_steps=None
-        for layer,b in enumerate(model.blocks):
-            for name in ('c_proj','c_stat','c_third'):
-                module=getattr(b.attn,name)
-                def capture(m,args,output,layer=layer,name=name):
-                    x=args[0].detach().float();y=output.detach().float()
-                    rows.append(dict(layer=layer,branch=name,input_rms=float(x.square().mean().sqrt()),
-                        input_max=float(x.abs().max()),first_token_max=float(x[:,0].abs().max()),
-                        output_rms=float(y.square().mean().sqrt()),
-                        weight_gradient_norm=float(m.weight.grad.float().norm())))
-                handles.append(module.register_forward_hook(capture))
-        with torch.no_grad():model(data.batch('train',0,1)[0])
-        for h in handles:h.remove()
-        result['branch_scales_after_50_updates']=rows
-    if mode=='variance_support':
-        # Observe support/gate values after 50 real updates, outside timing and
-        # peak-memory measurements. Hooks run only in this eager diagnostic.
-        rows=[];handles=[];model.compiled_steps=None
-        for layer,b in enumerate(model.blocks):
-            def capture(m,args,output,layer=layer):
-                logn=args[1].detach().float();g=m.coefficients(logn).detach()
-                visible=torch.arange(1,logn.shape[1]+1,device=logn.device)[None,:,None]
-                rows.append(dict(layer=layer,log_support_min=float(logn.min()),log_support_max=float(logn.max()),
-                    first_token_log_support_max=float(logn[:,0].abs().max()),
-                    support_visible_excess=float((logn.exp()-visible).max()),
-                    gate_min=float(g.min()),gate_max=float(g.max()),gate_mean=float(g.mean()),
-                    a=m.a.detach().tolist(),b=m.b.detach().tolist(),
-                    a_gradient_norm=float(m.a.grad.norm()),b_gradient_norm=float(m.b.grad.norm())))
-            handles.append(b.attn.support_gate.register_forward_hook(capture))
-        with torch.no_grad():model(data.batch('train',0,1)[0])
-        for h in handles:h.remove()
-        result['support_after_50_updates']=rows
     json_write(out,result)
     assert result['peak_reserved_bytes'] < .9*22000*1024**2, result
 
@@ -97,8 +62,8 @@ def probe():
     mask=torch.ones(256,256,device='cuda',dtype=torch.bool).tril()
     a=((qf@kf.transpose(-1,-2))/128**.5).masked_fill(~mask,-torch.inf).softmax(-1)
     raw=a@vf.square()-(a@vf).square()
-    actual=value_moments(q,k,v,centered=True,recompute=False)
-    reference=value_moments(q.double(),k.double(),v.double(),centered=True,recompute=False)
+    actual=value_moments(q,k,v,recompute=False)
+    reference=value_moments(q.double(),k.double(),v.double(),recompute=False)
     error=(actual.double()-reference).abs()
     report['precision']=dict(raw_min=float(raw.min()),negative_fraction=float((raw<0).float().mean()),
         fp32_max_absolute_error=float(error.max()),fp32_relative_l2=float(error.norm()/reference.norm()),
@@ -130,15 +95,15 @@ def main():
         '-v','--junitxml=results/moment-tests.xml'],'tests')
     suites=ET.parse('results/moment-tests.xml').getroot().findall('testsuite')
     checks={key:sum(int(s.attrib.get(key,0)) for s in suites) for key in ('tests','failures','errors','skipped')}
-    assert checks==dict(tests=17,failures=0,errors=0,skipped=0),checks
+    assert checks==dict(tests=12,failures=0,errors=0,skipped=0),checks
     profiles=[]
-    for repeat,order in enumerate([('none','second_moment','variance'),('variance','second_moment','none')]):
+    for repeat,order in enumerate([('none','variance','jensen_silu'),('jensen_silu','variance','none')]):
         for mode in order:
             name=f'profile-{repeat}-{mode}'
             execute([sys.executable,'-m','scripts.connection_moment_gate','--profile',mode,'--output','results/'+name+'.json'],name)
             profiles.append(json.loads(Path('results',name+'.json').read_text()))
     resumes={}
-    for mode in ('second_moment','variance'):
+    for mode in ('variance','jensen_silu'):
         out=Path('results')/('resume-'+mode);ckpt=Path('../gate-checkpoints')/mode
         cmd=[sys.executable,'-m','scripts.connection_train','--variant','baseline',
             '--attention-statistic',mode,'--steps','50','--schedule-steps','305176',

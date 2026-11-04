@@ -1,0 +1,71 @@
+{
+  "date": "2026-11-04",
+  "pre_cleanup_commit": "476d47ec4f5b3dfb54a2bcf11161fd6a5f1c6acd",
+  "user_decision": "Retain variance and SiLU Jensen; retire other statistics implementations and stop this research direction",
+  "supported_statistics": [
+    "none",
+    "variance",
+    "jensen_silu"
+  ],
+  "removed_statistics": [
+    "second_moment",
+    "jensen_abs",
+    "variance_third",
+    "variance_support"
+  ],
+  "nonlinear_ablation": {
+    "implemented": false,
+    "submitted": false,
+    "authorization_revoked": true
+  },
+  "stopped_runs": [
+    {
+      "mode": "variance_third",
+      "job": "7805885.0",
+      "run_id": "5508403c",
+      "checkpoint_step": 271570,
+      "checkpoint_tokens": 8898805760,
+      "retained_directory": "/home/yzhong239/variance-third-10b-20261104/retry-2/stop-20261104",
+      "verification": {
+        "queue_empty": true,
+        "history": {
+          "ClusterId": 7805885,
+          "ExitCode": 143,
+          "JobStatus": 3,
+          "NumJobStarts": 1,
+          "ProcId": 0
+        },
+        "wandb_deleted": false
+      },
+      "training_completed": false
+    },
+    {
+      "mode": "variance_support",
+      "job": "7806178.0",
+      "run_id": "73cbe01c",
+      "checkpoint_step": 274221,
+      "checkpoint_tokens": 8985673728,
+      "retained_directory": "/home/yzhong239/variance-support-10b-20261104/stop-20261104",
+      "verification": {
+        "queue_empty": true,
+        "history": {
+          "ClusterId": 7806178,
+          "ExitCode": 143,
+          "JobStatus": 3,
+          "NumJobStarts": 2,
+          "ProcId": 0
+        },
+        "wandb_deleted": false
+      },
+      "training_completed": false
+    }
+  ],
+  "results_reports_and_wandb_preserved": true,
+  "static_validation": {
+    "retained_kernel_constexpr_ast_identical": true,
+    "baseline_kernel_byte_identical": true,
+    "retained_flop_counts_identical": true,
+    "native_and_mhc_code_unchanged": true
+  },
+  "gpu_validation": "pending: 35 retained-mode correctness/gradient/causality/compile/recompute/optimizer-RNG tests; no new formal training"
+}
