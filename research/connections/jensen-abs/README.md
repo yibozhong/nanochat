@@ -46,9 +46,25 @@ it does not eliminate that sensitivity or prove it harmless for training.
 The bounded H200 gate also traces operator launches, profiles baseline/SiLU/abs
 in two reversed rounds (2K, micro16, 20 warmup +30 timed steps), and validates
 25 -> exit85 -> fresh process50 with the 305176-step LR horizon. It returns no
-weights and records no W&B. Only implementation/validation is authorized here;
-no fourth formal 10B run is submitted. The three existing formal jobs keep their
-immutable source/configuration and continue unaffected.
+weights and records no W&B. This diagnostic gate never submits formal training.
+The three existing formal jobs keep their immutable source/configuration.
 
 Workflow root: `/home/yzhong239/jensen-abs-gate-20261103`. Results are published
 to `validation.json` after successful audit; submission alone is not a pass.
+
+## Authorized 10B run
+
+After validation completed, the user explicitly requested one formal 10B run.
+`pretrain.py ROOT submit` reuses the exact GPU-verified source bundle `7684123`,
+the existing Triton training launcher, and the original 2K FineWeb-Edu cache.
+The run starts from seed42 with vanilla full attention, 8 layers/D512/4 heads,
+micro16/accum1, default MuonAdamW and 305176-step LR horizon (10000007168 tokens).
+It uses the `triton-moments-10b-20261103` W&B group in the nanochat project, alongside
+the three earlier matched runs. No additional baseline or sweep is submitted.
+
+Root: `/home/yzhong239/jensen-abs-10b-20261103`. Single complete Hopper >=22GB,
+public soft priority/backfill allowed, 2CPU/16GB RAM/80GB scratch. Latest saves
+overwrite every500 steps, best remains separate, and exit85 every1800 seconds
+persists state for resumption with the same W&B ID. `pretrain.py ROOT monitor`
+stops after the first finite-loss training step. Source, queue and restart
+configuration are audited in the workflow root; do not duplicate submissions.
