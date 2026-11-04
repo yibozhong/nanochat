@@ -34,8 +34,11 @@ class ConnectionConfig:
     attention_kernel: str = 'original'
     attention_statistic: str = 'none'
     moment_query_chunk: int = 256
+    attention_output_ns: bool = False
 
     def __post_init__(self):
+        if self.attention_output_ns and (self.architecture != 'vanilla' or self.variant != 'baseline' or self.attention_statistic != 'none'):
+            raise ValueError('Attention output NS initially supports vanilla baseline without attention statistics')
         if self.attention_kernel not in ('original','fla_triton'):
             raise ValueError('Unknown attention kernel')
         if self.attention_kernel == 'fla_triton' and (self.architecture != 'vanilla' or self.variant != 'baseline'):
@@ -238,6 +241,9 @@ def optimizer_for(model, batch_tokens=32768):
     opt = MuonAdamW(groups)
     for g in opt.param_groups:
         g['initial_lr'] = g['lr']
+    if c.attention_output_ns:
+        from nanochat.attention_output_ns import install_attention_output_ns
+        install_attention_output_ns(model,opt)
     return opt, wd
 
 

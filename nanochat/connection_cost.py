@@ -22,7 +22,11 @@ def model_cost(config, batch=1, activation_bytes=2):
         extra = dict(statistics_dense_matmuls=stat_dense, statistics_projection=stat_proj)
     else:
         stat_dense = 0
-    return dict(estimated_forward_flops=forward,estimated_training_flops=3*forward+(stat_dense if c.attention_kernel == 'original' else 0),
+    # Three square GEMMs per NS polynomial, five iterations, once per optimizer
+    # step (not per token/microbatch). Norms/copies are excluded from matrix FLOPs.
+    ns_projection=30*depth*d**3 if c.attention_output_ns else 0
+    return dict(estimated_forward_flops=forward,estimated_training_flops=3*forward+(stat_dense if c.attention_kernel == 'original' else 0)+ns_projection,
+        attention_output_ns_flops_per_optimizer_step=ns_projection,
         components_forward=dict(backbone_projections=projections,vocab_head=head,
             attention=attention, **extra),
         accounting='FMA=2 FLOPs; allowed attention pairs, not masked dense-kernel execution. Backward approximated as2x consumed forward matrix FLOPs. Excludes softmax/norm/activation/optimizer/recomputation and is not measured hardware FLOPs.',

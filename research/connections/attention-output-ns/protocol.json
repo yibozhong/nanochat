@@ -1,0 +1,51 @@
+{
+  "name": "Attention output weight NS",
+  "status": "implementation awaiting GPU gate",
+  "method": "After each complete optimizer.step, project every vanilla attention c_proj.weight using five native Muon Polar Express polynomials, then restore its pre-projection Frobenius norm.",
+  "scope": "All8 attention512x512 output weights only; no QKV/MLP/head/embedding updates beyond original optimizer.",
+  "precision": "BF16 polynomial GEMMs; FP32 norm restoration and persisted weights. FP64 SVD only in read-only diagnostics outside compiled code.",
+  "parameter_count": 58720256,
+  "added_parameters": 0,
+  "initialization": "Unchanged zero W_o; projection leaves zero zero; shared parameters and RNG identical to baseline.",
+  "optimizer": "Same MuonAdamW, default LR and moments. Post-step projection does not differentiate or reset/transport momentum. Runs once after all gradient accumulation.",
+  "constraint": "Approximate scaled orthogonality; no exact rank guarantee, and NS cannot generate absent singular directions. No Muon row equilibration or variance scaling in the weight projection.",
+  "training": {
+    "steps": 305176,
+    "tokens": 10000007168,
+    "seed": 42,
+    "context": 2048,
+    "depth": 8,
+    "width": 512,
+    "heads": 4,
+    "vocab_size": 32768,
+    "microbatch": 16,
+    "accumulation": 1,
+    "attention_kernel": "fla_triton",
+    "attention_statistic": "none",
+    "data": "existing same packed FineWeb-Edu 10B/dev/test"
+  },
+  "reference": {
+    "baseline_job": "7802254.0",
+    "wandb_run": "46bd7320",
+    "final_dev_ce": 3.1815003156661987,
+    "final_test_ce": 3.160942070186138
+  },
+  "diagnostics": {
+    "correctness": "13 new GPU tests plus4 retained backend regressions",
+    "profiles": "same GPU, baseline/new twice in reversed order, each20warmup+30timed full steps",
+    "resume": "25 -> exit85 -> fresh process50, horizon305176; test exact state/RNG plus next fixed-gradient update",
+    "spectra": "W_o singular values, energy-entropy effective rank, stable rank, relative orthogonality error; fixed4dev contexts x128 uniformly spaced tokens before/after W_o, centered and uncentered feature effective ranks",
+    "log_frequency": "initial/resume, steps50/250, every5000 and final. These diagnostic passes are outside timed training.",
+    "caveat": "Square orthogonal mixing preserves covariance eigenvalues and does not whiten input activations. Improved weight spectrum alone is not evidence of better language modeling."
+  },
+  "operations": {
+    "wandb": "formal only: nanochat/attention-output-ns-10b-20261104",
+    "checkpoint": "latest500 overwrite, best separate, exit85 every1800seconds",
+    "resources": "single Hopper>=22GB; public soft priority with backfill allowed; gate40GB/formal80GB scratch",
+    "monitor": "Gate->audit/push->one10B->first finite formal training step, then exit"
+  },
+  "alternative": {
+    "householder": "Discussed only; not implemented or submitted. Exact orthogonal parametrization changes optimization coordinates, requires scale/zero-init handling and optimizer review.",
+    "source": "https://docs.pytorch.org/docs/2.10/generated/torch.nn.utils.parametrizations.orthogonal.html"
+  }
+}
