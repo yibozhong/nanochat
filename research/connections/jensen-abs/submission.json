@@ -1,0 +1,23 @@
+{
+  "job": "7805268.0",
+  "run_id": "a01d48b6",
+  "source": "76841233f69d155fe597fd1a29c77cda7d6726a7",
+  "launcher_commit": "5eef69da0fe88c23e461b745342cece1721328c6",
+  "attention_kernel": "fla_triton",
+  "attention_statistic": "jensen_abs",
+  "steps": 305176,
+  "training_tokens": 10000007168,
+  "sequence_length": 2048,
+  "microbatch": 16,
+  "grad_accum": 1,
+  "seed": 42,
+  "alpha": 1,
+  "wandb_project": "yibozhong657-none/nanochat",
+  "wandb_group": "triton-moments-10b-20261103",
+  "initial_status": 1,
+  "initial_starts": 0,
+  "monitor_pid": 2231936,
+  "prior_three_inputs_unchanged": true,
+  "checkpoint_exit85_verified": true,
+  "submitted_at": 1793771910.1486297
+}
