@@ -42,6 +42,8 @@ class FusedMomentFunction(torch.autograd.Function):
         delta=torch.empty((b,t,h),device=q.device,dtype=torch.float32)
         dq,dk,dv=(torch.empty_like(q) for _ in range(3))
         if mode:
+            # Two derivative streams exceed Hopper shared memory at stages=3.
+            kw["num_stages"] = 1
             ds=ds.contiguous();dm=torch.empty_like(do);dz=torch.empty_like(do)
             moment.moment_preprocess[(b*t*h,)](o,r,s,do,ds,dm,dz,delta,d,triton.next_power_of_2(d),mode)
             extra=dict(dz=dz,MODE=mode);module=moment

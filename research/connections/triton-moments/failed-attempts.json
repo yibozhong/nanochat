@@ -1,0 +1,10 @@
+[
+  {
+    "job": "7802187.0",
+    "source": "ff5a01477013c71399d90e3600a5fb374448dba8",
+    "passed": 12,
+    "failed": 5,
+    "reason": "Moment dKV D128 shared memory 246784 > H200 limit232448; no numeric assertion failure",
+    "fix": "Set extended backward num_stages=1; preserve forward and upstream baseline launch policy; numerical thresholds unchanged"
+  }
+]
