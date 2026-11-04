@@ -151,7 +151,8 @@ def audit_publish(root,state):
     return summary
 
 
-def submit_training(root,state,summary):
+def submit_training(root,state,summary,experiment_dir=None):
+    experiment_dir = experiment_dir or REPO/'research/connections/moments'
     assert (root/'published.json').exists() and not (root/'STOPPED.json').exists()
     with (root/'training-submit.lock').open('a') as lock:
         fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
@@ -165,7 +166,7 @@ def submit_training(root,state,summary):
         source=dict(commit=state['source']['commit'],hashes=hashes,gate_job=state['job'],formal_training=True,
             purpose=KEY,steps=305176,training_tokens=10000007168,profile_reference=summary,data_uri=ready['data_uri'])
         inputs(bundle,source)
-        shutil.copy2(REPO/'research/connections/moments/train.sh',root/'train.sh')
+        shutil.copy2(experiment_dir/'train.sh',root/'train.sh')
         run_ids={mode:uuid.uuid4().hex[:8] for mode in MODES}
         files=[str(p.relative_to(root)) for p in sorted(bundle.iterdir())]+['/home/yzhong239/.netrc',ready['data_uri'],RUNTIME,COMPAT]
         text=common_submit().replace('request_disk = 40GB','request_disk = 80GB')+f'''executable = train.sh
@@ -185,8 +186,7 @@ error = logs/train.$(Cluster).$(Process).err
 +MomentRole = "$(mode)"
 +MomentRunID = "$(runid)"
 queue mode,runid from (
-second_moment {run_ids['second_moment']}
-variance {run_ids['variance']}
+{chr(10).join(mode+' '+run_ids[mode] for mode in MODES)}
 )
 '''
         (root/'train.sub').write_text(text);command(['condor_submit','-dry-run','train-dryrun.ad','train.sub'],root)
@@ -197,7 +197,7 @@ variance {run_ids['variance']}
         write(root/'state.json',state)
         ads=json.loads(command(['condor_q',cluster,'-json','-attributes',
             'ClusterId,ProcId,JobStatus,Args,TransferInput,ContainerImage,SuccessCheckpointExitCode,TransferCheckpoint,RequestGpus,RequestMemory,RequestDisk,MomentKey,MomentRole,MomentRunID']))
-        assert len(ads)==2
+        assert len(ads)==len(MODES)
         for ad in ads:
             assert ad['RequestGpus']==1 and ad['MomentRole'] in MODES
             assert ad['Args']==f"baseline {run_ids[ad['MomentRole']]} 305176 {ad['MomentRole']}"
@@ -234,7 +234,7 @@ def monitor(root):
                                 if isinstance(row,dict) and row.get('step',0)>=1 and isinstance(row.get('loss'),(int,float)) and math.isfinite(row['loss']):
                                     first[mode]=dict(job=spec['job'],run_id=spec['run_id'],evidence=row,source=state['training_source']);break
                         if mode not in first and info and info['JobStatus']==4:raise RuntimeError(str(info))
-                    if len(first)==2:
+                    if len(first)==len(MODES):
                         state['status']='training_started';write(root/'first-steps.json',first)
                 state['last_poll']=time.time();write(root/'state.json',state)
             except Exception as exc:
