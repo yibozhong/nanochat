@@ -27,6 +27,7 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument('--variant', choices=('baseline','mhc','mhc_no_sinkhorn'), required=True)
     p.add_argument('--sequence-length', type=int, default=2048)
+    p.add_argument('--attention-kernel', choices=('original','fla_triton'), default='original')
     p.add_argument('--attention-statistic', choices=('none','second_moment','variance','jensen_silu'), default='none')
     p.add_argument('--moment-query-chunk', type=int, default=256)
     p.add_argument('--architecture', choices=('vanilla', 'native'), default='vanilla')
@@ -68,7 +69,7 @@ def main():
     seed_all(a.seed)
     c=ConnectionConfig(variant=a.variant,streams=a.streams,sinkhorn_iterations=a.sinkhorn_iterations,
                        sequence_length=a.sequence_length,
-                       attention_statistic=a.attention_statistic, moment_query_chunk=a.moment_query_chunk,
+                       attention_statistic=a.attention_statistic, moment_query_chunk=a.moment_query_chunk, attention_kernel=a.attention_kernel,
                        architecture=a.architecture, window_pattern=a.window_pattern,
                        activation_checkpoint=a.activation_checkpoint,
                        connection_backend=a.connection_backend, fused_connection_grad=a.fused_connection_grad)

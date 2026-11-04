@@ -1,0 +1,12 @@
+{
+  "repository": "https://api.github.com/repos/fla-org/flash-linear-attention",
+  "commit": "cf9f520fcfef873534132e65e61e12d36b77ab62",
+  "files": {
+    "fla/ops/attn/parallel.py": "e9afd07de67b5c1baa23d79a3a217e27558fe20ab8b684d286ce41c8ddbb21d5",
+    "fla/ops/attn/naive.py": "36cd6f9773c1544716efee24c16f3b01309c70872086edb8b96af97c34d2d2ce",
+    "fla/ops/attn/__init__.py": "57cdf72e6bcb41e0808a48e6b5e1dad7ca109a559d30672333144a9dc3962558",
+    "fla/ops/utils/op.py": "18cfb14ed285d6f4cc664b2d7e2e471d322fc897594eb13c61d179978bc50d0f",
+    "tests/ops/test_attn.py": "660e667ae42f5caf5d267411d515a928b9845b43e90fdea32ddaa1335c65f286",
+    "LICENSE": "41a83c8187efc1e3ccc21909e806a9e52338e69448554d9754706c3d1cd610e7"
+  }
+}

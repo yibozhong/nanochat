@@ -16,14 +16,16 @@ def model_cost(config, batch=1, activation_bytes=2):
         # first moment (variance/Jensen), and checkpoints the statistics branch.
         stat_matmuls = 2 if c.attention_statistic == 'second_moment' else 3
         stat_dense = stat_matmuls*2*batch*depth*t*t*d
+        if c.attention_kernel == 'fla_triton':
+            stat_dense = 2*batch*depth*d*(t*(t+1)//2)
         stat_proj = 2*batch*t*depth*d*d
         forward += stat_dense + stat_proj
         extra = dict(statistics_dense_matmuls=stat_dense, statistics_projection=stat_proj)
     else:
         stat_dense = 0
-    return dict(estimated_forward_flops=forward,estimated_training_flops=3*forward+stat_dense,
+    return dict(estimated_forward_flops=forward,estimated_training_flops=3*forward+(stat_dense if c.attention_kernel == 'original' else 0),
         components_forward=dict(backbone_projections=projections,vocab_head=head,
             attention=attention, **extra),
         accounting='FMA=2 FLOPs; allowed attention pairs, not masked dense-kernel execution. Backward approximated as2x consumed forward matrix FLOPs. Excludes softmax/norm/activation/optimizer/recomputation and is not measured hardware FLOPs.',
-        statistics_note='Statistics use full masked FP32 matrices; extra forward matmuls counted once more for activation recomputation. Excludes softmax and pointwise squares/centering. This is the reference implementation cost, not an optimized shared-softmax kernel.',
+        statistics_note=('FLA fused backend shares QK/softmax and adds only one P@phi(V) matmul per allowed pair; excludes nonlinear pointwise work and FlashAttention backward probability recomputation.' if c.attention_kernel == 'fla_triton' else 'Reference uses masked FP32 matrices and additional checkpoint recomputation; excludes pointwise operations.'),
         memory_note='Actual training peak VRAM must be measured separately.')

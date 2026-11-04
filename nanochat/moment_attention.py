@@ -58,17 +58,17 @@ class ZeroLinear(Linear):
 
 class MomentAttention(nn.Module):
     """Retain all existing Q/K/V/O Parameters, adding only a zero D x D W_s."""
-    def __init__(self, original, mode, query_chunk):
+    def __init__(self, original, mode, query_chunk, backend="original"):
         super().__init__()
-        assert mode in ('second_moment', 'variance', 'jensen_silu')
+        assert mode in ('second_moment', 'variance', 'jensen_silu') or (mode == 'none' and backend == 'fla_triton')
         for name in ('layer_idx', 'n_head', 'n_kv_head', 'n_embd', 'head_dim',
                      'c_q', 'c_k', 'c_v', 'c_proj', 've_gate_channels', 've_gate'):
             setattr(self, name, getattr(original, name))
         assert self.n_head == self.n_kv_head and self.ve_gate is None
-        self.mode, self.query_chunk = mode, query_chunk
+        self.mode, self.query_chunk, self.backend = mode, query_chunk, backend
         # Construct without consuming RNG so ALL old initial weights/RNG match.
         self.c_stat = ZeroLinear(self.n_embd, self.n_embd, bias=False,
-            device=self.c_proj.weight.device, dtype=self.c_proj.weight.dtype)
+            device=self.c_proj.weight.device, dtype=self.c_proj.weight.dtype) if mode != 'none' else None
 
     def forward(self, x, ve, cos_sin, window_size, kv_cache):
         assert ve is None and window_size == (-1, 0)
@@ -79,6 +79,15 @@ class MomentAttention(nn.Module):
         cos, sin = cos_sin
         q = norm(apply_rotary_emb(q, cos, sin)) * 1.2
         k = norm(apply_rotary_emb(k, cos, sin)) * 1.2
+        if self.backend == 'fla_triton':
+            if kv_cache is not None:
+                raise ValueError('Initial FLA backend is for full-sequence training/evaluation; KV decoding is not implemented')
+            from nanochat.triton_moment_attention import fused_attention
+            mean, stats = fused_attention(q, k, v, self.mode)
+            output = self.c_proj(mean.reshape(b, t, self.n_embd))
+            if self.c_stat is not None:
+                output = output + self.c_stat(stats.reshape(b, t, self.n_embd))
+            return output
         offset = 0
         if kv_cache is None:
             mean = flash_attn.flash_attn_func(q, k, v, causal=True, window_size=window_size)

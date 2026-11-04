@@ -16,10 +16,10 @@ from nanochat.connection_model import ConnectionConfig, ConnectionModel, optimiz
 from nanochat.packed_training import PackedData, seed_all, train_step, json_write
 
 
-def profile(mode, out):
+def profile(mode, out, kernel="original"):
     torch.set_num_threads(2);torch.backends.cuda.matmul.allow_tf32=False
     configure_attention('sdpa_cudnn');seed_all(42)
-    model=ConnectionModel(ConnectionConfig(attention_statistic=mode)).prepare(compile_blocks=True)
+    model=ConnectionModel(ConnectionConfig(attention_statistic=mode, attention_kernel=kernel)).prepare(compile_blocks=True)
     opt,wd=optimizer_for(model);data=PackedData('../data')
     times=[];losses=[]
     for step in range(50):
@@ -32,7 +32,7 @@ def profile(mode, out):
         if step>=20:times.append(duration)
         losses.append(loss)
         if step in (0,19,49):print(mode,step+1,loss,duration,flush=True)
-    result=dict(mode=mode,mean_seconds=statistics.mean(times),samples_seconds=times,
+    result=dict(mode=mode,attention_kernel=kernel,mean_seconds=statistics.mean(times),samples_seconds=times,
         tokens_per_second=32768/statistics.mean(times),microbatch=16,grad_accum=1,
         warmup_steps=20,timed_steps=30,schedule_steps=305176,losses=losses,
         parameters=sum(p.numel() for p in model.parameters()),gpu=torch.cuda.get_device_name(),
@@ -84,9 +84,9 @@ def execute(command, name, expected=0):
 
 
 def main():
-    parser=argparse.ArgumentParser();parser.add_argument('--profile');parser.add_argument('--output')
+    parser=argparse.ArgumentParser();parser.add_argument('--profile');parser.add_argument('--output');parser.add_argument('--kernel',default='original')
     args=parser.parse_args()
-    if args.profile:return profile(args.profile,Path(args.output))
+    if args.profile:return profile(args.profile,Path(args.output),args.kernel)
     Path('results').mkdir(exist_ok=True)
     assert not os.environ.get('WANDB_API_KEY')
     started=time.perf_counter()
