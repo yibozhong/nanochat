@@ -1,0 +1,49 @@
+{
+  "status": "retired_by_user",
+  "stopped_at": 1793818831.6839685,
+  "job": "7810069.0",
+  "wandb_run": "2820f41f",
+  "history": [
+    {
+      "ClusterId": 7810069,
+      "ExitCode": 143,
+      "JobBatchName": "innovation-residual-10b-20261104",
+      "JobStatus": 3,
+      "NumJobStarts": 2,
+      "ProcId": 0
+    }
+  ],
+  "live_queue_empty": true,
+  "automatic_continuation": false,
+  "last_logged_training_step": {
+    "step": 14000,
+    "tokens": 458752000,
+    "loss": 4.182063102722168,
+    "seconds": 0.06765647605061531,
+    "lr_multiplier": 1.0,
+    "innovation/predictor_mse": 590.8089599609375,
+    "innovation/beta": 1.0
+  },
+  "checkpoint_policy": "Cancelled immediately without waiting for checkpoint upload; no durable checkpoint found in experiment root or user spool.",
+  "checkpoints_preserved": false,
+  "wandb_record_deleted": false,
+  "monitor_locks_released": true,
+  "rollback": {
+    "reference": "d0109f9",
+    "runtime_trees_byte_identical": [
+      "nanochat",
+      "scripts",
+      "tests"
+    ],
+    "verification": "git diff --exit-code, AST, diff whitespace; exact return to already GPU-validated retained implementation; no new GPU job",
+    "removed": [
+      "predictor module",
+      "model/config/optimizer/train/metric hooks",
+      "GPU gate",
+      "tests",
+      "workflow",
+      "train and validation launchers"
+    ]
+  },
+  "retained": "native, vanilla, NVIDIA mHC, variance, SiLU Jensen; historical numerical reports and logs"
+}

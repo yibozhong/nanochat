@@ -30,9 +30,6 @@ def main():
     p.add_argument('--attention-kernel', choices=('original','fla_triton'), default='original')
     p.add_argument('--attention-statistic', choices=('none','variance','jensen_silu'), default='none')
     p.add_argument('--moment-query-chunk', type=int, default=256)
-    p.add_argument('--innovation-residual', action='store_true')
-    p.add_argument('--innovation-warmup-steps', type=int, default=40)
-    p.add_argument('--innovation-predictor-lr', type=float, default=.001)
     p.add_argument('--architecture', choices=('vanilla', 'native'), default='vanilla')
     p.add_argument('--window-pattern', default='SSSL', help='Native backbone only; vanilla always uses full attention')
     p.add_argument('--formal-training', action='store_true', help='Explicitly enable W&B for a formal training run')
@@ -73,8 +70,6 @@ def main():
     c=ConnectionConfig(variant=a.variant,streams=a.streams,sinkhorn_iterations=a.sinkhorn_iterations,
                        sequence_length=a.sequence_length,
                        attention_statistic=a.attention_statistic, moment_query_chunk=a.moment_query_chunk, attention_kernel=a.attention_kernel,
-                       innovation_residual=a.innovation_residual, innovation_warmup_steps=a.innovation_warmup_steps,
-                       innovation_predictor_lr=a.innovation_predictor_lr,
                        architecture=a.architecture, window_pattern=a.window_pattern,
                        activation_checkpoint=a.activation_checkpoint,
                        connection_backend=a.connection_backend, fused_connection_grad=a.fused_connection_grad)
@@ -124,7 +119,7 @@ def main():
         parameters=sum(p.numel() for p in model.parameters()),
         residual_mixing=('sinkhorn' if a.variant=='mhc' else
                          'unconstrained_raw' if a.variant=='mhc_no_sinkhorn' else
-                         'innovation' if a.innovation_residual else 'additive'),
+                         'additive'),
         applied_sinkhorn_iterations=c.sinkhorn_iterations if a.variant=='mhc' else 0,
         optimizer='native MuonAdamW; connector AdamW at native unembedding LR, no decay',
         optimizer_groups=initial_groups,
@@ -133,23 +128,15 @@ def main():
     from nanochat.connection_cost import model_cost
     cost=model_cost(c,batch=rows_per_step)
     config['compute_estimate']=cost
-    if a.innovation_residual:
-        config['innovation_objective']=dict(predictor='dense affine per attention/MLP branch; raw h input',
-            local_loss='sum of per-branch mean MSE(P(stopgrad(h)), stopgrad(r)); no backbone gradients',
-            ntp='predictor parameters detached; hidden Jacobian includes -beta*W',
-            initialization='W=0.001 I, b=0; full rank initially, unconstrained thereafter',
-            optimizer='local-only AdamW lr0.001 betas0.9/0.99 eps1e-8 WD0; same LR schedule',
-            beta='min(zero_based_step/(warmup_steps-1),1); stored in checkpoint',
-            r_squared='1-SSE/SST; centered per channel over full fixed dev set; undefined at zero variance')
-    profile_reference=source.get('profile_reference',{}).get('innovation' if a.innovation_residual else a.attention_statistic if a.attention_statistic != 'none' else a.variant)
+    profile_reference=source.get('profile_reference',{}).get(a.attention_statistic if a.attention_statistic != 'none' else a.variant)
     if profile_reference:
         config['same_gpu_profile_reference']=profile_reference
     kwargs=dict(project='nanochat',entity='yibozhong657-none',group=a.wandb_group,
                 job_type='pretrain' if a.formal_training else 'diagnostic',
-                name=f'{a.architecture}-{a.variant}'+('-innovation' if a.innovation_residual else '')+(f'-{a.attention_statistic}' if a.attention_statistic != 'none' else '')+f'-{c.sequence_length}ctx-{a.steps}steps',id=run_id,resume='allow',config=config)
+                name=f'{a.architecture}-{a.variant}'+(f'-{a.attention_statistic}' if a.attention_statistic != 'none' else '')+f'-{c.sequence_length}ctx-{a.steps}steps',id=run_id,resume='allow',config=config)
     run=training_run(formal_training=a.formal_training, local_dir=out/"diagnostics", **kwargs)
     run.define_metric('tokens')
-    for metric in ('train/*','dev/*','perf/*','innovation/*'):
+    for metric in ('train/*','dev/*','perf/*'):
         run.define_metric(metric,step_metric='tokens')
     json_write(out/'config.json',config)
     stop=False;begin=time.perf_counter()
@@ -168,37 +155,22 @@ def main():
     def save_best(dev):
         atomic_save(dict(model=model.state_dict(),config=asdict(c),protocol=protocol,source=source,
             run_id=run_id,step=step,dev_ce=dev,data_manifest=data.manifest),ckpt/'best.pt')
-    def evaluate_dev():
-        report={} if a.innovation_residual else None
-        value,ntokens=evaluate(model,data,microbatch=a.microbatch,innovation_report=report)
-        logged={'dev/ce':value,'dev/tokens':ntokens}
-        if report is not None:
-            with (out/'innovation.jsonl').open('a') as handle:
-                handle.write(json.dumps(dict(step=step,tokens=step*32768,ce=value,**report),allow_nan=False)+'\n')
-            logged['innovation/beta']=report['beta']
-            for branch in report['branches']:
-                prefix=f"dev/innovation/layer{branch['layer']}/{branch['branch']}/"
-                for key in ('r_squared','mse','prediction_to_residual_norm','innovation_to_residual_norm',
-                            'residual_to_hidden_norm','innovation_to_hidden_norm'):
-                    if branch[key] is not None:logged[prefix+key]=branch[key]
-        run.log(dict(step=step,tokens=step*32768,**logged))
-        return value,ntokens
     try:
         torch.cuda.reset_peak_memory_stats()
-        dev,dev_tokens=evaluate_dev()
+        dev,dev_tokens=evaluate(model,data,microbatch=a.microbatch)
         if initial_dev is None:initial_dev=dev
         if step==0:
             best=dev;save_best(dev);save()
+        run.log(dict(step=step,tokens=step*32768,**{'dev/ce':dev}))
         durations=[]
         with (out/'steps.jsonl').open('a',buffering=1) as log:
             while step<a.steps:
                 lr=schedule(opt,step,a.schedule_steps,wd)
                 torch.cuda.synchronize();start=time.perf_counter()
-                step_metrics={}
-                loss=train_step(model,opt,data,step,microbatch=a.microbatch,metrics=step_metrics)
+                loss=train_step(model,opt,data,step,microbatch=a.microbatch)
                 torch.cuda.synchronize();duration=time.perf_counter()-start
                 durations.append(duration);training_seconds+=duration;step+=1
-                row=dict(step=step,tokens=step*32768,loss=loss,seconds=duration,lr_multiplier=lr,**step_metrics)
+                row=dict(step=step,tokens=step*32768,loss=loss,seconds=duration,lr_multiplier=lr)
                 log.write(json.dumps(row)+'\n')
                 if step<=5 or step%10==0:
                     print(json.dumps(row),flush=True)
@@ -211,12 +183,13 @@ def main():
                     if profile_reference and 'additional_peak_allocated_bytes' in profile_reference:
                         perf['perf/profile_additional_peak_allocated_bytes']=profile_reference['additional_peak_allocated_bytes']
                         perf['perf/profile_additional_peak_reserved_bytes']=profile_reference['additional_peak_reserved_bytes']
-                    run.log(dict(step=step,tokens=row['tokens'],**perf,**step_metrics))
+                    run.log(dict(step=step,tokens=row['tokens'],**perf))
                 if step==50 or step%250==0 or step==a.steps:
-                    dev,dev_tokens=evaluate_dev()
+                    dev,dev_tokens=evaluate(model,data,microbatch=a.microbatch)
                     assert math.isfinite(dev)
                     if dev<best:
                         best=dev;save_best(dev)
+                    run.log(dict(step=step,tokens=step*32768,**{'dev/ce':dev,'dev/tokens':dev_tokens}))
                 if step==50 or step%500==0 or step==a.steps or stop:save()
                 if step<a.steps and (stop or time.perf_counter()-begin>=a.segment_seconds
                                       or a.segment_steps and step-start_step>=a.segment_steps):
