@@ -6,10 +6,9 @@ def model_cost(config, batch=1, activation_bytes=2):
     if c.architecture!='vanilla' or c.variant!='baseline':
         return None
     t,d,depth=c.sequence_length,c.width,c.depth
-    replaced=depth//2 if c.mlp_heavy else 0
-    projections=(24*depth+8*replaced)*batch*t*d*d
+    projections=24*batch*t*depth*d*d
     head=2*batch*t*d*c.vocab_size
-    attention=4*batch*d*(depth-replaced)*(t*(t+1)//2)
+    attention=4*batch*d*depth*(t*(t+1)//2)
     forward=projections+head+attention
     extra = {}
     if c.attention_statistic != 'none':

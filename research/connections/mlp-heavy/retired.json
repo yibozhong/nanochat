@@ -1,0 +1,11 @@
+{
+  "status": "retired_by_user",
+  "implementation_rolled_back": true,
+  "gate_job": "7812096.0",
+  "formal_training_submitted": false,
+  "wandb_created": false,
+  "validated": false,
+  "reason": "User cancels experiment and explicitly requests implementation rollback",
+  "time": 1793831551.1419556,
+  "audit": "/home/yzhong239/mlp-heavy-10b-20261104/stop-20261104"
+}
