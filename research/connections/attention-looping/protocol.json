@@ -1,7 +1,19 @@
 {
   "name": "attention_only_looping",
-  "status": "gpu_validated",
-  "formal_training": false,
+  "status": "gpu_validated_formal_authorized_ns_retired",
+  "formal_training": {
+    "authorized": true,
+    "runs": 1,
+    "steps": 305176,
+    "tokens": 10000007168,
+    "seed": 42,
+    "microbatch": 16,
+    "grad_accum": 1,
+    "wandb": "nanochat/attention-looping-10b-20261104",
+    "checkpoint": "latest500 overwrites; best separate; exit85 every1800s, same run ID on resume",
+    "monitor": "until first finite training step",
+    "baseline": "No additional formal baseline authorized; earlier Triton baseline has a different attention backend"
+  },
   "backbone": "vanilla",
   "attention_backend": "FA3 required, original nanochat CausalSelfAttention; no FLA",
   "total_attention_passes": 3,

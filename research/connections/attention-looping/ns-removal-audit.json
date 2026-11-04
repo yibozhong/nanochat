@@ -1,0 +1,30 @@
+{
+  "gate_commit": "977113646fd781670f37860ebb36fcc1a0780e59",
+  "gate_job": "7811013.0",
+  "unchanged_execution": true,
+  "evidence": [
+    "ConnectionBlock and ConnectionModel AST identical",
+    "optimizer AST identical after removal of disabled post-step branch",
+    "training AST identical after erasing disabled NS parser/metadata/diagnostics",
+    "core kernels/attention/optim/data/runtime unchanged byte for byte",
+    "loop FLOPs unchanged; false legacy NS metadata accepted and true rejected"
+  ],
+  "repeated_gpu_gate": false,
+  "reason": "Only inactive NS code removed from already validated looping configuration",
+  "final_runtime_sha256": {
+    "nanochat/optim.py": "7c9b714c6f76e3a9d50fc530044b2767d0cd89391237e609548f1cd730afed8f",
+    "nanochat/packed_training.py": "80ec81643312f8f1e8fa96e8f2ef10b12fd9f41b9a59c77ad6caaffae1933b57",
+    "nanochat/gpt.py": "f0832791a77302b46c413646417efd916fa858d2bb8fa6640bf3e036aa7d7bcc",
+    "nanochat/flash_attention.py": "05af334f7241bbfdc798d70af6468e0193ee329fa673ea1466915d7b4b0ff85a",
+    "nanochat/connection_experiment.py": "0a723dd412420aadc8aa7261c979ee17a352e470eb05aad9cbaf2d7bb77d42cf",
+    "nanochat/triton_moment_attention.py": "185f5841966181d765f9ece41c53027f210e2ea0bf611ea03d7d04dfd9db063c",
+    "nanochat/moment_attention.py": "21db7132a911dbe4f77dda0a15404413d3f541c6f6ae77ee23fee89b9a760056",
+    "nanochat/fla_attention_kernels.py": "4dec91002718313347b81968cf58376d91efcffaaf06bf4338e842d93580f95a",
+    "nanochat/moment_attention_kernels.py": "fde69f711cc2573ee1a01e7d457bdac0fc38c4259488820246721dfde2123b80",
+    "research/connections/runtime/uv.lock": "e0201988bb3f86389feddd9d8e9baf656e110301f6aab0804e5edf3b2dd48215",
+    "research/connections/toolchain/uv.lock": "41ece04cc51dfd61b740b7ab4a6479c56eee73faf562abbcfe487f3172c23036",
+    "nanochat/connection_model.py": "42b23edd38431b455e7b0f5727cafcd051a452cf5899a29ca733e32019a59a02",
+    "nanochat/connection_cost.py": "e9325117310c0addf17a5e0ce2f75b8a4c0a16661a91c0298ed0fcb688337965",
+    "scripts/connection_train.py": "6bbf913abb655ba19d137caffb8a9c3c3ed7f47ea40092742533136e3a3debbf"
+  }
+}

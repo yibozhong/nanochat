@@ -5,7 +5,8 @@ TASK_VARIANT="$1"
 TASK_RUN_ID="$2"
 TASK_STEPS="$3"
 TASK_MODE="$4"
-[ "$TASK_MODE" = output_ns ]
+[ "$TASK_MODE" = attention_looping ]
+[ "$TASK_VARIANT" = baseline ]
 shift 4
 mkdir -p checkpoints
 if [ -f results.tar ]; then tar -xf results.tar; fi
@@ -93,6 +94,25 @@ fi
 cd nanochat-src
 ln -sfn ../results results
 cp ../source.json source.json
+
+export NANOCHAT_FA3_REVISION=de87b9b5af06dd9984df595bef90b2eba44b181a
+export HF_HOME="$TASK_ROOT/fa3-cache"
+HF_HUB_OFFLINE=0 python - <<'FA3PY'
+import hashlib,json,os
+from pathlib import Path
+from kernels import get_kernel
+revision=os.environ['NANOCHAT_FA3_REVISION']
+module=get_kernel('varunneal/flash-attention-3',revision=revision)
+interface=module.flash_attn_interface
+folder=Path(interface.__file__).parent
+files={p.name:dict(bytes=p.stat().st_size,sha256=hashlib.sha256(p.read_bytes()).hexdigest())
+       for p in folder.iterdir() if p.is_file()}
+Path('results/fa3-artifacts.json').write_text(json.dumps(dict(repo='varunneal/flash-attention-3',revision=revision,files=files),indent=2)+'\n')
+expected=json.loads(Path('research/connections/attention-looping/fa3-artifacts.json').read_text())
+assert files==expected['files'] and revision==expected['revision']
+print('Pinned FA3 artifacts match GPU gate:',interface.__file__,flush=True)
+FA3PY
+
 python - <<'PYCHECK'
 import torch,cut_cross_entropy
 from nanochat.engine import KVCache
@@ -111,7 +131,7 @@ else
 fi
 python -m scripts.connection_train --variant "$TASK_VARIANT" --connection-backend "$TASK_BACKEND" \
     --steps "$TASK_STEPS" --schedule-steps "$TASK_STEPS" --microbatch 16 \
-    --attention-backend sdpa_cudnn --matched-backbone-init --evaluate-test \
+    --attention-backend fa3 --matched-backbone-init --evaluate-test \
     --no-activation-checkpoint --no-fused-connection-grad --seed 42 \
     --data-dir ../data --output-dir results/train --checkpoint-dir ../checkpoints \
-    --run-id "$TASK_RUN_ID" --formal-training --attention-kernel fla_triton --attention-statistic none --attention-output-ns --wandb-group attention-output-ns-10b-20261104 --resume auto --segment-seconds "${NANOCHAT_CHECKPOINT_SECONDS:-1800}"
+    --run-id "$TASK_RUN_ID" --formal-training --attention-kernel original --attention-statistic none --attention-looping --attention-loops 3 --attention-loop-window 128 --wandb-group attention-looping-10b-20261104 --resume auto --segment-seconds "${NANOCHAT_CHECKPOINT_SECONDS:-1800}"

@@ -34,7 +34,6 @@ class ConnectionConfig:
     attention_kernel: str = 'original'
     attention_statistic: str = 'none'
     moment_query_chunk: int = 256
-    attention_output_ns: bool = False
     attention_looping: bool = False
     attention_loops: int = 3  # total attention evaluations when enabled
     attention_loop_window: int = 128  # includes current token
@@ -45,10 +44,8 @@ class ConnectionConfig:
             if not isinstance(value, int) or isinstance(value, bool) or value < 1:
                 raise ValueError(f'{name} must be a positive integer')
         if self.attention_looping and (self.architecture != 'vanilla' or self.variant != 'baseline' or
-                                      self.attention_kernel != 'original' or self.attention_statistic != 'none' or self.attention_output_ns):
-            raise ValueError('Attention looping initially requires vanilla original attention, without statistics or output NS')
-        if self.attention_output_ns and (self.architecture != 'vanilla' or self.variant != 'baseline' or self.attention_statistic != 'none'):
-            raise ValueError('Attention output NS initially supports vanilla baseline without attention statistics')
+                                      self.attention_kernel != 'original' or self.attention_statistic != 'none'):
+            raise ValueError('Attention looping initially requires vanilla original attention, without statistics')
         if self.attention_kernel not in ('original','fla_triton'):
             raise ValueError('Unknown attention kernel')
         if self.attention_kernel == 'fla_triton' and (self.architecture != 'vanilla' or self.variant != 'baseline'):
@@ -82,6 +79,8 @@ class ConnectionConfig:
     def from_checkpoint(cls, config):
         """Read pre-cleanup NVIDIA/vanilla metadata; reject retired model weights."""
         config = dict(config)
+        if config.pop('attention_output_ns', False):
+            raise ValueError('Checkpoint belongs to the retired attention output NS experiment')
         if config.get('variant', 'baseline') not in ('baseline', 'mhc', 'mhc_no_sinkhorn'):
             raise ValueError('Checkpoint belongs to a retired model variant')
         # Legacy metadata was inert on the retained native/vanilla/mHC models.
@@ -262,9 +261,6 @@ def optimizer_for(model, batch_tokens=32768):
     opt = MuonAdamW(groups)
     for g in opt.param_groups:
         g['initial_lr'] = g['lr']
-    if c.attention_output_ns:
-        from nanochat.attention_output_ns import install_attention_output_ns
-        install_attention_output_ns(model,opt)
     return opt, wd
 
 

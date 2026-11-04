@@ -30,7 +30,6 @@ def main():
     p.add_argument('--attention-kernel', choices=('original','fla_triton'), default='original')
     p.add_argument('--attention-statistic', choices=('none','variance','jensen_silu'), default='none')
     p.add_argument('--moment-query-chunk', type=int, default=256)
-    p.add_argument('--attention-output-ns', action='store_true')
     p.add_argument('--attention-looping', action='store_true')
     p.add_argument('--attention-loops', type=int, default=3, help='Total attention passes per block; requires --attention-looping')
     p.add_argument('--attention-loop-window', type=int, default=128, help='Local window including self for all but the final full-attention pass')
@@ -74,7 +73,6 @@ def main():
     c=ConnectionConfig(variant=a.variant,streams=a.streams,sinkhorn_iterations=a.sinkhorn_iterations,
                        sequence_length=a.sequence_length,
                        attention_statistic=a.attention_statistic, moment_query_chunk=a.moment_query_chunk, attention_kernel=a.attention_kernel,
-                       attention_output_ns=a.attention_output_ns,
                        attention_looping=a.attention_looping, attention_loops=a.attention_loops,
                        attention_loop_window=a.attention_loop_window,
                        architecture=a.architecture, window_pattern=a.window_pattern,
@@ -135,17 +133,12 @@ def main():
     from nanochat.connection_cost import model_cost
     cost=model_cost(c,batch=rows_per_step)
     config['compute_estimate']=cost
-    if a.attention_output_ns:
-        config['attention_output_projection']=dict(method='five native Muon Polar Express polynomials on W_o after optimizer.step',
-            precision='BF16 GEMMs; FP32 weights and norm restoration',scale='preserve pre-projection Frobenius norm per layer; zero stays zero',
-            optimizer='unchanged MuonAdamW groups/moments; no momentum transport',scope='only all attention c_proj weights; no backward through projection',
-            constraint='approximate scaled orthogonality, not exact orthonormality')
-    profile_reference=source.get('profile_reference',{}).get('attention_looping' if a.attention_looping else 'output_ns' if a.attention_output_ns else a.attention_statistic if a.attention_statistic != 'none' else a.variant)
+    profile_reference=source.get('profile_reference',{}).get('attention_looping' if a.attention_looping else a.attention_statistic if a.attention_statistic != 'none' else a.variant)
     if profile_reference:
         config['same_gpu_profile_reference']=profile_reference
     kwargs=dict(project='nanochat',entity='yibozhong657-none',group=a.wandb_group,
                 job_type='pretrain' if a.formal_training else 'diagnostic',
-                name=f'{a.architecture}-{a.variant}'+(f'-attn-loop{a.attention_loops}-w{a.attention_loop_window}' if a.attention_looping else '')+('-output-ns' if a.attention_output_ns else '')+(f'-{a.attention_statistic}' if a.attention_statistic != 'none' else '')+f'-{c.sequence_length}ctx-{a.steps}steps',id=run_id,resume='allow',config=config)
+                name=f'{a.architecture}-{a.variant}'+(f'-attn-loop{a.attention_loops}-w{a.attention_loop_window}' if a.attention_looping else '')+(f'-{a.attention_statistic}' if a.attention_statistic != 'none' else '')+f'-{c.sequence_length}ctx-{a.steps}steps',id=run_id,resume='allow',config=config)
     run=training_run(formal_training=a.formal_training, local_dir=out/"diagnostics", **kwargs)
     run.define_metric('tokens')
     for metric in ('train/*','dev/*','perf/*'):
@@ -167,20 +160,6 @@ def main():
     def save_best(dev):
         atomic_save(dict(model=model.state_dict(),config=asdict(c),protocol=protocol,source=source,
             run_id=run_id,step=step,dev_ce=dev,data_manifest=data.manifest),ckpt/'best.pt')
-    def log_output_spectra():
-        if not a.attention_output_ns:return
-        from nanochat.attention_output_ns import attention_output_diagnostics
-        report=attention_output_diagnostics(model,data)
-        with (out/'attention-output-spectra.jsonl').open('a') as handle:
-            handle.write(json.dumps(dict(step=step,tokens=step*32768,**report),allow_nan=False)+'\n')
-        metrics={'perf/output_spectrum_seconds':report['seconds']}
-        for row in report['layers']:
-            prefix=f"dev/output_ns/layer{row['layer']}/"
-            for key,value in row['weight'].items():
-                if value is not None:metrics[prefix+'weight_'+key]=value
-            for name in ('input_features','output_features'):
-                metrics[prefix+name+'_centered_erank']=row[name]['centered']['energy_erank']
-        run.log(dict(step=step,tokens=step*32768,**metrics))
     try:
         torch.cuda.reset_peak_memory_stats()
         dev,dev_tokens=evaluate(model,data,microbatch=a.microbatch)
@@ -188,7 +167,6 @@ def main():
         if step==0:
             best=dev;save_best(dev);save()
         run.log(dict(step=step,tokens=step*32768,**{'dev/ce':dev}))
-        log_output_spectra()
         durations=[]
         with (out/'steps.jsonl').open('a',buffering=1) as log:
             while step<a.steps:
@@ -217,7 +195,6 @@ def main():
                     if dev<best:
                         best=dev;save_best(dev)
                     run.log(dict(step=step,tokens=step*32768,**{'dev/ce':dev,'dev/tokens':dev_tokens}))
-                    if step in (50,250) or step%5000==0 or step==a.steps:log_output_spectra()
                 if step==50 or step%500==0 or step==a.steps or stop:save()
                 if step<a.steps and (stop or time.perf_counter()-begin>=a.segment_seconds
                                       or a.segment_steps and step-start_step>=a.segment_steps):

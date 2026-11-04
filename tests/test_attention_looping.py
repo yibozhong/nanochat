@@ -172,7 +172,7 @@ def test_exact_saved_optimizer_rng_and_next_update(tmp_path):
     equal_tree(model.state_dict(),other.state_dict());equal_tree(opt.state_dict(),other_opt.state_dict())
 
 
-@pytest.mark.parametrize('options',[dict(attention_loops=0),dict(attention_loop_window=0),dict(attention_kernel='fla_triton'),dict(variant='mhc'),dict(architecture='native'),dict(attention_statistic='variance'),dict(attention_output_ns=True)])
+@pytest.mark.parametrize('options',[dict(attention_loops=0),dict(attention_loop_window=0),dict(attention_kernel='fla_triton'),dict(variant='mhc'),dict(architecture='native'),dict(attention_statistic='variance'),dict(attention_loops=1.5)])
 def test_reject_unvalidated_combinations(options):
     with pytest.raises(ValueError):ConnectionConfig(attention_looping=True,**options)
 

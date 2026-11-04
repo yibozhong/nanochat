@@ -1,0 +1,9 @@
+{
+  "status": "stopped_by_user",
+  "reason": "User requested rollback and only FA3 looping training",
+  "formal_training_ever_submitted": false,
+  "initial_gate": "7810669.0 failed",
+  "numerics": "7810858.0 completed exit0; no follow-up or training",
+  "retained": "Historical reports and Git history; no executable NS route",
+  "audit": "/home/yzhong239/attention-output-ns-10b-20261104/stop-20261104/verified.json"
+}
