@@ -1,0 +1,811 @@
+{
+  "complete": true,
+  "source": {
+    "commit": "429ea729309789cf0d6c7154908532b2ed24dfef",
+    "hashes": {
+      "mhc-official-runtime-7546767.tar.gz": "6b927f93021961293e12452b4001a479ff1b54cbc1aae0355e73e75a393d4dc0",
+      "cuda-compat-13-1_590.48.01-1_amd64.deb": "066f24c715f5f8f31bb7e8bd0f9ddc93fe78a82d3be55c6f3e9bbe26fa4fd7be",
+      "transformer_engine_torch-2.20.2-cp311-cp311-linux_x86_64.whl": "9b69f40b34570e3073171dcb231d6dd038092d20a277e501e7da01e6475920de",
+      "source.tar": "283f4b90e3ad72cacf663a04ead48c67384f835902c036783cc6838033f2e0ef",
+      "gate-data.tar": "63f5dbf7923419932fcec40db7e458ab83330e8557997985a837665109c5cde1"
+    },
+    "formal_training": false,
+    "purpose": "triton-moments-10b-20261103 correctness/profile/restart"
+  },
+  "checks": {
+    "tests": 4,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "trials": {
+    "none": {
+      "summary": {
+        "complete": true,
+        "variant": "baseline",
+        "run_id": "gate-none",
+        "steps": 50,
+        "training_tokens": 1638400,
+        "initial_dev_ce": 10.398012638092041,
+        "final_dev_ce": 6.496179580688477,
+        "best_dev_ce": 6.496179580688477,
+        "dev_tokens": 131072,
+        "training_seconds": 22.464616160839796,
+        "elapsed_seconds": 49.58307462744415,
+        "steady_step_seconds": 0.06426729150116443,
+        "gpu": "NVIDIA H200",
+        "peak_allocated_bytes": 5770922496,
+        "peak_reserved_bytes": 5786042368,
+        "source": {
+          "commit": "429ea729309789cf0d6c7154908532b2ed24dfef",
+          "hashes": {
+            "mhc-official-runtime-7546767.tar.gz": "6b927f93021961293e12452b4001a479ff1b54cbc1aae0355e73e75a393d4dc0",
+            "cuda-compat-13-1_590.48.01-1_amd64.deb": "066f24c715f5f8f31bb7e8bd0f9ddc93fe78a82d3be55c6f3e9bbe26fa4fd7be",
+            "transformer_engine_torch-2.20.2-cp311-cp311-linux_x86_64.whl": "9b69f40b34570e3073171dcb231d6dd038092d20a277e501e7da01e6475920de",
+            "source.tar": "283f4b90e3ad72cacf663a04ead48c67384f835902c036783cc6838033f2e0ef",
+            "gate-data.tar": "63f5dbf7923419932fcec40db7e458ab83330e8557997985a837665109c5cde1"
+          },
+          "formal_training": false,
+          "purpose": "triton-moments-10b-20261103 correctness/profile/restart"
+        },
+        "test_evaluated": false,
+        "checkpoint_files": {
+          "latest.pt": {
+            "bytes": 503550565,
+            "sha256": "efe50e6848428f275331f67309494f39265da09aeafcc68a7775607e1bc80365"
+          },
+          "best.pt": {
+            "bytes": 201347109,
+            "sha256": "3505603f7c96cec5e12f56e4bd1bf34abbc13da7afe74d62d0ac8558837c360c"
+          }
+        }
+      },
+      "config": {
+        "logging_backend": "local",
+        "model": {
+          "variant": "baseline",
+          "depth": 8,
+          "width": 512,
+          "heads": 4,
+          "sequence_length": 2048,
+          "vocab_size": 32768,
+          "streams": 4,
+          "sinkhorn_iterations": 20,
+          "activation_checkpoint": false,
+          "connection_backend": "nvidia",
+          "fused_connection_grad": false,
+          "architecture": "vanilla",
+          "window_pattern": "SSSL",
+          "attention_kernel": "fla_triton",
+          "attention_statistic": "none",
+          "moment_query_chunk": 256
+        },
+        "protocol": {
+          "steps": 50,
+          "schedule_steps": 305176,
+          "batch_tokens": 32768,
+          "microbatch": 16,
+          "grad_accum": 1,
+          "seed": 42,
+          "attention_backend": "sdpa_cudnn",
+          "matched_backbone_init": true,
+          "evaluate_test": false
+        },
+        "data_manifest": {
+          "complete": true,
+          "logging_backend": "local",
+          "sequence_length": 2048,
+          "dtype": "uint16",
+          "layout": "rows of 2049 token ids; x=row[:-1], y=row[1:]",
+          "batch_tokens": 32768,
+          "training_steps": 128,
+          "requested_tokens": 4194304,
+          "training_tokens": 4194304,
+          "files": {
+            "train": {
+              "rows": 2048,
+              "tokens": 4194304,
+              "bytes": 8392704,
+              "sha256": "a5fb6a5c5b38d7c67ead2b12ad393d7c342ff94ba0b4e5d7eaffb1050d93d62d"
+            },
+            "dev": {
+              "rows": 64,
+              "tokens": 131072,
+              "bytes": 262272,
+              "sha256": "bd67b90b4386ba6428992864712f56eb10527678ed8b3664ed5f63c1643458a4",
+              "last_source_state": {
+                "pq_idx": 0,
+                "rg_idx": 1,
+                "epoch": 1
+              }
+            },
+            "test": {
+              "rows": 1024,
+              "tokens": 2097152,
+              "bytes": 4196352,
+              "sha256": "e7d24b6a89155ebc7123afe68bd2c58aeaf159b5087dbdf28e090ce09f293d09",
+              "last_source_state": {
+                "pq_idx": 0,
+                "rg_idx": 4,
+                "epoch": 1
+              }
+            }
+          },
+          "tokenizer": {
+            "dataset": "HuggingFaceFW/fineweb-edu",
+            "config": "sample-10BT",
+            "revision": "87f09149ef4734204d70ed1d046ddc9ca3f2b8f9",
+            "full_dataset_bytes": 28518193415,
+            "full_source_gpt2_tokens": 9972918177,
+            "nanochat_commit": "145da40cdd37b9522aa53d26c0c356e9126458bb",
+            "nanochat_source_sha256": "9a39516fc52effabe6bf9b87fc5fc67f7026a95060861be560d3525257bfb3e6",
+            "files": {
+              "token_bytes.pt": {
+                "bytes": 132649,
+                "sha256": "8e6ed9947610b8b329f0aed7e01bf332359331790e61fc6c0c95dc3cff29bdb4"
+              },
+              "tokenizer.pkl": {
+                "bytes": 412696,
+                "sha256": "8d1a5a03421ca24e7acafd1ef68fe8dbc6326dad903bc65cc726ec0601c577de"
+              }
+            },
+            "train_shards": [
+              "000_00000.parquet"
+            ],
+            "validation_shards": [
+              "013_00000.parquet"
+            ],
+            "tokenizer": "native RustBPE 32768 vocab, first 100M capped characters from training shard",
+            "benchmark": "native base_train d8/D512/2K/SSSL, 300 steps x 32768 model tokens; original source unmodified",
+            "vocab_size": 32768,
+            "max_chars": 100000000,
+            "doc_cap": 10000,
+            "purpose": "Throughput pilot tokenizer; native RustBPE; train shard only",
+            "elapsed_seconds": 5.633999116718769,
+            "run_id": "eqnd6jdz"
+          },
+          "native_commit": "145da40cdd37b9522aa53d26c0c356e9126458bb",
+          "dataset_revision": "87f09149ef4734204d70ed1d046ddc9ca3f2b8f9",
+          "train_shards": "000..012",
+          "heldout_shard": "013",
+          "epoch_note": "Native loader cycles the entire 13-shard training split. Epoch tracks source reads into the document buffer, not exact consumed unique tokens.",
+          "seconds": 9800.379161169752,
+          "validation": "dev first 64 rows, test next 1024 rows; no shared packed rows",
+          "purpose": "Exact 2K training prefix for checks; not a separate training run"
+        },
+        "source": {
+          "commit": "429ea729309789cf0d6c7154908532b2ed24dfef",
+          "hashes": {
+            "mhc-official-runtime-7546767.tar.gz": "6b927f93021961293e12452b4001a479ff1b54cbc1aae0355e73e75a393d4dc0",
+            "cuda-compat-13-1_590.48.01-1_amd64.deb": "066f24c715f5f8f31bb7e8bd0f9ddc93fe78a82d3be55c6f3e9bbe26fa4fd7be",
+            "transformer_engine_torch-2.20.2-cp311-cp311-linux_x86_64.whl": "9b69f40b34570e3073171dcb231d6dd038092d20a277e501e7da01e6475920de",
+            "source.tar": "283f4b90e3ad72cacf663a04ead48c67384f835902c036783cc6838033f2e0ef",
+            "gate-data.tar": "63f5dbf7923419932fcec40db7e458ab83330e8557997985a837665109c5cde1"
+          },
+          "formal_training": false,
+          "purpose": "triton-moments-10b-20261103 correctness/profile/restart"
+        },
+        "checkpoint_transport": {
+          "upload_interval_seconds": 1800.0,
+          "local_save_every_steps": 500,
+          "method": "exit85 plus scheduler transfer; local save alone is not durable"
+        },
+        "gpu": "NVIDIA H200",
+        "torch": "2.10.0+cu130",
+        "cuda": "13.0",
+        "gpu_capability": [
+          9,
+          0
+        ],
+        "explicit_portability_gate": false,
+        "parameters": 58720256,
+        "residual_mixing": "additive",
+        "applied_sinkhorn_iterations": 0,
+        "optimizer": "native MuonAdamW; connector AdamW at native unembedding LR, no decay",
+        "optimizer_groups": [
+          {
+            "kind": "adamw",
+            "lr": 0.0024494897427831783,
+            "betas": [
+              0.8,
+              0.96
+            ],
+            "eps": 1e-10,
+            "weight_decay": 0.01,
+            "initial_lr": 0.0024494897427831783
+          },
+          {
+            "kind": "adamw",
+            "lr": 0.09185586535436918,
+            "betas": [
+              0.8,
+              0.995
+            ],
+            "eps": 1e-10,
+            "weight_decay": 0.001,
+            "initial_lr": 0.09185586535436918
+          },
+          {
+            "kind": "muon",
+            "lr": 0.005,
+            "momentum": 0.95,
+            "ns_steps": 5,
+            "beta2": 0.9,
+            "weight_decay": 0.18375000000000002,
+            "initial_lr": 0.005
+          },
+          {
+            "kind": "muon",
+            "lr": 0.005,
+            "momentum": 0.95,
+            "ns_steps": 5,
+            "beta2": 0.9,
+            "weight_decay": 0.18375000000000002,
+            "initial_lr": 0.005
+          },
+          {
+            "kind": "muon",
+            "lr": 0.005,
+            "momentum": 0.95,
+            "ns_steps": 5,
+            "beta2": 0.9,
+            "weight_decay": 0.18375000000000002,
+            "initial_lr": 0.005
+          }
+        ],
+        "loss": "full-token full-vocabulary CCE; no gradient filtering",
+        "references": "research/connections/references.json",
+        "compute_estimate": {
+          "estimated_forward_flops": 3298803318784,
+          "estimated_training_flops": 9896409956352,
+          "components_forward": {
+            "backbone_projections": 1649267441664,
+            "vocab_head": 1099511627776,
+            "attention": 550024249344
+          },
+          "accounting": "FMA=2 FLOPs; allowed attention pairs, not masked dense-kernel execution. Backward approximated as2x consumed forward matrix FLOPs. Excludes softmax/norm/activation/optimizer/recomputation and is not measured hardware FLOPs.",
+          "statistics_note": "FLA fused backend shares QK/softmax and adds only one P@phi(V) matmul per allowed pair; excludes nonlinear pointwise work and FlashAttention backward probability recomputation.",
+          "memory_note": "Actual training peak VRAM must be measured separately."
+        }
+      },
+      "exact_steps_1_to_50": true
+    },
+    "variance": {
+      "summary": {
+        "complete": true,
+        "variant": "baseline",
+        "run_id": "gate-variance",
+        "steps": 50,
+        "training_tokens": 1638400,
+        "initial_dev_ce": 10.398012638092041,
+        "final_dev_ce": 6.49855649471283,
+        "best_dev_ce": 6.49855649471283,
+        "dev_tokens": 131072,
+        "training_seconds": 13.418228538706899,
+        "elapsed_seconds": 40.653015507385135,
+        "steady_step_seconds": 0.0719315362473329,
+        "gpu": "NVIDIA H200",
+        "peak_allocated_bytes": 6328781312,
+        "peak_reserved_bytes": 6350176256,
+        "source": {
+          "commit": "429ea729309789cf0d6c7154908532b2ed24dfef",
+          "hashes": {
+            "mhc-official-runtime-7546767.tar.gz": "6b927f93021961293e12452b4001a479ff1b54cbc1aae0355e73e75a393d4dc0",
+            "cuda-compat-13-1_590.48.01-1_amd64.deb": "066f24c715f5f8f31bb7e8bd0f9ddc93fe78a82d3be55c6f3e9bbe26fa4fd7be",
+            "transformer_engine_torch-2.20.2-cp311-cp311-linux_x86_64.whl": "9b69f40b34570e3073171dcb231d6dd038092d20a277e501e7da01e6475920de",
+            "source.tar": "283f4b90e3ad72cacf663a04ead48c67384f835902c036783cc6838033f2e0ef",
+            "gate-data.tar": "63f5dbf7923419932fcec40db7e458ab83330e8557997985a837665109c5cde1"
+          },
+          "formal_training": false,
+          "purpose": "triton-moments-10b-20261103 correctness/profile/restart"
+        },
+        "test_evaluated": false,
+        "checkpoint_files": {
+          "latest.pt": {
+            "bytes": 520346629,
+            "sha256": "60c3cc4bcde9b3a0736d9a33155e465ad8b86e9a722b2821e62df9b5d90a07ca"
+          },
+          "best.pt": {
+            "bytes": 209738165,
+            "sha256": "a08632fa3ad85015851fd0c750b6e1a28243a4c9ad0e3e47837406f60b271790"
+          }
+        }
+      },
+      "config": {
+        "logging_backend": "local",
+        "model": {
+          "variant": "baseline",
+          "depth": 8,
+          "width": 512,
+          "heads": 4,
+          "sequence_length": 2048,
+          "vocab_size": 32768,
+          "streams": 4,
+          "sinkhorn_iterations": 20,
+          "activation_checkpoint": false,
+          "connection_backend": "nvidia",
+          "fused_connection_grad": false,
+          "architecture": "vanilla",
+          "window_pattern": "SSSL",
+          "attention_kernel": "fla_triton",
+          "attention_statistic": "variance",
+          "moment_query_chunk": 256
+        },
+        "protocol": {
+          "steps": 50,
+          "schedule_steps": 305176,
+          "batch_tokens": 32768,
+          "microbatch": 16,
+          "grad_accum": 1,
+          "seed": 42,
+          "attention_backend": "sdpa_cudnn",
+          "matched_backbone_init": true,
+          "evaluate_test": false
+        },
+        "data_manifest": {
+          "complete": true,
+          "logging_backend": "local",
+          "sequence_length": 2048,
+          "dtype": "uint16",
+          "layout": "rows of 2049 token ids; x=row[:-1], y=row[1:]",
+          "batch_tokens": 32768,
+          "training_steps": 128,
+          "requested_tokens": 4194304,
+          "training_tokens": 4194304,
+          "files": {
+            "train": {
+              "rows": 2048,
+              "tokens": 4194304,
+              "bytes": 8392704,
+              "sha256": "a5fb6a5c5b38d7c67ead2b12ad393d7c342ff94ba0b4e5d7eaffb1050d93d62d"
+            },
+            "dev": {
+              "rows": 64,
+              "tokens": 131072,
+              "bytes": 262272,
+              "sha256": "bd67b90b4386ba6428992864712f56eb10527678ed8b3664ed5f63c1643458a4",
+              "last_source_state": {
+                "pq_idx": 0,
+                "rg_idx": 1,
+                "epoch": 1
+              }
+            },
+            "test": {
+              "rows": 1024,
+              "tokens": 2097152,
+              "bytes": 4196352,
+              "sha256": "e7d24b6a89155ebc7123afe68bd2c58aeaf159b5087dbdf28e090ce09f293d09",
+              "last_source_state": {
+                "pq_idx": 0,
+                "rg_idx": 4,
+                "epoch": 1
+              }
+            }
+          },
+          "tokenizer": {
+            "dataset": "HuggingFaceFW/fineweb-edu",
+            "config": "sample-10BT",
+            "revision": "87f09149ef4734204d70ed1d046ddc9ca3f2b8f9",
+            "full_dataset_bytes": 28518193415,
+            "full_source_gpt2_tokens": 9972918177,
+            "nanochat_commit": "145da40cdd37b9522aa53d26c0c356e9126458bb",
+            "nanochat_source_sha256": "9a39516fc52effabe6bf9b87fc5fc67f7026a95060861be560d3525257bfb3e6",
+            "files": {
+              "token_bytes.pt": {
+                "bytes": 132649,
+                "sha256": "8e6ed9947610b8b329f0aed7e01bf332359331790e61fc6c0c95dc3cff29bdb4"
+              },
+              "tokenizer.pkl": {
+                "bytes": 412696,
+                "sha256": "8d1a5a03421ca24e7acafd1ef68fe8dbc6326dad903bc65cc726ec0601c577de"
+              }
+            },
+            "train_shards": [
+              "000_00000.parquet"
+            ],
+            "validation_shards": [
+              "013_00000.parquet"
+            ],
+            "tokenizer": "native RustBPE 32768 vocab, first 100M capped characters from training shard",
+            "benchmark": "native base_train d8/D512/2K/SSSL, 300 steps x 32768 model tokens; original source unmodified",
+            "vocab_size": 32768,
+            "max_chars": 100000000,
+            "doc_cap": 10000,
+            "purpose": "Throughput pilot tokenizer; native RustBPE; train shard only",
+            "elapsed_seconds": 5.633999116718769,
+            "run_id": "eqnd6jdz"
+          },
+          "native_commit": "145da40cdd37b9522aa53d26c0c356e9126458bb",
+          "dataset_revision": "87f09149ef4734204d70ed1d046ddc9ca3f2b8f9",
+          "train_shards": "000..012",
+          "heldout_shard": "013",
+          "epoch_note": "Native loader cycles the entire 13-shard training split. Epoch tracks source reads into the document buffer, not exact consumed unique tokens.",
+          "seconds": 9800.379161169752,
+          "validation": "dev first 64 rows, test next 1024 rows; no shared packed rows",
+          "purpose": "Exact 2K training prefix for checks; not a separate training run"
+        },
+        "source": {
+          "commit": "429ea729309789cf0d6c7154908532b2ed24dfef",
+          "hashes": {
+            "mhc-official-runtime-7546767.tar.gz": "6b927f93021961293e12452b4001a479ff1b54cbc1aae0355e73e75a393d4dc0",
+            "cuda-compat-13-1_590.48.01-1_amd64.deb": "066f24c715f5f8f31bb7e8bd0f9ddc93fe78a82d3be55c6f3e9bbe26fa4fd7be",
+            "transformer_engine_torch-2.20.2-cp311-cp311-linux_x86_64.whl": "9b69f40b34570e3073171dcb231d6dd038092d20a277e501e7da01e6475920de",
+            "source.tar": "283f4b90e3ad72cacf663a04ead48c67384f835902c036783cc6838033f2e0ef",
+            "gate-data.tar": "63f5dbf7923419932fcec40db7e458ab83330e8557997985a837665109c5cde1"
+          },
+          "formal_training": false,
+          "purpose": "triton-moments-10b-20261103 correctness/profile/restart"
+        },
+        "checkpoint_transport": {
+          "upload_interval_seconds": 1800.0,
+          "local_save_every_steps": 500,
+          "method": "exit85 plus scheduler transfer; local save alone is not durable"
+        },
+        "gpu": "NVIDIA H200",
+        "torch": "2.10.0+cu130",
+        "cuda": "13.0",
+        "gpu_capability": [
+          9,
+          0
+        ],
+        "explicit_portability_gate": false,
+        "parameters": 60817408,
+        "residual_mixing": "additive",
+        "applied_sinkhorn_iterations": 0,
+        "optimizer": "native MuonAdamW; connector AdamW at native unembedding LR, no decay",
+        "optimizer_groups": [
+          {
+            "kind": "adamw",
+            "lr": 0.0024494897427831783,
+            "betas": [
+              0.8,
+              0.96
+            ],
+            "eps": 1e-10,
+            "weight_decay": 0.01,
+            "initial_lr": 0.0024494897427831783
+          },
+          {
+            "kind": "adamw",
+            "lr": 0.09185586535436918,
+            "betas": [
+              0.8,
+              0.995
+            ],
+            "eps": 1e-10,
+            "weight_decay": 0.001,
+            "initial_lr": 0.09185586535436918
+          },
+          {
+            "kind": "muon",
+            "lr": 0.005,
+            "momentum": 0.95,
+            "ns_steps": 5,
+            "beta2": 0.9,
+            "weight_decay": 0.18375000000000002,
+            "initial_lr": 0.005
+          },
+          {
+            "kind": "muon",
+            "lr": 0.005,
+            "momentum": 0.95,
+            "ns_steps": 5,
+            "beta2": 0.9,
+            "weight_decay": 0.18375000000000002,
+            "initial_lr": 0.005
+          },
+          {
+            "kind": "muon",
+            "lr": 0.005,
+            "momentum": 0.95,
+            "ns_steps": 5,
+            "beta2": 0.9,
+            "weight_decay": 0.18375000000000002,
+            "initial_lr": 0.005
+          }
+        ],
+        "loss": "full-token full-vocabulary CCE; no gradient filtering",
+        "references": "research/connections/references.json",
+        "compute_estimate": {
+          "estimated_forward_flops": 3711254396928,
+          "estimated_training_flops": 11133763190784,
+          "components_forward": {
+            "backbone_projections": 1649267441664,
+            "vocab_head": 1099511627776,
+            "attention": 550024249344,
+            "statistics_dense_matmuls": 275012124672,
+            "statistics_projection": 137438953472
+          },
+          "accounting": "FMA=2 FLOPs; allowed attention pairs, not masked dense-kernel execution. Backward approximated as2x consumed forward matrix FLOPs. Excludes softmax/norm/activation/optimizer/recomputation and is not measured hardware FLOPs.",
+          "statistics_note": "FLA fused backend shares QK/softmax and adds only one P@phi(V) matmul per allowed pair; excludes nonlinear pointwise work and FlashAttention backward probability recomputation.",
+          "memory_note": "Actual training peak VRAM must be measured separately."
+        }
+      },
+      "exact_steps_1_to_50": true
+    },
+    "jensen_silu": {
+      "summary": {
+        "complete": true,
+        "variant": "baseline",
+        "run_id": "gate-jensen_silu",
+        "steps": 50,
+        "training_tokens": 1638400,
+        "initial_dev_ce": 10.398012399673462,
+        "final_dev_ce": 6.4911874532699585,
+        "best_dev_ce": 6.4911874532699585,
+        "dev_tokens": 131072,
+        "training_seconds": 12.313427155837417,
+        "elapsed_seconds": 34.72940949164331,
+        "steady_step_seconds": 0.07499066504339377,
+        "gpu": "NVIDIA H200",
+        "peak_allocated_bytes": 6328781312,
+        "peak_reserved_bytes": 6350176256,
+        "source": {
+          "commit": "429ea729309789cf0d6c7154908532b2ed24dfef",
+          "hashes": {
+            "mhc-official-runtime-7546767.tar.gz": "6b927f93021961293e12452b4001a479ff1b54cbc1aae0355e73e75a393d4dc0",
+            "cuda-compat-13-1_590.48.01-1_amd64.deb": "066f24c715f5f8f31bb7e8bd0f9ddc93fe78a82d3be55c6f3e9bbe26fa4fd7be",
+            "transformer_engine_torch-2.20.2-cp311-cp311-linux_x86_64.whl": "9b69f40b34570e3073171dcb231d6dd038092d20a277e501e7da01e6475920de",
+            "source.tar": "283f4b90e3ad72cacf663a04ead48c67384f835902c036783cc6838033f2e0ef",
+            "gate-data.tar": "63f5dbf7923419932fcec40db7e458ab83330e8557997985a837665109c5cde1"
+          },
+          "formal_training": false,
+          "purpose": "triton-moments-10b-20261103 correctness/profile/restart"
+        },
+        "test_evaluated": false,
+        "checkpoint_files": {
+          "latest.pt": {
+            "bytes": 520346629,
+            "sha256": "22fb44fc84ae93dc082263bfad979487df952c684ebb025a6a43803bf438e374"
+          },
+          "best.pt": {
+            "bytes": 209738165,
+            "sha256": "cd8f2521cc13638e7d0ce7b472e936f6ad56178fd4a159ef5ff5b34cb1dc99ca"
+          }
+        }
+      },
+      "config": {
+        "logging_backend": "local",
+        "model": {
+          "variant": "baseline",
+          "depth": 8,
+          "width": 512,
+          "heads": 4,
+          "sequence_length": 2048,
+          "vocab_size": 32768,
+          "streams": 4,
+          "sinkhorn_iterations": 20,
+          "activation_checkpoint": false,
+          "connection_backend": "nvidia",
+          "fused_connection_grad": false,
+          "architecture": "vanilla",
+          "window_pattern": "SSSL",
+          "attention_kernel": "fla_triton",
+          "attention_statistic": "jensen_silu",
+          "moment_query_chunk": 256
+        },
+        "protocol": {
+          "steps": 50,
+          "schedule_steps": 305176,
+          "batch_tokens": 32768,
+          "microbatch": 16,
+          "grad_accum": 1,
+          "seed": 42,
+          "attention_backend": "sdpa_cudnn",
+          "matched_backbone_init": true,
+          "evaluate_test": false
+        },
+        "data_manifest": {
+          "complete": true,
+          "logging_backend": "local",
+          "sequence_length": 2048,
+          "dtype": "uint16",
+          "layout": "rows of 2049 token ids; x=row[:-1], y=row[1:]",
+          "batch_tokens": 32768,
+          "training_steps": 128,
+          "requested_tokens": 4194304,
+          "training_tokens": 4194304,
+          "files": {
+            "train": {
+              "rows": 2048,
+              "tokens": 4194304,
+              "bytes": 8392704,
+              "sha256": "a5fb6a5c5b38d7c67ead2b12ad393d7c342ff94ba0b4e5d7eaffb1050d93d62d"
+            },
+            "dev": {
+              "rows": 64,
+              "tokens": 131072,
+              "bytes": 262272,
+              "sha256": "bd67b90b4386ba6428992864712f56eb10527678ed8b3664ed5f63c1643458a4",
+              "last_source_state": {
+                "pq_idx": 0,
+                "rg_idx": 1,
+                "epoch": 1
+              }
+            },
+            "test": {
+              "rows": 1024,
+              "tokens": 2097152,
+              "bytes": 4196352,
+              "sha256": "e7d24b6a89155ebc7123afe68bd2c58aeaf159b5087dbdf28e090ce09f293d09",
+              "last_source_state": {
+                "pq_idx": 0,
+                "rg_idx": 4,
+                "epoch": 1
+              }
+            }
+          },
+          "tokenizer": {
+            "dataset": "HuggingFaceFW/fineweb-edu",
+            "config": "sample-10BT",
+            "revision": "87f09149ef4734204d70ed1d046ddc9ca3f2b8f9",
+            "full_dataset_bytes": 28518193415,
+            "full_source_gpt2_tokens": 9972918177,
+            "nanochat_commit": "145da40cdd37b9522aa53d26c0c356e9126458bb",
+            "nanochat_source_sha256": "9a39516fc52effabe6bf9b87fc5fc67f7026a95060861be560d3525257bfb3e6",
+            "files": {
+              "token_bytes.pt": {
+                "bytes": 132649,
+                "sha256": "8e6ed9947610b8b329f0aed7e01bf332359331790e61fc6c0c95dc3cff29bdb4"
+              },
+              "tokenizer.pkl": {
+                "bytes": 412696,
+                "sha256": "8d1a5a03421ca24e7acafd1ef68fe8dbc6326dad903bc65cc726ec0601c577de"
+              }
+            },
+            "train_shards": [
+              "000_00000.parquet"
+            ],
+            "validation_shards": [
+              "013_00000.parquet"
+            ],
+            "tokenizer": "native RustBPE 32768 vocab, first 100M capped characters from training shard",
+            "benchmark": "native base_train d8/D512/2K/SSSL, 300 steps x 32768 model tokens; original source unmodified",
+            "vocab_size": 32768,
+            "max_chars": 100000000,
+            "doc_cap": 10000,
+            "purpose": "Throughput pilot tokenizer; native RustBPE; train shard only",
+            "elapsed_seconds": 5.633999116718769,
+            "run_id": "eqnd6jdz"
+          },
+          "native_commit": "145da40cdd37b9522aa53d26c0c356e9126458bb",
+          "dataset_revision": "87f09149ef4734204d70ed1d046ddc9ca3f2b8f9",
+          "train_shards": "000..012",
+          "heldout_shard": "013",
+          "epoch_note": "Native loader cycles the entire 13-shard training split. Epoch tracks source reads into the document buffer, not exact consumed unique tokens.",
+          "seconds": 9800.379161169752,
+          "validation": "dev first 64 rows, test next 1024 rows; no shared packed rows",
+          "purpose": "Exact 2K training prefix for checks; not a separate training run"
+        },
+        "source": {
+          "commit": "429ea729309789cf0d6c7154908532b2ed24dfef",
+          "hashes": {
+            "mhc-official-runtime-7546767.tar.gz": "6b927f93021961293e12452b4001a479ff1b54cbc1aae0355e73e75a393d4dc0",
+            "cuda-compat-13-1_590.48.01-1_amd64.deb": "066f24c715f5f8f31bb7e8bd0f9ddc93fe78a82d3be55c6f3e9bbe26fa4fd7be",
+            "transformer_engine_torch-2.20.2-cp311-cp311-linux_x86_64.whl": "9b69f40b34570e3073171dcb231d6dd038092d20a277e501e7da01e6475920de",
+            "source.tar": "283f4b90e3ad72cacf663a04ead48c67384f835902c036783cc6838033f2e0ef",
+            "gate-data.tar": "63f5dbf7923419932fcec40db7e458ab83330e8557997985a837665109c5cde1"
+          },
+          "formal_training": false,
+          "purpose": "triton-moments-10b-20261103 correctness/profile/restart"
+        },
+        "checkpoint_transport": {
+          "upload_interval_seconds": 1800.0,
+          "local_save_every_steps": 500,
+          "method": "exit85 plus scheduler transfer; local save alone is not durable"
+        },
+        "gpu": "NVIDIA H200",
+        "torch": "2.10.0+cu130",
+        "cuda": "13.0",
+        "gpu_capability": [
+          9,
+          0
+        ],
+        "explicit_portability_gate": false,
+        "parameters": 60817408,
+        "residual_mixing": "additive",
+        "applied_sinkhorn_iterations": 0,
+        "optimizer": "native MuonAdamW; connector AdamW at native unembedding LR, no decay",
+        "optimizer_groups": [
+          {
+            "kind": "adamw",
+            "lr": 0.0024494897427831783,
+            "betas": [
+              0.8,
+              0.96
+            ],
+            "eps": 1e-10,
+            "weight_decay": 0.01,
+            "initial_lr": 0.0024494897427831783
+          },
+          {
+            "kind": "adamw",
+            "lr": 0.09185586535436918,
+            "betas": [
+              0.8,
+              0.995
+            ],
+            "eps": 1e-10,
+            "weight_decay": 0.001,
+            "initial_lr": 0.09185586535436918
+          },
+          {
+            "kind": "muon",
+            "lr": 0.005,
+            "momentum": 0.95,
+            "ns_steps": 5,
+            "beta2": 0.9,
+            "weight_decay": 0.18375000000000002,
+            "initial_lr": 0.005
+          },
+          {
+            "kind": "muon",
+            "lr": 0.005,
+            "momentum": 0.95,
+            "ns_steps": 5,
+            "beta2": 0.9,
+            "weight_decay": 0.18375000000000002,
+            "initial_lr": 0.005
+          },
+          {
+            "kind": "muon",
+            "lr": 0.005,
+            "momentum": 0.95,
+            "ns_steps": 5,
+            "beta2": 0.9,
+            "weight_decay": 0.18375000000000002,
+            "initial_lr": 0.005
+          }
+        ],
+        "loss": "full-token full-vocabulary CCE; no gradient filtering",
+        "references": "research/connections/references.json",
+        "compute_estimate": {
+          "estimated_forward_flops": 3711254396928,
+          "estimated_training_flops": 11133763190784,
+          "components_forward": {
+            "backbone_projections": 1649267441664,
+            "vocab_head": 1099511627776,
+            "attention": 550024249344,
+            "statistics_dense_matmuls": 275012124672,
+            "statistics_projection": 137438953472
+          },
+          "accounting": "FMA=2 FLOPs; allowed attention pairs, not masked dense-kernel execution. Backward approximated as2x consumed forward matrix FLOPs. Excludes softmax/norm/activation/optimizer/recomputation and is not measured hardware FLOPs.",
+          "statistics_note": "FLA fused backend shares QK/softmax and adds only one P@phi(V) matmul per allowed pair; excludes nonlinear pointwise work and FlashAttention backward probability recomputation.",
+          "memory_note": "Actual training peak VRAM must be measured separately."
+        }
+      },
+      "exact_steps_1_to_50": true
+    }
+  },
+  "formal_training": false,
+  "seconds": 198.44504068605602,
+  "job": "7802243.0",
+  "kernel_gate": "7802199.0",
+  "kernel_source": "bc77aba06ec52e1e284123340b5bd3e414a815b1",
+  "profile_reference": {
+    "none": {
+      "mean_seconds": 0.06398786557838321,
+      "peak_allocated_bytes": 5770922496,
+      "peak_reserved_bytes": 5916065792,
+      "parameters": 58720256
+    },
+    "variance": {
+      "mean_seconds": 0.07215443914756178,
+      "peak_allocated_bytes": 6328781312,
+      "peak_reserved_bytes": 6383730688,
+      "parameters": 60817408
+    },
+    "jensen_silu": {
+      "mean_seconds": 0.0751252098629872,
+      "peak_allocated_bytes": 6328781312,
+      "peak_reserved_bytes": 6375342080,
+      "parameters": 60817408
+    },
+    "baseline": {
+      "mean_seconds": 0.06398786557838321,
+      "peak_allocated_bytes": 5770922496,
+      "peak_reserved_bytes": 5916065792,
+      "parameters": 58720256
+    }
+  }
+}
