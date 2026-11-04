@@ -20,9 +20,10 @@ class InnovationResidual(nn.Module):
         if local_loss:
             local_pred = F.linear(h.detach(), self.weight.to(h.dtype), self.bias.to(h.dtype))
             loss = (local_pred.float() - residual.detach().float()).square().mean()
-        stats = h.new_empty((0,), dtype=torch.float64)
-        if collect_statistics:
-            stats = prediction_sums(h, residual, pred, innovation)
+        # Return detached views, without a stack/copy. The caller reduces them
+        # outside the compiled block: Inductor's split FP64 reduction currently
+        # emits a mismatched FP32 accumulator at the real 16x2048x512 shape.
+        stats = (h.detach(), residual.detach(), pred.detach(), innovation.detach()) if collect_statistics else ()
         return updated, loss, stats
 
 

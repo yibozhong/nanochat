@@ -50,7 +50,7 @@ def main():
              '-v','--junitxml=results/innovation-tests.xml'],'tests')
     suites=ET.parse('results/innovation-tests.xml').getroot().findall('testsuite')
     checks={key:sum(int(s.attrib.get(key,0)) for s in suites) for key in ('tests','failures','errors','skipped')}
-    assert checks==dict(tests=18,failures=0,errors=0,skipped=0),checks
+    assert checks==dict(tests=19,failures=0,errors=0,skipped=0),checks
     profiles=[]
     for repeat,order in enumerate([('baseline','innovation'),('innovation','baseline')]):
         for mode in order:

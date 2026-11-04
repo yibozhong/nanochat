@@ -56,11 +56,12 @@
     "outer_optimizer": "unchanged MuonAdamW and default LR schedule"
   },
   "diagnostics": {
-    "correctness": "14 new GPU tests + 4 retained-backend regressions",
+    "correctness": "15 new GPU tests + 4 retained-backend regressions; includes production-shape compiled FP64 diagnostics",
     "profiles": "baseline/innovation twice in reversed order, each 20 warmup + 30 measured full training steps",
     "resume": "25 -> exit85 -> fresh process to 50, horizon remains305176",
     "r_squared": "variance-weighted 1-SSE/SST, feature-wise centering over same full dev set; undefined zero SST",
-    "evaluation": "every250steps plus50 and end; all16 branches, beta, MSE, raw/predicted/innovation relative norms"
+    "evaluation": "every250steps plus50 and end; all16 branches, beta, MSE, raw/predicted/innovation relative norms",
+    "r_squared_execution": "Compiled BF16 model returns detached branch views; diagnostic FP64 sufficient-statistic reductions outside compiled blocks"
   },
   "interpretation": [
     "Online MSE predictor need not reach the least-squares solution.",

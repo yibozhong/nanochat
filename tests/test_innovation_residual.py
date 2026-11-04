@@ -156,6 +156,26 @@ def test_validation_metrics_do_not_train_predictors():
     assert report['beta']==1.
 
 
+def test_production_shape_compiled_r_squared_reduction():
+    """The old inline FP64 reduction compiled at small sizes but failed here."""
+    seed_all(42);torch.set_num_threads(2);torch.backends.cuda.matmul.allow_tf32=False
+    model=ConnectionModel(ConnectionConfig(innovation_residual=True,attention_kernel='fla_triton',
+        depth=1,width=512,heads=4,vocab_size=256,sequence_length=2048)).prepare(compile_blocks=True).eval()
+    model.set_innovation_step(39)
+    with torch.no_grad():
+        for block in model.blocks:
+            block.attn.c_proj.weight.normal_(std=.01);block.mlp.c_proj.weight.normal_(std=.01)
+        x=torch.randint(256,(16,2048),device='cuda')
+        ordinary=model(x)
+        observed,_,sums=model(x,return_innovation=True,collect_statistics=True)
+        torch.testing.assert_close(ordinary,observed,rtol=.008,atol=1e-4)
+        assert sums.shape==(2,1029) and sums.dtype==torch.float64
+        assert torch.isfinite(sums).all()
+        rows=summarize_prediction_sums(sums,512)
+        assert all(r['tokens']==32768 and r['r_squared'] is not None for r in rows)
+        assert all(p.grad is None for p in model.parameters())
+
+
 def test_exact_optimizer_rng_and_next_fixed_gradient_resume(tmp_path):
     model=build();opt,wd=optimizer_for(model)
     x=torch.randint(256,(2,128),device='cuda');y=(x+1)%256

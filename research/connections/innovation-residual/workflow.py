@@ -19,7 +19,7 @@ def audit_publish(root,state):
     with tarfile.open(root/'results'/f'gate-{state["job"]}.tar') as tf:
         result=json.load(tf.extractfile('results/gate.json'))
         assert result['complete'] and result['source']==state['source']
-        assert result['checks']==dict(tests=18,failures=0,errors=0,skipped=0)
+        assert result['checks']==dict(tests=19,failures=0,errors=0,skipped=0)
         assert not result['formal_training'] and not result['weights_returned']
         assert len(result['profiles'])==4 and len({p['gpu'] for p in result['profiles']})==1
         for p in result['profiles']:

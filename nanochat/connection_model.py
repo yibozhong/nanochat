@@ -114,7 +114,7 @@ class ConnectionBlock(Block):
         x, attn_loss, attn_stats = self.attn_innovation(x, residual, beta, local_loss, collect_statistics)
         residual = self.mlp_branch(x)
         x, mlp_loss, mlp_stats = self.mlp_innovation(x, residual, beta, local_loss, collect_statistics)
-        return x, attn_loss + mlp_loss, torch.stack((attn_stats, mlp_stats))
+        return x, attn_loss + mlp_loss, (attn_stats, mlp_stats)
 
     def forward(self, x, cos, sin, kv_cache=None):
         if self.variant == 'baseline':
@@ -223,7 +223,12 @@ class ConnectionModel(nn.Module):
                 else:
                     x, local, stats = fn(*args)
                 auxiliary = auxiliary + local
-                statistics.append(stats)
+                if collect_statistics:
+                    from nanochat.innovation_residual import prediction_sums
+                    # Keep the compiled BF16 model, but use eager FP64 only for
+                    # diagnostic reductions. Release branch views each block.
+                    statistics.extend(prediction_sums(*branch) for branch in stats)
+                    del stats
                 continue
             fn = self.compiled_steps[i] if self.compiled_steps is not None else b.forward
             if self.config.activation_checkpoint and self.training and torch.is_grad_enabled():
@@ -235,7 +240,8 @@ class ConnectionModel(nn.Module):
         if self.stream_head is not None:
             x = self.stream_head(x)
         if return_innovation:
-            return norm(x), auxiliary, torch.cat(statistics)
+            sums = torch.stack(statistics) if statistics else x.new_empty((0,), dtype=torch.float64)
+            return norm(x), auxiliary, sums
         return norm(x)
 
     def forward(self, idx, targets=None, dense=False, kv_cache=None, return_innovation=False, collect_statistics=False):
