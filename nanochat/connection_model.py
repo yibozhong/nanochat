@@ -11,7 +11,7 @@ from torch import nn
 from torch.nn import functional as F
 from torch.utils.checkpoint import checkpoint
 
-from nanochat.gpt import Block, GPTConfig, Linear, norm
+from nanochat.gpt import Block, GPTConfig, Linear, MLP, norm
 from nanochat.nvidia_connections import NvidiaHyperConnection, NvidiaHyperHead, expand_streams, check_nvidia_device
 from nanochat.optim import MuonAdamW
 
@@ -34,18 +34,12 @@ class ConnectionConfig:
     attention_kernel: str = 'original'
     attention_statistic: str = 'none'
     moment_query_chunk: int = 256
-    attention_looping: bool = False
-    attention_loops: int = 3  # total attention evaluations when enabled
-    attention_loop_window: int = 128  # includes current token
+    mlp_heavy: bool = False  # replace attention in zero-based blocks 1,3,5,...
 
     def __post_init__(self):
-        for name in ('attention_loops', 'attention_loop_window'):
-            value = getattr(self, name)
-            if not isinstance(value, int) or isinstance(value, bool) or value < 1:
-                raise ValueError(f'{name} must be a positive integer')
-        if self.attention_looping and (self.architecture != 'vanilla' or self.variant != 'baseline' or
-                                      self.attention_kernel != 'original' or self.attention_statistic != 'none'):
-            raise ValueError('Attention looping initially requires vanilla original attention, without statistics')
+        if self.mlp_heavy and (self.architecture != 'vanilla' or self.variant != 'baseline' or
+                               self.attention_kernel != 'original' or self.attention_statistic != 'none'):
+            raise ValueError('MLP-heavy initially requires vanilla original attention, without statistics')
         if self.attention_kernel not in ('original','fla_triton'):
             raise ValueError('Unknown attention kernel')
         if self.attention_kernel == 'fla_triton' and (self.architecture != 'vanilla' or self.variant != 'baseline'):
@@ -79,6 +73,10 @@ class ConnectionConfig:
     def from_checkpoint(cls, config):
         """Read pre-cleanup NVIDIA/vanilla metadata; reject retired model weights."""
         config = dict(config)
+        if config.pop('attention_looping', False):
+            raise ValueError('Checkpoint belongs to the retired attention looping experiment')
+        for name in ('attention_loops', 'attention_loop_window'):
+            config.pop(name, None)
         if config.pop('attention_output_ns', False):
             raise ValueError('Checkpoint belongs to the retired attention output NS experiment')
         if config.get('variant', 'baseline') not in ('baseline', 'mhc', 'mhc_no_sinkhorn'):
@@ -101,8 +99,7 @@ class ConnectionBlock(Block):
         super().__init__(native, index)
         self.attn.ve_gate = None
         self.variant = config.variant
-        self.attention_loops = config.attention_loops if config.attention_looping else 1
-        self.attention_loop_window = config.attention_loop_window
+        self.attention_mlp = None
         self.compiled_attention = self.compiled_mlp = None
         if self.variant != 'baseline':
             kwargs = dict(use_tf32=config.connection_backend == 'nvidia', fused_grad_acc=config.fused_connection_grad,
@@ -111,6 +108,8 @@ class ConnectionBlock(Block):
             self.mlp_connection = NvidiaHyperConnection(config.width, config.streams, 2*index+1, config.sinkhorn_iterations, **kwargs)
 
     def attention_branch(self, h, cos, sin, kv_cache=None):
+        if self.attention_mlp is not None:
+            return self.attention_mlp(norm(h))
         return self.attn(norm(h), None, (cos, sin), (-1, 0), kv_cache)
 
     def mlp_branch(self, h):
@@ -118,14 +117,8 @@ class ConnectionBlock(Block):
 
     def forward(self, x, cos, sin, kv_cache=None):
         if self.variant == 'baseline':
-            if self.attention_loops > 1:
-                if kv_cache is not None:
-                    raise ValueError('Attention looping requires separate per-loop KV caches; cached decoding is not implemented')
-                # The SAME Q/K/V/O parameters see a refined hidden each time.
-                # There is no detach, loop-specific parameter, or repeated MLP.
-                for iteration in range(self.attention_loops):
-                    window = (-1, 0) if iteration == self.attention_loops - 1 else (self.attention_loop_window - 1, 0)
-                    x = x + self.attn(norm(x), None, (cos, sin), window, None)
+            if self.attention_mlp is not None:
+                x = x + self.attention_mlp(norm(x))
                 return x + self.mlp(norm(x))
             return super().forward(x, None, (cos, sin), (-1, 0), kv_cache)
         h, skip, post = self.attn_connection.read(x)
@@ -166,6 +159,21 @@ class ConnectionModel(nn.Module):
             self.stream_head = NvidiaHyperHead(config.width, config.streams, use_tf32=config.connection_backend == 'nvidia')
         if self.stream_head is not None:
             self.stream_head.reset_parameters()
+        if config.mlp_heavy:
+            # Finish the original initialization first: all retained parameters
+            # and the caller's RNG state remain identical to vanilla. The new
+            # MLPs are independent, with the same initialization as an old MLP.
+            with torch.random.fork_rng(devices=[]):
+                for index in range(1, config.depth, 2):
+                    block = self.blocks[index]
+                    block.attn = None  # no unused attention weights/optimizer states
+                    block.attention_mlp = MLP(native)
+                    nn.init.uniform_(block.attention_mlp.c_fc.weight, -s*.4, s*.4)
+                    nn.init.zeros_(block.attention_mlp.c_proj.weight)
+            # One cache slot per retained attention, including when the last
+            # block is MLP-only. The final attention advances the cache once.
+            for cache_index, block in enumerate(b for b in self.blocks if b.attn is not None):
+                block.attn.layer_idx = cache_index
         d = config.width // config.heads
         inv = 1 / (100000 ** (torch.arange(0, d, 2, dtype=torch.float32) / d))
         freq = torch.outer(torch.arange(config.sequence_length, dtype=torch.float32), inv)
@@ -196,6 +204,8 @@ class ConnectionModel(nn.Module):
         return self
 
     def hidden(self, idx, kv_cache=None):
+        if self.config.mlp_heavy and kv_cache is not None and kv_cache.n_layers != (self.config.depth + 1)//2:
+            raise ValueError('MLP-heavy KV cache needs one slot per retained attention, not per block')
         start = 0 if kv_cache is None else kv_cache.get_pos()
         if start + idx.shape[1] > self.config.sequence_length:
             raise ValueError('Input exceeds configured context length')

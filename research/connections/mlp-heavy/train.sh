@@ -5,7 +5,7 @@ TASK_VARIANT="$1"
 TASK_RUN_ID="$2"
 TASK_STEPS="$3"
 TASK_MODE="$4"
-[ "$TASK_MODE" = attention_looping ]
+[ "$TASK_MODE" = mlp_heavy ]
 [ "$TASK_VARIANT" = baseline ]
 shift 4
 mkdir -p checkpoints
@@ -108,7 +108,7 @@ folder=Path(interface.__file__).parent
 files={p.name:dict(bytes=p.stat().st_size,sha256=hashlib.sha256(p.read_bytes()).hexdigest())
        for p in folder.iterdir() if p.is_file()}
 Path('results/fa3-artifacts.json').write_text(json.dumps(dict(repo='varunneal/flash-attention-3',revision=revision,files=files),indent=2)+'\n')
-expected=json.loads(Path('research/connections/attention-looping/fa3-artifacts.json').read_text())
+expected=json.loads(Path('research/connections/runtime/fa3-artifacts.json').read_text())
 assert files==expected['files'] and revision==expected['revision']
 print('Pinned FA3 artifacts match GPU gate:',interface.__file__,flush=True)
 FA3PY
@@ -134,4 +134,4 @@ python -m scripts.connection_train --variant "$TASK_VARIANT" --connection-backen
     --attention-backend fa3 --matched-backbone-init --evaluate-test \
     --no-activation-checkpoint --no-fused-connection-grad --seed 42 \
     --data-dir ../data --output-dir results/train --checkpoint-dir ../checkpoints \
-    --run-id "$TASK_RUN_ID" --formal-training --attention-kernel original --attention-statistic none --attention-looping --attention-loops 3 --attention-loop-window 128 --wandb-group attention-looping-10b-20261104 --resume auto --segment-seconds "${NANOCHAT_CHECKPOINT_SECONDS:-1800}"
+    --run-id "$TASK_RUN_ID" --formal-training --attention-kernel original --attention-statistic none --mlp-heavy --wandb-group mlp-heavy-10b-20261104 --resume auto --segment-seconds "${NANOCHAT_CHECKPOINT_SECONDS:-1800}"

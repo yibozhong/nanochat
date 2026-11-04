@@ -1,0 +1,45 @@
+{
+  "name": "mlp_heavy",
+  "authorization": "Ordinary vanilla; replace zero-based blocks 1,3,5,7 attention with independent MLPs; retain original MLPs; remaining attention once. One 10B, monitor every 300s until first finite step. Stop and retire old looping now.",
+  "architecture": {
+    "depth": 8,
+    "width": 512,
+    "heads": 4,
+    "sequence_length": 2048,
+    "vocab_size": 32768,
+    "attention_layers": [
+      0,
+      2,
+      4,
+      6
+    ],
+    "mlp_count": 12,
+    "new_mlp": "Independent ReLU squared 512->2048->512; pre-RMSNorm plus residual",
+    "remaining_attention": "Full causal, pinned FA3, one pass each",
+    "parameters": 62914560,
+    "baseline_parameters": 58720256,
+    "matched_initialization": "Retained weights and caller RNG bitwise identical; new MLP fc original uniform, output zero; fork_rng",
+    "cache": "One cache slot per retained attention; final retained attention advances position"
+  },
+  "training": {
+    "steps": 305176,
+    "tokens": 10000007168,
+    "microbatch": 16,
+    "grad_accum": 1,
+    "seed": 42,
+    "schedule": "Original 10B MuonAdamW/LR/WD unchanged",
+    "data": "Existing FineWeb-Edu 2K 10B packed cache; dev/test unchanged",
+    "wandb": "yibozhong657-none/nanochat/mlp-heavy-10b-20261104",
+    "checkpoint": "latest every500 overwrite; best separate; exit85 every1800s; full state resume"
+  },
+  "validation": {
+    "tests": 37,
+    "profiles": "Same GPU baseline/new two orders each20warmup30timed steps; full optimizer; 2K micro16",
+    "resume": "25->exit85->fresh process50; schedule305176",
+    "precision": "BF16 activations, original FP32 master weights",
+    "logging": "Local only, no W&B credentials or returned weights",
+    "minimum_gpu_mib": 22000,
+    "reserved_limit_fraction": 0.9
+  },
+  "interpretation": "At D512/T2048 major matrix FLOPs almost match, but parameter count increases 7.14%. Existing formal baseline used FLA rather than FA3; no new formal baseline authorized. No claim of equal measured hardware work or isolated quality cause."
+}

@@ -64,6 +64,8 @@ folder=Path(interface.__file__).parent
 files={p.name:dict(bytes=p.stat().st_size,sha256=hashlib.sha256(p.read_bytes()).hexdigest())
        for p in folder.iterdir() if p.is_file()}
 Path('results/fa3-artifacts.json').write_text(json.dumps(dict(repo='varunneal/flash-attention-3',revision=revision,files=files),indent=2)+'\n')
-print('Pinned FA3 loaded:',interface.__file__,flush=True)
+expected=json.loads(Path('research/connections/runtime/fa3-artifacts.json').read_text())
+assert files==expected['files'] and revision==expected['revision']
+print('Pinned FA3 artifacts match prior gate:',interface.__file__,flush=True)
 FA3PY
-python -m scripts.connection_loop_gate
+python -m scripts.connection_mlp_heavy_gate

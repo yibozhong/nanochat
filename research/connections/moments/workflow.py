@@ -206,7 +206,7 @@ queue mode,runid from (
         write(root/'training-submission-verified.json',ads)
 
 
-def monitor(root):
+def monitor(root, poll_seconds=30):
     with (root/'monitor.lock').open('a') as lock:
         fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
         while not (root/'STOPPED.json').exists():
@@ -240,7 +240,7 @@ def monitor(root):
             except Exception as exc:
                 state.update(status='needs_attention',error=repr(exc));write(root/'state.json',state);raise
             if state['status']=='training_started':return
-            time.sleep(30)
+            time.sleep(poll_seconds)
 
 
 if __name__=='__main__':

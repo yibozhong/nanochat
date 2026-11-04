@@ -1,0 +1,10 @@
+{
+  "status": "retired_by_user",
+  "job": "7811512.0",
+  "wandb_run": "4fa85af8",
+  "reason": "User requests immediate stop and code rollback to free GPU for MLP-heavy",
+  "audit": "/home/yzhong239/attention-looping-10b-20261104/stop-mlp-heavy-20261104",
+  "weights": "No additional checkpoint requested or awaited; existing files retained",
+  "wandb": "Retained",
+  "time": 1793830815.1720457
+}
