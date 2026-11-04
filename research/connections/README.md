@@ -1,27 +1,34 @@
 # Official mHC kernels in nanochat
 
-## Supported configurations after cleanup (2026-11-01)
+## Supported configurations after cleanup (2026-11-04)
 
-The active model and training code is restored byte-for-byte to `d7c3036`,
-the verified native/vanilla/NVIDIA mHC implementation before the experimental
-readouts. Choose `--architecture native|vanilla` and
-`--variant baseline|mhc|mhc_no_sinkhorn`. Native retains nanochat's SSSL pattern
-and native additions; vanilla uses full attention without those additions.
-Both use the ordinary linear vocabulary head. The complete NVIDIA backend,
-no-Sinkhorn ablation, formal-only W&B logging, and checkpoint/resume remain.
+The active models are vanilla, native nanochat, and full NVIDIA mHC (including
+no-Sinkhorn). Select `--architecture native|vanilla` and
+`--variant baseline|mhc|mhc_no_sinkhorn`. Native retains SSSL and its native
+additions; vanilla uses full attention. Both use the ordinary linear LM head.
+The default attention backend and the ordinary FLA Triton baseline remain;
+FLA supports vanilla fixed-length causal MHA only. Runtime and optimizer paths
+for native/mHC are unchanged.
 
-DFWR, nonlinear SwiGLU heads, vocabulary/channel partitioning, expanded heads,
-and final stream mixers have been removed from the model, CLI, tests, and
-submission entrypoints. Historical reports and protocols are in
-[the retired research archive](archive/retired-20261101/README.md); they are not
-current configurations. Completed vanilla/mHC 10B controls are recorded in
-[pretrain results](pretrain/results.json). Native baseline completed 10B; its
-mHC/no-Sinkhorn counterparts were stopped early and are not final 10B results.
+All experimental statistics branches, looping, MLP-heavy replacement, innovation
+residual, orthogonal output projections, Lookback, DFWR, nonlinear heads,
+partitioned/expanded readouts, stream mixers, and stream-specific attention are
+retired. Their code and launchers have been removed; reports below and in the
+archive are historical. Existing checkpoints from retired models are not
+supported. No new training or GPU test was started during this cleanup.
 
-Shared data preparation assets now live in
-`/home/yzhong239/datasets/fineweb-edu-10bt/prepare-assets`, independently of the
-removed EBT workspace. Existing FineWeb data/cache paths and runtime images stay
-valid. The cleanup starts no new training or profiling and creates no W&B runs.
+Eight checkpoint archives remain: vanilla 2K (original and FLA), vanilla 16K,
+vanilla+mHC/no-Sinkhorn, and native baseline/mHC/no-Sinkhorn. The two native mHC
+runs are partial, not completed 10B results. The cleanup removed eight other
+checkpoint archives and obsolete workflow files while retaining numerical
+results and W&B records. See [cleanup audit](cleanup-20261104.json).
+
+The ready 2K FineWeb cache is recorded in
+`/home/yzhong239/datasets/fineweb-edu-10bt/current-packed-cache.json`.
+The shared wheel and diagnostic input references now live in
+`/home/yzhong239/nanochat-runtime-assets`, outside retired experiments.
+Historical one-off submitters below may reference their original data manifests;
+they do not authorize restarting old runs.
 
 ## Scheduling and checkpoint transport defaults (2026-10-31)
 

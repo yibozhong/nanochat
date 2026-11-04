@@ -1,4 +1,4 @@
-> Current supported attention statistics: `none`, `variance`, `jensen_silu`. Other statistics are retired as of 2026-11-04. Older modes/results below are historical. This research direction is closed unless explicitly reopened.
+> Retired on 2026-11-04: all attention-statistics implementations, checkpoints and launchers have been removed. Only ordinary vanilla attention (including the FLA mean-only backend), native and NVIDIA mHC remain. This document preserves historical results and commands; it is not an active experiment.
 
 # Attention value moments, 2K / 10B
 

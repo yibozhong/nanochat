@@ -1,3 +1,5 @@
+> Retired on 2026-11-04: all attention-statistics implementations, checkpoints and launchers have been removed. Only ordinary vanilla attention (including the FLA mean-only backend), native and NVIDIA mHC remain. This document preserves historical results and commands; it is not an active experiment.
+
 # FLA Triton moment attention验证与吞吐报告
 
 GPU job7802199.0，H200，source `bc77aba06ec52e1e284123340b5bd3e414a815b1`。17/17检查通过；无W&B、无正式训练、无权重回传。

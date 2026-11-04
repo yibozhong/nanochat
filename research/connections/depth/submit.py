@@ -10,7 +10,7 @@ import tarfile
 
 REPO=Path(__file__).resolve().parents[3]
 ROOT=Path(sys.argv[1]).resolve()
-PREVIOUS=Path('/home/yzhong239/mhc-stream-independent-20261103/retry-2')
+PREVIOUS=Path('/home/yzhong239/nanochat-runtime-assets')
 
 
 def command(args):return subprocess.check_output(args,cwd=REPO,text=True).strip()

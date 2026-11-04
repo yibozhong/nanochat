@@ -1,0 +1,472 @@
+{
+  "time": 1793832085.5319068,
+  "authorization": "User requests retain only vanilla/native/mHC and remove all other stopped experiment checkpoints and implementations",
+  "jobs": {
+    "queue_empty": true,
+    "attention_looping": "7811512.0 cancelled, history3/exit143",
+    "mlp_heavy": "7812096.0 cancelled, history3/zero starts; no formal training",
+    "monitor_goal": "paused at user request"
+  },
+  "checkpoint_archives_retained": [
+    {
+      "path": "/home/yzhong239/lookback-16k-10b-20261102/results/baseline-7669762.0-checkpoints.tar",
+      "bytes": 704911360,
+      "inode": 49777988,
+      "mtime_ns": 1793644994734489444
+    },
+    {
+      "path": "/home/yzhong239/mhc-native-pretrain-20261031/stop-20261101/mhc/last-durable-checkpoints.tar",
+      "bytes": 1254584320,
+      "inode": 49719286,
+      "mtime_ns": 1793511782186481213
+    },
+    {
+      "path": "/home/yzhong239/mhc-native-pretrain-20261031/stop-20261101/mhc_no_sinkhorn/last-durable-checkpoints.tar",
+      "bytes": 1254584320,
+      "inode": 49719293,
+      "mtime_ns": 1793511955323956972
+    },
+    {
+      "path": "/home/yzhong239/mhc-native-pretrain-20261031/results/baseline-7638116.0-checkpoints.tar",
+      "bytes": 1241794560,
+      "inode": 49719026,
+      "mtime_ns": 1793507281356988038
+    },
+    {
+      "path": "/home/yzhong239/mhc-no-sinkhorn-20261031/results/train-7581136.0-checkpoints.tar",
+      "bytes": 717690880,
+      "inode": 49716954,
+      "mtime_ns": 1793468016788817620
+    },
+    {
+      "path": "/home/yzhong239/mhc-pretrain-20261030/results/baseline-7562105.0-checkpoints.tar",
+      "bytes": 704911360,
+      "inode": 49715933,
+      "mtime_ns": 1793442881092653478
+    },
+    {
+      "path": "/home/yzhong239/mhc-pretrain-20261030/results/mhc-7562105.1-checkpoints.tar",
+      "bytes": 717690880,
+      "inode": 49717161,
+      "mtime_ns": 1793473212822808688
+    },
+    {
+      "path": "/home/yzhong239/triton-moments-10b-20261103/results/none-7802254.0-checkpoints.tar",
+      "bytes": 704911360,
+      "inode": 49880417,
+      "mtime_ns": 1793782753825411243
+    }
+  ],
+  "checkpoint_archives_deleted": [
+    {
+      "path": "/home/yzhong239/lookback-16k-10b-20261102/stop-cross-attention-20261102/last-durable-checkpoints.tar",
+      "bytes": 723804160,
+      "inode": 49777854,
+      "mtime_ns": 1793639547836590808,
+      "members": [
+        {
+          "name": "checkpoints",
+          "bytes": 0
+        },
+        {
+          "name": "checkpoints/best.pt",
+          "bytes": 207642689
+        },
+        {
+          "name": "checkpoints/latest.pt",
+          "bytes": 516149965
+        }
+      ]
+    },
+    {
+      "path": "/home/yzhong239/lookback-final-hidden-10b-20261102/stop-shared-kv-20261102/last-durable-checkpoints.tar",
+      "bytes": 704911360,
+      "inode": 49777995,
+      "mtime_ns": 1793647941332411971,
+      "members": [
+        {
+          "name": "checkpoints",
+          "bytes": 0
+        },
+        {
+          "name": "checkpoints/latest.pt",
+          "bytes": 503553189
+        },
+        {
+          "name": "checkpoints/best.pt",
+          "bytes": 201349733
+        }
+      ]
+    },
+    {
+      "path": "/home/yzhong239/lookback-lastkv-blend-10b-20261102/results/lookback_recompute-7678934.0-checkpoints.tar",
+      "bytes": 704911360,
+      "inode": 49798810,
+      "mtime_ns": 1793675947980069024,
+      "members": [
+        {
+          "name": "checkpoints",
+          "bytes": 0
+        },
+        {
+          "name": "checkpoints/best.pt",
+          "bytes": 201351071
+        },
+        {
+          "name": "checkpoints/latest.pt",
+          "bytes": 503555353
+        }
+      ]
+    },
+    {
+      "path": "/home/yzhong239/triton-moments-10b-20261103/results/jensen_silu-7802254.2-checkpoints.tar",
+      "bytes": 730091520,
+      "inode": 49889517,
+      "mtime_ns": 1793788116961355106,
+      "members": [
+        {
+          "name": "checkpoints",
+          "bytes": 0
+        },
+        {
+          "name": "checkpoints/best.pt",
+          "bytes": 209738997
+        },
+        {
+          "name": "checkpoints/latest.pt",
+          "bytes": 520347461
+        }
+      ]
+    },
+    {
+      "path": "/home/yzhong239/triton-moments-10b-20261103/results/variance-7802254.1-checkpoints.tar",
+      "bytes": 730091520,
+      "inode": 49889583,
+      "mtime_ns": 1793789614168917328,
+      "members": [
+        {
+          "name": "checkpoints",
+          "bytes": 0
+        },
+        {
+          "name": "checkpoints/best.pt",
+          "bytes": 209738933
+        },
+        {
+          "name": "checkpoints/latest.pt",
+          "bytes": 520347461
+        }
+      ]
+    },
+    {
+      "path": "/home/yzhong239/variance-support-10b-20261104/stop-20261104/last-durable-checkpoints.tar",
+      "bytes": 730112000,
+      "inode": 49890483,
+      "mtime_ns": 1793812614877423398,
+      "members": [
+        {
+          "name": "checkpoints",
+          "bytes": 0
+        },
+        {
+          "name": "checkpoints/best.pt",
+          "bytes": 209744405
+        },
+        {
+          "name": "checkpoints/latest.pt",
+          "bytes": 520362775
+        }
+      ]
+    },
+    {
+      "path": "/home/yzhong239/variance-third-10b-20261104/retry-2/stop-20261104/last-durable-checkpoints.tar",
+      "bytes": 755281920,
+      "inode": 49890476,
+      "mtime_ns": 1793812612814462205,
+      "members": [
+        {
+          "name": "checkpoints",
+          "bytes": 0
+        },
+        {
+          "name": "checkpoints/best.pt",
+          "bytes": 218130053
+        },
+        {
+          "name": "checkpoints/latest.pt",
+          "bytes": 537143589
+        }
+      ]
+    },
+    {
+      "path": "/home/yzhong239/jensen-abs-10b-20261103/results/jensen_abs-7805268.0-checkpoints.tar",
+      "bytes": 730091520,
+      "inode": 49889961,
+      "mtime_ns": 1793801269562866763,
+      "members": [
+        {
+          "name": "checkpoints",
+          "bytes": 0
+        },
+        {
+          "name": "checkpoints/latest.pt",
+          "bytes": 520347845
+        },
+        {
+          "name": "checkpoints/best.pt",
+          "bytes": 209739317
+        }
+      ]
+    }
+  ],
+  "checkpoint_bytes_freed": 5809295360,
+  "obsolete_workflow_roots": 25,
+  "obsolete_workflow_files": 502,
+  "obsolete_workflow_bytes_freed": 323522354,
+  "total_deleted_bytes": 6132817714,
+  "remaining_weights_scan": {
+    "archives_scanned": 145,
+    "loose_weights": [],
+    "archives_with_weights": [
+      {
+        "path": "/home/yzhong239/mhc-no-sinkhorn-20261031/results/train-7581136.0-checkpoints.tar",
+        "weights": [
+          "checkpoints/latest.pt",
+          "checkpoints/best.pt"
+        ]
+      },
+      {
+        "path": "/home/yzhong239/mhc-pretrain-20261030/results/baseline-7562105.0-checkpoints.tar",
+        "weights": [
+          "checkpoints/best.pt",
+          "checkpoints/latest.pt"
+        ]
+      },
+      {
+        "path": "/home/yzhong239/mhc-pretrain-20261030/results/mhc-7562105.1-checkpoints.tar",
+        "weights": [
+          "checkpoints/best.pt",
+          "checkpoints/latest.pt"
+        ]
+      },
+      {
+        "path": "/home/yzhong239/lookback-16k-10b-20261102/results/baseline-7669762.0-checkpoints.tar",
+        "weights": [
+          "checkpoints/best.pt",
+          "checkpoints/latest.pt"
+        ]
+      },
+      {
+        "path": "/home/yzhong239/mhc-native-pretrain-20261031/stop-20261101/mhc/last-durable-checkpoints.tar",
+        "weights": [
+          "checkpoints/best.pt",
+          "checkpoints/latest.pt"
+        ]
+      },
+      {
+        "path": "/home/yzhong239/mhc-native-pretrain-20261031/stop-20261101/mhc_no_sinkhorn/last-durable-checkpoints.tar",
+        "weights": [
+          "checkpoints/best.pt",
+          "checkpoints/latest.pt"
+        ]
+      },
+      {
+        "path": "/home/yzhong239/mhc-native-pretrain-20261031/results/baseline-7638116.0-checkpoints.tar",
+        "weights": [
+          "checkpoints/latest.pt",
+          "checkpoints/best.pt"
+        ]
+      },
+      {
+        "path": "/home/yzhong239/triton-moments-10b-20261103/results/none-7802254.0-checkpoints.tar",
+        "weights": [
+          "checkpoints/best.pt",
+          "checkpoints/latest.pt"
+        ]
+      }
+    ],
+    "errors": []
+  },
+  "verification": {
+    "prior": "fc9eb06",
+    "unchanged_sha256": {
+      "nanochat/gpt.py": "f0832791a77302b46c413646417efd916fa858d2bb8fa6640bf3e036aa7d7bcc",
+      "nanochat/native_connection_model.py": "96c315da7418e8847d88830e59392f284fbd868661230474ec083e8ff34d3610",
+      "nanochat/nvidia_connections.py": "ab9b1782d09b04db2e58bc3d20bbc1b52c8ac020383994996cf68d87a3fb5429",
+      "nanochat/nvidia_ops.py": "012d4dc4d17ec1ba585c3a3a8ae76202a414b72f990b44367e267eed5de669f3",
+      "nanochat/optim.py": "7c9b714c6f76e3a9d50fc530044b2767d0cd89391237e609548f1cd730afed8f",
+      "nanochat/packed_training.py": "80ec81643312f8f1e8fa96e8f2ef10b12fd9f41b9a59c77ad6caaffae1933b57",
+      "nanochat/flash_attention.py": "05af334f7241bbfdc798d70af6468e0193ee329fa673ea1466915d7b4b0ff85a",
+      "nanochat/fla_attention_kernels.py": "4dec91002718313347b81968cf58376d91efcffaaf06bf4338e842d93580f95a"
+    },
+    "block_optimizer_schedule_ast_equal": true,
+    "retained_checkpoint_configs": [
+      {
+        "model": "vanilla",
+        "config": {
+          "variant": "baseline",
+          "depth": 8,
+          "width": 512,
+          "heads": 4,
+          "sequence_length": 2048,
+          "vocab_size": 32768,
+          "streams": 4,
+          "sinkhorn_iterations": 20,
+          "activation_checkpoint": false,
+          "connection_backend": "nvidia",
+          "fused_connection_grad": false,
+          "architecture": "vanilla",
+          "window_pattern": "SSSL",
+          "attention_kernel": "original"
+        }
+      },
+      {
+        "model": "vanilla_mhc",
+        "config": {
+          "variant": "mhc",
+          "depth": 8,
+          "width": 512,
+          "heads": 4,
+          "sequence_length": 2048,
+          "vocab_size": 32768,
+          "streams": 4,
+          "sinkhorn_iterations": 20,
+          "activation_checkpoint": false,
+          "connection_backend": "nvidia",
+          "fused_connection_grad": false,
+          "architecture": "vanilla",
+          "window_pattern": "SSSL",
+          "attention_kernel": "original"
+        }
+      },
+      {
+        "model": "no_sinkhorn",
+        "config": {
+          "variant": "mhc_no_sinkhorn",
+          "depth": 8,
+          "width": 512,
+          "heads": 4,
+          "sequence_length": 2048,
+          "vocab_size": 32768,
+          "streams": 4,
+          "sinkhorn_iterations": 20,
+          "activation_checkpoint": false,
+          "connection_backend": "nvidia",
+          "fused_connection_grad": false,
+          "architecture": "vanilla",
+          "window_pattern": "SSSL",
+          "attention_kernel": "original"
+        }
+      },
+      {
+        "model": "native",
+        "config": {
+          "variant": "baseline",
+          "depth": 8,
+          "width": 512,
+          "heads": 4,
+          "sequence_length": 2048,
+          "vocab_size": 32768,
+          "streams": 4,
+          "sinkhorn_iterations": 20,
+          "activation_checkpoint": false,
+          "connection_backend": "nvidia",
+          "fused_connection_grad": false,
+          "architecture": "native",
+          "window_pattern": "SSSL",
+          "attention_kernel": "original"
+        }
+      },
+      {
+        "model": "native_mhc",
+        "config": {
+          "variant": "mhc",
+          "depth": 8,
+          "width": 512,
+          "heads": 4,
+          "sequence_length": 2048,
+          "vocab_size": 32768,
+          "streams": 4,
+          "sinkhorn_iterations": 20,
+          "activation_checkpoint": false,
+          "connection_backend": "nvidia",
+          "fused_connection_grad": false,
+          "architecture": "native",
+          "window_pattern": "SSSL",
+          "attention_kernel": "original"
+        }
+      },
+      {
+        "model": "native_no_sinkhorn",
+        "config": {
+          "variant": "mhc_no_sinkhorn",
+          "depth": 8,
+          "width": 512,
+          "heads": 4,
+          "sequence_length": 2048,
+          "vocab_size": 32768,
+          "streams": 4,
+          "sinkhorn_iterations": 20,
+          "activation_checkpoint": false,
+          "connection_backend": "nvidia",
+          "fused_connection_grad": false,
+          "architecture": "native",
+          "window_pattern": "SSSL",
+          "attention_kernel": "original"
+        }
+      },
+      {
+        "model": "vanilla16k",
+        "config": {
+          "variant": "baseline",
+          "depth": 8,
+          "width": 512,
+          "heads": 4,
+          "sequence_length": 16384,
+          "vocab_size": 32768,
+          "streams": 4,
+          "sinkhorn_iterations": 20,
+          "activation_checkpoint": false,
+          "connection_backend": "nvidia",
+          "fused_connection_grad": false,
+          "architecture": "vanilla",
+          "window_pattern": "SSSL",
+          "attention_kernel": "original"
+        }
+      },
+      {
+        "model": "vanilla_fla",
+        "config": {
+          "variant": "baseline",
+          "depth": 8,
+          "width": 512,
+          "heads": 4,
+          "sequence_length": 2048,
+          "vocab_size": 32768,
+          "streams": 4,
+          "sinkhorn_iterations": 20,
+          "activation_checkpoint": false,
+          "connection_backend": "nvidia",
+          "fused_connection_grad": false,
+          "architecture": "vanilla",
+          "window_pattern": "SSSL",
+          "attention_kernel": "fla_triton"
+        }
+      }
+    ],
+    "retired_statistics_rejected": true,
+    "baseline_flops_equal": true,
+    "fla_launch_options_ast_equal": true,
+    "parsed_python_files": 93,
+    "unresolved_local_imports": [],
+    "gpu_test_submitted": false,
+    "verification_limit": "Static retained-path audit; no new GPU correctness or training run. FLA low-level kernels unchanged; wrapper specialized to previous mode=none.",
+    "fla_old_mode_none_specialized_ast_equal": {
+      "forward": true,
+      "backward": true
+    }
+  },
+  "audit_directory": "/home/yzhong239/research-cleanup-20261104",
+  "protected": "Original data/tokenizer, ready 2K token cache, current container/runtime, vanilla/native/mHC weights, reports and W&B records",
+  "new_training": false
+}

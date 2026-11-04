@@ -1,3 +1,5 @@
+> Retired on 2026-11-04: all attention-statistics implementations, checkpoints and launchers have been removed. Only ordinary vanilla attention (including the FLA mean-only backend), native and NVIDIA mHC remain. This document preserves historical results and commands; it is not an active experiment.
+
 > Archived on 2026-11-04 by user request. Implementation and launchers have been removed; the text below records the historical experiment only. No automatic continuation.
 
 # Mean + variance + third central moment attention
