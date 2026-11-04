@@ -26,11 +26,13 @@ from three simultaneous accumulators. No full A or transformed V tensors in HBM.
 
 Q/K/V, transformed V dot operands, outputs and saved moments are BF16; online
 softmax and matrix accumulators use standard FP32. Center with BF16 returned mu,
-retaining unrounded m2/m3 accumulators on chip. The variance centering follows
-the existing squared-mean BF16 convention; c3 polynomial arithmetic is FP32
-before its final BF16 cast. Cubing and centralization can amplify rounding;
-near-zero/first-token discrepancies are measured, not promised bitwise zero for
-arbitrary BF16 values. No added high-precision attention path is used.
+retaining unrounded m2/m3 accumulators on chip. Use the algebraically equivalent
+`c3 = (m3 - cube(mu)) - 3*mu*(m2 - square(mu))`, rounding square(mu)/cube(mu)
+to BF16 exactly as on the V side. This removes the spurious singleton signal
+caused by subtracting unrounded mean powers from rounded value powers.
+Singleton c3 is exactly zero, and its adjoint is masked to zero in preprocess.
+General near-zero/large-offset cancellation remains subject to BF16 precision;
+no high-precision attention path is added.
 
 Analytic backward (gs includes the variance clamp mask; gt is the c3 adjoint):
 
@@ -44,8 +46,11 @@ dV  = A^T gmu + 2 V (A^T g2) + 3 V^2 (A^T g3)
 
 The softmax delta includes mu*gmu + m2*g2 + m3*g3. There are three backward
 launches (preprocess/dQ/dKV). All branches differentiate through the same A.
+For the actual rounded centering, the gt coefficient in gmu is
+`3*mu^2 + 3*BF16(mu^2) - 3*m2`, i.e. the exact chain rule with casts treated
+as identity in backward, rather than substituting an unrounded square.
 
-Gate: 17 existing regressions +14 new checks, independent centered FP64 and
+Gate: 17 existing regressions +15 new checks, independent centered FP64 and
 compiled FP32 oracle/VJP, three BF16 shapes through real2K, each branch VJP,
 signed/zero/translation/cubic scaling cases, exact causal prefix/future VJP,
 matched initialization, Muon and exact optimizer/RNG restoration, full-model
@@ -54,6 +59,13 @@ compile/eager full gradient<2% and CE difference<.002. Same-card baseline/varian
 variance_third profiles in two reverse rounds, micro16/2K,20warmup+30timed;
 operator launch trace and after-50-step branch scale/gradient probes. Real
 25 -> exit85 -> fresh-process50 uses the full305176-step LR horizon.
+
+First gate7805763.0 passed its31 tests, but manual scale review found singleton
+c3 as large as1.08594 after50 updates; it should be zero. Automatically submitted
+7805791.0 was cancelled at zero starts, before training. The revised32-check gate
+adds arbitrary BF16 singleton output/VJP checks and requires zero first-token
+c3 in every real-data scale probe. Original evidence remains in Git history,
+the initial workflow root, and `failed-attempts.json`; no W&B run was started.
 
 After audit/push, the workflow automatically submits only variance_third for
 305176 steps x32768=10000007168 tokens, seed42 from scratch, default MuonAdamW/LR,

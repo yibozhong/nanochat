@@ -78,7 +78,7 @@ class FusedThirdMomentFunction(torch.autograd.Function):
         do,ds,dt=(x.contiguous() for x in (do,ds,dt))
         dm,d2,d3,dq,dk,dv=(torch.empty_like(v) for _ in range(6))
         delta=torch.empty((b,t,h),device=q.device,dtype=torch.float32)
-        third.third_preprocess[(b*t*h,)](o,r2,r3,s,do,ds,dt,dm,d2,d3,delta,d,triton.next_power_of_2(d))
+        third.third_preprocess[(b*t*h,)](o,r2,r3,s,do,ds,dt,dm,d2,d3,delta,d,triton.next_power_of_2(d),t,h)
         extra=dict(dz=d2,dz3=d3,MODE=2)
         third.third_bwd_kernel_dq[grid](q=q,k=k,v=v,lse=lse,delta=delta,do=dm,dq=dq,dg_cumsum=None,**extra,**kw)
         third.third_bwd_kernel_dkv[grid](q=q,k=k,v=v,lse=lse,delta=delta,do=dm,dk=dk,dv=dv,dg_cumsum=None,**extra,**kw)

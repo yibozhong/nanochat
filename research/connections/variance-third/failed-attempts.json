@@ -1,0 +1,18 @@
+[
+  {
+    "gate": "7805763.0",
+    "source": "525657c6730442257032b135092a1c7058be299c",
+    "checks": {
+      "tests": 31,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "outcome": "Superseded after manual numerical audit, despite original test pass",
+    "issue": "BF16 value powers versus unrounded mean powers created nonzero singleton third moment",
+    "largest_real_data_singleton": 1.0859375,
+    "cancelled_training_job": "7805791.0",
+    "cancelled_num_starts": 0,
+    "fix": "Matched BF16 centered powers and correct rounded chain rule; zero singleton third adjoint; added32nd test and real-data audit"
+  }
+]

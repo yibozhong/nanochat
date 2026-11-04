@@ -21,7 +21,7 @@ def audit(root,state):
     with tarfile.open(root/'results'/f'gate-{state["job"]}.tar') as tf:
         result=json.load(tf.extractfile('results/third-gate.json'))
         assert result['complete'] and result['source']==state['source']
-        assert result['checks']==dict(tests=31,failures=0,errors=0,skipped=0)
+        assert result['checks']==dict(tests=32,failures=0,errors=0,skipped=0)
         assert not result['formal_training'] and not result['weights_returned']
         assert len(result['profiles'])==6 and len({r['gpu'] for r in result['profiles']})==1
         assert {r['mode'] for r in result['profiles']}=={'none','variance','variance_third'}
@@ -35,6 +35,7 @@ def audit(root,state):
                 assert {r['branch'] for r in scales}=={'c_proj','c_stat','c_third'}
                 for r in scales:
                     assert all(math.isfinite(r[k]) for k in ('input_rms','input_max','output_rms','weight_gradient_norm'))
+                    if r['branch']=='c_third':assert r['first_token_max']==0,r
         restart=result['restart']
         assert restart['exact_steps_1_to_50'] and restart['summary']['complete'] and restart['summary']['steps']==50
         assert restart['config']['protocol']['schedule_steps']==305176 and restart['config']['logging_backend']=='local'

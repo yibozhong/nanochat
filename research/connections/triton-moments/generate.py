@@ -107,7 +107,11 @@ assert third_fwd.count(needle)==2
 third_fwd=third_fwd.replace(needle,needle+'\n        b_z3 = b_z3 * b_r[:, None] + tl.dot(b_p.to(b_q.dtype), cube(b_v).to(b_v.dtype))')
 third_fwd=third_fwd.replace('    b_m += log2(b_acc)', '''    b_z3 = b_z3 / b_acc[:, None]
     mu = b_mean.to(tl.float32)
-    b_third = b_z3 - 3. * mu * b_z + 2. * mu * mu * mu
+    # Algebraically m3 - 3*mu*m2 + 2*mu^3. Center with the SAME
+    # BF16 transformed values on both sides; singleton gaps then cancel.
+    mu2 = phi(b_mean, MODE).to(b_mean.dtype).to(tl.float32)
+    mu3 = cube(b_mean).to(b_mean.dtype).to(tl.float32)
+    b_third = (b_z3 - mu3) - 3. * mu * (b_z - mu2)
     offs = (bos * HQ + i_hq) * V + o_q[:, None] * (HQ*V) + o_v[None, :]
     tl.store(third + offs, b_third, mask=m_q[:, None] & (o_v[None, :] < V))
     tl.store(raw3 + offs, b_z3, mask=m_q[:, None] & (o_v[None, :] < V))
@@ -137,7 +141,7 @@ def cube(x):
     return x * x * x
 
 @triton.jit
-def third_preprocess(O, R2, R3, S, DO, DS, DT, DM, D2, D3, Delta, D: tl.constexpr, BD: tl.constexpr):
+def third_preprocess(O, R2, R3, S, DO, DS, DT, DM, D2, D3, Delta, D: tl.constexpr, BD: tl.constexpr, T: tl.constexpr, H: tl.constexpr):
     row = tl.program_id(0)
     d = tl.arange(0, BD)
     mu = tl.load(O + row*D+d, d<D, 0).to(tl.float32)
@@ -147,8 +151,11 @@ def third_preprocess(O, R2, R3, S, DO, DS, DT, DM, D2, D3, Delta, D: tl.constexp
     stat = tl.load(S + row*D+d, d<D, 0)
     gs = tl.where(stat > 0, gs, 0.)
     gt = tl.load(DT + row*D+d, d<D, 0).to(tl.float32)
+    # A singleton distribution has identically zero third central moment.
+    gt = tl.where((row // H) % T == 0, 0., gt)
     gm = tl.load(DO + row*D+d, d<D, 0).to(tl.float32)
-    gm = gm - 2. * mu * gs + (6. * mu * mu - 3. * r2) * gt
+    mu2 = (mu * mu).to(O.dtype.element_ty).to(tl.float32)
+    gm = gm - 2. * mu * gs + (3. * mu * mu + 3. * mu2 - 3. * r2) * gt
     g2 = gs - 3. * mu * gt
     gm = gm.to(DM.dtype.element_ty)
     g2 = g2.to(D2.dtype.element_ty)

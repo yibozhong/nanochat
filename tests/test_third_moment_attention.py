@@ -21,7 +21,9 @@ def formula(q,k,v,rounded=True):
     mu=cast(a@v.to(dtype))
     r2=a@cast(v.to(dtype).square());r3=a@cast(v.to(dtype).pow(3))
     var=(r2-cast(mu.square())).clamp_min(0)
-    c3=r3-3*mu*r2+2*mu.pow(3)
+    c3=(r3-cast(mu.pow(3)))-3*mu*(r2-cast(mu.square()))
+    if rounded:
+        c3=torch.where(torch.arange(t,device=q.device)[None,None,:,None]>0,c3,0.)
     return tuple((x.to(v.dtype) if rounded else x).transpose(1,2) for x in (mu,var,c3))
 
 
@@ -91,6 +93,15 @@ def test_zero_signed_translation_and_cubic_scaling():
         torch.testing.assert_close(other[2],c3*scale**3,atol=0,rtol=0)
     constant=fused_attention(q,k,torch.ones_like(v)*3,MODE)
     assert constant[1].count_nonzero()==0 and constant[2].count_nonzero()==0
+
+
+def test_singleton_arbitrary_bf16_values_have_zero_third_and_vjp():
+    xs=[torch.randn(2,129,2,128,device='cuda',dtype=torch.bfloat16,requires_grad=True) for _ in range(3)]
+    with torch.no_grad():xs[2].mul_(4)
+    c3=fused_attention(*xs,MODE)[2]
+    assert c3[:,0].count_nonzero()==0
+    grads=torch.autograd.grad((c3[:,0].float()*torch.randn_like(c3[:,0]).float()).sum(),xs)
+    assert all(g.count_nonzero()==0 for g in grads)
 
 
 def test_real_2k_causal_prefix_and_no_future_vjp():

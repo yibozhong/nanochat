@@ -14,7 +14,7 @@ def main():
         '-v','--junitxml=results/third-tests.xml'],'third-tests')
     suites=ET.parse('results/third-tests.xml').getroot().findall('testsuite')
     checks={key:sum(int(s.attrib.get(key,0)) for s in suites) for key in ('tests','failures','errors','skipped')}
-    assert checks==dict(tests=31,failures=0,errors=0,skipped=0),checks
+    assert checks==dict(tests=32,failures=0,errors=0,skipped=0),checks
     operator_profile(('none','variance','variance_third'))
     profiles=[]
     for repeat,order in enumerate([('none','variance','variance_third'),('variance_third','variance','none')]):
