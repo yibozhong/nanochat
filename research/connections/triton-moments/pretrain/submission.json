@@ -1,0 +1,87 @@
+{
+  "source": "429ea729309789cf0d6c7154908532b2ed24dfef",
+  "publication": {
+    "commit": "d97e9f11b00100e3c26000370004b28f4d39ac2d",
+    "gate_commit": "429ea729309789cf0d6c7154908532b2ed24dfef",
+    "job": "7802243.0",
+    "remote_verified": true
+  },
+  "kernel": "fla_triton",
+  "context_length": 2048,
+  "steps": 305176,
+  "tokens": 10000007168,
+  "seed": 42,
+  "microbatch": 16,
+  "grad_accum": 1,
+  "modes": {
+    "none": {
+      "job": "7802254.0",
+      "run_id": "46bd7320",
+      "last_job": {
+        "Args": "baseline 46bd7320 305176 none",
+        "ClusterId": 7802254,
+        "JobStatus": 1,
+        "MomentKey": "triton-moments-10b-20261103",
+        "MomentRole": "none",
+        "NumJobStarts": 0,
+        "ProcId": 0
+      }
+    },
+    "variance": {
+      "job": "7802254.1",
+      "run_id": "58dd471b",
+      "last_job": {
+        "Args": "baseline 58dd471b 305176 variance",
+        "ClusterId": 7802254,
+        "JobStatus": 1,
+        "MomentKey": "triton-moments-10b-20261103",
+        "MomentRole": "variance",
+        "NumJobStarts": 0,
+        "ProcId": 1
+      }
+    },
+    "jensen_silu": {
+      "job": "7802254.2",
+      "run_id": "e1fa1a99",
+      "last_job": {
+        "Args": "baseline e1fa1a99 305176 jensen_silu",
+        "ClusterId": 7802254,
+        "JobStatus": 1,
+        "MomentKey": "triton-moments-10b-20261103",
+        "MomentRole": "jensen_silu",
+        "NumJobStarts": 0,
+        "ProcId": 2
+      }
+    }
+  },
+  "wandb_project": "yibozhong657-none/nanochat",
+  "wandb_group": "triton-moments-10b-20261103",
+  "restart_checks": 4,
+  "restart_gate": "7802243.0",
+  "all_three_process_restarts_passed": true,
+  "initial_queue": [
+    {
+      "ClusterId": 7802254,
+      "ProcId": 0,
+      "JobStatus": 1,
+      "NumJobStarts": 0,
+      "MomentRole": "none"
+    },
+    {
+      "ClusterId": 7802254,
+      "ProcId": 1,
+      "JobStatus": 1,
+      "NumJobStarts": 0,
+      "MomentRole": "variance"
+    },
+    {
+      "ClusterId": 7802254,
+      "ProcId": 2,
+      "JobStatus": 1,
+      "NumJobStarts": 0,
+      "MomentRole": "jensen_silu"
+    }
+  ],
+  "monitor_stops_after_first_training_step": true,
+  "launcher_sha256": "ae993aca3d2a4082753f59b4747b6bfc1b3fe7d87453e91a329ffe8d49f7b540"
+}
