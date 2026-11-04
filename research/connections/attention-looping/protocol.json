@@ -1,6 +1,6 @@
 {
   "name": "attention_only_looping",
-  "status": "implemented_pending_gpu_validation",
+  "status": "gpu_validated",
   "formal_training": false,
   "backbone": "vanilla",
   "attention_backend": "FA3 required, original nanochat CausalSelfAttention; no FLA",
@@ -54,5 +54,7 @@
     "build": "torch210-cxx11-cu130-x86_64-linux",
     "source": "https://huggingface.co/varunneal/flash-attention-3/tree/de87b9b5af06dd9984df595bef90b2eba44b181a",
     "policy": "Worker fetches pinned module once; later processes offline. Record artifact SHA256 and profiler kernel names; reject fallback."
-  }
+  },
+  "gate_job": "7811013.0",
+  "validation_source": "977113646fd781670f37860ebb36fcc1a0780e59"
 }
