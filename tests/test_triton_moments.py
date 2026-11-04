@@ -21,7 +21,8 @@ def reference(q,k,v,mode):
     a=a.masked_fill(~torch.ones(t,t,device=q.device,dtype=torch.bool).tril(),-torch.inf).softmax(-1)
     mu=(a@v.float()).to(v.dtype)
     if mode=='none':return mu.transpose(1,2),torch.empty(0,device=q.device)
-    phi=lambda x:(F.silu(x.float()) if mode=='jensen_silu' else x.float().square()).to(v.dtype).float()
+    nonlinear={'jensen_silu':F.silu,'jensen_abs':torch.abs}
+    phi=lambda x:nonlinear.get(mode,torch.square)(x.float()).to(v.dtype).float()
     raw=a@phi(v)
     stat=raw if mode=='second_moment' else raw-phi(mu)
     if mode=='variance':stat=stat.clamp_min(0)
@@ -46,6 +47,10 @@ def test_operator_forward_and_gradients(mode,t,d):
     result=dict(mode=mode,t=t,d=d,forward=[relative(a,b) for a,b in zip(out,expected)],
         gradients=[relative(a,b) for a,b in zip(grads,rgrads)],
         max_abs=[float((a.float()-b.float()).abs().max()) if a.numel() else 0 for a,b in zip(out,expected)])
+    if mode=='jensen_abs':
+        result.update(statistic_min=float(out[1].min()),
+            negative_fraction=float((out[1]<0).float().mean()),
+            mean_sign_disagreement=float((out[0].sign()!=expected[0].sign()).float().mean()))
     record(f'{mode}-{t}-{d}',result)
     assert all(torch.isfinite(x).all() for x in (*out,*grads))
     assert max(result['forward'])<.025,result

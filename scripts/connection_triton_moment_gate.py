@@ -6,10 +6,10 @@ from scripts.connection_moment_gate import execute
 from nanochat.packed_training import json_write
 from nanochat.triton_moment_attention import fused_attention
 
-def operator_profile():
+def operator_profile(modes=('none','second_moment','variance','jensen_silu')):
     from torch.profiler import profile,ProfilerActivity
     rows=[]
-    for mode in ('none','second_moment','variance','jensen_silu'):
+    for mode in modes:
         xs=[torch.randn(16,2048,4,128,device='cuda',dtype=torch.bfloat16,requires_grad=True) for _ in range(3)]
         def run():
             out=fused_attention(*xs,mode)

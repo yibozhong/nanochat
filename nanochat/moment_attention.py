@@ -1,10 +1,11 @@
-"""Value moments for vanilla attention; precision-first compiled reference.
+"""Value statistics for vanilla attention: compiled reference and fused Triton.
 
 The original mean uses the unchanged efficient attention backend. The added
 branch recomputes the SAME mathematical causal probabilities in FP32, without
 rounding squared values or moments to BF16 before centering. Query tiling and
 activation recomputation bound temporary probability memory; they do not change
-the attention support. No new custom kernels or attention parameters are used.
+the attention support. The optional FLA-derived Triton backend instead computes
+mean and statistic together with BF16 dot operands and shared on-chip weights.
 """
 import torch
 from torch import nn
@@ -26,6 +27,10 @@ def moment_tile(q, k, v, query_start, centered, nonlinearity='square'):
         # SiLU is not globally convex: signed gaps are intentional. Both terms
         # use the same phi, values and mathematical attention distribution.
         return a @ F.silu(v) - F.silu(a @ v)
+    if nonlinearity == 'abs':
+        # Direct Jensen difference, without an added clamp. torch.abs uses
+        # subgradient zero at zero, as does the fused Triton backward.
+        return a @ v.abs() - (a @ v).abs()
     assert nonlinearity == 'square'
     second = a @ v.square()
     if not centered:
@@ -60,7 +65,7 @@ class MomentAttention(nn.Module):
     """Retain all existing Q/K/V/O Parameters, adding only a zero D x D W_s."""
     def __init__(self, original, mode, query_chunk, backend="original"):
         super().__init__()
-        assert mode in ('second_moment', 'variance', 'jensen_silu') or (mode == 'none' and backend == 'fla_triton')
+        assert mode in ('second_moment', 'variance', 'jensen_silu', 'jensen_abs') or (mode == 'none' and backend == 'fla_triton')
         for name in ('layer_idx', 'n_head', 'n_kv_head', 'n_embd', 'head_dim',
                      'c_q', 'c_k', 'c_v', 'c_proj', 've_gate_channels', 've_gate'):
             setattr(self, name, getattr(original, name))
@@ -101,7 +106,7 @@ class MomentAttention(nn.Module):
                 kv_cache.advance(t)
         stats = value_moments(q, k, v, centered=self.mode == 'variance',
                              query_chunk=self.query_chunk, offset=offset,
-                             nonlinearity='silu' if self.mode == 'jensen_silu' else 'square')
+                             nonlinearity={'jensen_silu':'silu','jensen_abs':'abs'}.get(self.mode, 'square'))
         mean = mean.contiguous().view(b, t, self.n_embd)
         stats = stats.contiguous().view(b, t, self.n_embd).to(mean.dtype)
         return self.c_proj(mean) + self.c_stat(stats)

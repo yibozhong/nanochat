@@ -28,7 +28,7 @@ def main():
     p.add_argument('--variant', choices=('baseline','mhc','mhc_no_sinkhorn'), required=True)
     p.add_argument('--sequence-length', type=int, default=2048)
     p.add_argument('--attention-kernel', choices=('original','fla_triton'), default='original')
-    p.add_argument('--attention-statistic', choices=('none','second_moment','variance','jensen_silu'), default='none')
+    p.add_argument('--attention-statistic', choices=('none','second_moment','variance','jensen_silu','jensen_abs'), default='none')
     p.add_argument('--moment-query-chunk', type=int, default=256)
     p.add_argument('--architecture', choices=('vanilla', 'native'), default='vanilla')
     p.add_argument('--window-pattern', default='SSSL', help='Native backbone only; vanilla always uses full attention')

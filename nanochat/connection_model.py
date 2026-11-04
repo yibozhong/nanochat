@@ -40,7 +40,7 @@ class ConnectionConfig:
             raise ValueError('Unknown attention kernel')
         if self.attention_kernel == 'fla_triton' and (self.architecture != 'vanilla' or self.variant != 'baseline'):
             raise ValueError('Initial FLA port supports vanilla baseline backbone only')
-        if self.attention_statistic not in ('none', 'second_moment', 'variance', 'jensen_silu'):
+        if self.attention_statistic not in ('none', 'second_moment', 'variance', 'jensen_silu', 'jensen_abs'):
             raise ValueError('Unknown attention statistic')
         if self.moment_query_chunk < 1:
             raise ValueError('moment_query_chunk must be positive')

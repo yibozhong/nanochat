@@ -9,7 +9,7 @@ import triton
 from nanochat import fla_attention_kernels as base
 from nanochat import moment_attention_kernels as moment
 
-MODES={'none':0,'second_moment':1,'variance':2,'jensen_silu':3}
+MODES={'none':0,'second_moment':1,'variance':2,'jensen_silu':3,'jensen_abs':4}
 
 
 def launch_options(q):
