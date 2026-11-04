@@ -28,5 +28,5 @@ def model_cost(config, batch=1, activation_bytes=2):
         components_forward=dict(backbone_projections=projections,vocab_head=head,
             attention=attention, **extra),
         accounting='FMA=2 FLOPs; allowed attention pairs, not masked dense-kernel execution. Backward approximated as2x consumed forward matrix FLOPs. Excludes softmax/norm/activation/optimizer/recomputation and is not measured hardware FLOPs.',
-        statistics_note=('FLA fused backend shares QK/softmax; one extra P@phi(V) for a single statistic, two for variance_third. Excludes nonlinear pointwise work and FlashAttention backward probability recomputation.' if c.attention_kernel == 'fla_triton' else 'Reference uses masked FP32 matrices and additional checkpoint recomputation; excludes pointwise operations.'),
+        statistics_note=('FLA fused backend shares QK/softmax; one extra P@phi(V) for a single statistic, two for variance_third. Effective-support gating adds no matrix FLOPs. Excludes rowwise support reductions and nonlinear pointwise work and FlashAttention backward probability recomputation.' if c.attention_kernel == 'fla_triton' else 'Reference uses masked FP32 matrices and additional checkpoint recomputation; excludes pointwise operations.'),
         memory_note='Actual training peak VRAM must be measured separately.')

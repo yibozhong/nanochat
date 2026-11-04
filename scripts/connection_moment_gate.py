@@ -54,6 +54,24 @@ def profile(mode, out, kernel="original"):
         with torch.no_grad():model(data.batch('train',0,1)[0])
         for h in handles:h.remove()
         result['branch_scales_after_50_updates']=rows
+    if mode=='variance_support':
+        # Observe support/gate values after 50 real updates, outside timing and
+        # peak-memory measurements. Hooks run only in this eager diagnostic.
+        rows=[];handles=[];model.compiled_steps=None
+        for layer,b in enumerate(model.blocks):
+            def capture(m,args,output,layer=layer):
+                logn=args[1].detach().float();g=m.coefficients(logn).detach()
+                visible=torch.arange(1,logn.shape[1]+1,device=logn.device)[None,:,None]
+                rows.append(dict(layer=layer,log_support_min=float(logn.min()),log_support_max=float(logn.max()),
+                    first_token_log_support_max=float(logn[:,0].abs().max()),
+                    support_visible_excess=float((logn.exp()-visible).max()),
+                    gate_min=float(g.min()),gate_max=float(g.max()),gate_mean=float(g.mean()),
+                    a=m.a.detach().tolist(),b=m.b.detach().tolist(),
+                    a_gradient_norm=float(m.a.grad.norm()),b_gradient_norm=float(m.b.grad.norm())))
+            handles.append(b.attn.support_gate.register_forward_hook(capture))
+        with torch.no_grad():model(data.batch('train',0,1)[0])
+        for h in handles:h.remove()
+        result['support_after_50_updates']=rows
     json_write(out,result)
     assert result['peak_reserved_bytes'] < .9*22000*1024**2, result
 

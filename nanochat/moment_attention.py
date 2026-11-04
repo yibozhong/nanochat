@@ -61,11 +61,25 @@ class ZeroLinear(Linear):
         nn.init.zeros_(self.weight)
 
 
+class SupportGate(nn.Module):
+    """Per-head support gate; identity at initialization, no detach or /length."""
+    def __init__(self, heads, device):
+        super().__init__()
+        self.a=nn.Parameter(torch.zeros(heads,device=device,dtype=torch.float32))
+        self.b=nn.Parameter(torch.zeros(heads,device=device,dtype=torch.float32))
+
+    def coefficients(self, log_support):
+        return 2. * torch.sigmoid(log_support.float() * self.a + self.b)
+
+    def forward(self, variance, log_support):
+        return (variance.float() * self.coefficients(log_support).unsqueeze(-1)).to(variance.dtype)
+
+
 class MomentAttention(nn.Module):
     """Retain all existing Q/K/V/O Parameters, adding only a zero D x D W_s."""
     def __init__(self, original, mode, query_chunk, backend="original"):
         super().__init__()
-        assert mode in ('second_moment', 'variance', 'jensen_silu', 'jensen_abs', 'variance_third') or (mode == 'none' and backend == 'fla_triton')
+        assert mode in ('second_moment', 'variance', 'jensen_silu', 'jensen_abs', 'variance_third', 'variance_support') or (mode == 'none' and backend == 'fla_triton')
         for name in ('layer_idx', 'n_head', 'n_kv_head', 'n_embd', 'head_dim',
                      'c_q', 'c_k', 'c_v', 'c_proj', 've_gate_channels', 've_gate'):
             setattr(self, name, getattr(original, name))
@@ -76,6 +90,8 @@ class MomentAttention(nn.Module):
             device=self.c_proj.weight.device, dtype=self.c_proj.weight.dtype) if mode != 'none' else None
         self.c_third = ZeroLinear(self.n_embd, self.n_embd, bias=False,
             device=self.c_proj.weight.device, dtype=self.c_proj.weight.dtype) if mode == 'variance_third' else None
+
+        self.support_gate = SupportGate(self.n_head, self.c_proj.weight.device) if mode == 'variance_support' else None
 
     def forward(self, x, ve, cos_sin, window_size, kv_cache):
         assert ve is None and window_size == (-1, 0)
@@ -92,6 +108,8 @@ class MomentAttention(nn.Module):
             from nanochat.triton_moment_attention import fused_attention
             moments = fused_attention(q, k, v, self.mode)
             mean, stats = moments[:2]
+            if self.support_gate is not None:
+                stats = self.support_gate(stats, moments[2])
             output = self.c_proj(mean.reshape(b, t, self.n_embd))
             if self.c_stat is not None:
                 output = output + self.c_stat(stats.reshape(b, t, self.n_embd))

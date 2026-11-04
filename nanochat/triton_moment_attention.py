@@ -9,6 +9,7 @@ import triton
 from nanochat import fla_attention_kernels as base
 from nanochat import moment_attention_kernels as moment
 from nanochat import third_moment_attention_kernels as third
+from nanochat import support_attention_kernels as support
 
 MODES={'none':0,'second_moment':1,'variance':2,'jensen_silu':3,'jensen_abs':4}
 
@@ -85,12 +86,41 @@ class FusedThirdMomentFunction(torch.autograd.Function):
         return dq,dk,dv
 
 
+class FusedSupportFunction(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx,q,k,v):
+        kw=launch_options(q);b,t,h,d=q.shape
+        o,s,r=(torch.empty_like(v) for _ in range(3))
+        lse=torch.empty((b,t,h),device=q.device,dtype=torch.float32)
+        log_support=torch.empty_like(lse)
+        support.support_fwd_kernel[(triton.cdiv(t,128),b*h)](
+            q=q,k=k,v=v,o=o,stat=s,raw=r,log_support=log_support,
+            MODE=2,lse=lse,sink_bias=None,**kw)
+        ctx.save_for_backward(q,k,v,o,s,r,lse,log_support)
+        return o,s,log_support
+
+    @staticmethod
+    def backward(ctx,do,ds,dlog):
+        q,k,v,o,s,r,lse,log_support=ctx.saved_tensors
+        b,t,h,d=q.shape;kw=launch_options(q);kw['num_stages']=1
+        do,ds,dlog=(x.contiguous() for x in (do,ds,dlog))
+        dm,dz,dq,dk,dv=(torch.empty_like(v) for _ in range(5))
+        delta=torch.empty_like(lse);grid=(triton.cdiv(t,128),b*h)
+        moment.moment_preprocess[(b*t*h,)](o,r,s,do,ds,dm,dz,delta,d,triton.next_power_of_2(d),2)
+        extra=dict(dz=dz,MODE=2,log_support=log_support,dlog_support=dlog)
+        support.support_bwd_kernel_dq[grid](q=q,k=k,v=v,lse=lse,delta=delta,do=dm,dq=dq,dg_cumsum=None,**extra,**kw)
+        support.support_bwd_kernel_dkv[grid](q=q,k=k,v=v,lse=lse,delta=delta,do=dm,dk=dk,dv=dv,dg_cumsum=None,**extra,**kw)
+        return dq,dk,dv
+
+
 def fused_attention(q,k,v,mode='none'):
     if q.ndim!=4 or q.shape!=k.shape or q.shape!=v.shape:
         raise ValueError('Initial port supports equal-length/equal-head causal MHA in BTHD layout')
     if q.dtype!=torch.bfloat16 or k.dtype!=q.dtype or v.dtype!=q.dtype or not q.is_cuda:
         raise ValueError('The training kernel requires CUDA BF16 Q/K/V')
     if q.shape[-1] not in (32,64,128):raise ValueError('Validated head dimensions: 32/64/128')
+    if mode=='variance_support':
+        return FusedSupportFunction.apply(q.contiguous(),k.contiguous(),v.contiguous())
     if mode=='variance_third':
         return FusedThirdMomentFunction.apply(q.contiguous(),k.contiguous(),v.contiguous())
     return FusedMomentFunction.apply(q.contiguous(),k.contiguous(),v.contiguous(),MODES[mode])

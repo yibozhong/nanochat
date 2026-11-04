@@ -167,3 +167,34 @@ def third_preprocess(O, R2, R3, S, DO, DS, DT, DM, D2, D3, Delta, D: tl.constexp
 
 '''
 (root/'nanochat/third_moment_attention_kernels.py').write_text(header+third_helpers+third_fwd+third_bwd)
+
+# Effective support shares the online P and adds only a rowwise sum of P^2.
+# Retain the old moment kernels verbatim, including their tiles/rounding.
+support_fwd=fwd.replace('moment_fwd_kernel','support_fwd_kernel').replace('    stat,\n','    stat,\n    log_support,\n')
+support_fwd=support_fwd.replace('    b_acc = tl.zeros([BT], dtype=tl.float32)',
+    '    b_acc = tl.zeros([BT], dtype=tl.float32)\n    b_sq = tl.zeros([BT], dtype=tl.float32)')
+needle='        b_acc = b_acc * b_r + tl.sum(b_p, 1)'
+assert support_fwd.count(needle)==2
+support_fwd=support_fwd.replace(needle,needle+'\n        b_sq = b_sq * b_r * b_r + tl.sum(b_p * b_p, 1)')
+support_fwd=support_fwd.replace('    b_m += log2(b_acc)',
+    '    tl.store(log_support + bos * HQ + i_hq + o_q * HQ, 2. * tl.log(b_acc) - tl.log(b_sq), mask=m_q)\n    b_m += log2(b_acc)')
+support_bwd=bwd.replace('moment_bwd_kernel_','support_bwd_kernel_').replace('    dz,\n','    dz,\n    log_support,\n    dlog_support,\n')
+needle='b_delta = tl.load(p_delta, mask=m_q, other=0.0)'
+assert support_bwd.count(needle)==3
+lines=[]
+for line in support_bwd.splitlines():
+    lines.append(line)
+    if line.strip()==needle:
+        indent=line[:len(line)-len(line.lstrip())]
+        lines.extend(indent+x for x in (
+            'b_neff = tl.exp(tl.load(log_support + bos * HQ + i_hq + o_q * HQ, mask=m_q, other=0.))',
+            'b_dlog = tl.load(dlog_support + bos * HQ + i_hq + o_q * HQ, mask=m_q, other=0.)',
+            '# A singleton has constant support=1, hence an exactly zero adjoint.',
+            'b_dlog = tl.where(o_q == 0, 0., b_dlog)'))
+support_bwd='\n'.join(lines)+'\n'
+for axis in ('[:, None]','[None, :]'):
+    dp='b_dp.to(tl.float32)' if axis=='[:, None]' else 'b_dp'
+    needle=f'        b_ds = b_p * ({dp} - b_delta{axis})'
+    assert support_bwd.count(needle)==2
+    support_bwd=support_bwd.replace(needle,needle+f'\n        b_ds += 2. * b_dlog{axis} * b_p * (1. - b_neff{axis} * b_p)')
+(root/'nanochat/support_attention_kernels.py').write_text(header+phi[:phi.index('@triton.jit\ndef moment_preprocess')]+support_fwd+support_bwd)
