@@ -34,7 +34,8 @@ def _load_flash_attention_3():
         # The varunneal kernel obtains better results for H100/Hopper
         if major == 9:
             hf_kernel = "varunneal/flash-attention-3"
-            return get_kernel(hf_kernel).flash_attn_interface
+            revision = os.environ.get("NANOCHAT_FA3_REVISION")
+            return get_kernel(hf_kernel, **({"revision": revision} if revision else {})).flash_attn_interface
         else:
             hf_kernel = "kernels-community/flash-attn3"
             if has_kernel(hf_kernel):

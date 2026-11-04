@@ -11,6 +11,14 @@ def model_cost(config, batch=1, activation_bytes=2):
     attention=4*batch*d*depth*(t*(t+1)//2)
     forward=projections+head+attention
     extra = {}
+    if c.attention_looping:
+        loops = c.attention_loops - 1
+        window = min(t, c.attention_loop_window)
+        pairs = window*t - window*(window-1)//2
+        loop_projections = loops*8*batch*t*depth*d*d  # Q, K, V and O every pass
+        loop_attention = loops*4*batch*d*depth*pairs
+        forward += loop_projections + loop_attention
+        extra.update(loop_projections=loop_projections, loop_attention=loop_attention)
     if c.attention_statistic != 'none':
         # Current reference executes dense masked matrices, recomputes QK and
         # first moment (variance/Jensen), and checkpoints the statistics branch.

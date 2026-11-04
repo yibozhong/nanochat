@@ -31,8 +31,11 @@ def main():
     p.add_argument('--attention-statistic', choices=('none','variance','jensen_silu'), default='none')
     p.add_argument('--moment-query-chunk', type=int, default=256)
     p.add_argument('--attention-output-ns', action='store_true')
+    p.add_argument('--attention-looping', action='store_true')
+    p.add_argument('--attention-loops', type=int, default=3, help='Total attention passes per block; requires --attention-looping')
+    p.add_argument('--attention-loop-window', type=int, default=128, help='Local window including self for all but the final full-attention pass')
     p.add_argument('--architecture', choices=('vanilla', 'native'), default='vanilla')
-    p.add_argument('--window-pattern', default='SSSL', help='Native backbone only; vanilla always uses full attention')
+    p.add_argument('--window-pattern', default='SSSL', help='Native backbone only; vanilla final attention is full')
     p.add_argument('--formal-training', action='store_true', help='Explicitly enable W&B for a formal training run')
     p.add_argument('--wandb-group', default='mhc-official-kernels-20261030')
     p.add_argument('--connection-backend', choices=('nvidia','nvidia_precise'), default='nvidia')
@@ -46,7 +49,7 @@ def main():
     p.add_argument('--data-dir', default='data')
     p.add_argument('--output-dir', required=True)
     p.add_argument('--checkpoint-dir', default=None)
-    p.add_argument('--attention-backend', choices=('auto','sdpa_cudnn'), default='auto')
+    p.add_argument('--attention-backend', choices=('auto','sdpa_cudnn','fa3'), default='auto')
     p.add_argument('--matched-backbone-init', action='store_true')
     p.add_argument('--evaluate-test', action='store_true')
     p.add_argument('--run-id', default=None)
@@ -72,6 +75,8 @@ def main():
                        sequence_length=a.sequence_length,
                        attention_statistic=a.attention_statistic, moment_query_chunk=a.moment_query_chunk, attention_kernel=a.attention_kernel,
                        attention_output_ns=a.attention_output_ns,
+                       attention_looping=a.attention_looping, attention_loops=a.attention_loops,
+                       attention_loop_window=a.attention_loop_window,
                        architecture=a.architecture, window_pattern=a.window_pattern,
                        activation_checkpoint=a.activation_checkpoint,
                        connection_backend=a.connection_backend, fused_connection_grad=a.fused_connection_grad)
@@ -135,12 +140,12 @@ def main():
             precision='BF16 GEMMs; FP32 weights and norm restoration',scale='preserve pre-projection Frobenius norm per layer; zero stays zero',
             optimizer='unchanged MuonAdamW groups/moments; no momentum transport',scope='only all attention c_proj weights; no backward through projection',
             constraint='approximate scaled orthogonality, not exact orthonormality')
-    profile_reference=source.get('profile_reference',{}).get('output_ns' if a.attention_output_ns else a.attention_statistic if a.attention_statistic != 'none' else a.variant)
+    profile_reference=source.get('profile_reference',{}).get('attention_looping' if a.attention_looping else 'output_ns' if a.attention_output_ns else a.attention_statistic if a.attention_statistic != 'none' else a.variant)
     if profile_reference:
         config['same_gpu_profile_reference']=profile_reference
     kwargs=dict(project='nanochat',entity='yibozhong657-none',group=a.wandb_group,
                 job_type='pretrain' if a.formal_training else 'diagnostic',
-                name=f'{a.architecture}-{a.variant}'+('-output-ns' if a.attention_output_ns else '')+(f'-{a.attention_statistic}' if a.attention_statistic != 'none' else '')+f'-{c.sequence_length}ctx-{a.steps}steps',id=run_id,resume='allow',config=config)
+                name=f'{a.architecture}-{a.variant}'+(f'-attn-loop{a.attention_loops}-w{a.attention_loop_window}' if a.attention_looping else '')+('-output-ns' if a.attention_output_ns else '')+(f'-{a.attention_statistic}' if a.attention_statistic != 'none' else '')+f'-{c.sequence_length}ctx-{a.steps}steps',id=run_id,resume='allow',config=config)
     run=training_run(formal_training=a.formal_training, local_dir=out/"diagnostics", **kwargs)
     run.define_metric('tokens')
     for metric in ('train/*','dev/*','perf/*'):

@@ -1,0 +1,58 @@
+{
+  "name": "attention_only_looping",
+  "status": "implemented_pending_gpu_validation",
+  "formal_training": false,
+  "backbone": "vanilla",
+  "attention_backend": "FA3 required, original nanochat CausalSelfAttention; no FLA",
+  "total_attention_passes": 3,
+  "windows_including_self": [
+    128,
+    128,
+    "full_causal"
+  ],
+  "mlp_passes": 1,
+  "parameter_sharing": "Q/K/V/O shared across passes within each block, not across layers",
+  "recurrence": "Each pass x <- x + attention(norm(x)); recompute Q/K/V from refined x. Then x <- x + MLP(norm(x)). No detach or extra parameter.",
+  "defaults": {
+    "enabled": false,
+    "total_passes": 3,
+    "window": 128
+  },
+  "window_api": "FA3 left=127, right=0; includes self so exactly128 visible keys",
+  "unchanged": [
+    "native",
+    "NVIDIA mHC",
+    "variance",
+    "SiLU Jensen",
+    "default baseline",
+    "NS numerical diagnostic immutable inputs"
+  ],
+  "limitations": [
+    "Initial implementation vanilla mean-only original attention; no combined NS/statistics/mHC experiment",
+    "Cached decoding explicitly rejected because it needs separate per-loop caches; full-prefix evaluation remains causal",
+    "Same parameter count does not imply same FLOPs, memory, or latency"
+  ],
+  "model": {
+    "depth": 8,
+    "width": 512,
+    "heads": 4,
+    "context": 2048,
+    "vocab": 32768,
+    "parameters": 58720256
+  },
+  "validation": {
+    "tests": 41,
+    "local_forward_and_vjp": "Independent FP32 dense reference with BF16 inputs/outputs",
+    "integrated": "2/3/4-pass ordering and gradients, single MLP, exact support, 2K causality, compile/checkpoint, initialization/RNG/optimizer sharing, checkpoint restoration",
+    "regression": "Retained FLA none/variance/SiLU kernel forward/VJP/model tests and saved-state tests; no FLA in looping",
+    "profile": "Same GPU baseline/loop in both orders, 20 warmup +30 timed full optimizer steps, micro16 accum1, fixed dev",
+    "restart": "25 steps -> exit85 -> fresh process ->50; horizon305176, local logging only, no returned weights"
+  },
+  "fa3": {
+    "repo": "varunneal/flash-attention-3",
+    "revision": "de87b9b5af06dd9984df595bef90b2eba44b181a",
+    "build": "torch210-cxx11-cu130-x86_64-linux",
+    "source": "https://huggingface.co/varunneal/flash-attention-3/tree/de87b9b5af06dd9984df595bef90b2eba44b181a",
+    "policy": "Worker fetches pinned module once; later processes offline. Record artifact SHA256 and profiler kernel names; reject fallback."
+  }
+}

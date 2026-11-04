@@ -30,13 +30,23 @@ class ConnectionConfig:
     connection_backend: str = 'nvidia'
     fused_connection_grad: bool = False
     architecture: str = 'vanilla'
-    window_pattern: str = 'SSSL'  # native only; vanilla is always full attention
+    window_pattern: str = 'SSSL'  # native only; vanilla's final attention is full
     attention_kernel: str = 'original'
     attention_statistic: str = 'none'
     moment_query_chunk: int = 256
     attention_output_ns: bool = False
+    attention_looping: bool = False
+    attention_loops: int = 3  # total attention evaluations when enabled
+    attention_loop_window: int = 128  # includes current token
 
     def __post_init__(self):
+        for name in ('attention_loops', 'attention_loop_window'):
+            value = getattr(self, name)
+            if not isinstance(value, int) or isinstance(value, bool) or value < 1:
+                raise ValueError(f'{name} must be a positive integer')
+        if self.attention_looping and (self.architecture != 'vanilla' or self.variant != 'baseline' or
+                                      self.attention_kernel != 'original' or self.attention_statistic != 'none' or self.attention_output_ns):
+            raise ValueError('Attention looping initially requires vanilla original attention, without statistics or output NS')
         if self.attention_output_ns and (self.architecture != 'vanilla' or self.variant != 'baseline' or self.attention_statistic != 'none'):
             raise ValueError('Attention output NS initially supports vanilla baseline without attention statistics')
         if self.attention_kernel not in ('original','fla_triton'):
@@ -92,6 +102,8 @@ class ConnectionBlock(Block):
         super().__init__(native, index)
         self.attn.ve_gate = None
         self.variant = config.variant
+        self.attention_loops = config.attention_loops if config.attention_looping else 1
+        self.attention_loop_window = config.attention_loop_window
         self.compiled_attention = self.compiled_mlp = None
         if self.variant != 'baseline':
             kwargs = dict(use_tf32=config.connection_backend == 'nvidia', fused_grad_acc=config.fused_connection_grad,
@@ -107,6 +119,15 @@ class ConnectionBlock(Block):
 
     def forward(self, x, cos, sin, kv_cache=None):
         if self.variant == 'baseline':
+            if self.attention_loops > 1:
+                if kv_cache is not None:
+                    raise ValueError('Attention looping requires separate per-loop KV caches; cached decoding is not implemented')
+                # The SAME Q/K/V/O parameters see a refined hidden each time.
+                # There is no detach, loop-specific parameter, or repeated MLP.
+                for iteration in range(self.attention_loops):
+                    window = (-1, 0) if iteration == self.attention_loops - 1 else (self.attention_loop_window - 1, 0)
+                    x = x + self.attn(norm(x), None, (cos, sin), window, None)
+                return x + self.mlp(norm(x))
             return super().forward(x, None, (cos, sin), (-1, 0), kv_cache)
         h, skip, post = self.attn_connection.read(x)
         y = (self.compiled_attention or self.attention_branch)(h, cos, sin, kv_cache)

@@ -9,6 +9,12 @@ from nanochat.connection_model import ConnectionConfig, ConnectionModel
 def configure_attention(backend):
     if backend == 'auto':
         return
+    if backend == 'fa3':
+        from nanochat import flash_attention
+        if not flash_attention.HAS_FA3:
+            raise RuntimeError('FA3 was explicitly requested but could not load; refusing SDPA fallback')
+        flash_attention.USE_FA3 = True
+        return
     if backend != 'sdpa_cudnn':
         raise ValueError(backend)
     from nanochat import flash_attention
