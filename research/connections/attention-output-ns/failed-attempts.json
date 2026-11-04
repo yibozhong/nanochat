@@ -1,0 +1,14 @@
+[
+  {
+    "job": "7810669.0",
+    "source": "fb863952810d5efd4d75a6daf4a7fe253d7b9f4d",
+    "passed": 15,
+    "failed": 2,
+    "failures": [
+      "Real512 BF16 scaled Gram error0.209633 exceeds0.2",
+      "Compiled post-step vs eager individual projection relative L2 about0.067 exceeds0.015"
+    ],
+    "formal_training_submitted": false,
+    "decision": "Keep production math unchanged during a separate read-only GPU numerical audit; compare FP64 scalar spectral oracle, compiled/eager BF16 and explicit FP32 pointwise with BF16 GEMMs."
+  }
+]
