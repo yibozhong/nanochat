@@ -1,0 +1,30 @@
+{
+  "name": "FFN-Width Residual",
+  "scope": "Optional ordinary full-attention vanilla; native and NVIDIA mHC remain unchanged and reject enabling this option.",
+  "user_correction": "SwiGLU was illustrative. Keep the original ReLU-squared MLP, its parameters, dimensions and initialization.",
+  "activation": "z = relu(c_fc(norm(h_after_attention))) ** 2",
+  "read": "r = RMSNorm(old_s, eps=1e-6) * RMS(z), independently per token over the FFN width",
+  "output": "h_after_attention + c_proj(z + r)",
+  "write": "new_s = old_s + original_z; out of place, after reading old_s",
+  "state": "[B,T,4D], zeros each forward; depth-local runtime tensor, never a parameter, buffer or checkpoint field; no detach",
+  "dtype": "BF16 state/activations; FP32 RMS reductions (FP64 in oracle); exact zero RMS(z) uses vector_norm with finite zero subgradient",
+  "unchanged": ["attention", "both hidden identity residuals", "parameter names/count/initialization", "MuonAdamW groups and learning rates", "NTP objective", "data/tokenizer", "batch size"],
+  "parameters": 58720256,
+  "additional_parameters": 0,
+  "coefficient": 1,
+  "additional_gemm_flops": 0,
+  "live_state_bytes_micro16_t2048_d512_bf16": 134217728,
+  "memory_caveat": "Backward saves more than one live state. Actual training peak and elementwise overhead must be measured.",
+  "gate": {
+    "unit_and_regression_checks": 28,
+    "profile": "Same GPU, original FA3 full attention, B16 T2048 D512 depth8; baseline then enabled, each20 warmup+40 timed updates",
+    "restart": "Separate processes25 -> exit85 ->50; full305176-step LR horizon; exact optimizer/RNG tested separately with fixed gradients",
+    "cache": "Existing packed2K gate prefix, no new tokenization or large cache",
+    "minimum_vram_mib": 22000,
+    "reserved_limit_fraction": 0.9,
+    "wandb": false,
+    "return_weights": false
+  },
+  "formal_training_authorized": false,
+  "limitations": "Short checks do not establish convergence, long-run stability, or a quality advantage. No10B training is submitted by this workflow."
+}

@@ -32,8 +32,11 @@ class ConnectionConfig:
     architecture: str = 'vanilla'
     window_pattern: str = 'SSSL'  # native only; vanilla is always full attention
     attention_kernel: str = 'original'
+    ffn_width_residual: bool = False
 
     def __post_init__(self):
+        if self.ffn_width_residual and (self.architecture != 'vanilla' or self.variant != 'baseline'):
+            raise ValueError('FFN-Width Residual currently supports ordinary vanilla only')
         if self.attention_kernel not in ('original','fla_triton'):
             raise ValueError('Unknown attention kernel')
         if self.attention_kernel == 'fla_triton' and (self.architecture != 'vanilla' or self.variant != 'baseline'):
@@ -103,6 +106,14 @@ class ConnectionBlock(Block):
     def mlp_branch(self, h):
         return self.mlp(norm(h))
 
+    def forward_ffn_width(self, x, state, cos, sin, kv_cache=None):
+        from nanochat.ffn_width_residual import ffn_width_residual
+        x = x + self.attention_branch(x, cos, sin, kv_cache)
+        # Keep the original ReLU-squared FFN and its original parameter names.
+        z = F.relu(self.mlp.c_fc(norm(x))).square()
+        mixed, state = ffn_width_residual(z, state)
+        return x + self.mlp.c_proj(mixed), state
+
     def forward(self, x, cos, sin, kv_cache=None):
         if self.variant == 'baseline':
             return super().forward(x, None, (cos, sin), (-1, 0), kv_cache)
@@ -164,7 +175,8 @@ class ConnectionModel(nn.Module):
         self.wte.to(dtype=dtype)
         self.cos = self.cos.to(dtype); self.sin = self.sin.to(dtype)
         if compile_blocks and self.config.variant == 'baseline':
-            self.compiled_steps = [torch.compile(b.forward, dynamic=False, fullgraph=True) for b in self.blocks]
+            self.compiled_steps = [torch.compile(b.forward_ffn_width if self.config.ffn_width_residual else b.forward,
+                                                dynamic=False, fullgraph=True) for b in self.blocks]
         elif compile_blocks:
             # NVIDIA TE supplies its own kernels and custom backward.
             # Compile only the unchanged attention/MLP branches with Inductor.
@@ -181,6 +193,20 @@ class ConnectionModel(nn.Module):
         if self.config.variant != 'baseline':
             x = expand_streams(x, self.config.streams)
         cos, sin = self.cos[:, start:start+idx.shape[1]], self.sin[:, start:start+idx.shape[1]]
+        if self.config.ffn_width_residual:
+            # Runtime-local only: each token has its own state, carried across
+            # depth, freshly zeroed for every forward/prefill/decode call.
+            width = self.blocks[0].mlp.c_fc.out_features
+            state = x.new_zeros((*x.shape[:2], width))
+            for i, b in enumerate(self.blocks):
+                fn = self.compiled_steps[i] if self.compiled_steps is not None else b.forward_ffn_width
+                if self.config.activation_checkpoint and self.training and torch.is_grad_enabled():
+                    if kv_cache is not None:
+                        raise ValueError('Activation checkpointing cannot mutate a KV cache')
+                    x, state = checkpoint(fn, x, state, cos, sin, use_reentrant=False)
+                else:
+                    x, state = fn(x, state, cos, sin, kv_cache)
+            return norm(x)
         for i, b in enumerate(self.blocks):
             fn = self.compiled_steps[i] if self.compiled_steps is not None else b.forward
             if self.config.activation_checkpoint and self.training and torch.is_grad_enabled():
