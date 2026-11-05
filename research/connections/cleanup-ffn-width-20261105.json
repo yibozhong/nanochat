@@ -1,0 +1,18 @@
+{
+  "reason": "User rejected FFN-width result and requested rollback; replace with Wide Residual Stream",
+  "job": "7815469.0",
+  "time": 1793859472.1182976,
+  "automatic_continuation": false,
+  "last_logged_step": {
+    "step": 10270,
+    "tokens": 336527360,
+    "loss": 3.82216215133667,
+    "seconds": 0.06478516943752766,
+    "lr_multiplier": 1.0
+  },
+  "cancel_stdout": "Job 7815469.0 marked for removal\n",
+  "previous_head": "79fecb277baec301579c538a0aabb61e4b1e9783",
+  "restored_runtime_base": "2d417e129bff81c30b941242bdbb4e4a1f890bf4",
+  "wandb_retained": "d72f013b",
+  "note": "User rejected this experiment; last log is partial training, not10B result. No new checkpoint preservation requested."
+}
