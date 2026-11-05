@@ -1,0 +1,460 @@
+{
+  "complete": true,
+  "formal_training": false,
+  "source": {
+    "commit": "7daac76e21d5e4298fa262ddb922d979aa775566",
+    "formal_training": false,
+    "purpose": "A100/FA2 shared4->16->ReLU->4 stream mixing; original NVIDIA pre/post; no Sinkhorn",
+    "attention_backend": "fa2",
+    "gpu_family": "A100"
+  },
+  "checks": {
+    "tests": 12,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "profiles": {
+    "mhc_stream_mlp": {
+      "complete": true,
+      "variant": "mhc_stream_mlp",
+      "sequence_length": 2048,
+      "microbatch": 16,
+      "grad_accum": 1,
+      "batch_tokens": 32768,
+      "repetition": 0,
+      "probe": false,
+      "model": {
+        "variant": "mhc_stream_mlp",
+        "depth": 8,
+        "width": 512,
+        "heads": 4,
+        "sequence_length": 2048,
+        "vocab_size": 32768,
+        "streams": 4,
+        "sinkhorn_iterations": 20,
+        "activation_checkpoint": false,
+        "connection_backend": "nvidia",
+        "fused_connection_grad": false,
+        "architecture": "vanilla",
+        "window_pattern": "SSSL",
+        "attention_kernel": "original"
+      },
+      "logging_backend": "local",
+      "gpu": "NVIDIA A100-SXM4-40GB",
+      "gpu_uuid": "ebc70bbe-26fa-01af-ba2f-340326dc273e",
+      "device_total_bytes": 42406903808,
+      "torch": "2.10.0+cu130",
+      "cuda": "13.0",
+      "attention_backend": "fa2",
+      "minimum_gpu_bytes": 23068672000,
+      "memory_limit_bytes": 20761804800,
+      "nvidia_tf32_override": null,
+      "source": {
+        "commit": "7daac76e21d5e4298fa262ddb922d979aa775566",
+        "formal_training": false,
+        "purpose": "A100/FA2 shared4->16->ReLU->4 stream mixing; original NVIDIA pre/post; no Sinkhorn",
+        "attention_backend": "fa2",
+        "gpu_family": "A100"
+      },
+      "seed": 42,
+      "data_note": "Re-segment existing packed tokens for performance, not long-document quality.\n\n    Original 2049-token rows are independent packed examples. Flattening them\n    does not recover original document continuity. All variants use the same\n    deterministic examples at a given context length; no new cache is saved.\n    ",
+      "timing_includes": "CPU data copy/H2D, CCE, backward, finite checks, MuonAdamW",
+      "warmup_steps": 20,
+      "timed_steps": 40,
+      "input_sha256": "d48c02ea5fc901d04770addea3ff74a997f1e76d31985439fae15a1ae477560d",
+      "parameters": 58992805,
+      "setup_and_warmup_seconds": 60.876415241509676,
+      "first_step_including_compilation_seconds": 55.63340796157718,
+      "losses": [
+        10.397918701171875,
+        10.394294738769531,
+        10.386880874633789,
+        10.377007484436035,
+        10.35873031616211,
+        10.332108497619629,
+        10.286258697509766,
+        10.227728843688965,
+        10.142772674560547,
+        10.00174331665039,
+        9.843585014343262,
+        9.613479614257812,
+        9.379207611083984,
+        9.157726287841797,
+        8.857322692871094,
+        8.61075210571289,
+        8.31803035736084,
+        8.098511695861816,
+        7.878824234008789,
+        7.726983070373535,
+        7.55281925201416,
+        7.507500648498535,
+        7.4676055908203125,
+        7.436805725097656,
+        7.429431915283203,
+        7.382503509521484,
+        7.215380668640137,
+        7.210829257965088,
+        7.18209171295166,
+        7.105619430541992,
+        7.116005897521973,
+        7.031579971313477,
+        6.982116222381592,
+        6.962403297424316,
+        6.968836784362793,
+        6.8805999755859375,
+        6.766119480133057,
+        6.795672416687012,
+        6.713954925537109,
+        6.783408164978027,
+        6.691241264343262,
+        6.69107723236084,
+        6.651919841766357,
+        6.813448905944824,
+        6.55306339263916,
+        6.614072799682617,
+        6.629210472106934,
+        6.5164475440979,
+        6.534609794616699,
+        6.575984954833984,
+        6.554069519042969,
+        6.401022911071777,
+        6.53486967086792,
+        6.430706024169922,
+        6.392726421356201,
+        6.532285690307617,
+        6.406560897827148,
+        6.498971462249756,
+        6.480676174163818,
+        6.415576457977295
+      ],
+      "optimizer_updates": 60,
+      "training_tokens": 1966080,
+      "peak_allocated_bytes": 9093470208,
+      "peak_reserved_bytes": 9370075136,
+      "fits_minimum_gpu_budget": true,
+      "step_seconds": [
+        0.2626945674419403,
+        0.25945386476814747,
+        0.2623995505273342,
+        0.2603538390249014,
+        0.2600423526018858,
+        0.26081113517284393,
+        0.2599730808287859,
+        0.2601382117718458,
+        0.2596694342792034,
+        0.2595798335969448,
+        0.26225925981998444,
+        0.26056290604174137,
+        0.2600875925272703,
+        0.2598482333123684,
+        0.25968557596206665,
+        0.2614164687693119,
+        0.26040641963481903,
+        0.2598215639591217,
+        0.2599302642047405,
+        0.2596196662634611,
+        0.2624289505183697,
+        0.26010616309940815,
+        0.2596891149878502,
+        0.2596265338361263,
+        0.2595225553959608,
+        0.26105525344610214,
+        0.25973258540034294,
+        0.2596348039805889,
+        0.2596137747168541,
+        0.2595118172466755,
+        0.2598219532519579,
+        0.25960028544068336,
+        0.2596325892955065,
+        0.25945567712187767,
+        0.25955130346119404,
+        0.2620819918811321,
+        0.2602720595896244,
+        0.2595383767038584,
+        0.2595922853797674,
+        0.2595482748001814
+      ],
+      "mean_seconds": 0.2602192542515695,
+      "median_seconds": 0.2598217586055398,
+      "stdev_seconds": 0.0009376092534840869,
+      "tokens_per_second": 125924.5788488857,
+      "estimated_10b_training_hours": 22.059075315410272,
+      "causal_prefix_max_abs": 0.0,
+      "causality_passed": true,
+      "status": "fits"
+    }
+  },
+  "probes": {
+    "initial": {
+      "complete": true,
+      "variant": "mhc_stream_mlp",
+      "step": 0,
+      "probe_tokens": 2048,
+      "ce": 10.39841365814209,
+      "layers": {
+        "0/attn_connection": {
+          "input_rms": 1.0000030994415283,
+          "branch_rms": 0.0,
+          "output_rms": 1.0000030994415283,
+          "output_gradient_rms": 1.2131476978538558e-07
+        },
+        "0/mlp_connection": {
+          "input_rms": 1.0000030994415283,
+          "branch_rms": 0.0,
+          "output_rms": 1.0000030994415283,
+          "output_gradient_rms": 1.2131476978538558e-07
+        },
+        "1/attn_connection": {
+          "input_rms": 1.0000030994415283,
+          "branch_rms": 0.0,
+          "output_rms": 1.0000030994415283,
+          "output_gradient_rms": 1.2131476978538558e-07
+        },
+        "1/mlp_connection": {
+          "input_rms": 1.0000030994415283,
+          "branch_rms": 0.0,
+          "output_rms": 1.0000030994415283,
+          "output_gradient_rms": 1.2131476978538558e-07
+        },
+        "2/attn_connection": {
+          "input_rms": 1.0000030994415283,
+          "branch_rms": 0.0,
+          "output_rms": 1.0000030994415283,
+          "output_gradient_rms": 1.2131476978538558e-07
+        },
+        "2/mlp_connection": {
+          "input_rms": 1.0000030994415283,
+          "branch_rms": 0.0,
+          "output_rms": 1.0000030994415283,
+          "output_gradient_rms": 1.2131476978538558e-07
+        },
+        "3/attn_connection": {
+          "input_rms": 1.0000030994415283,
+          "branch_rms": 0.0,
+          "output_rms": 1.0000030994415283,
+          "output_gradient_rms": 1.2131476978538558e-07
+        },
+        "3/mlp_connection": {
+          "input_rms": 1.0000030994415283,
+          "branch_rms": 0.0,
+          "output_rms": 1.0000030994415283,
+          "output_gradient_rms": 1.2131476978538558e-07
+        },
+        "4/attn_connection": {
+          "input_rms": 1.0000030994415283,
+          "branch_rms": 0.0,
+          "output_rms": 1.0000030994415283,
+          "output_gradient_rms": 1.2131476978538558e-07
+        },
+        "4/mlp_connection": {
+          "input_rms": 1.0000030994415283,
+          "branch_rms": 0.0,
+          "output_rms": 1.0000030994415283,
+          "output_gradient_rms": 1.2131476978538558e-07
+        },
+        "5/attn_connection": {
+          "input_rms": 1.0000030994415283,
+          "branch_rms": 0.0,
+          "output_rms": 1.0000030994415283,
+          "output_gradient_rms": 1.2131476978538558e-07
+        },
+        "5/mlp_connection": {
+          "input_rms": 1.0000030994415283,
+          "branch_rms": 0.0,
+          "output_rms": 1.0000030994415283,
+          "output_gradient_rms": 1.2131476978538558e-07
+        },
+        "6/attn_connection": {
+          "input_rms": 1.0000030994415283,
+          "branch_rms": 0.0,
+          "output_rms": 1.0000030994415283,
+          "output_gradient_rms": 1.2131476978538558e-07
+        },
+        "6/mlp_connection": {
+          "input_rms": 1.0000030994415283,
+          "branch_rms": 0.0,
+          "output_rms": 1.0000030994415283,
+          "output_gradient_rms": 1.2131476978538558e-07
+        },
+        "7/attn_connection": {
+          "input_rms": 1.0000030994415283,
+          "branch_rms": 0.0,
+          "output_rms": 1.0000030994415283,
+          "output_gradient_rms": 1.2131476978538558e-07
+        },
+        "7/mlp_connection": {
+          "input_rms": 1.0000030994415283,
+          "branch_rms": 0.0,
+          "output_rms": 1.0000030994415283,
+          "output_gradient_rms": 1.2131476978538558e-07
+        }
+      },
+      "parameters_finite": true,
+      "gradients_finite": true,
+      "maximum_output_rms": 1.0000030994415283,
+      "scope": "Fixed one2K dev sequence; no optimizer update; short diagnostics do not establish long-term stability"
+    },
+    "trained": {
+      "complete": true,
+      "variant": "mhc_stream_mlp",
+      "step": 128,
+      "probe_tokens": 2048,
+      "ce": 5.859989166259766,
+      "layers": {
+        "0/attn_connection": {
+          "input_rms": 0.9999642372131348,
+          "branch_rms": 0.07982069253921509,
+          "output_rms": 0.9085351824760437,
+          "output_gradient_rms": 2.7190910714125494e-06
+        },
+        "0/mlp_connection": {
+          "input_rms": 0.9085351824760437,
+          "branch_rms": 0.06727305054664612,
+          "output_rms": 0.887481153011322,
+          "output_gradient_rms": 2.7180442430108087e-06
+        },
+        "1/attn_connection": {
+          "input_rms": 0.887481153011322,
+          "branch_rms": 0.07860653102397919,
+          "output_rms": 0.8855690360069275,
+          "output_gradient_rms": 2.600007974251639e-06
+        },
+        "1/mlp_connection": {
+          "input_rms": 0.8855690360069275,
+          "branch_rms": 0.06027418002486229,
+          "output_rms": 0.9371588230133057,
+          "output_gradient_rms": 2.509758132873685e-06
+        },
+        "2/attn_connection": {
+          "input_rms": 0.9371588230133057,
+          "branch_rms": 0.0829160287976265,
+          "output_rms": 1.0044636726379395,
+          "output_gradient_rms": 2.3790751129126875e-06
+        },
+        "2/mlp_connection": {
+          "input_rms": 1.0044636726379395,
+          "branch_rms": 0.05437195301055908,
+          "output_rms": 1.1190000772476196,
+          "output_gradient_rms": 2.2782699033996323e-06
+        },
+        "3/attn_connection": {
+          "input_rms": 1.1190000772476196,
+          "branch_rms": 0.13319824635982513,
+          "output_rms": 1.2260676622390747,
+          "output_gradient_rms": 2.0599384242814267e-06
+        },
+        "3/mlp_connection": {
+          "input_rms": 1.2260676622390747,
+          "branch_rms": 0.05714087933301926,
+          "output_rms": 1.3956865072250366,
+          "output_gradient_rms": 1.9594958757807035e-06
+        },
+        "4/attn_connection": {
+          "input_rms": 1.3956865072250366,
+          "branch_rms": 0.12736938893795013,
+          "output_rms": 1.560879111289978,
+          "output_gradient_rms": 1.8590462786960416e-06
+        },
+        "4/mlp_connection": {
+          "input_rms": 1.560879111289978,
+          "branch_rms": 0.06076887995004654,
+          "output_rms": 1.7662972211837769,
+          "output_gradient_rms": 1.8054689689961378e-06
+        },
+        "5/attn_connection": {
+          "input_rms": 1.7662972211837769,
+          "branch_rms": 0.13021795451641083,
+          "output_rms": 1.9628214836120605,
+          "output_gradient_rms": 1.760587338139885e-06
+        },
+        "5/mlp_connection": {
+          "input_rms": 1.9628214836120605,
+          "branch_rms": 0.06634785979986191,
+          "output_rms": 2.180227756500244,
+          "output_gradient_rms": 1.7509324834463769e-06
+        },
+        "6/attn_connection": {
+          "input_rms": 2.180227756500244,
+          "branch_rms": 0.15688911080360413,
+          "output_rms": 2.3902671337127686,
+          "output_gradient_rms": 1.7414098465451389e-06
+        },
+        "6/mlp_connection": {
+          "input_rms": 2.3902671337127686,
+          "branch_rms": 0.07772116363048553,
+          "output_rms": 2.6196956634521484,
+          "output_gradient_rms": 1.7436276493754121e-06
+        },
+        "7/attn_connection": {
+          "input_rms": 2.6196956634521484,
+          "branch_rms": 0.18279752135276794,
+          "output_rms": 2.8744494915008545,
+          "output_gradient_rms": 1.7352811028104043e-06
+        },
+        "7/mlp_connection": {
+          "input_rms": 2.8744494915008545,
+          "branch_rms": 0.08726061880588531,
+          "output_rms": 3.1739253997802734,
+          "output_gradient_rms": 1.7447575828555273e-06
+        }
+      },
+      "parameters_finite": true,
+      "gradients_finite": true,
+      "maximum_output_rms": 3.1739253997802734,
+      "scope": "Fixed one2K dev sequence; no optimizer update; short diagnostics do not establish long-term stability"
+    }
+  },
+  "restart": {
+    "complete": true,
+    "variant": "mhc_stream_mlp",
+    "run_id": "stream-mlp-restart",
+    "steps": 128,
+    "training_tokens": 4194304,
+    "initial_dev_ce": 10.398012638092041,
+    "final_dev_ce": 5.885648727416992,
+    "best_dev_ce": 5.885648727416992,
+    "dev_tokens": 131072,
+    "training_seconds": 40.063811553642154,
+    "elapsed_seconds": 115.30596733093262,
+    "steady_step_seconds": 0.2597347017257444,
+    "gpu": "NVIDIA A100-SXM4-40GB",
+    "peak_allocated_bytes": 9194133504,
+    "peak_reserved_bytes": 9397338112,
+    "source": {
+      "commit": "7daac76e21d5e4298fa262ddb922d979aa775566",
+      "formal_training": false,
+      "purpose": "A100/FA2 shared4->16->ReLU->4 stream mixing; original NVIDIA pre/post; no Sinkhorn",
+      "attention_backend": "fa2",
+      "gpu_family": "A100"
+    },
+    "test_evaluated": false,
+    "checkpoint_files": {
+      "latest.pt": {
+        "bytes": 506893460,
+        "sha256": "c0d424ea866697e8170727044666b8f38396e920034f7a0b1a1ecbbb947bec8f"
+      },
+      "best.pt": {
+        "bytes": 202459796,
+        "sha256": "6095a3dd8d2aea460e13f9ff151efc8b90132b11e82a56e03ca1317d7852b00b"
+      }
+    }
+  },
+  "attention_backend": "fa2",
+  "comparison_profiles": false,
+  "limitations": "A100/FA2 only; no baseline comparison. 60-step capacity/timing,128-step finite training and25->128 process restart. No long-run quality/stability claim.",
+  "hardware_policy_audit": {
+    "gpu_validated_model_commit": "7daac76e21d5e4298fa262ddb922d979aa775566",
+    "policy_commit": "95b82f3961496466c16e226a20c1dc49fd0cbfc5",
+    "changed_runtime_policy_paths": [
+      "nanochat/connection_experiment.py",
+      "scripts/connection_context_profile.py",
+      "scripts/connection_stream_mlp_gate.py",
+      "scripts/connection_stream_mlp_preflight.py",
+      "scripts/connection_train.py"
+    ],
+    "invariant": "All model, mixer, official NVIDIA ops, optimizer, precision and dependency files unchanged",
+    "additional_checks": "Formal worker tests hardware-selected backend plus full-batch finite updates before NTP training"
+  },
+  "job": "7825044.0"
+}
