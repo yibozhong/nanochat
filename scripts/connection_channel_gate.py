@@ -10,7 +10,10 @@ def main():
     def run(args,name,expected=0):
         print('BEGIN '+name,flush=True)
         with (root/(name+'.log')).open('w') as log:
-            proc=subprocess.run([sys.executable,*args],stdout=log,stderr=subprocess.STDOUT)
+            proc=subprocess.Popen([sys.executable,*args],stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True)
+            for line in proc.stdout:
+                log.write(line);print(line,end='',flush=True)
+            proc.wait()
         assert proc.returncode==expected,(name,proc.returncode)
         print('PASS '+name,flush=True)
     run(['-m','pytest','-v','tests/test_channel_mixing.py','tests/test_connection_training_resume.py',
@@ -28,6 +31,8 @@ def main():
              '--microbatch','16','--attention-backend','fa3','--output',str(root/(v+'.json'))],'profile-'+v)
         p=json.loads((root/(v+'.json')).read_text());profiles[v]=p
         assert p['complete'] and p['status']=='fits' and p['causality_passed'],p
+        expected_params=58720256 if v=='baseline' else 59646133 if v==VARIANT else 59515317
+        assert p['parameters']==expected_params,(v,p['parameters'],expected_params)
         assert p['optimizer_updates']==60 and p['peak_reserved_bytes']<int(.9*22000*1024**2)
     assert len({p['gpu_uuid'] for p in profiles.values()})==1
     assert len({p['input_sha256'] for p in profiles.values()})==1

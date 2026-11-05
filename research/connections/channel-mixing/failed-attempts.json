@@ -1,0 +1,153 @@
+[
+  {
+    "job": "7816438.0",
+    "source": "18c43e6d469754f1a0c273c9a4338a7b5bb9e048",
+    "exit_code": 1,
+    "passed": 14,
+    "failed": 2,
+    "reason": "AdamW compiled graph cache recompile_limit8 exhausted by new shape/dtype signatures; later legacy optimizer test inherited saturated cache",
+    "correction": "Derive cache budget from actual AdamW shape/dtype signatures, following native optimizer; no numeric threshold, optimizer or kernel change",
+    "checks": {
+      "oracle-131-128-1.0": {
+        "output": 0.0016602900457133717,
+        "gradients": [
+          0.0016509425542684207,
+          0.0016628042762895268,
+          4.916761162936025e-08,
+          1.5780556132265166e-07,
+          5.981195289026052e-08,
+          4.0676258441127826e-08
+        ]
+      },
+      "locality": {
+        "saved_shapes": [
+          [
+            2,
+            17,
+            128,
+            4
+          ],
+          [
+            2,
+            17,
+            128
+          ],
+          [
+            2,
+            17,
+            4
+          ],
+          [
+            128,
+            4,
+            4,
+            4
+          ],
+          [
+            128,
+            4,
+            4
+          ],
+          [
+            1
+          ]
+        ],
+        "no_cross_token_or_channel_path": true
+      },
+      "oracle-1-128-1.0": {
+        "output": 0.001733076767376759,
+        "gradients": [
+          0.0015923400866625188,
+          0.001572684651718213,
+          4.601611186954259e-08,
+          4.98227781001238e-08,
+          0.0,
+          2.6052472467014837e-08
+        ]
+      },
+      "oracle-17-128-0.0": {
+        "output": 0.0016362926589844578,
+        "gradients": [
+          0.0016489558509850688,
+          0.0016723081908905629,
+          4.7801945685869496e-08,
+          0.0,
+          0.0,
+          0.0
+        ]
+      },
+      "oracle-17-128-0.0001": {
+        "output": 0.0016327285771402039,
+        "gradients": [
+          0.0016608581690181249,
+          0.0016723081908905629,
+          4.7801945685869496e-08,
+          7.765502811572208e-08,
+          2.081748970234004e-08,
+          3.148204632441142e-07
+        ]
+      },
+      "oracle-129-512-1.0": {
+        "output": 0.0016633355018102014,
+        "gradients": [
+          0.0016593842250708724,
+          0.001659336947897815,
+          5.7296062344594065e-08,
+          1.5689585545387242e-07,
+          5.868591085054162e-08,
+          9.094237505139096e-08
+        ]
+      },
+      "model": {
+        "ce": 4.852324485778809,
+        "dense": 4.852324485778809,
+        "gradients": {
+          "wte.weight": 0.0,
+          "blocks.0.attn.c_q.weight": 0.0,
+          "blocks.0.attn.c_k.weight": 0.0,
+          "blocks.0.attn.c_v.weight": 0.0,
+          "blocks.0.attn.c_proj.weight": 0.0,
+          "blocks.0.mlp.c_fc.weight": 0.0,
+          "blocks.0.mlp.c_proj.weight": 0.0,
+          "blocks.0.attn_connection.phi": 0.0,
+          "blocks.0.attn_connection.bias": 0.0,
+          "blocks.0.attn_connection.scales": 0.0,
+          "blocks.0.attn_connection.mix_weight": 0.0,
+          "blocks.0.attn_connection.mix_bias": 0.0,
+          "blocks.0.attn_connection.mix_scale": 0.0,
+          "blocks.0.mlp_connection.phi": 0.0,
+          "blocks.0.mlp_connection.bias": 0.0,
+          "blocks.0.mlp_connection.scales": 0.0,
+          "blocks.0.mlp_connection.mix_weight": 0.0,
+          "blocks.0.mlp_connection.mix_bias": 0.0,
+          "blocks.0.mlp_connection.mix_scale": 0.0,
+          "blocks.1.attn.c_q.weight": 0.0,
+          "blocks.1.attn.c_k.weight": 0.0,
+          "blocks.1.attn.c_v.weight": 0.0,
+          "blocks.1.attn.c_proj.weight": 0.0,
+          "blocks.1.mlp.c_fc.weight": 0.0,
+          "blocks.1.mlp.c_proj.weight": 0.0,
+          "blocks.1.attn_connection.phi": 0.0,
+          "blocks.1.attn_connection.bias": 0.0,
+          "blocks.1.attn_connection.scales": 0.0,
+          "blocks.1.attn_connection.mix_weight": 0.0,
+          "blocks.1.attn_connection.mix_bias": 0.0,
+          "blocks.1.attn_connection.mix_scale": 0.0,
+          "blocks.1.mlp_connection.phi": 0.0,
+          "blocks.1.mlp_connection.bias": 0.0,
+          "blocks.1.mlp_connection.scales": 0.0,
+          "blocks.1.mlp_connection.mix_weight": 0.0,
+          "blocks.1.mlp_connection.mix_bias": 0.0,
+          "blocks.1.mlp_connection.mix_scale": 0.0,
+          "lm_head.weight": 0.0,
+          "stream_head.phi": 0.0,
+          "stream_head.scale": 0.0,
+          "stream_head.bias": 0.0
+        },
+        "sinkhorn_calls": 0,
+        "causal_tokens": 2048
+      }
+    },
+    "scope": "No profile, restart or formal training completed"
+  }
+]

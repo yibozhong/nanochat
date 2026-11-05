@@ -6,7 +6,7 @@
   "depth": 8,
   "local_generator": "v_c = x_c / sqrt(mean(x_c**2)+FP32eps); M_c = bias_c + scale * einsum(v_c,W_c)",
   "orientation": "x row-vector @ M; matrix axes[input stream,output stream]",
-  "parameters": "independent W_c[4,4,4],bias_c[4,4] per channel and connector; one learned mixing scale per connector",
+  "parameters": 59646133,
   "init": "W normal std0.5, bias identity, scale0.01; H_pre/H_post and backbone/RNG matched to old mHC",
   "routing": "original NVIDIA global H_pre/H_post and final collapse; no Sinkhorn, softmax, clipping or matrix constraints",
   "kernel": "fused local RMS/generation/mixing/branch-write; hand-derived backward; no coefficient bank saved or materialized; deterministic partial reduction",
@@ -31,5 +31,6 @@
     "best_separate": true
   },
   "monitoring": "300-second checks; finish goal and stop monitoring at first finite formal training step",
-  "limitations": "Only vanilla integration initially; NVIDIA fused grad buffer deliberately unsupported. FP32 routing/reductions,BF16 activations, no full dynamic cross-channel matrix."
+  "limitations": "Only vanilla integration initially; NVIDIA fused grad buffer deliberately unsupported. FP32 routing/reductions,BF16 activations, no full dynamic cross-channel matrix.",
+  "additional_parameters_vs_shared_mhc": 130816
 }

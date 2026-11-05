@@ -10,7 +10,7 @@ import time
 import uuid
 
 REPO=Path(__file__).resolve().parents[3]
-GATE=Path('/home/yzhong239/channel-mixing-gate-20261105')
+GATE=Path('/home/yzhong239/channel-mixing-gate-20261105-r2')
 ASSETS=Path('/home/yzhong239/nanochat-runtime-assets')
 KEY='channel-mixing-10b-20261105'
 STEPS=305176
