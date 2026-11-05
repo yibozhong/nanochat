@@ -1,5 +1,5 @@
-"""A100/FA2 stream MLP correctness, capacity and resume; no comparison runs/W&B."""
-import json,math,subprocess,sys
+"""Hardware-selected stream MLP correctness, capacity and resume; no comparison runs/W&B."""
+import json,math,subprocess,sys,os
 from pathlib import Path
 import xml.etree.ElementTree as ET
 
@@ -16,7 +16,7 @@ def main():
             proc.wait()
         assert proc.returncode==expected,(name,proc.returncode)
         print('PASS '+name,flush=True)
-    run(['-m','pytest','-v','tests/test_stream_mlp.py','tests/test_stream_mlp_a100.py',
+    run(['-m','pytest','-v','tests/test_stream_mlp.py','tests/test_stream_mlp_backend.py',
          '--junitxml='+str(root/'tests.xml')],'tests')
     suites=ET.parse(root/'tests.xml').getroot().findall('testsuite')
     counts={k:sum(int(s.get(k,0)) for s in suites) for k in ('tests','failures','errors','skipped')}
@@ -24,7 +24,7 @@ def main():
     profiles={}
     for v in (VARIANT,):
         run(['-m','scripts.connection_context_profile','--variant',v,'--sequence-length','2048',
-             '--microbatch','16','--attention-backend','fa2','--output',str(root/(v+'.json'))],'profile-'+v)
+             '--microbatch','16','--attention-backend','hardware_auto','--output',str(root/(v+'.json'))],'profile-'+v)
         p=json.loads((root/(v+'.json')).read_text());profiles[v]=p
         assert p['complete'] and p['status']=='fits' and p['causality_passed'],p
         expected_params=58992805
@@ -35,7 +35,7 @@ def main():
     run(['-m','scripts.connection_stream_mlp_probe','--output',str(root/'initial-probe.json')],'initial-probe')
     args=['-m','scripts.connection_train','--variant',VARIANT,'--matched-backbone-init',
           '--steps','128','--schedule-steps','305176','--microbatch','16','--data-dir','../data',
-          '--attention-backend','fa2','--output-dir',str(root/'restart'),
+          '--attention-backend','hardware_auto','--output-dir',str(root/'restart'),
           '--checkpoint-dir','../stream-mlp-gate-checkpoints','--run-id','stream-mlp-restart',
           '--segment-seconds','3600','--segment-steps','25']
     run(args,'restart-first',85)
@@ -48,7 +48,8 @@ def main():
     assert [r['step'] for r in rows]==list(range(1,129)) and all(math.isfinite(r['loss']) for r in rows)
     assert summary['final_dev_ce']<summary['initial_dev_ce'] and math.isfinite(summary['final_dev_ce'])
     assert config['logging_backend']=='local' and config['applied_sinkhorn_iterations']==0
-    assert config['protocol']['attention_backend']=='fa2'
+    assert config['protocol']['attention_backend']=='hardware_auto'
+    assert config['actual_attention_backend']==os.environ['STREAM_MLP_ATTENTION_BACKEND']
     assert config['protocol']['grad_accum']==1 and config['protocol']['schedule_steps']==305176
     assert summary['peak_reserved_bytes']<int(.9*22000*1024**2)
     # Explicit post-optimizer finite-parameter audit (not only finite gradients).
@@ -60,8 +61,8 @@ def main():
     assert not list(Path('results').rglob('*.wandb'))
     result=dict(complete=True,formal_training=False,source=json.loads(Path('source.json').read_text()),
         checks=counts,profiles=profiles,probes={k:json.loads((root/(k+'-probe.json')).read_text()) for k in ('initial','trained')},restart=summary,
-        attention_backend='fa2',comparison_profiles=False,
-        limitations='A100/FA2 only; no baseline comparison. 60-step capacity/timing,128-step finite training and25->128 process restart. No long-run quality/stability claim.')
+        attention_backend=os.environ['STREAM_MLP_ATTENTION_BACKEND'],attention_policy='hardware_auto',comparison_profiles=False,
+        limitations='Hardware-selected Hopper/FA3 or A100/FA2; no baseline comparison. 60-step capacity/timing,128-step finite training and25->128 process restart. No long-run quality/stability claim.')
     (root/'validation.json').write_text(json.dumps(result,indent=2)+'\n')
     print(json.dumps({k:v for k,v in result.items() if k not in ('profiles','restart','micro')},indent=2),flush=True)
 if __name__=='__main__':main()

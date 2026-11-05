@@ -73,8 +73,7 @@ if [ "$SYSTEM_CUDA_DRIVER" -lt 13010 ]; then
     dpkg-deb -x cuda-compat-13-1_590.48.01-1_amd64.deb cuda-compat
     export LD_LIBRARY_PATH="$PWD/cuda-compat/usr/local/cuda-13.1/compat:$LD_LIBRARY_PATH"
 fi
-# PyTorch 2.10 embeds FA2; no download or FA3 initialization on A100.
-export NANOCHAT_DISABLE_FA3=1 STREAM_MLP_ATTENTION_BACKEND=fa2
+source nanochat-src/research/connections/stream-mlp/device.sh
 cd nanochat-src
 ln -sfn ../results results
 cp ../source.json source.json
@@ -84,13 +83,16 @@ from pathlib import Path
 assert importlib.util.find_spec('tile_kernels') is None
 assert importlib.util.find_spec('tilelang') is None
 assert torch.cuda.is_available() and torch.cuda.device_count()==1
-assert torch.cuda.get_device_capability()==(8,0) and 'A100' in torch.cuda.get_device_name()
+from nanochat.connection_experiment import resolve_attention_backend
+assert resolve_attention_backend('hardware_auto') in ('fa2','fa3')
 Path('results/device.json').write_text(json.dumps(dict(gpu=torch.cuda.get_device_name(),capability=torch.cuda.get_device_capability(),torch=torch.__version__),indent=2)+'\n')
 print('NVIDIA-only runtime verified; GPU:',torch.cuda.get_device_name(),flush=True)
 PY
 unset NVIDIA_TF32_OVERRIDE
+# Validate each hardware path locally once before this run uses it. No W&B or weights.
+WANDB_MODE=disabled python -m scripts.connection_stream_mlp_preflight
 python -m scripts.connection_train --architecture vanilla --variant mhc_stream_mlp --matched-backbone-init \
-    --sequence-length 2048 --attention-kernel original --attention-backend fa2 \
+    --sequence-length 2048 --attention-kernel original --attention-backend hardware_auto \
     --steps "$TASK_STEPS" --schedule-steps "$TASK_STEPS" --microbatch 16 --seed 42 \
     --no-activation-checkpoint --no-fused-connection-grad --evaluate-test \
     --data-dir ../data --output-dir results/train --checkpoint-dir ../checkpoints \

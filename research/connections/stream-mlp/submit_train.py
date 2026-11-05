@@ -1,9 +1,10 @@
-"""Submit the authorized single 10B run from the already validated GPU source."""
+"""Submit one10B run with a validated model and audited hardware-selection policy."""
 import fcntl
 import hashlib
 import json
 from pathlib import Path
 import shutil
+import runpy
 import subprocess
 import sys
 import time
@@ -39,9 +40,12 @@ def main(root,gate_root):
         assert gate['complete'] and gs['status'] in ('published','complete') and gate['job']==gs['job']
         assert gs['pushed_commit']==head
         assert gate['checks']==dict(tests=12,failures=0,errors=0,skipped=0)
-        assert gate['attention_backend']=='fa2' and not gate['comparison_profiles']
+        assert gate['attention_backend'] in ('fa2','fa3') and not gate['comparison_profiles']
         assert gate['restart']['steps']==128 and gate['restart']['complete']
-        model_commit=gate['source']['commit']
+        model_commit=gs.get('policy_commit',gate['source']['commit'])
+        if model_commit!=gate['source']['commit']:
+            audit=runpy.run_path(str(REPO/'research/connections/stream-mlp/policy_audit.py'))['check_policy_update'](gate['source']['commit'],model_commit)
+            assert gate['hardware_policy_audit']==audit
         changed=command(['git','diff','--name-only',model_commit,head,'--','nanochat','scripts',
                          'research/connections/runtime','research/connections/toolchain'],REPO)
         assert not changed,changed
@@ -51,13 +55,14 @@ def main(root,gate_root):
         assert runtime['complete'] and runtime['actual_eviction']
         for name in ('bundles','logs','results'):(root/name).mkdir(exist_ok=True)
         bundle=root/'bundles';wheel='transformer_engine_torch-2.20.2-cp311-cp311-linux_x86_64.whl'
-        shutil.copy2(GATE/'bundles/source.tar',bundle/'source.tar')
+        subprocess.run(['git','archive','--format=tar','--prefix=nanochat-src/','-o',str(bundle/'source.tar'),model_commit],cwd=REPO,check=True)
         (bundle/wheel).symlink_to(ASSETS/'bundles'/wheel)
         shutil.copy2(REPO/'research/connections/stream-mlp/train.sh',root/'train.sh')
         hashes=json.loads((ASSETS/'state.json').read_text())['source']['hashes'].copy()
         hashes.pop('gate-data.tar')
         hashes['source.tar']=hashlib.sha256((bundle/'source.tar').read_bytes()).hexdigest()
-        assert hashes['source.tar']==gs['hashes']['source.tar']
+        if model_commit==gate['source']['commit']:
+            assert hashes['source.tar']==gs['hashes']['source.tar']
         data_name=data['data_uri'].rsplit('/',1)[-1]
         hashes[data_name]=data['archive']['sha256']
         profile=dict(gate['profiles']['mhc_stream_mlp'])
@@ -66,14 +71,15 @@ def main(root,gate_root):
                     steps=STEPS,training_tokens=STEPS*32768,data_uri=data['data_uri'],wandb_group=KEY,
                     launcher_sha256=hashlib.sha256((root/'train.sh').read_bytes()).hexdigest(),
                     profile_reference=dict(mhc_stream_mlp=profile),checkpoint_upload_seconds=1800,
-                    attention_backend='fa2',gpu_family='A100')
+                    attention_backend='hardware_auto',gpu_family='Hopper_or_A100',
+                    gate_model_commit=gate['source']['commit'],hardware_preflight=True)
         (bundle/'source.json').write_text(json.dumps(source,indent=2)+'\n')
         hashes['source.json']=hashlib.sha256((bundle/'source.json').read_bytes()).hexdigest()
         (bundle/'inputs.sha256').write_text(''.join(v+'  '+k+'\n' for k,v in hashes.items()))
         run_id=uuid.uuid4().hex[:8]
         template=(ASSETS/'gate.sub').read_text()
         template=template.replace('gpus_minimum_capability = 9.0','gpus_minimum_capability = 8.0')
-        template=template.replace('(Capability == 9.0)', '(Capability == 8.0) && regexp("A100",DeviceName)')
+        template=template.replace('(Capability == 9.0)', '((Capability == 9.0) || ((Capability == 8.0) && regexp("A100",DeviceName)))')
         template=template.replace('executable = validate.sh',f'executable = train.sh\narguments = {run_id}')
         template=template.replace('request_disk = 40GB','request_disk = 80GB')
         template=template.replace('when_to_transfer_output = ON_EXIT',
@@ -110,6 +116,7 @@ def main(root,gate_root):
         assert '.netrc' in ad['EncryptInputFiles'] and 'nanochat-uv-v4.sif' in ad['TransferInput']
         assert data_name in ad['TransferInput'] and 'gate-data.tar' not in ad['TransferInput']
         assert ad['StreamMLPTrainKey']==KEY
+        assert 'Capability == 9.0' in ad['RequireGPUs'] and 'Capability == 8.0' in ad['RequireGPUs'] and 'A100' in ad['RequireGPUs']
         keys=['ClusterId','ProcId','JobStatus','NumJobStarts','RequestGPUs','RequestMemory','RequestDisk',
               'RequireGPUs','Rank','WantGPULab','SuccessCheckpointExitCode','TransferCheckpoint',
               'TransferOutput','TransferInput','EncryptInputFiles','ContainerImage','StreamMLPTrainKey']

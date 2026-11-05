@@ -43,7 +43,7 @@ def main():
     p.add_argument('--data-dir', default='data')
     p.add_argument('--output-dir', required=True)
     p.add_argument('--checkpoint-dir', default=None)
-    p.add_argument('--attention-backend', choices=('auto','sdpa_cudnn','fa3','fa2'), default='auto')
+    p.add_argument('--attention-backend', choices=('auto','sdpa_cudnn','fa3','fa2','hardware_auto'), default='auto')
     p.add_argument('--matched-backbone-init', action='store_true')
     p.add_argument('--evaluate-test', action='store_true')
     p.add_argument('--run-id', default=None)
@@ -63,7 +63,7 @@ def main():
     ckpt=Path(a.checkpoint_dir) if a.checkpoint_dir else out/'checkpoints'
     ckpt.mkdir(parents=True,exist_ok=True)
     torch.set_num_threads(2);torch.backends.cuda.matmul.allow_tf32=False
-    configure_attention(a.attention_backend)
+    actual_attention_backend = configure_attention(a.attention_backend)
     seed_all(a.seed)
     c=ConnectionConfig(variant=a.variant,streams=a.streams,sinkhorn_iterations=a.sinkhorn_iterations,
                        sequence_length=a.sequence_length,
@@ -113,6 +113,7 @@ def main():
             method='exit85 plus scheduler transfer; local save alone is not durable'),
         gpu=torch.cuda.get_device_name(),torch=torch.__version__,cuda=torch.version.cuda,
         gpu_capability=list(torch.cuda.get_device_capability()),
+        actual_attention_backend=actual_attention_backend,
         explicit_portability_gate=os.environ.get('NANOCHAT_MHC_TEST_PORTABILITY')=='1',
         parameters=sum(p.numel() for p in model.parameters()),
         residual_mixing=('sinkhorn' if a.variant=='mhc' else
@@ -130,7 +131,8 @@ def main():
     config['compute_estimate']=cost
     profile_reference=source.get('profile_reference',{}).get(a.variant)
     if profile_reference:
-        config['same_gpu_profile_reference']=profile_reference
+        config['profile_reference']=profile_reference
+        config['profile_matches_current_gpu']=str(torch.cuda.get_device_properties(0).uuid)==profile_reference.get('gpu_uuid')
     kwargs=dict(project='nanochat',entity='yibozhong657-none',group=a.wandb_group,
                 job_type='pretrain' if a.formal_training else 'diagnostic',
                 name=f'{a.architecture}-{a.variant}'+f'-{c.sequence_length}ctx-{a.steps}steps',id=run_id,resume='allow',config=config)
