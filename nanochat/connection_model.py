@@ -34,8 +34,11 @@ class ConnectionConfig:
     architecture: str = 'vanilla'
     window_pattern: str = 'SSSL'  # native only; vanilla is always full attention
     attention_kernel: str = 'original'
+    compact_routing: bool = False
 
     def __post_init__(self):
+        if self.compact_routing and self.variant not in ('mhc_stream_mlp','mhc_channel_no_sinkhorn'):
+            raise ValueError('Compact routing applies only to8-coefficient stream/channel connectors')
         if self.attention_kernel not in ('original','fla_triton'):
             raise ValueError('Unknown attention kernel')
         if self.attention_kernel == 'fla_triton' and (self.architecture != 'vanilla' or self.variant != 'baseline'):
@@ -107,6 +110,8 @@ class ConnectionBlock(Block):
                 connection = StreamMLPHyperConnection
             kwargs = dict(use_tf32=config.connection_backend == 'nvidia', fused_grad_acc=config.fused_connection_grad,
                           sinkhorn=config.variant != 'mhc_no_sinkhorn')
+            if config.variant in ('mhc_stream_mlp','mhc_channel_no_sinkhorn'):
+                kwargs['compact_routing']=config.compact_routing
             self.attn_connection = connection(config.width, config.streams, 2*index, config.sinkhorn_iterations, **kwargs)
             self.mlp_connection = connection(config.width, config.streams, 2*index+1, config.sinkhorn_iterations, **kwargs)
 
