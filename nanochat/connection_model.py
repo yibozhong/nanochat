@@ -15,9 +15,6 @@ from nanochat.gpt import Block, GPTConfig, Linear, norm
 from nanochat.nvidia_connections import NvidiaHyperConnection, NvidiaHyperHead, expand_streams, check_nvidia_device
 from nanochat.optim import MuonAdamW
 
-STATIC_VARIANTS = ('mhc_static_linear', 'mhc_static_mlp')
-CONNECTION_VARIANTS = ('baseline', 'mhc', 'mhc_no_sinkhorn', 'mhc_channel_no_sinkhorn', *STATIC_VARIANTS)
-
 
 @dataclass
 class ConnectionConfig:
@@ -47,12 +44,10 @@ class ConnectionConfig:
             raise ValueError('window_pattern must contain S and/or L')
         if self.connection_backend not in ('nvidia', 'nvidia_precise'):
             raise ValueError('Only the full NVIDIA mHC implementation is supported')
-        if self.variant not in CONNECTION_VARIANTS:
+        if self.variant not in ('baseline', 'mhc', 'mhc_no_sinkhorn', 'mhc_channel_no_sinkhorn'):
             raise ValueError(f'Unknown connection variant: {self.variant}')
         if self.variant == 'mhc_channel_no_sinkhorn' and (self.architecture != 'vanilla' or self.fused_connection_grad):
             raise ValueError('Local channel mixing initially supports vanilla and unfused gradient accumulation')
-        if self.variant in STATIC_VARIANTS and (self.architecture != 'vanilla' or self.fused_connection_grad):
-            raise ValueError('Static mixing initially supports vanilla and unfused gradient accumulation')
         if self.sinkhorn_iterations != 20:
             raise ValueError('The NVIDIA composite API requires 20 Sinkhorn iterations')
         if min(self.depth, self.width, self.heads, self.sequence_length, self.vocab_size, self.streams) < 1:
@@ -77,7 +72,7 @@ class ConnectionConfig:
             config.pop(name, None)
         if config.pop('attention_output_ns', False):
             raise ValueError('Checkpoint belongs to the retired attention output NS experiment')
-        if config.get('variant', 'baseline') not in CONNECTION_VARIANTS:
+        if config.get('variant', 'baseline') not in ('baseline', 'mhc', 'mhc_no_sinkhorn', 'mhc_channel_no_sinkhorn'):
             raise ValueError('Checkpoint belongs to a retired model variant')
         # Legacy metadata was inert on the retained native/vanilla/mHC models.
         for name in ("chunk_size", "lookback_enabled", "lookback_update",
@@ -105,10 +100,6 @@ class ConnectionBlock(Block):
                 connection = ChannelHyperConnection
             kwargs = dict(use_tf32=config.connection_backend == 'nvidia', fused_grad_acc=config.fused_connection_grad,
                           sinkhorn=config.variant != 'mhc_no_sinkhorn')
-            if self.variant in STATIC_VARIANTS:
-                from nanochat.static_connections import StaticHyperConnection
-                connection = StaticHyperConnection
-                kwargs['mixing'] = 'linear' if self.variant == 'mhc_static_linear' else 'mlp'
             self.attn_connection = connection(config.width, config.streams, 2*index, config.sinkhorn_iterations, **kwargs)
             self.mlp_connection = connection(config.width, config.streams, 2*index+1, config.sinkhorn_iterations, **kwargs)
 
@@ -186,9 +177,6 @@ class ConnectionModel(nn.Module):
             for b in self.blocks:
                 b.compiled_attention = torch.compile(b.attention_branch, dynamic=False, fullgraph=True)
                 b.compiled_mlp = torch.compile(b.mlp_branch, dynamic=False, fullgraph=True)
-                if self.config.variant in STATIC_VARIANTS:
-                    for conn in (b.attn_connection,b.mlp_connection):
-                        conn.compiled_mix = torch.compile(conn.mix,dynamic=False,fullgraph=True)
         return self
 
     def hidden(self, idx, kv_cache=None):
@@ -243,8 +231,7 @@ def optimizer_for(model, batch_tokens=32768):
     matrices, routing = [], []
     for b in model.blocks:
         for name, p in b.named_parameters():
-            static_matrix = c.variant in STATIC_VARIANTS and '_connection.mix_' in name
-            (routing if '_connection.' in name and not static_matrix else matrices).append(p)
+            (routing if '_connection.' in name else matrices).append(p)
     if model.stream_head is not None:
         routing.extend(model.stream_head.parameters())
     if routing:
@@ -255,7 +242,7 @@ def optimizer_for(model, batch_tokens=32768):
             lr=.02*batch_scale, momentum=.95, ns_steps=5, beta2=.9, weight_decay=wd))
     ids = [id(p) for g in groups for p in g['params']]
     assert len(ids) == len(set(ids)) and set(ids) == {id(p) for p in model.parameters()}
-    if c.variant == 'mhc_channel_no_sinkhorn' or c.variant in STATIC_VARIANTS:
+    if c.variant == 'mhc_channel_no_sinkhorn':
         # Like native.setup_optimizer: the unchanged compiled AdamW function
         # specializes once per routing shape/dtype. Local generators introduce
         # two extra tensor ranks; this is a compiler cache budget, not an LR or

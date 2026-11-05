@@ -1,0 +1,33 @@
+{
+  "complete": true,
+  "request": "Stop and revert static linear and static MLP experiments; delete related experiment folders/checkpoints",
+  "restored_source": "d71bca89939cdd8f8f4ec6b359902713fb1ad5c5",
+  "removed_commits": [
+    "65094c35871f253db1aa58901fdcdb05abaea7b1",
+    "692599df58e4fd5ec5cc352cfbad3d78acbd29de"
+  ],
+  "jobs": {
+    "linear": {
+      "job": "7818669.0",
+      "run_id": "87e3b8a6",
+      "status": "cancelled; queue empty; abort event confirmed",
+      "last_logged_step_before_cleanup": 7870
+    },
+    "mlp": {
+      "job": "7818670.0",
+      "run_id": "a283e69d",
+      "status": "already exited1 before user stop; nonfinite loss/gradient guard",
+      "last_logged_step_before_cleanup": 9150
+    }
+  },
+  "deleted_roots": [
+    "static-mixing-gate-20261105",
+    "static-mixing-linear-10b-20261105",
+    "static-mixing-mlp-10b-20261105"
+  ],
+  "deleted_local_bytes": 1141501836,
+  "removed_spool_directories_absent": true,
+  "retained": "Original vanilla/native/NVIDIA mHC/shared no-Sinkhorn/channel-local models; channel-local7816910.0 continues. Shared runtime/data and channel-local immutable inputs unchanged. Remote W&B records and Git history kept.",
+  "validation": "nanochat/scripts/tests/research exactly restored to previously GPU-validated d71bca8 before this audit; modified Python AST and git diff whitespace checks passed. No new GPU job.",
+  "audit_manifest": "/home/yzhong239/research-cleanup-20261105/static-mixing-removal.json"
+}
