@@ -106,7 +106,7 @@ class _ChannelMix(torch.autograd.Function):
         if weight.shape != (c,4,4,4) or bias.shape != (c,4,4) or scale.shape != (1,):
             raise ValueError('Invalid channel mixing parameter shapes')
         out = torch.empty_like(x)
-        _forward[(tr.cdiv(n,32),tr.cdiv(c,8))](x,y,post,weight,bias,scale,out,n,c,32,8)
+        _forward[(tr.cdiv(n,32),tr.cdiv(c,8))](x,y,post,weight,bias,scale,out,n,c,32,8,num_warps=8)
         ctx.save_for_backward(x,y,post,weight,bias,scale)
         return out
 
@@ -119,7 +119,10 @@ class _ChannelMix(torch.autograd.Function):
         gx=torch.empty_like(x); gy=torch.empty_like(y); gp=torch.empty_like(post)
         # Temporary deterministic reduction workspace, not a saved activation.
         parts=torch.empty((tr.cdiv(n,128),c,81),device=x.device,dtype=torch.float32)
-        _backward_mix[(tr.cdiv(n,128),tr.cdiv(c,4))](x,weight,bias,scale,go,gx,parts,n,c,128,4)
+        # The bounded Hopper geometry benchmark halves this kernel's time by
+        # distributing its live tensors across8 warps instead of4. Reductions
+        # remain deterministic; the temporary workspace size is unchanged.
+        _backward_mix[(tr.cdiv(n,128),tr.cdiv(c,4))](x,weight,bias,scale,go,gx,parts,n,c,128,4,num_warps=8)
         _backward_branch[(n,)](y,post,go,gy,gp,n,c,tr.next_power_of_2(c))
         reduced=parts.sum(0)
         gw=reduced[:,:64].reshape_as(weight).contiguous()

@@ -1,0 +1,221 @@
+{
+  "gpu": "NVIDIA H100 80GB HBM3",
+  "forward": [
+    {
+      "bt": 32,
+      "bc": 8,
+      "warps": 4,
+      "ms": 0.5556543827056885
+    },
+    {
+      "bt": 32,
+      "bc": 8,
+      "warps": 8,
+      "ms": 0.5206431865692138
+    },
+    {
+      "bt": 64,
+      "bc": 8,
+      "warps": 4,
+      "ms": 0.5207007884979248
+    },
+    {
+      "bt": 64,
+      "bc": 8,
+      "warps": 8,
+      "ms": 0.535865592956543
+    },
+    {
+      "bt": 128,
+      "bc": 8,
+      "warps": 8,
+      "ms": 0.5903168201446534
+    },
+    {
+      "bt": 32,
+      "bc": 32,
+      "warps": 8,
+      "ms": 0.7698976039886475
+    },
+    {
+      "bt": 16,
+      "bc": 32,
+      "warps": 4,
+      "ms": 0.6786719799041748
+    },
+    {
+      "bt": 16,
+      "bc": 64,
+      "warps": 8,
+      "ms": 0.8006048202514648
+    },
+    {
+      "bt": 32,
+      "bc": 16,
+      "warps": 4,
+      "ms": 0.5734591960906983
+    },
+    {
+      "bt": 32,
+      "bc": 16,
+      "warps": 8,
+      "ms": 0.8583040237426758
+    }
+  ],
+  "backward": [
+    {
+      "bt": 128,
+      "bc": 4,
+      "warps": 4,
+      "ms": 3.633036804199219,
+      "reduce_ms": 0.016758400201797485,
+      "total_ms": 3.6497952044010162,
+      "workspace_bytes": 42467328
+    },
+    {
+      "bt": 128,
+      "bc": 4,
+      "warps": 8,
+      "ms": 1.688572883605957,
+      "reduce_ms": 0.01597760021686554,
+      "total_ms": 1.7045504838228225,
+      "workspace_bytes": 42467328
+    },
+    {
+      "bt": 128,
+      "bc": 4,
+      "warps": 16,
+      "ms": 1.9846912384033204,
+      "reduce_ms": 0.015884800255298613,
+      "total_ms": 2.000576038658619,
+      "workspace_bytes": 42467328
+    },
+    {
+      "bt": 128,
+      "bc": 8,
+      "warps": 8,
+      "ms": 4.311423873901367,
+      "reduce_ms": 0.015996800363063814,
+      "total_ms": 4.327420674264431,
+      "workspace_bytes": 42467328
+    },
+    {
+      "bt": 128,
+      "bc": 8,
+      "warps": 16,
+      "ms": 3.768137741088867,
+      "reduce_ms": 0.015913599729537965,
+      "total_ms": 3.784051340818405,
+      "workspace_bytes": 42467328
+    },
+    {
+      "bt": 64,
+      "bc": 8,
+      "warps": 4,
+      "ms": 4.36181755065918,
+      "reduce_ms": 0.03363519906997681,
+      "total_ms": 4.395452749729157,
+      "workspace_bytes": 84934656
+    },
+    {
+      "bt": 64,
+      "bc": 8,
+      "warps": 8,
+      "ms": 1.71212158203125,
+      "reduce_ms": 0.03367680013179779,
+      "total_ms": 1.7457983821630478,
+      "workspace_bytes": 84934656
+    },
+    {
+      "bt": 64,
+      "bc": 16,
+      "warps": 8,
+      "ms": 31.607723999023438,
+      "reduce_ms": 0.033744001388549806,
+      "total_ms": 31.641468000411987,
+      "workspace_bytes": 84934656
+    },
+    {
+      "bt": 32,
+      "bc": 16,
+      "warps": 4,
+      "ms": 4.514678573608398,
+      "reduce_ms": 0.06381440162658691,
+      "total_ms": 4.578492975234985,
+      "workspace_bytes": 169869312
+    },
+    {
+      "bt": 32,
+      "bc": 32,
+      "warps": 8,
+      "ms": 32.4235107421875,
+      "reduce_ms": 0.06370880007743836,
+      "total_ms": 32.48721954226494,
+      "workspace_bytes": 169869312
+    },
+    {
+      "bt": 64,
+      "bc": 16,
+      "warps": 16,
+      "ms": 4.053961563110351,
+      "reduce_ms": 0.03320960104465485,
+      "total_ms": 4.087171164155007,
+      "workspace_bytes": 84934656
+    },
+    {
+      "bt": 256,
+      "bc": 4,
+      "warps": 8,
+      "ms": 30.454888916015626,
+      "reduce_ms": 0.007744000107049942,
+      "total_ms": 30.462632916122676,
+      "workspace_bytes": 21233664
+    },
+    {
+      "bt": 256,
+      "bc": 4,
+      "warps": 16,
+      "ms": 3.7267166137695313,
+      "reduce_ms": 0.008054400235414505,
+      "total_ms": 3.734771014004946,
+      "workspace_bytes": 21233664
+    }
+  ],
+  "branch": [
+    {
+      "warps": 4,
+      "ms": 0.06848319768905639
+    },
+    {
+      "warps": 8,
+      "ms": 0.07666239738464356
+    },
+    {
+      "warps": 16,
+      "ms": 0.11914880275726318
+    }
+  ],
+  "complete": true,
+  "source": {
+    "commit": "30dbfefce1de52650b2176400c051c4ce40647b9",
+    "formal_training": false,
+    "purpose": "Bounded geometry tuning of unchanged channel-mixing equations"
+  },
+  "job": "7816466.0",
+  "selected": {
+    "forward": {
+      "bt": 32,
+      "bc": 8,
+      "warps": 8
+    },
+    "backward": {
+      "bt": 128,
+      "bc": 4,
+      "warps": 8
+    },
+    "branch": {
+      "warps": 4
+    }
+  },
+  "note": "Same-H100 geometry timing only; final all-gradient/whole-model/restart gate pending; no cross-GPU speed comparison"
+}

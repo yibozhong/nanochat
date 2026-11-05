@@ -14,7 +14,8 @@
     "checks": 16,
     "profile": "same-GPU baseline/mHC/shared no-Sinkhorn/local no-Sinkhorn,60steps each,2K/B16",
     "restart": "25->exit85->fresh process128, full305176-step LR horizon",
-    "logging": "local, no credentials or returned weights"
+    "logging": "local, no credentials or returned weights",
+    "source_requirement": "Full final gate after launch-geometry change; first successful gate is insufficient to release training"
   },
   "training": {
     "steps": 305176,
@@ -32,5 +33,20 @@
   },
   "monitoring": "300-second checks; finish goal and stop monitoring at first finite formal training step",
   "limitations": "Only vanilla integration initially; NVIDIA fused grad buffer deliberately unsupported. FP32 routing/reductions,BF16 activations, no full dynamic cross-channel matrix.",
-  "additional_parameters_vs_shared_mhc": 130816
+  "additional_parameters_vs_shared_mhc": 130816,
+  "launch_geometry": {
+    "forward": {
+      "bt": 32,
+      "bc": 8,
+      "warps": 8
+    },
+    "backward": {
+      "bt": 128,
+      "bc": 4,
+      "warps": 8
+    },
+    "branch": {
+      "warps": 4
+    }
+  }
 }
