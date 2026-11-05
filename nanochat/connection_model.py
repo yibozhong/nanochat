@@ -35,8 +35,13 @@ class ConnectionConfig:
     window_pattern: str = 'SSSL'  # native only; vanilla is always full attention
     attention_kernel: str = 'original'
     compact_routing: bool = False
+    stream_mlp_kernel: str = 'legacy'
 
     def __post_init__(self):
+        if self.stream_mlp_kernel not in ('legacy','rowwise','tensorcore','hybrid'):
+            raise ValueError('Unknown stream MLP kernel')
+        if self.stream_mlp_kernel != 'legacy' and self.variant != 'mhc_stream_mlp':
+            raise ValueError('Stream MLP kernel requires mhc_stream_mlp')
         if self.compact_routing and self.variant not in ('mhc_stream_mlp','mhc_channel_no_sinkhorn'):
             raise ValueError('Compact routing applies only to8-coefficient stream/channel connectors')
         if self.attention_kernel not in ('original','fla_triton'):
@@ -112,6 +117,8 @@ class ConnectionBlock(Block):
                           sinkhorn=config.variant != 'mhc_no_sinkhorn')
             if config.variant in ('mhc_stream_mlp','mhc_channel_no_sinkhorn'):
                 kwargs['compact_routing']=config.compact_routing
+            if config.variant == 'mhc_stream_mlp':
+                kwargs['stream_mlp_kernel']=config.stream_mlp_kernel
             self.attn_connection = connection(config.width, config.streams, 2*index, config.sinkhorn_iterations, **kwargs)
             self.mlp_connection = connection(config.width, config.streams, 2*index+1, config.sinkhorn_iterations, **kwargs)
 

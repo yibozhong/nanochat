@@ -10,13 +10,14 @@ from nanochat.stream_mlp import stream_mlp
 
 class StreamMLPHyperConnection(nn.Module):
     def __init__(self, width, streams, branch_index, iterations=20, *,
-                 use_tf32=True, fused_grad_acc=False, compact_routing=False, **unused):
+                 use_tf32=True, fused_grad_acc=False, compact_routing=False, stream_mlp_kernel='legacy', **unused):
         super().__init__()
         if streams != 4 or fused_grad_acc:
             raise ValueError('Stream MLP requires four streams and unfused gradient accumulation')
         self.width, self.streams = width, streams
         self.use_tf32, self.sinkhorn = use_tf32, False
         self.compact_routing = compact_routing
+        self.stream_mlp_kernel = stream_mlp_kernel
         self.phi = nn.Parameter(torch.empty(8, 4*width))
         self.bias = nn.Parameter(torch.empty(8))
         self.scales = nn.Parameter(torch.empty(2))
@@ -57,4 +58,7 @@ class StreamMLPHyperConnection(nn.Module):
         return branch, x, post.reshape(b,t,n).contiguous()
 
     def write(self, output, residual, post):
+        if self.stream_mlp_kernel != 'legacy':
+            from nanochat.stream_mlp_optimized import optimized_stream_mlp
+            return optimized_stream_mlp(residual, output.contiguous(), post, self.mix_in, self.mix_out, self.stream_mlp_kernel)
         return stream_mlp(residual, output.contiguous(), post, self.mix_in, self.mix_out)
