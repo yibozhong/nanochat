@@ -18,14 +18,14 @@ import uuid
 import torch
 from nanochat.experiment_logging import training_run
 
-from nanochat.connection_model import ConnectionConfig, build_connection_model, optimizer_for, schedule
+from nanochat.connection_model import ConnectionConfig, build_connection_model, optimizer_for, schedule, CONNECTION_VARIANTS
 from nanochat.packed_training import PackedData, seed_all, evaluate, train_step, snapshot, atomic_save, restore_rng, json_write
 from nanochat.connection_experiment import configure_attention, match_vanilla_initialization
 
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument('--variant', choices=('baseline','mhc','mhc_no_sinkhorn','mhc_channel_no_sinkhorn'), required=True)
+    p.add_argument('--variant', choices=CONNECTION_VARIANTS, required=True)
     p.add_argument('--sequence-length', type=int, default=2048)
     p.add_argument('--attention-kernel', choices=('original','fla_triton'), default='original')
     p.add_argument('--architecture', choices=('vanilla', 'native'), default='vanilla')
@@ -118,6 +118,7 @@ def main():
         residual_mixing=('sinkhorn' if a.variant=='mhc' else
                          'unconstrained_raw' if a.variant=='mhc_no_sinkhorn' else
                          'local_channel_unconstrained_raw' if a.variant=='mhc_channel_no_sinkhorn' else
+                         'shared_stream_mlp_4_16_4_relu' if a.variant=='mhc_stream_mlp' else
                          'additive'),
         applied_sinkhorn_iterations=c.sinkhorn_iterations if a.variant=='mhc' else 0,
         optimizer='native MuonAdamW; connector AdamW at native unembedding LR, no decay',

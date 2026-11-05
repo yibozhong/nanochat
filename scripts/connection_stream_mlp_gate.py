@@ -1,0 +1,74 @@
+"""Stream MLP tests, same-device benchmarks and fresh-process resume; no W&B."""
+import json,math,subprocess,sys
+from pathlib import Path
+import xml.etree.ElementTree as ET
+
+VARIANT='mhc_stream_mlp'
+
+def main():
+    root=Path('results/stream-mlp');root.mkdir(parents=True,exist_ok=True)
+    def run(args,name,expected=0):
+        print('BEGIN '+name,flush=True)
+        with (root/(name+'.log')).open('w') as log:
+            proc=subprocess.Popen([sys.executable,*args],stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True)
+            for line in proc.stdout:
+                log.write(line);print(line,end='',flush=True)
+            proc.wait()
+        assert proc.returncode==expected,(name,proc.returncode)
+        print('PASS '+name,flush=True)
+    run(['-m','pytest','-v','tests/test_stream_mlp.py','tests/test_connection_training_resume.py',
+         'tests/test_channel_mixing.py::test_fused_all_gradients_against_fp64[129-512-1.0]',
+         'tests/test_channel_mixing.py::test_optimizer_rng_resume',
+         'tests/test_native_connections.py::test_full_size_backbone_initialization_and_optimizer_groups',
+         'tests/test_native_connections.py::test_real_kernels_causal_swa_gqa_cache_and_feature_gradients[mhc]',
+         '--junitxml='+str(root/'tests.xml')],'tests')
+    suites=ET.parse(root/'tests.xml').getroot().findall('testsuite')
+    counts={k:sum(int(s.get(k,0)) for s in suites) for k in ('tests','failures','errors','skipped')}
+    assert counts==dict(tests=18,failures=0,errors=0,skipped=0),counts
+    run(['-m','scripts.connection_stream_mlp_micro'],'micro')
+    profiles={}
+    for v in ('mhc','mhc_channel_no_sinkhorn',VARIANT):
+        run(['-m','scripts.connection_context_profile','--variant',v,'--sequence-length','2048',
+             '--microbatch','16','--attention-backend','fa3','--output',str(root/(v+'.json'))],'profile-'+v)
+        p=json.loads((root/(v+'.json')).read_text());profiles[v]=p
+        assert p['complete'] and p['status']=='fits' and p['causality_passed'],p
+        expected_params=58992805 if v==VARIANT else 59646133 if v=='mhc_channel_no_sinkhorn' else 59515317
+        assert p['parameters']==expected_params,(v,p['parameters'],expected_params)
+        assert p['optimizer_updates']==60 and p['peak_reserved_bytes']<int(.9*22000*1024**2)
+    assert len({p['gpu_uuid'] for p in profiles.values()})==1
+    assert len({p['input_sha256'] for p in profiles.values()})==1
+    run(['-m','scripts.connection_stream_mlp_probe','--output',str(root/'initial-probe.json')],'initial-probe')
+    args=['-m','scripts.connection_train','--variant',VARIANT,'--matched-backbone-init',
+          '--steps','128','--schedule-steps','305176','--microbatch','16','--data-dir','../data',
+          '--attention-backend','fa3','--output-dir',str(root/'restart'),
+          '--checkpoint-dir','../stream-mlp-gate-checkpoints','--run-id','stream-mlp-restart',
+          '--segment-seconds','3600','--segment-steps','25']
+    run(args,'restart-first',85)
+    assert json.loads((root/'restart/progress.json').read_text())['step']==25
+    run(args+['--resume','auto','--segment-steps','0'],'restart-second')
+    summary=json.loads((root/'restart/summary.json').read_text())
+    config=json.loads((root/'restart/config.json').read_text())
+    rows=[json.loads(s) for s in (root/'restart/steps.jsonl').read_text().splitlines()]
+    assert summary['complete'] and summary['steps']==128
+    assert [r['step'] for r in rows]==list(range(1,129)) and all(math.isfinite(r['loss']) for r in rows)
+    assert summary['final_dev_ce']<summary['initial_dev_ce'] and math.isfinite(summary['final_dev_ce'])
+    assert config['logging_backend']=='local' and config['applied_sinkhorn_iterations']==0
+    assert config['protocol']['grad_accum']==1 and config['protocol']['schedule_steps']==305176
+    assert summary['peak_reserved_bytes']<int(.9*22000*1024**2)
+    # Explicit post-optimizer finite-parameter audit (not only finite gradients).
+    import torch
+    state=torch.load('../stream-mlp-gate-checkpoints/latest.pt',map_location='cpu',weights_only=False)
+    assert all(torch.isfinite(p).all() for p in state['model'].values())
+    del state
+    run(['-m','scripts.connection_stream_mlp_probe','--checkpoint','../stream-mlp-gate-checkpoints/latest.pt','--output',str(root/'trained-probe.json')],'trained-probe')
+    assert not list(Path('results').rglob('*.wandb'))
+    new=profiles[VARIANT];base=profiles['mhc']
+    result=dict(complete=True,formal_training=False,source=json.loads(Path('source.json').read_text()),
+        checks=counts,profiles=profiles,probes={k:json.loads((root/(k+'-probe.json')).read_text()) for k in ('initial','trained')},micro=json.loads((root/'micro.json').read_text()),restart=summary,
+        overhead_percent=100*(new['mean_seconds']/base['mean_seconds']-1),
+        additional_peak_allocated_bytes=new['peak_allocated_bytes']-base['peak_allocated_bytes'],
+        additional_peak_reserved_bytes=new['peak_reserved_bytes']-base['peak_reserved_bytes'],
+        limitations='Single GPU/seed/order; 60-step profile,128-step finite training and25->128 process restart. No long-run quality/stability claim.')
+    (root/'validation.json').write_text(json.dumps(result,indent=2)+'\n')
+    print(json.dumps({k:v for k,v in result.items() if k not in ('profiles','restart','micro')},indent=2),flush=True)
+if __name__=='__main__':main()
