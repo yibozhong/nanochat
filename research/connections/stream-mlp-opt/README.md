@@ -6,7 +6,7 @@ running jobs retain their immutable sources. No new formal run is submitted.
 
 `stream_mlp_kernel=legacy` remains the default, including for old checkpoints.
 The optional candidates are `rowwise` (four split streams, local FMAs),
-`tensorcore` (fused TF32x3 dots), and `hybrid` (rowwise forward, dot backward).
+and `hybrid` (rowwise forward, TF32x3 dot backward).
 They all fuse the branch write in forward and recompute hidden activations
 in backward. Small matrices and hidden arithmetic remain FP32; activations
 and output remain BF16. No global 16-channel hidden tensor is stored. Dot
@@ -19,7 +19,7 @@ Our shared MLP differs from NVIDIA's per-token dynamic4×4 matrix: its weight
 gradients reduce across both token and channel rows. The dot backward uses
 this structure. Generated PTX is inspected for actual MMA instructions.
 
-One bounded GPU gate runs22 correctness checks, a production-size
+One bounded GPU gate runs15 correctness checks, a production-size
 B16/T2048/D512 microbenchmark including compiled FP32 PyTorch, reverse-order
 timing repeats, and kernel-level CUDA timing. It then measures the best new
 candidate against legacy in ABBA whole-model order, with original routing
@@ -31,3 +31,13 @@ the GPU family it actually ran on. A negative performance result is retained.
 
 `submit.py ROOT` submits one immutable gate; `collect.py ROOT` polls every
 300seconds, publishes the audited result, and stops. It cannot submit training.
+
+
+Initial gate7836281.0 passed21/22 checks. The full-dot forward candidate
+passed the isolated FP64 VJPs but failed the unchanged full-model gradient
+parity bound: max relative error0.045875 >0.03. It has been withdrawn, not
+promoted or accepted by relaxing the threshold. Rowwise/hybrid full-model
+max errors were0.001364/0.001676. The next gate retains those two candidates
+and computes the hybrid backward ReLU mask in the exact rowwise FMA order.
+Its15 checks cover both remaining candidates; all performance measurements
+and fresh-process resume checks still run. See failed-attempts.json.

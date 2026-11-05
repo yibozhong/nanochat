@@ -12,7 +12,7 @@ from nanochat.connection_experiment import configure_attention,match_vanilla_ini
 from nanochat.packed_training import seed_all
 from test_stream_mlp import reference,relative
 
-KINDS=('rowwise','tensorcore','hybrid')
+KINDS=('rowwise','hybrid')
 
 
 def record(name,value):
@@ -91,6 +91,8 @@ def test_full_model(kind):
 
 def test_old_configuration_default():
     assert ConnectionConfig.from_checkpoint(dict(variant='mhc_stream_mlp')).stream_mlp_kernel=='legacy'
+    with pytest.raises(ValueError):
+        ConnectionConfig(variant='mhc_stream_mlp',stream_mlp_kernel='tensorcore')
     for kind in KINDS:
         c=ConnectionConfig(variant='mhc_stream_mlp',stream_mlp_kernel=kind)
         assert ConnectionConfig.from_checkpoint(asdict(c))==c

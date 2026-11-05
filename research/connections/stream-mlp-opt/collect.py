@@ -25,7 +25,7 @@ def collect(root,state,ad):
     assert ad.get('ExitCode')==0,ad
     value=json.loads((root/'collected/results/stream-mlp-opt/validation.json').read_text())
     assert value['complete'] and not value['formal_training'] and value['source']==state['source']
-    assert value['checks']==dict(tests=22,failures=0,errors=0,skipped=0)
+    assert value['checks']==dict(tests=15,failures=0,errors=0,skipped=0)
     assert value['restart']['complete'] and value['restart']['steps']==50
     assert cmd(['git','rev-parse','HEAD'],REPO)==state['source']['commit']
     assert not cmd(['git','status','--porcelain'],REPO)
@@ -49,7 +49,7 @@ def publish(root,state):
         fcntl.flock(f,fcntl.LOCK_EX);s=f.read()
         heading='## 新授权：优化共享Stream MLP kernel，保留现有训练（2026-11-05）\n'
         assert heading in s
-        note=f'\nGPU gate{state["job"]}已exit0，22检查/同卡多实现和ABBA整步profile/25→50真实恢复通过；main{head}已push核验。整步耗时降低{report["step_time_reduction_percent"]:.3f}%（负值表示变慢），stream_mlp_kernel仍默认legacy；候选{report["candidate"]}，建议启用={report["recommended"]}。没有新正式训练；现有7825549.0与7816910.0不改。collector完成退出。\n'
+        note=f'\nGPU gate{state["job"]}已exit0，15检查/同卡多实现和ABBA整步profile/25→50真实恢复通过；main{head}已push核验。整步耗时降低{report["step_time_reduction_percent"]:.3f}%（负值表示变慢），stream_mlp_kernel仍默认legacy；候选{report["candidate"]}，建议启用={report["recommended"]}。没有新正式训练；现有7825549.0与7816910.0不改。collector完成退出。\n'
         f.seek(0);f.write(s.replace(heading,heading+note,1));f.truncate()
 
 

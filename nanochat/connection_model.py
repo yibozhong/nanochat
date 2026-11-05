@@ -38,7 +38,7 @@ class ConnectionConfig:
     stream_mlp_kernel: str = 'legacy'
 
     def __post_init__(self):
-        if self.stream_mlp_kernel not in ('legacy','rowwise','tensorcore','hybrid'):
+        if self.stream_mlp_kernel not in ('legacy','rowwise','hybrid'):
             raise ValueError('Unknown stream MLP kernel')
         if self.stream_mlp_kernel != 'legacy' and self.variant != 'mhc_stream_mlp':
             raise ValueError('Stream MLP kernel requires mhc_stream_mlp')

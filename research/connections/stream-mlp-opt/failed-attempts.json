@@ -1,0 +1,13 @@
+[
+  {
+    "job": "7836281.0",
+    "source": "9af9a318d6e8a5c4ba622395c870584a9fd16ed8",
+    "gpu": "NVIDIA A100-SXM4-80GB",
+    "exit_code": 1,
+    "tests": 22,
+    "passed": 21,
+    "failure": "full-model tensorcore forward: max per-parameter relative gradient0.04587547349 >0.03",
+    "decision": "Withdraw full-dot forward; keep rowwise/hybrid candidates; unchanged thresholds. Align hybrid ReLU-mask recomputation with rowwise forward FMA order.",
+    "formal_jobs_unchanged": true
+  }
+]

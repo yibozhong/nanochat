@@ -17,7 +17,7 @@ import triton.language as tl
 from torch.autograd.function import once_differentiable
 from nanochat.channel_mixing import _backward_branch
 
-IMPLEMENTATIONS = ('legacy', 'rowwise', 'tensorcore', 'hybrid')
+IMPLEMENTATIONS = ('legacy', 'rowwise', 'hybrid')
 
 
 @tr.jit
@@ -92,20 +92,13 @@ def _dot_hidden(X, Win, row, N: tl.constexpr):
     k=tl.arange(0,16)
     x=tl.load(X+row[:,None]*4+k[None,:],(row[:,None]<N)&(k[None,:]<4),0).to(tl.float32)
     wi=tl.load(Win+k[:,None]*4+k[None,:],k[None,:]<4,0)
-    z=tl.dot(x,tl.trans(wi),input_precision='tf32x3')
+    # Use the same four-term FMA order as the rowwise forward for its ReLU mask.
+    x0,x1,x2,x3=_rows(X,row,N)
+    w0=tl.load(Win+k*4);w1=tl.load(Win+k*4+1)
+    w2=tl.load(Win+k*4+2);w3=tl.load(Win+k*4+3)
+    z=tl.fma(x3[:,None],w3[None,:],tl.fma(x2[:,None],w2[None,:],
+      tl.fma(x1[:,None],w1[None,:],x0[:,None]*w0[None,:])))
     return x,wi,z,tl.maximum(z,0.)
-
-
-@tr.jit
-def _dot_forward(X,Y,Post,Win,Wout,Out,N:tl.constexpr,C:tl.constexpr,BLOCK:tl.constexpr):
-    row=tl.program_id(0)*BLOCK+tl.arange(0,BLOCK);k=tl.arange(0,16)
-    x,wi,z,a=_dot_hidden(X,Win,row,N)
-    wo=tl.load(Wout+k[:,None]*16+k[None,:],k[:,None]<4,0)
-    out=tl.dot(a,tl.trans(wo),input_precision='tf32x3')
-    y=tl.load(Y+row,row<N,0).to(tl.float32)
-    post=tl.load(Post+(row[:,None]//C)*4+k[None,:],(row[:,None]<N)&(k[None,:]<4),0)
-    out=out+y[:,None]*post
-    tl.store(Out+row[:,None]*4+k[None,:],out,(row[:,None]<N)&(k[None,:]<4))
 
 
 @tr.jit
@@ -133,9 +126,8 @@ class _Optimized(torch.autograd.Function):
         if x.shape[-1]!=4 or y.shape!=x.shape[:-1] or post.shape!=(*x.shape[:-2],4):raise ValueError('Invalid stream shapes')
         if win.shape!=(16,4) or wout.shape!=(4,16):raise ValueError('Expected4->16->4')
         n=x.numel()//4;out=torch.empty_like(x)
-        dot=implementation=='tensorcore';block=128 if dot else 256
-        fn=_dot_forward if dot else _row_forward
-        fn[(tr.cdiv(n,block),)](x,y,post,win,wout,out,n,x.shape[-2],block,num_warps=4)
+        block=256
+        _row_forward[(tr.cdiv(n,block),)](x,y,post,win,wout,out,n,x.shape[-2],block,num_warps=4)
         ctx.save_for_backward(x,y,post,win,wout);ctx.implementation=implementation
         return out
 

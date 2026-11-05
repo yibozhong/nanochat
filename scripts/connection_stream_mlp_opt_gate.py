@@ -16,7 +16,7 @@ def main():
     run(['-m','pytest','-v','tests/test_stream_mlp_optimized.py','--junitxml='+str(root/'tests.xml')],'tests')
     suites=ET.parse(root/'tests.xml').getroot().findall('testsuite')
     counts={k:sum(int(s.get(k,0)) for s in suites) for k in ('tests','failures','errors','skipped')}
-    assert counts==dict(tests=22,failures=0,errors=0,skipped=0),counts
+    assert counts==dict(tests=15,failures=0,errors=0,skipped=0),counts
     run(['-m','scripts.connection_stream_mlp_opt_micro'],'micro')
     micro=json.loads((root/'micro.json').read_text());winner=micro['winner']
     # Preserve an honest negative result if none of the new implementations wins.

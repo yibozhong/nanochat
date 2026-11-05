@@ -34,7 +34,7 @@ def main():
     p.add_argument('--wandb-group', default='mhc-official-kernels-20261030')
     p.add_argument('--connection-backend', choices=('nvidia','nvidia_precise'), default='nvidia')
     p.add_argument('--fused-connection-grad', action=argparse.BooleanOptionalAction, default=False)
-    p.add_argument('--stream-mlp-kernel', choices=('legacy','rowwise','tensorcore','hybrid'), default='legacy')
+    p.add_argument('--stream-mlp-kernel', choices=('legacy','rowwise','hybrid'), default='legacy')
     p.add_argument('--compact-routing', action=argparse.BooleanOptionalAction, default=False)
     p.add_argument('--steps', type=int, required=True)
     p.add_argument('--schedule-steps', type=int, default=30518)

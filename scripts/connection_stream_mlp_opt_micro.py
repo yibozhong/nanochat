@@ -3,7 +3,7 @@ import gc,json,statistics
 from pathlib import Path
 import torch
 from nanochat.stream_mlp import stream_mlp
-from nanochat.stream_mlp_optimized import optimized_stream_mlp,_dot_forward,_row_forward
+from nanochat.stream_mlp_optimized import optimized_stream_mlp,_dot_backward,_row_forward
 from scripts.connection_stream_mlp_micro import reference
 
 
@@ -36,7 +36,7 @@ def main():
     wo=(torch.randn(4,16,device='cuda')*.25).requires_grad_()
     args=(x,y,p,wi,wo);go=torch.randn_like(x)
     functions={'legacy':stream_mlp}
-    for kind in ('rowwise','tensorcore','hybrid'):
+    for kind in ('rowwise','hybrid'):
         functions[kind]=lambda *args,kind=kind:optimized_stream_mlp(*args,kind)
     functions['torch_compile']=torch.compile(reference,fullgraph=True)
     result=dict(gpu=torch.cuda.get_device_name(),gpu_uuid=str(torch.cuda.get_device_properties(0).uuid),
@@ -60,12 +60,14 @@ def main():
     result['scores_ms']=scores;result['winner']=min(scores,key=scores.get)
     # Inspect actual emitted instructions, rather than assuming tl.dot uses TC.
     out=torch.empty_like(x);n=x.numel()//4
+    gx=torch.empty_like(x);parts=torch.empty(((n+127)//128,128),device='cuda',dtype=torch.float32)
     kernels={
         'rowwise':_row_forward[((n+255)//256,)](x,y,p,wi,wo,out,n,512,256,num_warps=4),
-        'tensorcore':_dot_forward[((n+127)//128,)](x,y,p,wi,wo,out,n,512,128,num_warps=4)}
+        'hybrid_backward':_dot_backward[((n+127)//128,)](x,wi,wo,go,gx,parts,n,128,num_warps=4)}
     result['compiled']={name:dict(registers=k.n_regs,spills=k.n_spills,
         mma_sync_instructions=k.asm['ptx'].count('mma.sync'),
         wgmma_instructions=k.asm['ptx'].count('wgmma.mma_async')) for name,k in kernels.items()}
+    del out,gx,parts
     # One warmed iteration for a kernel-level CUDA time breakdown.
     result['kernel_breakdown']={}
     for name in dict.fromkeys(('legacy',result['winner'])):

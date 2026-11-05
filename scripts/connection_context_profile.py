@@ -50,7 +50,7 @@ def main():
     p.add_argument('--microbatch', type=int, required=True)
     p.add_argument('--repetition', type=int, default=0)
     p.add_argument('--probe', action='store_true')
-    p.add_argument('--stream-mlp-kernel', choices=('legacy','rowwise','tensorcore','hybrid'), default='legacy')
+    p.add_argument('--stream-mlp-kernel', choices=('legacy','rowwise','hybrid'), default='legacy')
     p.add_argument('--compact-routing', action=argparse.BooleanOptionalAction, default=False)
     p.add_argument('--data-dir', default='../data')
     p.add_argument('--output', required=True)
