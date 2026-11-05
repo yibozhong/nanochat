@@ -32,11 +32,8 @@ class ConnectionConfig:
     architecture: str = 'vanilla'
     window_pattern: str = 'SSSL'  # native only; vanilla is always full attention
     attention_kernel: str = 'original'
-    wide_residual: bool = False
 
     def __post_init__(self):
-        if self.wide_residual and (self.architecture != 'vanilla' or self.variant != 'baseline'):
-            raise ValueError('Wide Residual Stream supports ordinary vanilla sublayers only')
         if self.attention_kernel not in ('original','fla_triton'):
             raise ValueError('Unknown attention kernel')
         if self.attention_kernel == 'fla_triton' and (self.architecture != 'vanilla' or self.variant != 'baseline'):
@@ -64,8 +61,6 @@ class ConnectionConfig:
     def from_checkpoint(cls, config):
         """Read pre-cleanup NVIDIA/vanilla metadata; reject retired model weights."""
         config = dict(config)
-        if config.pop('ffn_width_residual', False):
-            raise ValueError('Checkpoint belongs to the retired FFN-width residual experiment')
         if config.pop('attention_statistic', 'none') != 'none':
             raise ValueError('Checkpoint belongs to a retired attention-statistics experiment')
         config.pop('moment_query_chunk', None)
@@ -95,14 +90,7 @@ class ConnectionBlock(Block):
         super().__init__(native, index)
         self.attn.ve_gate = None
         self.variant = config.variant
-        self.wide_residual = config.wide_residual
         self.compiled_attention = self.compiled_mlp = None
-        if self.wide_residual:
-            from nanochat.wide_residual import WideResidualConnection
-            # Preserve the original backbone initialization and CPU RNG sequence.
-            with torch.random.fork_rng(devices=[]):
-                self.attn_wide = WideResidualConnection(config.width)
-                self.mlp_wide = WideResidualConnection(config.width)
         if self.variant != 'baseline':
             kwargs = dict(use_tf32=config.connection_backend == 'nvidia', fused_grad_acc=config.fused_connection_grad,
                           sinkhorn=config.variant != 'mhc_no_sinkhorn')
@@ -116,11 +104,6 @@ class ConnectionBlock(Block):
         return self.mlp(norm(h))
 
     def forward(self, x, cos, sin, kv_cache=None):
-        if self.wide_residual:
-            h = self.attn_wide.read(x)
-            y = self.attn(h, None, (cos, sin), (-1, 0), kv_cache)
-            x = self.attn_wide.write(x, y)
-            return self.mlp_wide.write(x, self.mlp(self.mlp_wide.read(x)))
         if self.variant == 'baseline':
             return super().forward(x, None, (cos, sin), (-1, 0), kv_cache)
         h, skip, post = self.attn_connection.read(x)
@@ -167,17 +150,6 @@ class ConnectionModel(nn.Module):
         self.register_buffer('cos', freq.cos()[None, :, None, :], persistent=False)
         self.register_buffer('sin', freq.sin()[None, :, None, :], persistent=False)
         self.compiled_steps = None
-        if config.wide_residual:
-            from nanochat.wide_residual import initialize_projection
-            with torch.random.fork_rng(devices=[]):
-                self.init_up_proj = Linear(config.width, 4*config.width, bias=False)
-                self.final_down_proj = Linear(4*config.width, config.width, bias=False)
-                projections = [self.init_up_proj, self.final_down_proj]
-                for block in self.blocks:
-                    for connection in (block.attn_wide, block.mlp_wide):
-                        projections.extend((connection.down_proj, connection.up_proj))
-                for projection in projections:
-                    initialize_projection(projection)
         if config.attention_kernel == 'fla_triton':
             from nanochat.fla_attention import FlaAttention
             for block in self.blocks:
@@ -205,7 +177,7 @@ class ConnectionModel(nn.Module):
         start = 0 if kv_cache is None else kv_cache.get_pos()
         if start + idx.shape[1] > self.config.sequence_length:
             raise ValueError('Input exceeds configured context length')
-        x = self.init_up_proj(self.wte(idx)) if self.config.wide_residual else norm(self.wte(idx))
+        x = norm(self.wte(idx))
         if self.config.variant != 'baseline':
             x = expand_streams(x, self.config.streams)
         cos, sin = self.cos[:, start:start+idx.shape[1]], self.sin[:, start:start+idx.shape[1]]
@@ -219,8 +191,6 @@ class ConnectionModel(nn.Module):
                 x = fn(x, cos, sin, kv_cache)
         if self.stream_head is not None:
             x = self.stream_head(x)
-        if self.config.wide_residual:
-            x = self.final_down_proj(x)
         return norm(x)
 
     def forward(self, idx, targets=None, dense=False, kv_cache=None):
@@ -256,8 +226,6 @@ def optimizer_for(model, batch_tokens=32768):
     for b in model.blocks:
         for name, p in b.named_parameters():
             (routing if '_connection.' in name else matrices).append(p)
-    if c.wide_residual:
-        matrices.extend((model.init_up_proj.weight, model.final_down_proj.weight))
     if model.stream_head is not None:
         routing.extend(model.stream_head.parameters())
     if routing:

@@ -1,0 +1,19 @@
+{
+  "user_request": "Rollback Wide Residual implementation; focus discussion on existing mHC without changing aggregation/distribution",
+  "restored_runtime_base": "2d417e129bff81c30b941242bdbb4e4a1f890bf4",
+  "production_code_byte_identical": true,
+  "static_ast_checked": true,
+  "queue_empty": true,
+  "retired_training_job": "7815947.0",
+  "wandb_run_retained": "6e52efdd",
+  "last_logged_steps": 8670,
+  "last_logged_tokens": 284098560,
+  "stopped_workflows": [
+    "/home/yzhong239/wide-residual-gate-20261105",
+    "/home/yzhong239/wide-residual-10b-20261105"
+  ],
+  "report_archive": "/home/yzhong239/wide-residual-gate-20261105/results/gate-7815924.0.tar",
+  "new_training": false,
+  "weights_and_data_unchanged": true,
+  "timestamp": 1793862326.9407089
+}
