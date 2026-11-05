@@ -1,0 +1,494 @@
+{
+  "wte.weight": {
+    "rms": 1.51627406053257e+17,
+    "maxabs": 5.0440315826549555e+19,
+    "finite": true,
+    "nonfinite": 0
+  },
+  "blocks.0.attn.c_q.weight": {
+    "rms": 5.552298456927845e+19,
+    "maxabs": 4.7039197387959357e+20,
+    "finite": true,
+    "nonfinite": 0
+  },
+  "blocks.0.attn.c_k.weight": {
+    "rms": 5.148113534672493e+19,
+    "maxabs": 4.3349848573217446e+20,
+    "finite": true,
+    "nonfinite": 0
+  },
+  "blocks.0.attn.c_v.weight": {
+    "rms": 5.609529386086102e+19,
+    "maxabs": 5.4648479318364547e+20,
+    "finite": true,
+    "nonfinite": 0
+  },
+  "blocks.0.attn.c_proj.weight": {
+    "rms": 5.7011572533863604e+19,
+    "maxabs": 5.2112052008229483e+20,
+    "finite": true,
+    "nonfinite": 0
+  },
+  "blocks.0.mlp.c_fc.weight": {
+    "rms": 2.1313215547293815e+19,
+    "maxabs": 5.1420299105465375e+20,
+    "finite": true,
+    "nonfinite": 0
+  },
+  "blocks.0.mlp.c_proj.weight": {
+    "rms": 2.6564944259585987e+19,
+    "maxabs": 8.301034833169298e+20,
+    "finite": true,
+    "nonfinite": 0
+  },
+  "blocks.0.token_residual.q.weight": {
+    "rms": 4.116649976185506e+19,
+    "maxabs": 4.677258429001902e+20,
+    "finite": true,
+    "nonfinite": 0
+  },
+  "blocks.0.token_residual.k.weight": {
+    "rms": 4.639895070810241e+19,
+    "maxabs": 6.857360936619412e+20,
+    "finite": true,
+    "nonfinite": 0
+  },
+  "blocks.0.token_residual.v.weight": {
+    "rms": 6.278609653291182e+19,
+    "maxabs": 6.801516301240018e+20,
+    "finite": true,
+    "nonfinite": 0
+  },
+  "blocks.0.token_residual.o.weight": {
+    "rms": 8.490920445885692e+19,
+    "maxabs": 7.896791730616523e+20,
+    "finite": true,
+    "nonfinite": 0
+  },
+  "blocks.1.attn.c_q.weight": {
+    "rms": 5.274199118549463e+18,
+    "maxabs": 1.1413922895607785e+20,
+    "finite": true,
+    "nonfinite": 0
+  },
+  "blocks.1.attn.c_k.weight": {
+    "rms": 5.304705346037941e+18,
+    "maxabs": 1.4353872732355245e+20,
+    "finite": true,
+    "nonfinite": 0
+  },
+  "blocks.1.attn.c_v.weight": {
+    "rms": 1.865693203831936e+19,
+    "maxabs": 2.2136092888451462e+20,
+    "finite": true,
+    "nonfinite": 0
+  },
+  "blocks.1.attn.c_proj.weight": {
+    "rms": 1.8086170479744051e+19,
+    "maxabs": 2.2251385038912147e+20,
+    "finite": true,
+    "nonfinite": 0
+  },
+  "blocks.1.mlp.c_fc.weight": {
+    "rms": 4.76220996459731e+18,
+    "maxabs": 1.3085659077287713e+20,
+    "finite": true,
+    "nonfinite": 0
+  },
+  "blocks.1.mlp.c_proj.weight": {
+    "rms": 6.486614123040158e+18,
+    "maxabs": 1.890791267555229e+20,
+    "finite": true,
+    "nonfinite": 0
+  },
+  "blocks.1.token_residual.q.weight": {
+    "rms": 2.215080298919488e+19,
+    "maxabs": 4.532422664985667e+20,
+    "finite": true,
+    "nonfinite": 0
+  },
+  "blocks.1.token_residual.k.weight": {
+    "rms": 2.915628566516588e+19,
+    "maxabs": 4.501437899549358e+20,
+    "finite": true,
+    "nonfinite": 0
+  },
+  "blocks.1.token_residual.v.weight": {
+    "rms": 4.799124577083075e+19,
+    "maxabs": 4.595473059768854e+20,
+    "finite": true,
+    "nonfinite": 0
+  },
+  "blocks.1.token_residual.o.weight": {
+    "rms": 6.219708447086114e+19,
+    "maxabs": 5.4408887818188436e+20,
+    "finite": true,
+    "nonfinite": 0
+  },
+  "blocks.2.attn.c_q.weight": {
+    "rms": 1.19452488531903e+18,
+    "maxabs": 2.1184932647150813e+19,
+    "finite": true,
+    "nonfinite": 0
+  },
+  "blocks.2.attn.c_k.weight": {
+    "rms": 1.3927052154410977e+18,
+    "maxabs": 1.7870283321406128e+19,
+    "finite": true,
+    "nonfinite": 0
+  },
+  "blocks.2.attn.c_v.weight": {
+    "rms": 8.419532297896747e+18,
+    "maxabs": 7.724574080865875e+19,
+    "finite": true,
+    "nonfinite": 0
+  },
+  "blocks.2.attn.c_proj.weight": {
+    "rms": 7.258957247347082e+18,
+    "maxabs": 6.917529027641082e+19,
+    "finite": true,
+    "nonfinite": 0
+  },
+  "blocks.2.mlp.c_fc.weight": {
+    "rms": 1.8718003353616003e+18,
+    "maxabs": 4.986385507424613e+19,
+    "finite": true,
+    "nonfinite": 0
+  },
+  "blocks.2.mlp.c_proj.weight": {
+    "rms": 2.610774729094297e+18,
+    "maxabs": 7.955158381787244e+19,
+    "finite": true,
+    "nonfinite": 0
+  },
+  "blocks.2.token_residual.q.weight": {
+    "rms": 7.032058952083518e+18,
+    "maxabs": 8.82885670949712e+19,
+    "finite": true,
+    "nonfinite": 0
+  },
+  "blocks.2.token_residual.k.weight": {
+    "rms": 7.717651296869882e+18,
+    "maxabs": 9.000894215262673e+19,
+    "finite": true,
+    "nonfinite": 0
+  },
+  "blocks.2.token_residual.v.weight": {
+    "rms": 5.448834705631039e+19,
+    "maxabs": 4.865328749440894e+20,
+    "finite": true,
+    "nonfinite": 0
+  },
+  "blocks.2.token_residual.o.weight": {
+    "rms": 6.724420207600513e+19,
+    "maxabs": 5.3380265663297015e+20,
+    "finite": true,
+    "nonfinite": 0
+  },
+  "blocks.3.attn.c_q.weight": {
+    "rms": 1.1334045277951846e+18,
+    "maxabs": 2.7093655358260904e+19,
+    "finite": true,
+    "nonfinite": 0
+  },
+  "blocks.3.attn.c_k.weight": {
+    "rms": 1.0687390891312527e+18,
+    "maxabs": 1.9743780766392254e+19,
+    "finite": true,
+    "nonfinite": 0
+  },
+  "blocks.3.attn.c_v.weight": {
+    "rms": 4.2499488143976033e+18,
+    "maxabs": 3.775817927587424e+19,
+    "finite": true,
+    "nonfinite": 0
+  },
+  "blocks.3.attn.c_proj.weight": {
+    "rms": 2.575151359302446e+18,
+    "maxabs": 2.3923121220592075e+19,
+    "finite": true,
+    "nonfinite": 0
+  },
+  "blocks.3.mlp.c_fc.weight": {
+    "rms": 3.4412182392444165e+18,
+    "maxabs": 6.975175102871424e+19,
+    "finite": true,
+    "nonfinite": 0
+  },
+  "blocks.3.mlp.c_proj.weight": {
+    "rms": 6.075655101992198e+18,
+    "maxabs": 2.697836320780022e+20,
+    "finite": true,
+    "nonfinite": 0
+  },
+  "blocks.3.token_residual.q.weight": {
+    "rms": 1.0793547475985486e+19,
+    "maxabs": 2.085436843450182e+20,
+    "finite": true,
+    "nonfinite": 0
+  },
+  "blocks.3.token_residual.k.weight": {
+    "rms": 1.7364529125139569e+19,
+    "maxabs": 3.0358314728141776e+20,
+    "finite": true,
+    "nonfinite": 0
+  },
+  "blocks.3.token_residual.v.weight": {
+    "rms": 3.934654178284747e+19,
+    "maxabs": 3.2112466783002585e+20,
+    "finite": true,
+    "nonfinite": 0
+  },
+  "blocks.3.token_residual.o.weight": {
+    "rms": 5.152724751745927e+19,
+    "maxabs": 5.17949985944626e+20,
+    "finite": true,
+    "nonfinite": 0
+  },
+  "blocks.4.attn.c_q.weight": {
+    "rms": 1.813645121702729e+17,
+    "maxabs": 2.8282605659886715e+18,
+    "finite": true,
+    "nonfinite": 0
+  },
+  "blocks.4.attn.c_k.weight": {
+    "rms": 1.8635607039711302e+17,
+    "maxabs": 2.8102461674791895e+18,
+    "finite": true,
+    "nonfinite": 0
+  },
+  "blocks.4.attn.c_v.weight": {
+    "rms": 1.4844828811205435e+19,
+    "maxabs": 1.7293822569102705e+20,
+    "finite": true,
+    "nonfinite": 0
+  },
+  "blocks.4.attn.c_proj.weight": {
+    "rms": 1.1792350524383455e+19,
+    "maxabs": 1.1702153271759497e+20,
+    "finite": true,
+    "nonfinite": 0
+  },
+  "blocks.4.mlp.c_fc.weight": {
+    "rms": 3.397797992176077e+18,
+    "maxabs": 7.061644215716938e+19,
+    "finite": true,
+    "nonfinite": 0
+  },
+  "blocks.4.mlp.c_proj.weight": {
+    "rms": 2.2805273486729231e+18,
+    "maxabs": 1.1471568970838127e+20,
+    "finite": true,
+    "nonfinite": 0
+  },
+  "blocks.4.token_residual.q.weight": {
+    "rms": 1.2045585241558061e+19,
+    "maxabs": 1.605510749159445e+20,
+    "finite": true,
+    "nonfinite": 0
+  },
+  "blocks.4.token_residual.k.weight": {
+    "rms": 9.628721107629273e+18,
+    "maxabs": 1.3085270289976132e+20,
+    "finite": true,
+    "nonfinite": 0
+  },
+  "blocks.4.token_residual.v.weight": {
+    "rms": 9.494585365571553e+18,
+    "maxabs": 1.274220331070537e+20,
+    "finite": true,
+    "nonfinite": 0
+  },
+  "blocks.4.token_residual.o.weight": {
+    "rms": 1.1147336215722273e+19,
+    "maxabs": 1.1412818106324196e+20,
+    "finite": true,
+    "nonfinite": 0
+  },
+  "blocks.5.attn.c_q.weight": {
+    "rms": 383074183593893.56,
+    "maxabs": 8831277394296832.0,
+    "finite": true,
+    "nonfinite": 0
+  },
+  "blocks.5.attn.c_k.weight": {
+    "rms": 489968219156871.7,
+    "maxabs": 9570149208162304.0,
+    "finite": true,
+    "nonfinite": 0
+  },
+  "blocks.5.attn.c_v.weight": {
+    "rms": 8.423140893796302e+16,
+    "maxabs": 8.241587318088008e+17,
+    "finite": true,
+    "nonfinite": 0
+  },
+  "blocks.5.attn.c_proj.weight": {
+    "rms": 1.2933683309986042e+17,
+    "maxabs": 1.252000696408998e+18,
+    "finite": true,
+    "nonfinite": 0
+  },
+  "blocks.5.mlp.c_fc.weight": {
+    "rms": 4.089667296546619e+16,
+    "maxabs": 1.261007895663739e+18,
+    "finite": true,
+    "nonfinite": 0
+  },
+  "blocks.5.mlp.c_proj.weight": {
+    "rms": 4.19360040117378e+16,
+    "maxabs": 1.7473966554197524e+18,
+    "finite": true,
+    "nonfinite": 0
+  },
+  "blocks.5.token_residual.q.weight": {
+    "rms": 1.8299098055569382e+17,
+    "maxabs": 3.5225185960455045e+18,
+    "finite": true,
+    "nonfinite": 0
+  },
+  "blocks.5.token_residual.k.weight": {
+    "rms": 2.4729256293336314e+17,
+    "maxabs": 3.706743968302629e+18,
+    "finite": true,
+    "nonfinite": 0
+  },
+  "blocks.5.token_residual.v.weight": {
+    "rms": 1.266959731171621e+17,
+    "maxabs": 1.1107002581002486e+18,
+    "finite": true,
+    "nonfinite": 0
+  },
+  "blocks.5.token_residual.o.weight": {
+    "rms": 1.527962403446207e+17,
+    "maxabs": 1.5487434915829514e+18,
+    "finite": true,
+    "nonfinite": 0
+  },
+  "blocks.6.attn.c_q.weight": {
+    "rms": 510465050848519.25,
+    "maxabs": 1.0625680370827264e+16,
+    "finite": true,
+    "nonfinite": 0
+  },
+  "blocks.6.attn.c_k.weight": {
+    "rms": 474907083847157.75,
+    "maxabs": 9992361673228288.0,
+    "finite": true,
+    "nonfinite": 0
+  },
+  "blocks.6.attn.c_v.weight": {
+    "rms": 6681080446093096.0,
+    "maxabs": 7.48723438050345e+16,
+    "finite": true,
+    "nonfinite": 0
+  },
+  "blocks.6.attn.c_proj.weight": {
+    "rms": 4538379280491782.0,
+    "maxabs": 4.531747125041562e+16,
+    "finite": true,
+    "nonfinite": 0
+  },
+  "blocks.6.mlp.c_fc.weight": {
+    "rms": 4045453136108.2676,
+    "maxabs": 79714593013760.0,
+    "finite": true,
+    "nonfinite": 0
+  },
+  "blocks.6.mlp.c_proj.weight": {
+    "rms": 4951991866436.041,
+    "maxabs": 110500918591488.0,
+    "finite": true,
+    "nonfinite": 0
+  },
+  "blocks.6.token_residual.q.weight": {
+    "rms": 3800590523354383.5,
+    "maxabs": 5.234785167763046e+16,
+    "finite": true,
+    "nonfinite": 0
+  },
+  "blocks.6.token_residual.k.weight": {
+    "rms": 7786552490380158.0,
+    "maxabs": 1.013294540175442e+17,
+    "finite": true,
+    "nonfinite": 0
+  },
+  "blocks.6.token_residual.v.weight": {
+    "rms": 58573832386240.15,
+    "maxabs": 543156093321216.0,
+    "finite": true,
+    "nonfinite": 0
+  },
+  "blocks.6.token_residual.o.weight": {
+    "rms": 49082996857799.234,
+    "maxabs": 439773915250688.0,
+    "finite": true,
+    "nonfinite": 0
+  },
+  "blocks.7.attn.c_q.weight": {
+    "rms": 2186395114.2898383,
+    "maxabs": 62277025792.0,
+    "finite": true,
+    "nonfinite": 0
+  },
+  "blocks.7.attn.c_k.weight": {
+    "rms": 1966421168.3040168,
+    "maxabs": 56371445760.0,
+    "finite": true,
+    "nonfinite": 0
+  },
+  "blocks.7.attn.c_v.weight": {
+    "rms": 6504444724.613093,
+    "maxabs": 69793218560.0,
+    "finite": true,
+    "nonfinite": 0
+  },
+  "blocks.7.attn.c_proj.weight": {
+    "rms": 7397625310.661881,
+    "maxabs": 70866960384.0,
+    "finite": true,
+    "nonfinite": 0
+  },
+  "blocks.7.mlp.c_fc.weight": {
+    "rms": 52475963.38832429,
+    "maxabs": 721420288.0,
+    "finite": true,
+    "nonfinite": 0
+  },
+  "blocks.7.mlp.c_proj.weight": {
+    "rms": 68720563.46603484,
+    "maxabs": 939524096.0,
+    "finite": true,
+    "nonfinite": 0
+  },
+  "blocks.7.token_residual.q.weight": {
+    "rms": 10887150563.824799,
+    "maxabs": 102542344192.0,
+    "finite": true,
+    "nonfinite": 0
+  },
+  "blocks.7.token_residual.k.weight": {
+    "rms": 15967669007.88953,
+    "maxabs": 210453397504.0,
+    "finite": true,
+    "nonfinite": 0
+  },
+  "blocks.7.token_residual.v.weight": {
+    "rms": 315645076.2322426,
+    "maxabs": 3992977408.0,
+    "finite": true,
+    "nonfinite": 0
+  },
+  "blocks.7.token_residual.o.weight": {
+    "rms": 265397081.70040298,
+    "maxabs": 2248146944.0,
+    "finite": true,
+    "nonfinite": 0
+  },
+  "lm_head.weight": {
+    "rms": 0.0003930814360879229,
+    "maxabs": 0.2041015625,
+    "finite": true,
+    "nonfinite": 0
+  }
+}

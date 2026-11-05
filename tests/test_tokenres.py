@@ -11,7 +11,7 @@ from nanochat.connection_experiment import configure_attention
 from nanochat.connection_cost import model_cost
 from nanochat.gpt import norm
 from nanochat.engine import KVCache
-from nanochat.packed_training import seed_all,snapshot,restore_rng
+from nanochat.packed_training import seed_all,snapshot,restore_rng,train_step
 from test_connection_training_resume import equal_tree
 from test_fla_attention import relative,record
 
@@ -39,9 +39,12 @@ def dense(q,k,v,window):
 
 def oracle(module,x,u):
     b,t,d=x.shape;shape=(b,t,module.heads,module.head_dim)
-    q=F.linear(u,module.q.weight.to(u.dtype)).view(shape)
-    k=F.linear(x,module.k.weight.to(x.dtype)).view(shape)
-    v=F.linear(x,module.v.weight.to(x.dtype)).view(shape)
+    un=F.rms_norm(u,(d,));xn=F.rms_norm(x,(d,))
+    q=F.linear(un,module.q.weight.to(u.dtype)).view(shape)
+    k=F.linear(xn,module.k.weight.to(x.dtype)).view(shape)
+    v=F.linear(xn,module.v.weight.to(x.dtype)).view(shape)
+    q=F.rms_norm(q,(module.head_dim,))*1.2
+    k=F.rms_norm(k,(module.head_dim,))*1.2
     return u+F.linear(dense(q,k,v,module.window).reshape(b,t,d),module.o.weight.to(x.dtype))
 
 
@@ -110,7 +113,7 @@ def test_exact_support_includes_diagonal_and_no_identity_bypass():
     x=torch.randn(1,257,128,device='cuda',dtype=torch.bfloat16,requires_grad=True);u=torch.zeros_like(x,requires_grad=True)
     y=m(x,u);g,=torch.autograd.grad(y[:,200].float().sum(),x)
     assert torch.equal((g[0,:,0]!=0).nonzero().flatten(),torch.arange(73,201,device='cuda'))
-    torch.testing.assert_close(y[:,0],x[:,0],rtol=0,atol=0)
+    torch.testing.assert_close(y[:,0],norm(x)[:,0],rtol=0,atol=0)
     with torch.no_grad():m.o.weight.zero_()
     u=torch.randn_like(x);torch.testing.assert_close(m(x,u),u,rtol=0,atol=0)
 
@@ -206,3 +209,38 @@ def test_flops_account_for_both_tokenres_calls():
     extra=16*t*l*d*d+8*d*l*(w*t-w*(w-1)//2)
     assert new['estimated_forward_flops']==base['estimated_forward_flops']+extra
     assert new['estimated_training_flops']==3*new['estimated_forward_flops']
+
+
+def test_pre_and_qk_norm_match_backbone(monkeypatch):
+    module=TokenResidual(32,2).cuda().double()
+    x=torch.randn(2,17,32,device='cuda',dtype=torch.float64)*1000
+    u=torch.randn_like(x)*100
+    def rms(z):
+        return z/(z.square().mean(-1,keepdim=True)+torch.finfo(z.dtype).eps).sqrt()
+    expected=[rms(F.linear(rms(u),module.q.weight).view(2,17,2,16))*1.2,
+              rms(F.linear(rms(x),module.k.weight).view(2,17,2,16))*1.2,
+              F.linear(rms(x),module.v.weight).view(2,17,2,16)]
+    def primitive(q,k,v,**kwargs):
+        for a,b in zip((q,k,v),expected):torch.testing.assert_close(a,b,atol=1e-12,rtol=1e-12)
+        return dense(q,k,v,128)
+    monkeypatch.setattr(flash_attention,'flash_attn_func',primitive)
+    module(x,u)
+
+
+def test_raw_checkpoint_not_silently_reinterpreted():
+    config=asdict(ConnectionConfig(tokenres=True));config.pop('tokenres_normalization')
+    with pytest.raises(ValueError,match='archived source'):ConnectionConfig.from_checkpoint(config)
+    config['tokenres']=False
+    assert not ConnectionConfig.from_checkpoint(config).tokenres
+
+
+def test_nonfinite_post_optimizer_is_rejected(monkeypatch):
+    model=build(sequence_length=128);opt,_=optimizer_for(model)
+    x=torch.randint(0,256,(1,128),device='cuda');y=(x+1)%256
+    class Data:
+        def batch(self,*args):return x,y
+    @torch.no_grad()
+    def corrupt():model.blocks[0].token_residual.o.weight.fill_(float('nan'))
+    monkeypatch.setattr(opt,'step',corrupt)
+    with pytest.raises(FloatingPointError,match='after optimizer'):
+        train_step(model,opt,Data(),0,microbatch=1,batch_tokens=128)

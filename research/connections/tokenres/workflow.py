@@ -13,7 +13,7 @@ import time
 import uuid
 
 REPO=Path(__file__).resolve().parents[3]
-KEY='tokenres-10b-20261104'
+KEY='tokenres-normalized-10b-20261104'
 PRIOR=Path('/home/yzhong239/nanochat-runtime-assets')
 READY=Path('/home/yzhong239/datasets/fineweb-edu-10bt/current-packed-cache.json')
 MODES=('tokenres',)
@@ -57,14 +57,16 @@ def submit(root, experiment_dir=None):
         assert not json.loads(command(['condor_q','yzhong239','-constraint',f'TokenResKey == "{KEY}"','-json']) or '[]')
         for name in ('bundles','logs','results'):(root/name).mkdir(exist_ok=True)
         bundle=root/'bundles';ready=json.loads(READY.read_text());assert ready['ready'] and ready['sequence_length']==2048
-        for name,path in [(WHEEL,PRIOR/'bundles'/WHEEL),('gate-data.tar',Path(ready['gate_archive']['path']))]:
+        gate_data=json.loads((root/'gate-data.json').read_text())
+        assert gate_data['unique_steps']==1024 and gate_data['sequence_length']==2048
+        for name,path in [(WHEEL,PRIOR/'bundles'/WHEEL),('gate-data.tar',Path(gate_data['path']))]:
             (bundle/name).symlink_to(path)
         commit=command(['git','rev-parse','HEAD'])
         command(['git','archive','--format=tar','--prefix=nanochat-src/',f'--output={bundle/"source.tar"}',commit])
         old=json.loads((PRIOR/'state.json').read_text())['source']['hashes']
         hashes={k:v for k,v in old.items() if k not in ('source.tar','gate-data.tar')}
         hashes.update({'source.tar':hashlib.sha256((bundle/'source.tar').read_bytes()).hexdigest(),
-                       'gate-data.tar':ready['gate_archive']['sha256']})
+                       'gate-data.tar':gate_data['sha256']})
         source=dict(commit=commit,hashes=hashes,formal_training=False,purpose=KEY+' correctness/profile/restart')
         inputs(bundle,source)
         shutil.copy2(experiment_dir/'validate.sh',root/'validate.sh')
@@ -102,7 +104,7 @@ def audit_publish(root,state):
     with tarfile.open(root/'results'/f'gate-{state["job"]}.tar') as tf:
         result=json.load(tf.extractfile('results/gate.json'))
         assert result['complete'] and result['source']==state['source']
-        assert result['checks']==dict(tests=32,failures=0,errors=0,skipped=0)
+        assert result['checks']==dict(tests=35,failures=0,errors=0,skipped=0)
         assert not result['formal_training'] and not result['weights_returned']
         assert len(result['profiles'])==4 and len({p['gpu'] for p in result['profiles']})==1
         for p in result['profiles']:
@@ -112,14 +114,22 @@ def audit_publish(root,state):
             assert len(p['samples_seconds'])==30 and all(math.isfinite(x) and x>0 for x in p['samples_seconds'])
             assert p['peak_reserved_bytes']<.9*22000*1024**2 and math.isfinite(p['dev_ce'])
             if p['mode']=='tokenres':
-                assert p['extended_probe']['steps']==128 and p['extended_probe']['training_tokens']==4194304
-                for diagnosis in (p['stability_before'],p['stability_after'],p['extended_probe']['stability']):
+                assert p['tokenres_normalization']=='pre_qk'
+                assert p['extended_probe']['steps']==1024 and p['extended_probe']['training_tokens']==33554432
+                assert len(p['extended_probe']['additional_losses'])==974
+                assert all(math.isfinite(v) for v in p['extended_probe']['additional_losses'])
+                checkpoints=p['extended_probe']['checkpoints']
+                assert [x['step'] for x in checkpoints]==[128,250,500,768,1024]
+                for diagnosis in [p['stability_before'],p['stability_after']]+[x['stability'] for x in checkpoints]:
                     assert len(diagnosis['layers'])==16 and math.isfinite(diagnosis['ce'])
+                    assert diagnosis['parameters_finite']
                     assert all(0<x['output_rms']<100 for x in diagnosis['layers'])
-                    assert all(math.isfinite(v) for v in diagnosis['parameter_gradient_norms'].values())
+                    assert all(math.isfinite(x['output_gradient_rms']) and x['output_gradient_rms']<1 for x in diagnosis['layers'])
+                    assert all(math.isfinite(v) and v<1e4 for v in diagnosis['parameter_gradient_norms'].values())
         resume=result['resume'];assert resume['exact_steps_1_to_50'] and resume['summary']['complete']
         assert resume['summary']['steps']==50 and resume['config']['logging_backend']=='local'
         assert resume['config']['model']['tokenres'] and resume['config']['model']['tokenres_window']==128
+        assert resume['config']['model']['tokenres_normalization']=='pre_qk'
         assert resume['config']['parameters']==67108864 and resume['config']['protocol']['schedule_steps']==305176
         probe=json.load(tf.extractfile('results/backend-probe.json'))
         assert probe['backend']=='fa3' and probe['revision']=='de87b9b5af06dd9984df595bef90b2eba44b181a'
@@ -147,7 +157,7 @@ def audit_publish(root,state):
     assert not command(['git','diff','--name-only',state['source']['commit'],'HEAD','--','nanochat','scripts','tests',
         'research/connections/tokenres','research/connections/runtime','research/connections/toolchain'])
     report=REPO/'research/connections/tokenres/validation.json';write(report,result)
-    command(['git','add',str(report)]);command(['git','commit','-m','Validate TokenRes causal routing, throughput and checkpoint recovery'])
+    command(['git','add',str(report)]);command(['git','commit','-m','Validate normalized TokenRes, 1024-step stability and checkpoint recovery'])
     head=command(['git','rev-parse','HEAD'])
     try:runpy.run_path(str(REPO/'research/connections/nvidia-only/watch.py'))['push']()
     except Exception:

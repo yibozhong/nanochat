@@ -35,7 +35,8 @@ def stability(model,data):
                 output_gradient_rms=float(out.grad.float().square().mean().sqrt()))
             result.append(row)
         gradient_norms={n:float(p.grad.float().norm()) for n,p in model.named_parameters()}
-        return dict(ce=float(loss.detach()),layers=result,parameter_gradient_norms=gradient_norms)
+        return dict(ce=float(loss.detach()),layers=result,parameter_gradient_norms=gradient_norms,
+                    parameters_finite=all(bool(p.isfinite().all()) for p in model.parameters()))
     finally:
         for h in handles:h.remove()
         model.compiled_steps=saved;model.zero_grad(set_to_none=True)
@@ -43,11 +44,13 @@ def stability(model,data):
 
 def check_stability(result):
     assert math.isfinite(result['ce'])
+    assert result['parameters_finite']
     for row in result['layers']:
         assert all(math.isfinite(v) for v in row.values() if isinstance(v,float)),row
         assert 0<row['output_rms']<100,row
+        assert row['output_gradient_rms']<1,row
     norms=result['parameter_gradient_norms']
-    assert all(math.isfinite(v) for v in norms.values()) and norms['wte.weight']>0
+    assert all(math.isfinite(v) and v<1e4 for v in norms.values()) and norms['wte.weight']>0
 
 
 def profile(mode,out):
@@ -73,23 +76,26 @@ def profile(mode,out):
         tokens_per_second=32768/statistics.mean(times),microbatch=16,grad_accum=1,warmup_steps=20,timed_steps=30,
         schedule_steps=305176,losses=losses,dev_ce=dev,dev_tokens=tokens,parameters=sum(p.numel() for p in model.parameters()),
         gpu=torch.cuda.get_device_name(),peak_allocated_bytes=allocated,peak_reserved_bytes=reserved,
-        analytic_cost=model_cost(model.config,batch=16),stability_before=before,stability_after=after)
+        analytic_cost=model_cost(model.config,batch=16),stability_before=before,stability_after=after,
+        tokenres_normalization=model.config.tokenres_normalization if model.config.tokenres else None)
     json_write(out,result)
     if after:check_stability(after)
     assert reserved<.9*22000*1024**2,result
     if model.config.tokenres:
-        # Continue beyond warmup on the complete existing 128-step gate prefix.
-        # No repeated data, no change to the 305176-step learning-rate horizon.
-        extended=[]
-        for step in range(50,128):
+        # Extend past the old ~552-step failure using unique source rows.
+        # Same 10B horizon, no data repetition and no diagnostic W&B run.
+        extended=[];probes=[]
+        for step in range(50,1024):
             schedule(opt,step,305176,wd)
             extended.append(train_step(model,opt,data,step))
-        extended_stability=stability(model,data)
-        result['extended_probe']=dict(steps=128,training_tokens=128*32768,
-            additional_losses=extended,stability=extended_stability)
-        json_write(out,result)
-        check_stability(extended_stability)
-        print(mode,'extended128',extended[-1],flush=True)
+            if step+1 in (128,250,500,768,1024):
+                diagnosis=stability(model,data)
+                probes.append(dict(step=step+1,stability=diagnosis))
+                result['extended_probe']=dict(steps=step+1,training_tokens=(step+1)*32768,
+                    additional_losses=extended,stability=diagnosis,checkpoints=probes)
+                json_write(out,result)
+                check_stability(diagnosis)
+                print(mode,'extended',step+1,extended[-1],flush=True)
 
 
 def backend_probe():
@@ -115,7 +121,7 @@ def main():
         'tests/test_connection_training_resume.py','-v','--junitxml=results/tokenres-tests.xml'],'tests')
     suites=ET.parse('results/tokenres-tests.xml').getroot().findall('testsuite')
     checks={key:sum(int(s.attrib.get(key,0)) for s in suites) for key in ('tests','failures','errors','skipped')}
-    assert checks==dict(tests=32,failures=0,errors=0,skipped=0),checks
+    assert checks==dict(tests=35,failures=0,errors=0,skipped=0),checks
     profiles=[]
     for repeat,order in enumerate([('baseline','tokenres'),('tokenres','baseline')]):
         for mode in order:
@@ -133,6 +139,7 @@ def main():
     assert result['complete'] and result['steps']==50 and result['training_tokens']==50*32768
     rows=[json.loads(line) for line in (out/'steps.jsonl').read_text().splitlines()];assert [r['step'] for r in rows]==list(range(1,51))
     assert config['model']['tokenres'] and config['model']['tokenres_window']==128 and config['parameters']==67108864
+    assert config['model']['tokenres_normalization']=='pre_qk'
     assert config['logging_backend']=='local' and config['protocol']['schedule_steps']==305176 and config['protocol']['grad_accum']==1
     assert not list(Path('results').rglob('*.wandb')) and not list(Path('results').rglob('*.pt'))
     json_write('results/gate.json',dict(complete=True,source=json.loads(Path('source.json').read_text()),checks=checks,profiles=profiles,

@@ -134,4 +134,4 @@ python -m scripts.connection_train --variant "$TASK_VARIANT" --connection-backen
     --attention-backend fa3 --matched-backbone-init --evaluate-test \
     --no-activation-checkpoint --no-fused-connection-grad --seed 42 \
     --data-dir ../data --output-dir results/train --checkpoint-dir ../checkpoints \
-    --run-id "$TASK_RUN_ID" --formal-training --attention-kernel original --tokenres --tokenres-window 128 --wandb-group tokenres-10b-20261104 --resume auto --segment-seconds "${NANOCHAT_CHECKPOINT_SECONDS:-1800}"
+    --run-id "$TASK_RUN_ID" --formal-training --attention-kernel original --tokenres --tokenres-window 128 --wandb-group tokenres-normalized-10b-20261104 --resume auto --segment-seconds "${NANOCHAT_CHECKPOINT_SECONDS:-1800}"

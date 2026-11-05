@@ -1,0 +1,788 @@
+[
+  {
+    "step": 552,
+    "shape": [
+      64,
+      512,
+      512
+    ],
+    "bad_parameters": [
+      "blocks.0.attn.c_q.weight",
+      "blocks.0.attn.c_k.weight",
+      "blocks.0.attn.c_v.weight",
+      "blocks.0.attn.c_proj.weight",
+      "blocks.0.token_residual.q.weight",
+      "blocks.0.token_residual.k.weight",
+      "blocks.0.token_residual.v.weight",
+      "blocks.0.token_residual.o.weight",
+      "blocks.1.attn.c_q.weight",
+      "blocks.1.attn.c_k.weight",
+      "blocks.1.attn.c_v.weight",
+      "blocks.1.attn.c_proj.weight",
+      "blocks.1.token_residual.q.weight",
+      "blocks.1.token_residual.k.weight",
+      "blocks.1.token_residual.v.weight",
+      "blocks.1.token_residual.o.weight",
+      "blocks.2.attn.c_q.weight",
+      "blocks.2.attn.c_k.weight",
+      "blocks.2.attn.c_v.weight",
+      "blocks.2.attn.c_proj.weight",
+      "blocks.2.token_residual.q.weight",
+      "blocks.2.token_residual.k.weight",
+      "blocks.2.token_residual.v.weight",
+      "blocks.2.token_residual.o.weight",
+      "blocks.3.attn.c_q.weight",
+      "blocks.3.attn.c_k.weight",
+      "blocks.3.attn.c_v.weight",
+      "blocks.3.attn.c_proj.weight",
+      "blocks.3.token_residual.q.weight",
+      "blocks.3.token_residual.k.weight",
+      "blocks.3.token_residual.v.weight",
+      "blocks.3.token_residual.o.weight",
+      "blocks.4.attn.c_v.weight",
+      "blocks.4.attn.c_proj.weight",
+      "blocks.4.token_residual.q.weight",
+      "blocks.4.token_residual.k.weight",
+      "blocks.4.token_residual.v.weight",
+      "blocks.4.token_residual.o.weight"
+    ],
+    "inputs": {
+      "gradients": {
+        "rms": 2.754536113622996e+19,
+        "maxabs": 7.896791730616523e+20,
+        "finite": true,
+        "nonfinite": 0
+      },
+      "parameters": {
+        "rms": 0.03921273496467978,
+        "maxabs": 0.2365623563528061,
+        "finite": true,
+        "nonfinite": 0
+      },
+      "momentum": {
+        "rms": 320965978632907.6,
+        "maxabs": 8364223860047872.0,
+        "finite": true,
+        "nonfinite": 0
+      },
+      "second_moment": {
+        "rms": 0.003122219470852656,
+        "maxabs": 0.04626714810729027,
+        "finite": true,
+        "nonfinite": 0
+      }
+    },
+    "after": {
+      "gradients": {
+        "rms": 1.6279133409583544e+18,
+        "maxabs": 4.667040271620794e+19,
+        "finite": true,
+        "nonfinite": 0
+      },
+      "parameters": {
+        "rms": "nan",
+        "maxabs": "nan",
+        "finite": false,
+        "nonfinite": 9961472
+      },
+      "momentum": {
+        "rms": 8.263436084093688e+17,
+        "maxabs": 2.3690770224387195e+19,
+        "finite": true,
+        "nonfinite": 0
+      },
+      "second_moment": {
+        "rms": "nan",
+        "maxabs": "nan",
+        "finite": false,
+        "nonfinite": 19456
+      }
+    },
+    "eager_shadow": {
+      "nesterov": {
+        "rms": 1.6279133409583544e+18,
+        "maxabs": 4.667040271620794e+19,
+        "finite": true,
+        "nonfinite": 0
+      },
+      "cast_bf16": {
+        "rms": 1.6278889099597578e+18,
+        "maxabs": 4.66933209365773e+19,
+        "finite": true,
+        "nonfinite": 0
+      },
+      "target_norm_fp32": {
+        "rms": "inf",
+        "maxabs": "inf",
+        "finite": false,
+        "nonfinite": 38
+      },
+      "row_norm_fp32": {
+        "rms": "inf",
+        "maxabs": "inf",
+        "finite": false,
+        "nonfinite": 8491
+      },
+      "row_equilibrated": {
+        "rms": "nan",
+        "maxabs": "nan",
+        "finite": false,
+        "nonfinite": 9961472
+      },
+      "polar_denominator": {
+        "rms": "nan",
+        "maxabs": "nan",
+        "finite": false,
+        "nonfinite": 38
+      },
+      "polar_normalized": {
+        "rms": "nan",
+        "maxabs": "nan",
+        "finite": false,
+        "nonfinite": 9961472
+      },
+      "polar_0": {
+        "rms": "nan",
+        "maxabs": "nan",
+        "finite": false,
+        "nonfinite": 9961472
+      },
+      "polar_1": {
+        "rms": "nan",
+        "maxabs": "nan",
+        "finite": false,
+        "nonfinite": 9961472
+      },
+      "polar_2": {
+        "rms": "nan",
+        "maxabs": "nan",
+        "finite": false,
+        "nonfinite": 9961472
+      },
+      "polar_3": {
+        "rms": "nan",
+        "maxabs": "nan",
+        "finite": false,
+        "nonfinite": 9961472
+      },
+      "polar_4": {
+        "rms": "nan",
+        "maxabs": "nan",
+        "finite": false,
+        "nonfinite": 9961472
+      },
+      "muon_plus": {
+        "rms": "nan",
+        "maxabs": "nan",
+        "finite": false,
+        "nonfinite": 9961472
+      },
+      "variance_scaled": {
+        "rms": "nan",
+        "maxabs": "nan",
+        "finite": false,
+        "nonfinite": 9961472
+      },
+      "parameters_after": {
+        "rms": "nan",
+        "maxabs": "nan",
+        "finite": false,
+        "nonfinite": 9961472
+      }
+    },
+    "max_scaled_shadow": {
+      "nesterov": {
+        "rms": 1.6279133409583544e+18,
+        "maxabs": 4.667040271620794e+19,
+        "finite": true,
+        "nonfinite": 0
+      },
+      "cast_bf16": {
+        "rms": 0.08747330589898672,
+        "maxabs": 1.0,
+        "finite": true,
+        "nonfinite": 0
+      },
+      "target_norm_fp32": {
+        "rms": 1.9792949274348492,
+        "maxabs": 2.8503289222717285,
+        "finite": true,
+        "nonfinite": 0
+      },
+      "row_norm_fp32": {
+        "rms": 1.9792949569535072,
+        "maxabs": 9.276847839355469,
+        "finite": true,
+        "nonfinite": 0
+      },
+      "row_equilibrated": {
+        "rms": 0.0874698373786724,
+        "maxabs": 0.63671875,
+        "finite": true,
+        "nonfinite": 0
+      },
+      "polar_denominator": {
+        "rms": 45.223376793354895,
+        "maxabs": 65.0,
+        "finite": true,
+        "nonfinite": 0
+      },
+      "polar_normalized": {
+        "rms": 0.0019338323129719096,
+        "maxabs": 0.011474609375,
+        "finite": true,
+        "nonfinite": 0
+      },
+      "polar_0": {
+        "rms": 0.005704074387280332,
+        "maxabs": 0.08447265625,
+        "finite": true,
+        "nonfinite": 0
+      },
+      "polar_1": {
+        "rms": 0.00899091585272867,
+        "maxabs": 0.224609375,
+        "finite": true,
+        "nonfinite": 0
+      },
+      "polar_2": {
+        "rms": 0.012017962469193831,
+        "maxabs": 0.30859375,
+        "finite": true,
+        "nonfinite": 0
+      },
+      "polar_3": {
+        "rms": 0.014141210466964725,
+        "maxabs": 0.236328125,
+        "finite": true,
+        "nonfinite": 0
+      },
+      "polar_4": {
+        "rms": 0.015673930381597208,
+        "maxabs": 0.25390625,
+        "finite": true,
+        "nonfinite": 0
+      },
+      "muon_plus": {
+        "rms": 0.044194173368213185,
+        "maxabs": 1.1773416996002197,
+        "finite": true,
+        "nonfinite": 0
+      },
+      "variance_scaled": {
+        "rms": 0.04419417247342507,
+        "maxabs": 0.7085255980491638,
+        "finite": true,
+        "nonfinite": 0
+      },
+      "parameters_after": {
+        "rms": 0.03919658211942746,
+        "maxabs": 0.23685820400714874,
+        "finite": true,
+        "nonfinite": 0
+      }
+    }
+  },
+  {
+    "step": 552,
+    "shape": [
+      8,
+      512,
+      2048
+    ],
+    "bad_parameters": [
+      "blocks.0.mlp.c_proj.weight",
+      "blocks.1.mlp.c_proj.weight",
+      "blocks.2.mlp.c_proj.weight",
+      "blocks.3.mlp.c_proj.weight",
+      "blocks.4.mlp.c_proj.weight"
+    ],
+    "inputs": {
+      "gradients": {
+        "rms": 9.979383244451269e+18,
+        "maxabs": 8.301034833169298e+20,
+        "finite": true,
+        "nonfinite": 0
+      },
+      "parameters": {
+        "rms": 0.020906582582268577,
+        "maxabs": 0.14541226625442505,
+        "finite": true,
+        "nonfinite": 0
+      },
+      "momentum": {
+        "rms": 169664885361652.1,
+        "maxabs": 9125485875298304.0,
+        "finite": true,
+        "nonfinite": 0
+      },
+      "second_moment": {
+        "rms": 0.0009919299506976496,
+        "maxabs": 0.016253797337412834,
+        "finite": true,
+        "nonfinite": 0
+      }
+    },
+    "after": {
+      "gradients": {
+        "rms": 5.897834256397286e+17,
+        "maxabs": 4.905662442345857e+19,
+        "finite": true,
+        "nonfinite": 0
+      },
+      "parameters": {
+        "rms": "nan",
+        "maxabs": "nan",
+        "finite": false,
+        "nonfinite": 5242880
+      },
+      "momentum": {
+        "rms": 2.993837395855845e+17,
+        "maxabs": 2.4900558470382617e+19,
+        "finite": true,
+        "nonfinite": 0
+      },
+      "second_moment": {
+        "rms": "nan",
+        "maxabs": "nan",
+        "finite": false,
+        "nonfinite": 10240
+      }
+    },
+    "eager_shadow": {
+      "nesterov": {
+        "rms": 5.897834256397286e+17,
+        "maxabs": 4.905662442345857e+19,
+        "finite": true,
+        "nonfinite": 0
+      },
+      "cast_bf16": {
+        "rms": 5.897394461949021e+17,
+        "maxabs": 4.8999163945791e+19,
+        "finite": true,
+        "nonfinite": 0
+      },
+      "target_norm_fp32": {
+        "rms": "inf",
+        "maxabs": "inf",
+        "finite": false,
+        "nonfinite": 5
+      },
+      "row_norm_fp32": {
+        "rms": "inf",
+        "maxabs": "inf",
+        "finite": false,
+        "nonfinite": 803
+      },
+      "row_equilibrated": {
+        "rms": "nan",
+        "maxabs": "nan",
+        "finite": false,
+        "nonfinite": 5242880
+      },
+      "polar_denominator": {
+        "rms": "nan",
+        "maxabs": "nan",
+        "finite": false,
+        "nonfinite": 5
+      },
+      "polar_normalized": {
+        "rms": "nan",
+        "maxabs": "nan",
+        "finite": false,
+        "nonfinite": 5242880
+      },
+      "polar_0": {
+        "rms": "nan",
+        "maxabs": "nan",
+        "finite": false,
+        "nonfinite": 5242880
+      },
+      "polar_1": {
+        "rms": "nan",
+        "maxabs": "nan",
+        "finite": false,
+        "nonfinite": 5242880
+      },
+      "polar_2": {
+        "rms": "nan",
+        "maxabs": "nan",
+        "finite": false,
+        "nonfinite": 5242880
+      },
+      "polar_3": {
+        "rms": "nan",
+        "maxabs": "nan",
+        "finite": false,
+        "nonfinite": 5242880
+      },
+      "polar_4": {
+        "rms": "nan",
+        "maxabs": "nan",
+        "finite": false,
+        "nonfinite": 5242880
+      },
+      "muon_plus": {
+        "rms": "nan",
+        "maxabs": "nan",
+        "finite": false,
+        "nonfinite": 5242880
+      },
+      "variance_scaled": {
+        "rms": "nan",
+        "maxabs": "nan",
+        "finite": false,
+        "nonfinite": 5242880
+      },
+      "parameters_after": {
+        "rms": "nan",
+        "maxabs": "nan",
+        "finite": false,
+        "nonfinite": 5242880
+      }
+    },
+    "max_scaled_shadow": {
+      "nesterov": {
+        "rms": 5.897834256397286e+17,
+        "maxabs": 4.905662442345857e+19,
+        "finite": true,
+        "nonfinite": 0
+      },
+      "cast_bf16": {
+        "rms": 0.03891549640424831,
+        "maxabs": 1.0,
+        "finite": true,
+        "nonfinite": 0
+      },
+      "target_norm_fp32": {
+        "rms": 1.7611142015120012,
+        "maxabs": 3.31019926071167,
+        "finite": true,
+        "nonfinite": 0
+      },
+      "row_norm_fp32": {
+        "rms": 1.7611143178574362,
+        "maxabs": 9.691853523254395,
+        "finite": true,
+        "nonfinite": 0
+      },
+      "row_equilibrated": {
+        "rms": 0.03891258077355612,
+        "maxabs": 0.55078125,
+        "finite": true,
+        "nonfinite": 0
+      },
+      "polar_denominator": {
+        "rms": 40.301355048558854,
+        "maxabs": 76.0,
+        "finite": true,
+        "nonfinite": 0
+      },
+      "polar_normalized": {
+        "rms": 0.0009673653857970562,
+        "maxabs": 0.0167236328125,
+        "finite": true,
+        "nonfinite": 0
+      },
+      "polar_0": {
+        "rms": 0.0025090813480590267,
+        "maxabs": 0.09130859375,
+        "finite": true,
+        "nonfinite": 0
+      },
+      "polar_1": {
+        "rms": 0.0037083935012506967,
+        "maxabs": 0.2158203125,
+        "finite": true,
+        "nonfinite": 0
+      },
+      "polar_2": {
+        "rms": 0.0051541743098204845,
+        "maxabs": 0.37890625,
+        "finite": true,
+        "nonfinite": 0
+      },
+      "polar_3": {
+        "rms": 0.005683412723169925,
+        "maxabs": 0.2578125,
+        "finite": true,
+        "nonfinite": 0
+      },
+      "polar_4": {
+        "rms": 0.006643270189553374,
+        "maxabs": 0.21484375,
+        "finite": true,
+        "nonfinite": 0
+      },
+      "muon_plus": {
+        "rms": 0.022097087212026714,
+        "maxabs": 1.273038625717163,
+        "finite": true,
+        "nonfinite": 0
+      },
+      "variance_scaled": {
+        "rms": 0.022097086646168808,
+        "maxabs": 0.9542616605758667,
+        "finite": true,
+        "nonfinite": 0
+      },
+      "parameters_after": {
+        "rms": 0.020897816154848807,
+        "maxabs": 0.14566290378570557,
+        "finite": true,
+        "nonfinite": 0
+      }
+    }
+  },
+  {
+    "step": 552,
+    "shape": [
+      8,
+      2048,
+      512
+    ],
+    "bad_parameters": [
+      "blocks.0.mlp.c_fc.weight",
+      "blocks.1.mlp.c_fc.weight",
+      "blocks.2.mlp.c_fc.weight",
+      "blocks.3.mlp.c_fc.weight",
+      "blocks.4.mlp.c_fc.weight"
+    ],
+    "inputs": {
+      "gradients": {
+        "rms": 7.935868918330531e+18,
+        "maxabs": 5.1420299105465375e+20,
+        "finite": true,
+        "nonfinite": 0
+      },
+      "parameters": {
+        "rms": 0.02586433200825627,
+        "maxabs": 0.20526184141635895,
+        "finite": true,
+        "nonfinite": 0
+      },
+      "momentum": {
+        "rms": 128760730669140.25,
+        "maxabs": 6736699153448960.0,
+        "finite": true,
+        "nonfinite": 0
+      },
+      "second_moment": {
+        "rms": 0.0011165332845716725,
+        "maxabs": 0.020019346848130226,
+        "finite": true,
+        "nonfinite": 0
+      }
+    },
+    "after": {
+      "gradients": {
+        "rms": 4.690126689469119e+17,
+        "maxabs": 3.039040243568214e+19,
+        "finite": true,
+        "nonfinite": 0
+      },
+      "parameters": {
+        "rms": "nan",
+        "maxabs": "nan",
+        "finite": false,
+        "nonfinite": 5242880
+      },
+      "momentum": {
+        "rms": 2.380792140517413e+17,
+        "maxabs": 1.5427140996697162e+19,
+        "finite": true,
+        "nonfinite": 0
+      },
+      "second_moment": {
+        "rms": "nan",
+        "maxabs": "nan",
+        "finite": false,
+        "nonfinite": 10240
+      }
+    },
+    "eager_shadow": {
+      "nesterov": {
+        "rms": 4.690126689469119e+17,
+        "maxabs": 3.039040243568214e+19,
+        "finite": true,
+        "nonfinite": 0
+      },
+      "cast_bf16": {
+        "rms": 4.689917058382424e+17,
+        "maxabs": 3.040830468400559e+19,
+        "finite": true,
+        "nonfinite": 0
+      },
+      "target_norm_fp32": {
+        "rms": "inf",
+        "maxabs": "inf",
+        "finite": false,
+        "nonfinite": 5
+      },
+      "row_norm_fp32": {
+        "rms": "inf",
+        "maxabs": "inf",
+        "finite": false,
+        "nonfinite": 689
+      },
+      "row_equilibrated": {
+        "rms": "nan",
+        "maxabs": "nan",
+        "finite": false,
+        "nonfinite": 5242880
+      },
+      "polar_denominator": {
+        "rms": "nan",
+        "maxabs": "nan",
+        "finite": false,
+        "nonfinite": 5
+      },
+      "polar_normalized": {
+        "rms": "nan",
+        "maxabs": "nan",
+        "finite": false,
+        "nonfinite": 5242880
+      },
+      "polar_0": {
+        "rms": "nan",
+        "maxabs": "nan",
+        "finite": false,
+        "nonfinite": 5242880
+      },
+      "polar_1": {
+        "rms": "nan",
+        "maxabs": "nan",
+        "finite": false,
+        "nonfinite": 5242880
+      },
+      "polar_2": {
+        "rms": "nan",
+        "maxabs": "nan",
+        "finite": false,
+        "nonfinite": 5242880
+      },
+      "polar_3": {
+        "rms": "nan",
+        "maxabs": "nan",
+        "finite": false,
+        "nonfinite": 5242880
+      },
+      "polar_4": {
+        "rms": "nan",
+        "maxabs": "nan",
+        "finite": false,
+        "nonfinite": 5242880
+      },
+      "muon_plus": {
+        "rms": "nan",
+        "maxabs": "nan",
+        "finite": false,
+        "nonfinite": 5242880
+      },
+      "variance_scaled": {
+        "rms": "nan",
+        "maxabs": "nan",
+        "finite": false,
+        "nonfinite": 5242880
+      },
+      "parameters_after": {
+        "rms": "nan",
+        "maxabs": "nan",
+        "finite": false,
+        "nonfinite": 5242880
+      }
+    },
+    "max_scaled_shadow": {
+      "nesterov": {
+        "rms": 4.690126689469119e+17,
+        "maxabs": 3.039040243568214e+19,
+        "finite": true,
+        "nonfinite": 0
+      },
+      "cast_bf16": {
+        "rms": 0.0475911648054326,
+        "maxabs": 1.0,
+        "finite": true,
+        "nonfinite": 0
+      },
+      "target_norm_fp32": {
+        "rms": 1.0768651217994003,
+        "maxabs": 1.6458042860031128,
+        "finite": true,
+        "nonfinite": 0
+      },
+      "row_norm_fp32": {
+        "rms": 1.0768651252286505,
+        "maxabs": 8.91907787322998,
+        "finite": true,
+        "nonfinite": 0
+      },
+      "row_equilibrated": {
+        "rms": 0.0474303278273085,
+        "maxabs": 0.259765625,
+        "finite": true,
+        "nonfinite": 0
+      },
+      "polar_denominator": {
+        "rms": 49.09342178438981,
+        "maxabs": 75.0,
+        "finite": true,
+        "nonfinite": 0
+      },
+      "polar_normalized": {
+        "rms": 0.0009659541012718343,
+        "maxabs": 0.00457763671875,
+        "finite": true,
+        "nonfinite": 0
+      },
+      "polar_0": {
+        "rms": 0.0035815657517803464,
+        "maxabs": 0.03173828125,
+        "finite": true,
+        "nonfinite": 0
+      },
+      "polar_1": {
+        "rms": 0.005828128203644809,
+        "maxabs": 0.10595703125,
+        "finite": true,
+        "nonfinite": 0
+      },
+      "polar_2": {
+        "rms": 0.008046382113383705,
+        "maxabs": 0.2333984375,
+        "finite": true,
+        "nonfinite": 0
+      },
+      "polar_3": {
+        "rms": 0.009215519131539618,
+        "maxabs": 0.2099609375,
+        "finite": true,
+        "nonfinite": 0
+      },
+      "polar_4": {
+        "rms": 0.009977035114942922,
+        "maxabs": 0.1640625,
+        "finite": true,
+        "nonfinite": 0
+      },
+      "muon_plus": {
+        "rms": 0.022097086228417426,
+        "maxabs": 0.633402943611145,
+        "finite": true,
+        "nonfinite": 0
+      },
+      "variance_scaled": {
+        "rms": 0.0220970863065984,
+        "maxabs": 0.3292686939239502,
+        "finite": true,
+        "nonfinite": 0
+      },
+      "parameters_after": {
+        "rms": 0.025854904453184883,
+        "maxabs": 0.20443807542324066,
+        "finite": true,
+        "nonfinite": 0
+      }
+    }
+  }
+]

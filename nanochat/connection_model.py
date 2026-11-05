@@ -34,8 +34,11 @@ class ConnectionConfig:
     attention_kernel: str = 'original'
     tokenres: bool = False
     tokenres_window: int = 128  # total visible tokens, including the diagonal
+    tokenres_normalization: str = 'pre_qk'
 
     def __post_init__(self):
+        if self.tokenres and self.tokenres_normalization != 'pre_qk':
+            raise ValueError('TokenRes requires pre_qk normalization')
         if not isinstance(self.tokenres_window, int) or isinstance(self.tokenres_window, bool) or self.tokenres_window < 1:
             raise ValueError('tokenres_window must be a positive integer')
         if self.tokenres and (self.architecture != 'vanilla' or self.variant != 'baseline' or self.attention_kernel != 'original'):
@@ -67,6 +70,8 @@ class ConnectionConfig:
     def from_checkpoint(cls, config):
         """Read pre-cleanup NVIDIA/vanilla metadata; reject retired model weights."""
         config = dict(config)
+        if config.get('tokenres', False) and config.get('tokenres_normalization') != 'pre_qk':
+            raise ValueError('Raw TokenRes checkpoint requires its archived source; do not reinterpret as normalized TokenRes')
         if config.pop('attention_statistic', 'none') != 'none':
             raise ValueError('Checkpoint belongs to a retired attention-statistics experiment')
         config.pop('moment_query_chunk', None)

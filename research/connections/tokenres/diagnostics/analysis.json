@@ -1,5 +1,5 @@
 {
-  "status": "primary_instability_evidence_complete_optimizer_transition_probe_pending",
+  "status": "complete",
   "diagnostic_job": "7814489.0",
   "gpu": "NVIDIA H200",
   "initial": {
@@ -53,18 +53,22 @@
     "只对V输入做RMSNorm将hidden最大RMS降至54.153，首hidden梯度RMS1.48e-7；K/V输入同时归一化结果近似。冻结CE从7.7726变差至9.0203，不代表归一化重训有效。",
     "early gate50步表示趋同已观察，但第500步末层token差分能量占比26.49%，不能把早期趋同说成失败checkpoint当前仍完全collapse。",
     "每子层32采样query、2条dev序列的FA3前向相对FP64 oracle误差均小于0.0017；此范围未见明显前向kernel错误，不覆盖反向或最终非有限触发。",
-    "重放在H200第524步CE为NaN，原H100为552步；不宣称逐步完全复现。失败batch eager从首attention分支即非有限，可能前一optimizer已写坏；原诊断未检查post-step参数，尚不能确诊第一非有限算子。"
+    "补充H100重放确认：第552步CE/gradient有限，Muon内部FP32范数溢出、row equilibration inf/inf，随后写坏参数。逐元素finite检查不足。只在shadow对输入按maxabs缩放则更新全finite；没有改动正式optimizer。"
   ],
   "limits": [
     "All frozen comparisons use two validation sequences, not full validation or retrained quality comparisons.",
     "Fixed constant-token linear product is not full nonlinear Jacobian.",
     "No formal training restarted, no checkpoint modified, no W&B diagnostic run."
   ],
-  "pending_probe": {
+  "optimizer_transition": {
     "job": "7814507.0",
-    "source": "b4c5140e05c2673a08131f3c28aa174a500aeef9",
-    "root": "/home/yzhong239/tokenres-diagnostics-20261104/optimizer-probe",
-    "maximum_replay_steps": 128,
-    "changes_production_optimizer": false
+    "gpu": "NVIDIA H100 80GB HBM3",
+    "first_bad_post_optimizer_step": 552,
+    "pre_gradients_finite": true,
+    "max_matrix_gradient_abs": 8.301034833169298e+20,
+    "first_nonfinite_shadow_stage": "FP32 norm reduction in MuonEq",
+    "next_stage": "inf/inf in row equilibration, then NaN parameter update",
+    "maxabs_scaled_shadow": "all stages finite; diagnostic only, optimizer not modified",
+    "limitation": "Replayed from500; not proof of identical full original-run trajectory."
   }
 }
