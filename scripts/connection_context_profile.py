@@ -14,7 +14,7 @@ import numpy as np
 import torch
 
 from nanochat.connection_experiment import configure_attention, match_vanilla_initialization
-from nanochat.connection_model import ConnectionConfig, ConnectionModel, optimizer_for, schedule
+from nanochat.connection_model import ConnectionConfig, ConnectionModel, optimizer_for, schedule, CONNECTION_VARIANTS
 from nanochat.packed_training import PackedData, json_write, seed_all, train_step
 
 BATCH_TOKENS = 32768
@@ -44,7 +44,7 @@ class TimingData:
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument('--variant', choices=('baseline', 'mhc','mhc_no_sinkhorn','mhc_channel_no_sinkhorn'), required=True)
+    p.add_argument('--variant', choices=CONNECTION_VARIANTS, required=True)
     p.add_argument('--attention-backend', choices=('sdpa_cudnn','fa3'), default='sdpa_cudnn')
     p.add_argument('--sequence-length', type=int, choices=(2048, 4096, 8192, 16384), required=True)
     p.add_argument('--microbatch', type=int, required=True)

@@ -1,0 +1,65 @@
+{
+  "variants": [
+    "mhc_static_linear",
+    "mhc_static_mlp"
+  ],
+  "architecture": "vanilla",
+  "depth": 8,
+  "width": 512,
+  "streams": 4,
+  "sequence_length": 2048,
+  "linear": {
+    "formula": "reshape(W @ flatten(S)) + original H_post branch distribution",
+    "shape": [
+      2048,
+      2048
+    ],
+    "init": "identity",
+    "parameters": 126099621
+  },
+  "mlp": {
+    "formula": "reshape(W_up @ relu(W_down @ flatten(S))) + original H_post branch distribution",
+    "shapes": [
+      [
+        512,
+        2048
+      ],
+      [
+        2048,
+        512
+      ]
+    ],
+    "init": "down N(0,2/2048),up N(0,1/512),both nonzero",
+    "parameters": 92545189
+  },
+  "shared": "Original NVIDIA H_pre/H_post, aggregate-after-routing branch RMSNorm, backbone, final collapse, softcap15 and full NTP objective",
+  "exclusions": "No extra identity bypass, no bias in mixers, no added normalization, gate, auxiliary loss, Sinkhorn or generated matrices",
+  "layout": "flatten existing channel-major,stream-minor layout; nn.Linear weight is output,input",
+  "optimizer": "New static mixing 2D matrices use default Muon groups/LR/WD; read/write and final collapse retain AdamW; backbone hyperparameters unchanged",
+  "precision": "BF16 activations/GEMMs,FP32 master weights; unchanged NVIDIA routing precision",
+  "gate": {
+    "checks": 20,
+    "profile": "same-device original mHC,current channel-local,and two new mixers;20warmup+40timed each",
+    "restart": "each new variant25->exit85->fresh process128,full305176-step LR horizon",
+    "probe": "init and step128 fixed2K dev forward/backward scales; no optimizer step",
+    "logging": "local only,no credentials or returned weights"
+  },
+  "training": {
+    "formal_runs": 2,
+    "steps_each": 305176,
+    "tokens_each": 10000007168,
+    "seed": 42,
+    "microbatch": 16,
+    "gradient_accumulation": 1,
+    "context": 2048,
+    "attention_backend": "FA3 pinned de87b9b5af06dd9984df595bef90b2eba44b181a",
+    "wandb_project": "nanochat",
+    "wandb_group": "static-mixing-10b-20261105",
+    "latest_steps": 500,
+    "durable_seconds": 1800,
+    "best_separate": true
+  },
+  "monitoring": "300-second polling until first finite formal step for each variant,then stop",
+  "existing_run": "channel-local7816910.0 and immutable inputs remain untouched; no permission to cancel it",
+  "limitations": "MLP mixing has a512-dimensional bottleneck and cannot initialize to the full2048-dimensional identity; short stability checks do not establish long-run quality. Mixer GEMMs halve in MLP variant; whole-model FLOPs do not halve."
+}
