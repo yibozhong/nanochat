@@ -44,8 +44,10 @@ class ConnectionConfig:
             raise ValueError('window_pattern must contain S and/or L')
         if self.connection_backend not in ('nvidia', 'nvidia_precise'):
             raise ValueError('Only the full NVIDIA mHC implementation is supported')
-        if self.variant not in ('baseline', 'mhc', 'mhc_no_sinkhorn'):
+        if self.variant not in ('baseline', 'mhc', 'mhc_no_sinkhorn', 'mhc_channel_no_sinkhorn'):
             raise ValueError(f'Unknown connection variant: {self.variant}')
+        if self.variant == 'mhc_channel_no_sinkhorn' and (self.architecture != 'vanilla' or self.fused_connection_grad):
+            raise ValueError('Local channel mixing initially supports vanilla and unfused gradient accumulation')
         if self.sinkhorn_iterations != 20:
             raise ValueError('The NVIDIA composite API requires 20 Sinkhorn iterations')
         if min(self.depth, self.width, self.heads, self.sequence_length, self.vocab_size, self.streams) < 1:
@@ -70,7 +72,7 @@ class ConnectionConfig:
             config.pop(name, None)
         if config.pop('attention_output_ns', False):
             raise ValueError('Checkpoint belongs to the retired attention output NS experiment')
-        if config.get('variant', 'baseline') not in ('baseline', 'mhc', 'mhc_no_sinkhorn'):
+        if config.get('variant', 'baseline') not in ('baseline', 'mhc', 'mhc_no_sinkhorn', 'mhc_channel_no_sinkhorn'):
             raise ValueError('Checkpoint belongs to a retired model variant')
         # Legacy metadata was inert on the retained native/vanilla/mHC models.
         for name in ("chunk_size", "lookback_enabled", "lookback_update",
@@ -92,10 +94,14 @@ class ConnectionBlock(Block):
         self.variant = config.variant
         self.compiled_attention = self.compiled_mlp = None
         if self.variant != 'baseline':
+            connection = NvidiaHyperConnection
+            if self.variant == 'mhc_channel_no_sinkhorn':
+                from nanochat.channel_connections import ChannelHyperConnection
+                connection = ChannelHyperConnection
             kwargs = dict(use_tf32=config.connection_backend == 'nvidia', fused_grad_acc=config.fused_connection_grad,
                           sinkhorn=config.variant != 'mhc_no_sinkhorn')
-            self.attn_connection = NvidiaHyperConnection(config.width, config.streams, 2*index, config.sinkhorn_iterations, **kwargs)
-            self.mlp_connection = NvidiaHyperConnection(config.width, config.streams, 2*index+1, config.sinkhorn_iterations, **kwargs)
+            self.attn_connection = connection(config.width, config.streams, 2*index, config.sinkhorn_iterations, **kwargs)
+            self.mlp_connection = connection(config.width, config.streams, 2*index+1, config.sinkhorn_iterations, **kwargs)
 
     def attention_branch(self, h, cos, sin, kv_cache=None):
         return self.attn(norm(h), None, (cos, sin), (-1, 0), kv_cache)

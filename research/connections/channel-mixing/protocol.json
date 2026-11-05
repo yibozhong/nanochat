@@ -1,0 +1,35 @@
+{
+  "variant": "mhc_channel_no_sinkhorn",
+  "architecture": "vanilla",
+  "width": 512,
+  "streams": 4,
+  "depth": 8,
+  "local_generator": "v_c = x_c / sqrt(mean(x_c**2)+FP32eps); M_c = bias_c + scale * einsum(v_c,W_c)",
+  "orientation": "x row-vector @ M; matrix axes[input stream,output stream]",
+  "parameters": "independent W_c[4,4,4],bias_c[4,4] per channel and connector; one learned mixing scale per connector",
+  "init": "W normal std0.5, bias identity, scale0.01; H_pre/H_post and backbone/RNG matched to old mHC",
+  "routing": "original NVIDIA global H_pre/H_post and final collapse; no Sinkhorn, softmax, clipping or matrix constraints",
+  "kernel": "fused local RMS/generation/mixing/branch-write; hand-derived backward; no coefficient bank saved or materialized; deterministic partial reduction",
+  "gate": {
+    "checks": 16,
+    "profile": "same-GPU baseline/mHC/shared no-Sinkhorn/local no-Sinkhorn,60steps each,2K/B16",
+    "restart": "25->exit85->fresh process128, full305176-step LR horizon",
+    "logging": "local, no credentials or returned weights"
+  },
+  "training": {
+    "steps": 305176,
+    "tokens": 10000007168,
+    "sequence_length": 2048,
+    "microbatch": 16,
+    "accumulation": 1,
+    "seed": 42,
+    "attention": "FA3 pinned de87b9b5af06dd9984df595bef90b2eba44b181a",
+    "project": "nanochat",
+    "group": "channel-mixing-10b-20261105",
+    "latest500": true,
+    "durable_seconds": 1800,
+    "best_separate": true
+  },
+  "monitoring": "300-second checks; finish goal and stop monitoring at first finite formal training step",
+  "limitations": "Only vanilla integration initially; NVIDIA fused grad buffer deliberately unsupported. FP32 routing/reductions,BF16 activations, no full dynamic cross-channel matrix."
+}

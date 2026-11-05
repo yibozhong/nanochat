@@ -25,7 +25,7 @@ from nanochat.connection_experiment import configure_attention, match_vanilla_in
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument('--variant', choices=('baseline','mhc','mhc_no_sinkhorn'), required=True)
+    p.add_argument('--variant', choices=('baseline','mhc','mhc_no_sinkhorn','mhc_channel_no_sinkhorn'), required=True)
     p.add_argument('--sequence-length', type=int, default=2048)
     p.add_argument('--attention-kernel', choices=('original','fla_triton'), default='original')
     p.add_argument('--architecture', choices=('vanilla', 'native'), default='vanilla')
@@ -117,6 +117,7 @@ def main():
         parameters=sum(p.numel() for p in model.parameters()),
         residual_mixing=('sinkhorn' if a.variant=='mhc' else
                          'unconstrained_raw' if a.variant=='mhc_no_sinkhorn' else
+                         'local_channel_unconstrained_raw' if a.variant=='mhc_channel_no_sinkhorn' else
                          'additive'),
         applied_sinkhorn_iterations=c.sinkhorn_iterations if a.variant=='mhc' else 0,
         optimizer='native MuonAdamW; connector AdamW at native unembedding LR, no decay',

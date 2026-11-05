@@ -44,7 +44,8 @@ class TimingData:
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument('--variant', choices=('baseline', 'mhc'), required=True)
+    p.add_argument('--variant', choices=('baseline', 'mhc','mhc_no_sinkhorn','mhc_channel_no_sinkhorn'), required=True)
+    p.add_argument('--attention-backend', choices=('sdpa_cudnn','fa3'), default='sdpa_cudnn')
     p.add_argument('--sequence-length', type=int, choices=(2048, 4096, 8192, 16384), required=True)
     p.add_argument('--microbatch', type=int, required=True)
     p.add_argument('--repetition', type=int, default=0)
@@ -57,7 +58,7 @@ def main():
     assert not os.environ.get('WANDB_API_KEY') and not Path('../.netrc').exists()
     torch.set_num_threads(2)
     torch.backends.cuda.matmul.allow_tf32 = False
-    configure_attention('sdpa_cudnn')
+    configure_attention(a.attention_backend)
     seed_all(42)
     props = torch.cuda.get_device_properties(0)
     cfg = ConnectionConfig(variant=a.variant, sequence_length=a.sequence_length)
@@ -65,7 +66,7 @@ def main():
         microbatch=a.microbatch, grad_accum=rows//a.microbatch, batch_tokens=BATCH_TOKENS,
         repetition=a.repetition, probe=a.probe, model=asdict(cfg), logging_backend='local',
         gpu=props.name, gpu_uuid=str(props.uuid), device_total_bytes=props.total_memory,
-        torch=torch.__version__, cuda=torch.version.cuda, attention_backend='sdpa_cudnn',
+        torch=torch.__version__, cuda=torch.version.cuda, attention_backend=a.attention_backend,
         minimum_gpu_bytes=MIN_GPU_BYTES, memory_limit_bytes=int(.9*MIN_GPU_BYTES),
         nvidia_tf32_override=os.environ.get('NVIDIA_TF32_OVERRIDE'),
         source=json.loads(Path('source.json').read_text()), seed=42,
