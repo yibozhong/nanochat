@@ -84,11 +84,6 @@ def train_step(model,opt,data,step,microbatch=16,batch_tokens=32768):
     if not bool(finite) or not torch.isfinite(total):
         raise FloatingPointError('Nonfinite loss/gradient before optimizer update')
     opt.step()
-    if getattr(model.config, 'tokenres', False):
-        # Finite gradients can still overflow inside the optimizer. Never log
-        # success or persist a resume checkpoint containing poisoned weights.
-        if not bool(torch.stack([torch.isfinite(p).all() for p in model.parameters()]).all()):
-            raise FloatingPointError('Nonfinite TokenRes parameters after optimizer update')
     return total.item()
 
 

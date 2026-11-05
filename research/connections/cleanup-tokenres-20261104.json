@@ -1,0 +1,54 @@
+{
+  "time": 1793852958.35937,
+  "authorization": "User requests revert TokenRes and delete related folders; includes runtime checkpoints and diagnostic copies. W&B not deleted.",
+  "source_before": "a0c51bb8ab6e398ac24e5d2dddf5e35057848169",
+  "restore_source": "6bb58043085a2fc1cc6fa1df2c0f6b3b1ea1b2e0",
+  "queue_before": [],
+  "active_tokenres_python_processes": [],
+  "historical_result": {
+    "raw_formal_job": "7814065.0",
+    "wandb_run": "80419435",
+    "last_finite_step": 551,
+    "durable_checkpoint_step_deleted": 500,
+    "normalized_gate": "7814516.0",
+    "normalized_tests_passed": 35,
+    "normalized_stability_stopped_step": 250,
+    "normalized_formal_training": false,
+    "conclusion": "Current configuration showed no benefit and failed numerical stability checks; user ended this exploration. Not a claim all attention-residual architectures fail."
+  },
+  "status": "complete",
+  "deleted_workflow_bytes": 969999741,
+  "deleted_workflow_files": 222,
+  "deleted_checkpoint_archive_bytes": 805652480,
+  "verification": {
+    "exact_pre_tokenres_tracked_tree": true,
+    "parsed_python_files": 62,
+    "no_executable_tokenres_references": true,
+    "no_new_gpu_or_training_job": true,
+    "retained_checkpoint_configs_checked": 8,
+    "queue_after_empty": true
+  },
+  "removed_extra_cache_files": [],
+  "deleted_folders": [
+    {
+      "path": "/home/yzhong239/tokenres-10b-20261104",
+      "regular_bytes": 824727338,
+      "regular_files": 121,
+      "symlinks": 6
+    },
+    {
+      "path": "/home/yzhong239/tokenres-diagnostics-20261104",
+      "regular_bytes": 64404793,
+      "regular_files": 55,
+      "symlinks": 5
+    },
+    {
+      "path": "/home/yzhong239/tokenres-normalized-10b-20261104",
+      "regular_bytes": 80867610,
+      "regular_files": 46,
+      "symlinks": 2
+    }
+  ],
+  "protected_checkpoint_archives": 8,
+  "full_audit": "/home/yzhong239/research-cleanup-20261104/tokenres-removal.json"
+}

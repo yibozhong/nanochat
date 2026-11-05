@@ -32,17 +32,8 @@ class ConnectionConfig:
     architecture: str = 'vanilla'
     window_pattern: str = 'SSSL'  # native only; vanilla is always full attention
     attention_kernel: str = 'original'
-    tokenres: bool = False
-    tokenres_window: int = 128  # total visible tokens, including the diagonal
-    tokenres_normalization: str = 'pre_qk'
 
     def __post_init__(self):
-        if self.tokenres and self.tokenres_normalization != 'pre_qk':
-            raise ValueError('TokenRes requires pre_qk normalization')
-        if not isinstance(self.tokenres_window, int) or isinstance(self.tokenres_window, bool) or self.tokenres_window < 1:
-            raise ValueError('tokenres_window must be a positive integer')
-        if self.tokenres and (self.architecture != 'vanilla' or self.variant != 'baseline' or self.attention_kernel != 'original'):
-            raise ValueError('TokenRes initially supports ordinary vanilla only')
         if self.attention_kernel not in ('original','fla_triton'):
             raise ValueError('Unknown attention kernel')
         if self.attention_kernel == 'fla_triton' and (self.architecture != 'vanilla' or self.variant != 'baseline'):
@@ -70,8 +61,6 @@ class ConnectionConfig:
     def from_checkpoint(cls, config):
         """Read pre-cleanup NVIDIA/vanilla metadata; reject retired model weights."""
         config = dict(config)
-        if config.get('tokenres', False) and config.get('tokenres_normalization') != 'pre_qk':
-            raise ValueError('Raw TokenRes checkpoint requires its archived source; do not reinterpret as normalized TokenRes')
         if config.pop('attention_statistic', 'none') != 'none':
             raise ValueError('Checkpoint belongs to a retired attention-statistics experiment')
         config.pop('moment_query_chunk', None)
@@ -101,7 +90,6 @@ class ConnectionBlock(Block):
         super().__init__(native, index)
         self.attn.ve_gate = None
         self.variant = config.variant
-        self.token_residual = None
         self.compiled_attention = self.compiled_mlp = None
         if self.variant != 'baseline':
             kwargs = dict(use_tf32=config.connection_backend == 'nvidia', fused_grad_acc=config.fused_connection_grad,
@@ -116,13 +104,6 @@ class ConnectionBlock(Block):
         return self.mlp(norm(h))
 
     def forward(self, x, cos, sin, kv_cache=None):
-        if self.token_residual is not None:
-            if kv_cache is not None:
-                raise ValueError('TokenRes cached decoding needs separate sublayer KV states; not implemented')
-            u = self.attention_branch(x, cos, sin)
-            x = self.token_residual(x, u)
-            u = self.mlp_branch(x)
-            return self.token_residual(x, u)
         if self.variant == 'baseline':
             return super().forward(x, None, (cos, sin), (-1, 0), kv_cache)
         h, skip, post = self.attn_connection.read(x)
@@ -163,15 +144,6 @@ class ConnectionModel(nn.Module):
             self.stream_head = NvidiaHyperHead(config.width, config.streams, use_tf32=config.connection_backend == 'nvidia')
         if self.stream_head is not None:
             self.stream_head.reset_parameters()
-        if config.tokenres:
-            from nanochat.tokenres import TokenResidual
-            # Keep all common weights/RNG unchanged except the two output
-            # projections: zero initialization assumes an identity residual.
-            with torch.random.fork_rng(devices=[]):
-                for b in self.blocks:
-                    nn.init.uniform_(b.attn.c_proj.weight, -s, s)
-                    nn.init.uniform_(b.mlp.c_proj.weight, -s/2, s/2)
-                    b.token_residual = TokenResidual(config.width, config.heads, config.tokenres_window)
         d = config.width // config.heads
         inv = 1 / (100000 ** (torch.arange(0, d, 2, dtype=torch.float32) / d))
         freq = torch.outer(torch.arange(config.sequence_length, dtype=torch.float32), inv)
