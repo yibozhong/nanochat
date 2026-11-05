@@ -30,10 +30,12 @@ def expand_streams(x, streams=4):
 def check_nvidia_device(device):
     if torch.device(device).type != 'cuda':
         raise RuntimeError('NVIDIA mHC requires CUDA')
-    major, _ = torch.cuda.get_device_capability(device)
-    if major < 9:
-        raise RuntimeError('NVIDIA TMA kernels require SM90 or later; no fallback is provided')
-    if major not in (9, 10) and os.environ.get('NANOCHAT_MHC_TEST_PORTABILITY') != '1':
+    major, minor = torch.cuda.get_device_capability(device)
+    # TE 2.20.2 selects ordinary tl.load on pre-Hopper GPUs. TMA is optional,
+    # not an architectural requirement of its mHC projection or backward.
+    if major < 8:
+        raise RuntimeError('NVIDIA mHC requires Ampere or newer')
+    if (major, minor) != (8, 0) and major not in (9, 10) and os.environ.get('NANOCHAT_MHC_TEST_PORTABILITY') != '1':
         raise RuntimeError('Other GPU architectures require an explicit portability gate')
 
 

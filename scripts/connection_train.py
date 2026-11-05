@@ -43,7 +43,7 @@ def main():
     p.add_argument('--data-dir', default='data')
     p.add_argument('--output-dir', required=True)
     p.add_argument('--checkpoint-dir', default=None)
-    p.add_argument('--attention-backend', choices=('auto','sdpa_cudnn','fa3'), default='auto')
+    p.add_argument('--attention-backend', choices=('auto','sdpa_cudnn','fa3','fa2'), default='auto')
     p.add_argument('--matched-backbone-init', action='store_true')
     p.add_argument('--evaluate-test', action='store_true')
     p.add_argument('--run-id', default=None)

@@ -15,14 +15,14 @@ def configure_attention(backend):
             raise RuntimeError('FA3 was explicitly requested but could not load; refusing SDPA fallback')
         flash_attention.USE_FA3 = True
         return
-    if backend != 'sdpa_cudnn':
+    if backend not in ('sdpa_cudnn', 'fa2'):
         raise ValueError(backend)
     from nanochat import flash_attention
     flash_attention.USE_FA3 = False
-    torch.backends.cuda.enable_flash_sdp(False)
+    torch.backends.cuda.enable_flash_sdp(backend == 'fa2')
     torch.backends.cuda.enable_mem_efficient_sdp(False)
     torch.backends.cuda.enable_math_sdp(False)
-    torch.backends.cuda.enable_cudnn_sdp(True)
+    torch.backends.cuda.enable_cudnn_sdp(backend == 'sdpa_cudnn')
 
 
 @torch.no_grad()

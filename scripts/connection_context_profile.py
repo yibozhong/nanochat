@@ -45,7 +45,7 @@ class TimingData:
 def main():
     p = argparse.ArgumentParser()
     p.add_argument('--variant', choices=CONNECTION_VARIANTS, required=True)
-    p.add_argument('--attention-backend', choices=('sdpa_cudnn','fa3'), default='sdpa_cudnn')
+    p.add_argument('--attention-backend', choices=('sdpa_cudnn','fa3','fa2'), default='sdpa_cudnn')
     p.add_argument('--sequence-length', type=int, choices=(2048, 4096, 8192, 16384), required=True)
     p.add_argument('--microbatch', type=int, required=True)
     p.add_argument('--repetition', type=int, default=0)

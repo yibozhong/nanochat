@@ -20,7 +20,7 @@ def main(root):
         assert not subprocess.check_output(['git','status','--porcelain'],cwd=REPO,text=True).strip()
         for name in ('bundles','logs','results'):(root/name).mkdir(exist_ok=True)
         commit=subprocess.check_output(['git','rev-parse','HEAD'],cwd=REPO,text=True).strip()
-        source=dict(commit=commit,formal_training=False,purpose='Shared4->16->ReLU->4 stream mixing; original NVIDIA pre/post; no Sinkhorn')
+        source=dict(commit=commit,formal_training=False,purpose='A100/FA2 shared4->16->ReLU->4 stream mixing; original NVIDIA pre/post; no Sinkhorn',attention_backend='fa2',gpu_family='A100')
         (root/'bundles/source.json').write_text(json.dumps(source,indent=2)+'\n')
         subprocess.run(['git','archive','--format=tar','--prefix=nanochat-src/','-o',str(root/'bundles/source.tar'),'HEAD'],cwd=REPO,check=True)
         for name in ('gate-data.tar','transformer_engine_torch-2.20.2-cp311-cp311-linux_x86_64.whl'):
@@ -31,6 +31,8 @@ def main(root):
         (root/'bundles/inputs.sha256').write_text(''.join(v+'  '+k+'\n' for k,v in hashes.items()))
         shutil.copy2(REPO/'research/connections/stream-mlp/run.sh',root/'run.sh')
         template=(ASSETS/'gate.sub').read_text().replace('executable = validate.sh','executable = run.sh')
+        template=template.replace('gpus_minimum_capability = 9.0','gpus_minimum_capability = 8.0')
+        template=template.replace('(Capability == 9.0)', '(Capability == 8.0) && regexp("A100",DeviceName)')
         template=template.replace('stream-$(Cluster)','gate-$(Cluster)').replace('logs/stream.','logs/gate.')
         template=template.replace('nanochat-depth-diagnostic','nanochat-stream-mlp-gate').replace('DepthDiagnosticKey','StreamMLPKey').replace('depth-diagnostic-20261103',root.name)
         (root/'gate.sub').write_text(template)

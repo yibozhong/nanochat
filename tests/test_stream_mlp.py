@@ -1,6 +1,6 @@
 """Independent all-gradient oracle, identity initialization and 2K integration."""
 from dataclasses import asdict
-import json
+import json,os
 from pathlib import Path
 import pytest
 import torch
@@ -123,7 +123,7 @@ def test_full_model_causal_cache_cce_recompute_no_sinkhorn(monkeypatch):
     def forbidden(*a,**kw):raise AssertionError('Sinkhorn invoked by stream MLP')
     monkeypatch.setattr(nvidia_ops(),'mhc_fused_sinkhorn',forbidden)
     monkeypatch.setattr(nvidia_ops(),'mhc_generate_mix_and_aggregate',forbidden)
-    configure_attention('fa3');seed_all(42)
+    configure_attention(os.environ.get('STREAM_MLP_ATTENTION_BACKEND','fa3'));seed_all(42)
     m=ConnectionModel(ConnectionConfig(variant=VARIANT,width=128,heads=2,depth=2,vocab_size=128)).prepare(compile_blocks=True)
     with torch.no_grad():
         for b in m.blocks:b.attn.c_proj.weight.normal_(std=.03);b.mlp.c_proj.weight.normal_(std=.03)
@@ -148,7 +148,8 @@ def test_full_model_causal_cache_cce_recompute_no_sinkhorn(monkeypatch):
     record('model',dict(ce=loss.item(),dense=dense.item(),gradients=errors,causal_tokens=2048,sinkhorn_calls=0))
 
 
-def test_optimizer_rng_resume(tmp_path):check_resume(VARIANT,tmp_path)
+def test_optimizer_rng_resume(tmp_path):
+    check_resume(VARIANT,tmp_path,attention_backend=os.environ.get('STREAM_MLP_ATTENTION_BACKEND','sdpa_cudnn'))
 
 
 def test_config_and_cost():

@@ -45,8 +45,8 @@ def test_backbones_have_identical_initial_weights():
 
 
 @pytest.mark.parametrize('variant',['baseline','mhc'])
-def test_optimizer_rng_checkpoint_and_fixed_gradient_next_update(variant,tmp_path):
-    configure_attention('sdpa_cudnn');torch.backends.cuda.matmul.allow_tf32=False
+def test_optimizer_rng_checkpoint_and_fixed_gradient_next_update(variant,tmp_path,attention_backend='sdpa_cudnn'):
+    configure_attention(attention_backend);torch.backends.cuda.matmul.allow_tf32=False
     model=build(variant);opt,wd=optimizer_for(model)
     x=torch.randint(0,256,(2,128),device='cuda');y=(x+1)%256
     for step in range(4):

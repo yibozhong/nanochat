@@ -26,7 +26,8 @@ def collect(root,state,ad):
     assert ad.get('ExitCode')==0,ad
     value=json.loads((root/'collected/results/stream-mlp/validation.json').read_text())
     assert value['complete'] and not value['formal_training'] and value['source']==state['source']
-    assert value['checks']==dict(tests=18,failures=0,errors=0,skipped=0)
+    assert value['checks']==dict(tests=12,failures=0,errors=0,skipped=0)
+    assert value['attention_backend']=='fa2' and not value['comparison_profiles']
     assert value['restart']['complete'] and value['restart']['steps']==128
     assert cmd(['git','rev-parse','HEAD'],REPO)==state['source']['commit']
     assert not cmd(['git','status','--porcelain'],REPO)
@@ -66,7 +67,7 @@ def submit_training(root,state):
         fcntl.flock(f,fcntl.LOCK_EX);text=f.read()
         heading='## 新授权：共享4→16→4 Stream MLP mixing 无Sinkhorn，单一10B（2026-11-05）\n'
         assert heading in text
-        note=f'\nGPU gate{state["job"]}已exit0，18检查、同卡profile及25→128真实恢复通过。main{state["pushed_commit"]}已push核验；正式10B{state["training_job"]}/W&B{state["run_id"]}已提交，首步watch PID{pid}/300秒。提交不等于已训练；短检查不保证长期稳定/效果。\n'
+        note=f'\nA100/FA2 gate{state["job"]}已exit0，12检查、仅new配置profile及25→128真实恢复通过。main{state["pushed_commit"]}已push核验；正式10B{state["training_job"]}/W&B{state["run_id"]}已提交，首步watch PID{pid}/300秒。提交不等于已训练；短检查不保证长期稳定/效果。\n'
         f.seek(0);f.write(text.replace(heading,heading+note,1));f.truncate()
 
 

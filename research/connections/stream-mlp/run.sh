@@ -37,15 +37,8 @@ if [ "$SYSTEM_CUDA_DRIVER" -lt 13010 ]; then
     dpkg-deb -x cuda-compat-13-1_590.48.01-1_amd64.deb cuda-compat
     export LD_LIBRARY_PATH="$PWD/cuda-compat/usr/local/cuda-13.1/compat:$LD_LIBRARY_PATH"
 fi
-export NANOCHAT_FA3_REVISION=de87b9b5af06dd9984df595bef90b2eba44b181a
-export HF_HOME="$TASK_ROOT/fa3-cache"
-HF_HUB_OFFLINE=0 python - <<'FA3'
-import os
-from kernels import get_kernel
-module=get_kernel('varunneal/flash-attention-3',revision=os.environ['NANOCHAT_FA3_REVISION'])
-assert hasattr(module.flash_attn_interface,'flash_attn_func')
-print('Pinned FA3 kernel cached',flush=True)
-FA3
+# PyTorch 2.10 embeds FA2; no download or FA3 initialization on A100.
+export NANOCHAT_DISABLE_FA3=1 STREAM_MLP_ATTENTION_BACKEND=fa2
 cd nanochat-src
 ln -sfn ../results results
 cp ../source.json source.json
@@ -55,6 +48,7 @@ from pathlib import Path
 assert importlib.util.find_spec('tile_kernels') is None
 assert importlib.util.find_spec('tilelang') is None
 assert torch.cuda.is_available() and torch.cuda.device_count()==1
+assert torch.cuda.get_device_capability()==(8,0) and 'A100' in torch.cuda.get_device_name()
 Path('results/device.json').write_text(json.dumps(dict(gpu=torch.cuda.get_device_name(),capability=torch.cuda.get_device_capability(),torch=torch.__version__),indent=2)+'\n')
 print('NVIDIA-only runtime verified; GPU:',torch.cuda.get_device_name(),flush=True)
 PY

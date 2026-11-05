@@ -38,7 +38,8 @@ def main(root,gate_root):
         gs=json.loads((GATE/'state.json').read_text())
         assert gate['complete'] and gs['status'] in ('published','complete') and gate['job']==gs['job']
         assert gs['pushed_commit']==head
-        assert gate['checks']==dict(tests=18,failures=0,errors=0,skipped=0)
+        assert gate['checks']==dict(tests=12,failures=0,errors=0,skipped=0)
+        assert gate['attention_backend']=='fa2' and not gate['comparison_profiles']
         assert gate['restart']['steps']==128 and gate['restart']['complete']
         model_commit=gate['source']['commit']
         changed=command(['git','diff','--name-only',model_commit,head,'--','nanochat','scripts',
@@ -60,18 +61,19 @@ def main(root,gate_root):
         data_name=data['data_uri'].rsplit('/',1)[-1]
         hashes[data_name]=data['archive']['sha256']
         profile=dict(gate['profiles']['mhc_stream_mlp'])
-        profile.update(additional_peak_allocated_bytes=gate['additional_peak_allocated_bytes'],
-                       additional_peak_reserved_bytes=gate['additional_peak_reserved_bytes'])
         source=dict(commit=model_commit,launcher_commit=head,formal_training=True,gate_job=gs['job'],
                     purpose='Authorized shared4->16->ReLU->4 stream mixer10B; no Sinkhorn; original backbone ReLU-squared MLP',
                     steps=STEPS,training_tokens=STEPS*32768,data_uri=data['data_uri'],wandb_group=KEY,
                     launcher_sha256=hashlib.sha256((root/'train.sh').read_bytes()).hexdigest(),
-                    profile_reference=dict(mhc_stream_mlp=profile),checkpoint_upload_seconds=1800)
+                    profile_reference=dict(mhc_stream_mlp=profile),checkpoint_upload_seconds=1800,
+                    attention_backend='fa2',gpu_family='A100')
         (bundle/'source.json').write_text(json.dumps(source,indent=2)+'\n')
         hashes['source.json']=hashlib.sha256((bundle/'source.json').read_bytes()).hexdigest()
         (bundle/'inputs.sha256').write_text(''.join(v+'  '+k+'\n' for k,v in hashes.items()))
         run_id=uuid.uuid4().hex[:8]
         template=(ASSETS/'gate.sub').read_text()
+        template=template.replace('gpus_minimum_capability = 9.0','gpus_minimum_capability = 8.0')
+        template=template.replace('(Capability == 9.0)', '(Capability == 8.0) && regexp("A100",DeviceName)')
         template=template.replace('executable = validate.sh',f'executable = train.sh\narguments = {run_id}')
         template=template.replace('request_disk = 40GB','request_disk = 80GB')
         template=template.replace('when_to_transfer_output = ON_EXIT',

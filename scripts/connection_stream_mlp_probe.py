@@ -1,5 +1,5 @@
 """Read-only 2K activation/gradient scale probe at init or a saved checkpoint."""
-import argparse,json
+import argparse,json,os
 from pathlib import Path
 import torch
 from nanochat.connection_model import ConnectionConfig,ConnectionModel
@@ -10,7 +10,7 @@ from nanochat.packed_training import PackedData,seed_all
 def main():
     p=argparse.ArgumentParser();p.add_argument('--checkpoint');p.add_argument('--output',required=True);a=p.parse_args()
     torch.set_num_threads(2);torch.backends.cuda.matmul.allow_tf32=False
-    configure_attention('fa3');seed_all(42)
+    configure_attention(os.environ.get('STREAM_MLP_ATTENTION_BACKEND','fa3'));seed_all(42)
     cfg=ConnectionConfig(variant='mhc_stream_mlp');m=ConnectionModel(cfg).prepare();match_vanilla_initialization(m,42)
     step=0
     if a.checkpoint:

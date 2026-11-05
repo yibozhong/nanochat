@@ -6,7 +6,7 @@ stream values are its input. Weights are shared across channels and tokens;
 each attention/MLP connector owns an independent pair of matrices. The stored
 layout is already `[B,T,d,4]`, so no physical transpose is needed.
 
-Original NVIDIA H_pre/H_post, branch RMSNorm, FA3 attention, backbone ReLU²
+Original NVIDIA H_pre/H_post, branch RMSNorm, FA2 attention, backbone ReLU²
 MLP and final stream collapse remain unchanged. No Sinkhorn is invoked.
 There is no added mixing norm, bias, gate, runtime alpha, identity bypass or
 auxiliary loss. Fused output is `MLP(old_streams) + H_post * branch_output`.
@@ -28,20 +28,24 @@ The8-layer/D512 model has58,992,805 parameters, including128 mixer parameters
 per connector. Each mixer costs65,536 forward MAC/token excluding the branch
 write; fewer parameters alone do not establish a throughput advantage.
 
-The18-test GPU gate covers independent FP64 forward/all-gradient references,
+The12-test A100 GPU gate covers independent FP64 forward/all-gradient references,
 zero/tiny/ragged inputs, identity initialization and derivative away from
 ReLU kinks, channel sharing, token/channel locality, absence of saved hidden
 banks, matched backbone/routing/optimizer,2K causality, cache/CCE/compile/
-recompute, exact optimizer/RNG resume, and retained-model regressions.
-Same-device profiling compares mHC, current channel-local mixing and the
-new model; fused/compiled-PyTorch microbenchmarks are recorded separately.
+recompute, exact optimizer/RNG resume, and a trace proving FA2 forward/backward with no math fallback.
+Only the new model is profiled for throughput and memory; no baseline
+comparison is run. NVIDIA TE selects its official non-TMA projection on A100.
 Real25->exit85->fresh-process128 training uses the full10B schedule and
 records initial/trained2K activation and gradient scales. No diagnostic
 W&B records, credentials or checkpoints are returned.
 
 After validation and push, one formal10B run uses the existing2K FineWeb-Edu
-cache, seed42, micro16/accum1 and the original FA3/optimizer schedule.
+cache, seed42, micro16/accum1 and the FA2 backend and original optimizer schedule.
 Latest checkpoints overwrite every500 steps; best is separate; exit85
 persists archives every1800 seconds. Formal logging uses nanochat/group
 stream-mlp-10b-20261105. Monitoring polls every300 seconds and ends at the
 first finite formal step. Existing channel-local training is untouched.
+
+The original Hopper-only gate7823819.0 was cancelled before starting.
+The user authorized A100/FA2 instead. All other10B training settings remain
+unchanged; prior FA3/Hopper curves are not a matched backend/hardware control.
