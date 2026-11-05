@@ -102,7 +102,7 @@ def audit_publish(root,state):
     with tarfile.open(root/'results'/f'gate-{state["job"]}.tar') as tf:
         result=json.load(tf.extractfile('results/gate.json'))
         assert result['complete'] and result['source']==state['source']
-        assert result['checks']==dict(tests=31,failures=0,errors=0,skipped=0)
+        assert result['checks']==dict(tests=32,failures=0,errors=0,skipped=0)
         assert not result['formal_training'] and not result['weights_returned']
         assert len(result['profiles'])==4 and len({p['gpu'] for p in result['profiles']})==1
         for p in result['profiles']:
@@ -112,9 +112,11 @@ def audit_publish(root,state):
             assert len(p['samples_seconds'])==30 and all(math.isfinite(x) and x>0 for x in p['samples_seconds'])
             assert p['peak_reserved_bytes']<.9*22000*1024**2 and math.isfinite(p['dev_ce'])
             if p['mode']=='tokenres':
-                for key in ('stability_before','stability_after'):
-                    assert len(p[key]['layers'])==16 and math.isfinite(p[key]['ce'])
-                    assert all(0<x['output_rms']<100 for x in p[key]['layers'])
+                assert p['extended_probe']['steps']==128 and p['extended_probe']['training_tokens']==4194304
+                for diagnosis in (p['stability_before'],p['stability_after'],p['extended_probe']['stability']):
+                    assert len(diagnosis['layers'])==16 and math.isfinite(diagnosis['ce'])
+                    assert all(0<x['output_rms']<100 for x in diagnosis['layers'])
+                    assert all(math.isfinite(v) for v in diagnosis['parameter_gradient_norms'].values())
         resume=result['resume'];assert resume['exact_steps_1_to_50'] and resume['summary']['complete']
         assert resume['summary']['steps']==50 and resume['config']['logging_backend']=='local'
         assert resume['config']['model']['tokenres'] and resume['config']['model']['tokenres_window']==128

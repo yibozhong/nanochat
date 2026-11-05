@@ -64,6 +64,16 @@ def test_fullsize_initialization_and_parameter_sharing():
     assert not ConnectionConfig.from_checkpoint(legacy).tokenres
 
 
+def test_small_nonzero_output_initialization_without_runtime_scale():
+    module=TokenResidual(512,4)
+    # Only O uses a smaller initial distribution. All four matrices are learned
+    # normally; there is no alpha parameter/buffer or zero-gradient barrier.
+    assert module.o.weight.abs().max()<=.1*(3/512)**.5
+    assert .095<float(module.o.weight.std()/module.v.weight.std())<.105
+    assert not list(module.buffers())
+    assert set(dict(module.named_parameters()))=={'q.weight','k.weight','v.weight','o.weight'}
+
+
 @pytest.mark.parametrize('window',[1,7,128])
 def test_fp64_equation_and_gradients(window,monkeypatch):
     # FA3 is BF16-only; substitute only its primitive with independent FP64

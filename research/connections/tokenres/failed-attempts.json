@@ -1,0 +1,31 @@
+[
+  {
+    "job": "7814043.0",
+    "source": "2e0d51add93d692990a35ecc0b5dd9d607793325",
+    "exit_code": 1,
+    "checks": {
+      "tests": 31,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "phase": "first TokenRes profile after50 steps",
+    "failure": {
+      "layer_zero_based": 3,
+      "sublayer": "mlp",
+      "input_rms": 47.103126525878906,
+      "branch_rms": 0.3585808575153351,
+      "output_rms": 104.20989990234375,
+      "threshold": 100
+    },
+    "training_losses": {
+      "step1": 10.400041580200195,
+      "step20": 7.816471576690674,
+      "step50": 7.885120868682861
+    },
+    "caveat": "No NaN/Inf reported in50 optimizer steps; RMS safety threshold failed. TokenRes50step profile JSON was not written because diagnosis raised early; full deeper-layer magnitudes and peak VRAM unavailable.",
+    "formal_training": false,
+    "weights_returned": false,
+    "correction": "Initialize only TokenRes O at0.1 of original fan-in scale, no runtime scale/gate/norm or LR change. Save full diagnosis before checking unchanged RMS threshold. Extend stability validation to128 unique steps."
+  }
+]

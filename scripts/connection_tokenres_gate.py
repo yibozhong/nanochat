@@ -33,15 +33,21 @@ def stability(model,data):
                 input_rms=float(x.detach().float().square().mean().sqrt()),branch_rms=float(u.detach().float().square().mean().sqrt()),
                 output_rms=float(power.sqrt()),token_variance_fraction=float(f.var(dim=1,unbiased=False).mean()/power.clamp_min(1e-30)),
                 output_gradient_rms=float(out.grad.float().square().mean().sqrt()))
-            assert all(math.isfinite(v) for v in row.values() if isinstance(v,float)),row
-            assert row['output_rms']>0 and row['output_rms']<100,row
             result.append(row)
         gradient_norms={n:float(p.grad.float().norm()) for n,p in model.named_parameters()}
-        assert all(math.isfinite(v) for v in gradient_norms.values()) and gradient_norms['wte.weight']>0
-        return dict(ce=float(loss),layers=result,parameter_gradient_norms=gradient_norms)
+        return dict(ce=float(loss.detach()),layers=result,parameter_gradient_norms=gradient_norms)
     finally:
         for h in handles:h.remove()
         model.compiled_steps=saved;model.zero_grad(set_to_none=True)
+
+
+def check_stability(result):
+    assert math.isfinite(result['ce'])
+    for row in result['layers']:
+        assert all(math.isfinite(v) for v in row.values() if isinstance(v,float)),row
+        assert 0<row['output_rms']<100,row
+    norms=result['parameter_gradient_norms']
+    assert all(math.isfinite(v) for v in norms.values()) and norms['wte.weight']>0
 
 
 def profile(mode,out):
@@ -49,6 +55,9 @@ def profile(mode,out):
     model=ConnectionModel(ConnectionConfig(tokenres=mode=='tokenres')).prepare(compile_blocks=True)
     opt,wd=optimizer_for(model);data=PackedData('../data');times=[];losses=[]
     before=stability(model,data) if model.config.tokenres else None
+    if before:
+        json_write(out.with_name(out.stem+'-stability-initial.json'),before)
+        check_stability(before)
     for step in range(50):
         schedule(opt,step,305176,wd)
         if step==20:gc.collect();torch.cuda.synchronize();torch.cuda.reset_peak_memory_stats()
@@ -66,7 +75,21 @@ def profile(mode,out):
         gpu=torch.cuda.get_device_name(),peak_allocated_bytes=allocated,peak_reserved_bytes=reserved,
         analytic_cost=model_cost(model.config,batch=16),stability_before=before,stability_after=after)
     json_write(out,result)
+    if after:check_stability(after)
     assert reserved<.9*22000*1024**2,result
+    if model.config.tokenres:
+        # Continue beyond warmup on the complete existing 128-step gate prefix.
+        # No repeated data, no change to the 305176-step learning-rate horizon.
+        extended=[]
+        for step in range(50,128):
+            schedule(opt,step,305176,wd)
+            extended.append(train_step(model,opt,data,step))
+        extended_stability=stability(model,data)
+        result['extended_probe']=dict(steps=128,training_tokens=128*32768,
+            additional_losses=extended,stability=extended_stability)
+        json_write(out,result)
+        check_stability(extended_stability)
+        print(mode,'extended128',extended[-1],flush=True)
 
 
 def backend_probe():
@@ -92,7 +115,7 @@ def main():
         'tests/test_connection_training_resume.py','-v','--junitxml=results/tokenres-tests.xml'],'tests')
     suites=ET.parse('results/tokenres-tests.xml').getroot().findall('testsuite')
     checks={key:sum(int(s.attrib.get(key,0)) for s in suites) for key in ('tests','failures','errors','skipped')}
-    assert checks==dict(tests=31,failures=0,errors=0,skipped=0),checks
+    assert checks==dict(tests=32,failures=0,errors=0,skipped=0),checks
     profiles=[]
     for repeat,order in enumerate([('baseline','tokenres'),('tokenres','baseline')]):
         for mode in order:

@@ -15,7 +15,11 @@ class TokenResidual(nn.Module):
         self.v = Linear(width, width, bias=False)
         self.o = Linear(width, width, bias=False)
         for layer in (self.q, self.k, self.v, self.o):
-            nn.init.uniform_(layer.weight, -math.sqrt(3 / width), math.sqrt(3 / width))
+            # The raw-value route composes across 16 sublayers, including two
+            # uses of the same O/V pair per block. Start its output projection
+            # small but nonzero; this is initialization only, not a runtime gate.
+            bound = math.sqrt(3 / width) * (0.1 if layer is self.o else 1.0)
+            nn.init.uniform_(layer.weight, -bound, bound)
 
     def forward(self, x, u):
         # Raw x and u, exactly as specified: no extra RMSNorm, RoPE, gate,

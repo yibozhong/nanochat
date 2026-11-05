@@ -28,8 +28,8 @@
   "initialization": {
     "unchanged": "Embedding/head/backbone QKV/MLP-up initial values and caller RNG",
     "changed": "Backbone attention O uniform+-sqrt(3/D), MLP-down uniform+-sqrt(3/(4D)); nonzero because no identity path",
-    "tokenres": "All four D x D projections independent fan-in uniform+-sqrt(3/D), no zero weights, gate, identity addition or positional bias",
-    "caveat": "No identity initialization equivalence claimed; measured activation/gradient statistics at init and50steps"
+    "tokenres": "Q/K/V uniform+-sqrt(3/D); O uniform+-0.1sqrt(3/D). Initialization only; no runtime alpha/gate/norm.",
+    "caveat": "No identity initialization equivalence; inspect all16 sublayers at init,50,128steps. Original fan-in O failed RMS<100 after50steps."
   },
   "training": {
     "steps": 305176,
@@ -45,14 +45,14 @@
     "formal_runs": 1
   },
   "gate": {
-    "checks": 31,
+    "checks": 32,
     "profile": "Same GPU baseline/tokenres, two orders each20warmup30timed, actual optimizer steps",
-    "stability": "Full-size2K per-sublayer output/input/branch RMS, across-token variance fraction, activation gradients and parameter gradients at init/50steps",
+    "stability": "Same diagnostics at init,50 and128 unique steps (4,194,304tokens), horizon305176; raw per-sublayer RMS stays in(0,100). Save diagnostics before asserting.",
     "recovery": "25->exit85->fresh process50, schedule305176",
     "credentials": false,
     "wandb": false,
     "weights_returned": false
   },
   "comparison": "The older full10B baseline used FLA; same-GPU performance gate uses FA3 for both. No new formal baseline/sweep. Extra parameters and FLOPs are reported, not claimed free.",
-  "monitor": "Stop after first finite formal-training step; no revived goal or old experiments"
+  "monitor": "User permits background automatic gate audit/publication/10B submission; no repeated interactive polling/status reports. Exit after first finite formal step."
 }
