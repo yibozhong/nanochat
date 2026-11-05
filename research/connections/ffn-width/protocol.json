@@ -8,7 +8,15 @@
   "write": "new_s = old_s + original_z; out of place, after reading old_s",
   "state": "[B,T,4D], zeros each forward; depth-local runtime tensor, never a parameter, buffer or checkpoint field; no detach",
   "dtype": "BF16 state/activations; FP32 RMS reductions (FP64 in oracle); exact zero RMS(z) uses vector_norm with finite zero subgradient",
-  "unchanged": ["attention", "both hidden identity residuals", "parameter names/count/initialization", "MuonAdamW groups and learning rates", "NTP objective", "data/tokenizer", "batch size"],
+  "unchanged": [
+    "attention",
+    "both hidden identity residuals",
+    "parameter names/count/initialization",
+    "MuonAdamW groups and learning rates",
+    "NTP objective",
+    "data/tokenizer",
+    "batch size"
+  ],
   "parameters": 58720256,
   "additional_parameters": 0,
   "coefficient": 1,
@@ -25,6 +33,23 @@
     "wandb": false,
     "return_weights": false
   },
-  "formal_training_authorized": false,
-  "limitations": "Short checks do not establish convergence, long-run stability, or a quality advantage. No10B training is submitted by this workflow."
+  "formal_training_authorized": true,
+  "limitations": "Short checks do not establish convergence, long-run stability, or a quality advantage. Formal training is submitted once by submit_train.py under the subsequent explicit authorization.",
+  "formal_training": {
+    "authorization": "User: 启动啊, after completed GPU gate7815447.0",
+    "group": "ffn-width-residual-10b-20261104",
+    "steps": 305176,
+    "tokens": 10000007168,
+    "seed": 42,
+    "microbatch": 16,
+    "gradient_accumulation": 1,
+    "attention_backend": "FA3, same as gate",
+    "source_commit": "eca05d11c2d683a4713af6237ceba2cd65c326bd",
+    "data_uri": "osdf:///chtc/staging/y/yzhong239/nanochat-2k-10b-data-7685535.tar",
+    "save_latest_every_steps": 500,
+    "best_separate": true,
+    "durable_checkpoint_seconds": 1800,
+    "project": "yibozhong657-none/nanochat",
+    "monitoring": "Only until first finite training step; then exit, user checks on request"
+  }
 }
