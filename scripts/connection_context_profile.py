@@ -14,7 +14,7 @@ import numpy as np
 import torch
 
 from nanochat.connection_experiment import configure_attention, match_vanilla_initialization
-from nanochat.connection_model import ConnectionConfig, ConnectionModel, optimizer_for, schedule, CONNECTION_VARIANTS
+from nanochat.connection_model import ConnectionConfig, build_connection_model, optimizer_for, schedule, CONNECTION_VARIANTS
 from nanochat.packed_training import PackedData, json_write, seed_all, train_step
 
 BATCH_TOKENS = 32768
@@ -76,7 +76,7 @@ def main():
         warmup_steps=4 if a.probe else 20, timed_steps=0 if a.probe else 40)
     output = Path(a.output); output.parent.mkdir(parents=True, exist_ok=True)
     try:
-        model = ConnectionModel(cfg).prepare(compile_blocks=True)
+        model = build_connection_model(cfg).prepare(compile_blocks=True)
         match_vanilla_initialization(model, 42)
         opt, wd = optimizer_for(model, BATCH_TOKENS)
         data = TimingData(a.data_dir, a.sequence_length)

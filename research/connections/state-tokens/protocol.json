@@ -1,0 +1,35 @@
+{
+  "variant": "state_tokens",
+  "backbone": "vanilla",
+  "width": 512,
+  "depth": 8,
+  "sequence_length": 2048,
+  "slots": 4,
+  "heads": 4,
+  "formulas": [
+    "h_new = F(pre_norm(h))",
+    "h_next = h_new + Read(h_new, state_old)",
+    "state_next = Write(state_old, concat(state_old,h_new))"
+  ],
+  "sharing": "One Read and one independently parameterized Write, shared across all16 sublayers. Backbone blocks are independent.",
+  "state_scope": "Per token, across depth only; reset on every forward. No cross-token state attention; backbone is causal.",
+  "initialization": {
+    "slots": "Embedding + learned centered tetrahedral offsets with unit RMS per head",
+    "read": "V/O identity,K identity,Q=.01I",
+    "write": "V/O identity,Q/K scaled identity targeting logit margin6 between distinct slots",
+    "limitations": "Approximate initial self retention, not exact identity or a guarantee against later collapse. The new-output key initially receives small nonzero mass. No diagonal mask/bias or residual bypass."
+  },
+  "normalization": "Original embedding RMSNorm, branch pre-RMSNorm, backbone QK norm and final RMSNorm remain. No new state/query norm.",
+  "loss": "Standard NTP only",
+  "optimizer": "Backbone unchanged;9 shared connector tensors use existing connector AdamW at unembedding LR, zero decay",
+  "parameters_added": 2099200,
+  "backend": "Existing FA3 on Hopper; explicitly noncausal SDPA/FA2 for slot attention on A100. No causal masking along the slot axis. FP32 oracle/debug alternative.",
+  "validation": {
+    "cpu": "FP64 outputs/all VJPs; state replacement/locality/sharing;16-step initial signal and gradient retention",
+    "gpu": "2K causality;KV-cache;CCE;compile/recompute;optimizer checkpoint;60-step same-card profiles;25->50 real process resume",
+    "formal_training": false,
+    "wandb": false,
+    "return_checkpoints": false
+  },
+  "implementation_status": "Implemented; validation pending"
+}

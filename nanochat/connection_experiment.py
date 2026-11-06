@@ -53,10 +53,11 @@ def match_vanilla_initialization(model, seed):
         # connector weights, so the same seed already matches all parameters.
         return
     options = asdict(model.config)
-    options.update(variant='baseline', fused_connection_grad=False, compact_routing=False)
+    options.update(variant='baseline', fused_connection_grad=False, compact_routing=False,
+                   state_attention_backend='auto')
     with torch.random.fork_rng(devices=list(range(torch.cuda.device_count()))):
         torch.manual_seed(seed)
         reference = ConnectionModel(ConnectionConfig(**options))
     missing, unexpected = model.load_state_dict(reference.state_dict(), strict=False)
     assert not unexpected
-    assert all('_connection.' in name or name.startswith('stream_head.') for name in missing)
+    assert all('_connection.' in name or name.startswith(('stream_head.', 'state_residual.')) for name in missing)
