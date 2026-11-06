@@ -10,7 +10,6 @@ from torch.nn import functional as F
 from nanochat.compact_routing import compact_routing
 from nanochat.connection_model import ConnectionConfig,ConnectionModel,optimizer_for
 from nanochat.connection_experiment import configure_attention,match_vanilla_initialization
-from nanochat.stream_mlp_connections import StreamMLPHyperConnection
 from nanochat.channel_connections import ChannelHyperConnection
 from nanochat.packed_training import seed_all
 
@@ -49,7 +48,7 @@ def test_fp64_all_gradients_and_determinism(m,k,amp,tf32):
     assert all(torch.equal(a,b) for a,b in zip(grad,again))
 
 
-@pytest.mark.parametrize('kind',[StreamMLPHyperConnection,ChannelHyperConnection])
+@pytest.mark.parametrize('kind',[ChannelHyperConnection])
 def test_nvidia_read_equivalence_and_all_gradients(kind):
     seed_all(55)
     old=kind(512,4,0).cuda();old.reset_parameters()
@@ -70,7 +69,7 @@ def test_nvidia_read_equivalence_and_all_gradients(kind):
     assert max(errors['output'])<.006 and max(errors['gradients'])<.02,errors
 
 
-@pytest.mark.parametrize('variant',['mhc_stream_mlp','mhc_channel_no_sinkhorn'])
+@pytest.mark.parametrize('variant',['mhc_channel_no_sinkhorn'])
 def test_full_model_initialization_causal_recompute_and_gradients(variant):
     configure_attention('hardware_auto');models=[]
     for compact in (False,True):
@@ -108,5 +107,5 @@ def test_default_and_checkpoint_schema():
     for v in ('baseline','mhc','mhc_no_sinkhorn'):
         assert not ConnectionConfig.from_checkpoint(dict(variant=v)).compact_routing
         with pytest.raises(ValueError):ConnectionConfig(variant=v,compact_routing=True)
-    c=ConnectionConfig(variant='mhc_stream_mlp',compact_routing=True)
+    c=ConnectionConfig(variant='mhc_channel_no_sinkhorn',compact_routing=True)
     assert ConnectionConfig.from_checkpoint(asdict(c))==c

@@ -34,7 +34,6 @@ def main():
     p.add_argument('--wandb-group', default='mhc-official-kernels-20261030')
     p.add_argument('--connection-backend', choices=('nvidia','nvidia_precise'), default='nvidia')
     p.add_argument('--fused-connection-grad', action=argparse.BooleanOptionalAction, default=False)
-    p.add_argument('--stream-mlp-kernel', choices=('legacy','rowwise','hybrid'), default='legacy')
     p.add_argument('--compact-routing', action=argparse.BooleanOptionalAction, default=False)
     p.add_argument('--steps', type=int, required=True)
     p.add_argument('--schedule-steps', type=int, default=30518)
@@ -68,7 +67,7 @@ def main():
     actual_attention_backend = configure_attention(a.attention_backend)
     seed_all(a.seed)
     c=ConnectionConfig(variant=a.variant,streams=a.streams,sinkhorn_iterations=a.sinkhorn_iterations,
-                       sequence_length=a.sequence_length, compact_routing=a.compact_routing, stream_mlp_kernel=a.stream_mlp_kernel,
+                       sequence_length=a.sequence_length, compact_routing=a.compact_routing,
                        attention_kernel=a.attention_kernel,
                        architecture=a.architecture, window_pattern=a.window_pattern,
                        activation_checkpoint=a.activation_checkpoint,
@@ -121,7 +120,6 @@ def main():
         residual_mixing=('sinkhorn' if a.variant=='mhc' else
                          'unconstrained_raw' if a.variant=='mhc_no_sinkhorn' else
                          'local_channel_unconstrained_raw' if a.variant=='mhc_channel_no_sinkhorn' else
-                         'shared_stream_mlp_4_16_4_relu' if a.variant=='mhc_stream_mlp' else
                          'additive'),
         applied_sinkhorn_iterations=c.sinkhorn_iterations if a.variant=='mhc' else 0,
         optimizer='native MuonAdamW; connector AdamW at native unembedding LR, no decay',

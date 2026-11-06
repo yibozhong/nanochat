@@ -53,7 +53,7 @@ def match_vanilla_initialization(model, seed):
         # connector weights, so the same seed already matches all parameters.
         return
     options = asdict(model.config)
-    options.update(variant='baseline', fused_connection_grad=False, compact_routing=False, stream_mlp_kernel='legacy')
+    options.update(variant='baseline', fused_connection_grad=False, compact_routing=False)
     with torch.random.fork_rng(devices=list(range(torch.cuda.device_count()))):
         torch.manual_seed(seed)
         reference = ConnectionModel(ConnectionConfig(**options))

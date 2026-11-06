@@ -1,0 +1,99 @@
+{
+  "complete": true,
+  "action": "User stopped Stream MLP; remove its implementation, workflows, checkpoints and local experiment files",
+  "prior_head": "d1ff1fe7628148f8cc42331ed17ee97cfe0315ec",
+  "stopped_job": "7860281.0",
+  "stopped_run": "d586bd5f",
+  "last_logged_step": {
+    "step": 90620,
+    "tokens": 2969436160,
+    "loss": 3.659119129180908,
+    "seconds": 0.12823389284312725,
+    "lr_multiplier": 1.0
+  },
+  "full_10b_completed": false,
+  "deleted_workflow_directories": [
+    "/home/yzhong239/stream-mlp-gate-20261105",
+    "/home/yzhong239/stream-mlp-a100-gate-20261105",
+    "/home/yzhong239/stream-mlp-10b-20261105",
+    "/home/yzhong239/stream-mlp-hopper-10b-20261105",
+    "/home/yzhong239/stream-mlp-opt-gate-20261105",
+    "/home/yzhong239/stream-mlp-opt-gate-20261105-r2",
+    "/home/yzhong239/stream-scaling-gate-20261105",
+    "/home/yzhong239/compact-routing-gate-20261105"
+  ],
+  "removed_bytes": 823092631,
+  "removed_gib": 0.766564748249948,
+  "checkpoint_policy": "All Stream MLP checkpoint copies in retired roots deleted; scheduler spool copies absent; retained model checkpoints untouched",
+  "wandb": "No remote W&B deletion or mutation performed",
+  "retained": [
+    "vanilla",
+    "native",
+    "NVIDIA mHC",
+    "no-Sinkhorn",
+    "channel-local mixing",
+    "optional channel compact routing",
+    "Hopper FA3 and A100 FA2 support",
+    "shared dataset/runtime",
+    "channel-local10B checkpoints and results"
+  ],
+  "removed": [
+    "Stream MLP variant/config/CLI/optimizer branch",
+    "legacy/rowwise/hybrid Stream MLP kernels",
+    "Stream MLP gate/train/profiling workflows",
+    "4/8/16/32 Stream MLP versus mHC benchmark implementations",
+    "MLP-specific compact-routing profile/submit workflow"
+  ],
+  "correctness": {
+    "python_files_parsed": 106,
+    "retained_constructor_combinations": 10,
+    "retained_constructors_identical": true,
+    "tensor_methods_unchanged": [
+      "ConnectionBlock.attention_branch",
+      "ConnectionBlock.mlp_branch",
+      "ConnectionBlock.forward",
+      "ConnectionModel.__init__",
+      "ConnectionModel.prepare",
+      "ConnectionModel.hidden",
+      "ConnectionModel.forward"
+    ],
+    "shared_runtime_hashes_unchanged": [
+      "nanochat/gpt.py",
+      "nanochat/native_connection_model.py",
+      "nanochat/nvidia_ops.py",
+      "nanochat/nvidia_connections.py",
+      "nanochat/channel_mixing.py",
+      "nanochat/channel_connections.py",
+      "nanochat/compact_routing.py",
+      "nanochat/flash_attention.py",
+      "nanochat/optim.py",
+      "nanochat/packed_training.py",
+      "nanochat/experiment_logging.py"
+    ],
+    "saved_config_metadata_accepted": [
+      "channel_local",
+      "mhc"
+    ],
+    "retired_checkpoints_rejected": true,
+    "gpu_rerun": false,
+    "note": "Removal and entrypoint cleanup only; surviving GPU computation unchanged. No torch import/model computation on login node."
+  },
+  "latest_matched_ce": {
+    "tokens": 2908160000,
+    "mlp_hopper": 3.527355134487152,
+    "channel_local": 3.490923225879669,
+    "mhc": 3.533167064189911,
+    "mlp_minus_channel": 0.03643190860748291,
+    "mlp_minus_mhc": -0.005811929702758789
+  },
+  "recent20_mean_ce": {
+    "mlp_hopper": 3.529157742857933,
+    "channel_local": 3.494991013407707,
+    "mhc": 3.5322023898363115,
+    "mlp_minus_channel": 0.03416672945022583,
+    "mlp_minus_mhc": -0.0030446469783782957
+  },
+  "evidence_directory": "/home/yzhong239/research-cleanup-20261105/stream-mlp",
+  "historical_reports_available_at_git_commit": "d1ff1fe7628148f8cc42331ed17ee97cfe0315ec",
+  "time": 1793928037.0324264
+}

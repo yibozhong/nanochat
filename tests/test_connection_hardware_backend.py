@@ -4,7 +4,7 @@ import torch
 from nanochat.connection_experiment import configure_attention, resolve_attention_backend
 from nanochat.nvidia_connections import check_nvidia_device
 from nanochat.nvidia_ops import nvidia_ops
-from test_stream_mlp import relative, record
+from test_compact_routing import relative, record
 
 
 def test_hardware_dispatch_attention_gradient_and_projection():

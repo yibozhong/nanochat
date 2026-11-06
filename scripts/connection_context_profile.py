@@ -50,7 +50,6 @@ def main():
     p.add_argument('--microbatch', type=int, required=True)
     p.add_argument('--repetition', type=int, default=0)
     p.add_argument('--probe', action='store_true')
-    p.add_argument('--stream-mlp-kernel', choices=('legacy','rowwise','hybrid'), default='legacy')
     p.add_argument('--compact-routing', action=argparse.BooleanOptionalAction, default=False)
     p.add_argument('--data-dir', default='../data')
     p.add_argument('--output', required=True)
@@ -63,7 +62,7 @@ def main():
     actual_attention_backend = configure_attention(a.attention_backend)
     seed_all(42)
     props = torch.cuda.get_device_properties(0)
-    cfg = ConnectionConfig(variant=a.variant, sequence_length=a.sequence_length, compact_routing=a.compact_routing, stream_mlp_kernel=a.stream_mlp_kernel)
+    cfg = ConnectionConfig(variant=a.variant, sequence_length=a.sequence_length, compact_routing=a.compact_routing)
     record = dict(complete=False, variant=a.variant, sequence_length=a.sequence_length,
         microbatch=a.microbatch, grad_accum=rows//a.microbatch, batch_tokens=BATCH_TOKENS,
         repetition=a.repetition, probe=a.probe, model=asdict(cfg), logging_backend='local',

@@ -1,8 +1,8 @@
 # Compact read/write routing
 
-Optional `--compact-routing` for `mhc_stream_mlp` and `mhc_channel_no_sinkhorn`.
-The default is false. Existing checkpoints and currently running immutable jobs
-retain the original NVIDIA implementation. No new formal experiment is submitted.
+Optional `--compact-routing` for `mhc_channel_no_sinkhorn`.
+The default is false. Existing channel-wise checkpoints retain the original
+NVIDIA implementation unless this option is explicitly enabled.
 
 Only the eight read/write coefficients are computed. The fused forward combines
 projection, mean-square normalization, learned scale/bias and sigmoid, returning
@@ -18,10 +18,12 @@ A100 uses ordinary loads; Hopper uses tensor descriptors/TMA. Gradients include
 the norm derivative and all routing parameters. Parameter reductions use explicit
 partial buffers rather than atomic adds. No graph-breaking optimizer is involved.
 
-The GPU gate checks FP64 forward/all VJPs in TF32 and precise modes, zero/tiny/
-ragged inputs, deterministic repeated gradients, NVIDIA read-path parity for
-both variants, matched initialization, full2K causality and recompute gradients,
-then measures old/new routing and whole-model throughput on the same GPU.
-A25->exit85->fresh-process50 checkpoint test retains the305176-step LR schedule.
-Only local numeric reports return; no W&B credentials, weights or formal runs.
-No speedup is claimed before the gate completes; this stays opt-in.
+`tests/test_compact_routing.py` retains the existing FP64 forward/VJP,
+determinism, channel-wise NVIDIA read-path parity, initialization, 2K causality,
+recompute-gradient and checkpoint-schema checks. Run GPU checks through HTCondor.
+
+`validation.json` records the historical 13-check gate before Stream MLP was
+retired. Its whole-model timing and 25-to-50-step restart measurements used that
+retired model, so they are not channel-wise speed or restart measurements.
+The Stream MLP test cases and its submission/profiling workflows have been
+removed; the shared kernel and already-validated channel-wise checks remain.
