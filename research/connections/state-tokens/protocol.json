@@ -31,5 +31,21 @@
     "wandb": false,
     "return_checkpoints": false
   },
-  "implementation_status": "A10080 gate7910438 passed25/26 (including primitive VJPs and each backend model checks); last cross-backend test blocked by global compile-cache accumulation. Test cache isolated; complete new gate pending."
+  "implementation_status": "A10080 gate7910438 passed25/26 (including primitive VJPs and each backend model checks); last cross-backend test blocked by global compile-cache accumulation. Test cache isolated; complete new gate pending.",
+  "automatic_formal_training": {
+    "authorized": true,
+    "count": 1,
+    "steps": 305176,
+    "tokens": 10000007168,
+    "seed": 42,
+    "context_length": 2048,
+    "wandb_project": "nanochat",
+    "variant": "state_tokens",
+    "state_attention_backend": "triton",
+    "conditions": "Gate exit0/all26 checks;both backends60finite updates;25->50real resume complete/finite. Failure stops, no automatic retry.",
+    "initialization": "Fresh seed42; no gate weights",
+    "monitor": "300s to first finite formal step then stop",
+    "checkpoint": "latest500 overwrite;best separate;1800s exit85 transport",
+    "hardware": "HopperFA3 or A100FA2; newly encountered family must pass26checks and60finite updates before formal logging; minimum memory from gate peaks plus15%headroom"
+  }
 }
