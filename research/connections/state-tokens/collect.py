@@ -40,7 +40,7 @@ def main(root):
                         with tarfile.open(archive) as bundle:
                             result = json.load(bundle.extractfile('results/state-tokens/validation.json'))
                             assert result['complete'] and not result['formal_training']
-                            assert result['checks']==dict(tests=10, failures=0, errors=0, skipped=0)
+                            assert result['checks']==dict(tests=26, failures=0, errors=0, skipped=0)
                             assert result['source']==state['source']
                             (root/'validation.json').write_text(json.dumps(result, indent=2)+'\n')
                         save('validation_complete', collector_complete=True, formal_training=False)

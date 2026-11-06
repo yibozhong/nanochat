@@ -9,28 +9,27 @@
   "formulas": [
     "h_new = F(pre_norm(h))",
     "h_next = h_new + Read(h_new, state_old)",
-    "state_next = Write(state_old, concat(state_old,h_new))"
+    "state_next = state_old + Write(state_old, concat(state_old,h_new))"
   ],
   "sharing": "One Read and one independently parameterized Write, shared across all16 sublayers. Backbone blocks are independent.",
   "state_scope": "Per token, across depth only; reset on every forward. No cross-token state attention; backbone is causal.",
   "initialization": {
     "slots": "Embedding + learned centered tetrahedral offsets with unit RMS per head",
     "read": "V/O identity,K identity,Q=.01I",
-    "write": "V/O identity,Q/K scaled identity targeting logit margin10 between distinct slots",
-    "limitations": "Approximate initial self retention, not exact identity or a guarantee against later collapse. The new-output key initially receives small nonzero mass. No diagonal mask/bias or residual bypass.",
-    "selection": "Smallest tested margin passing unchanged16-step retention criteria on3 CPU seeds; GPU and training validation pending"
+    "write": "V identity; independent Q/K uniform(-sqrt(3/d),sqrt(3/d)); O zero",
+    "limitations": "Exactly identity state Write at initialization; no runtime gate or scaling. Initial Write Q/K/V gradients are zero until O learns. No long-run stability guarantee."
   },
   "normalization": "Original embedding RMSNorm, branch pre-RMSNorm, backbone QK norm and final RMSNorm remain. No new state/query norm.",
   "loss": "Standard NTP only",
   "optimizer": "Backbone unchanged;9 shared connector tensors use existing connector AdamW at unembedding LR, zero decay",
   "parameters_added": 2099200,
-  "backend": "Original FA3/FA2 backbone;auto selects explicit tiny token-local attention compiled with each block,FP32 accumulation/softmax andBF16 activations.Explicit SDPA remains for reference/audits.",
+  "backend": "Backbone unchanged FA3/FA2. Optional triton local read1x4/write4x5 fused stable softmax+AV; analytic backward recomputes probabilities; no attention bank/padded workspace/atomics. BF16 activations, FP32 reductions. Compiled PyTorch auto retained for reference.",
   "validation": {
-    "cpu": "FP64 outputs/all VJPs; state replacement/locality/sharing;16-step initial signal and gradient retention",
-    "gpu": "10 checks including both BF16 implementations;production slot workspace microprofile;new andbaseline60step profiles at same microbatch;25->50 resume",
+    "cpu": "FP64 outputs/all VJPs; additive Write/locality/sharing and initialization retention (engineering checks only)",
+    "gpu": "26 checks; FP64 kernel forward/all VJPs, locality/determinism, both BF16/full-model backends, 2K causality/cache/CCE/compile/recompute/optimizer. Same-GPU local micro and full60update profiles; triton25->50 restart.",
     "formal_training": false,
     "wandb": false,
     "return_checkpoints": false
   },
-  "implementation_status": "Initial GPU9checks passed;full micro16 FA2 OOM.Compact local attention revision pending GPU verification"
+  "implementation_status": "Residual Write and optional Triton implemented; GPU validation pending. Prior overwrite version passed10 math checks but failed NTP afterstep20 beforestep40; not reused."
 }

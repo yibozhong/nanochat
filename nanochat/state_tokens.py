@@ -32,6 +32,10 @@ class SlotAttention(nn.Module):
         q = self.q(query).reshape(batch*time, nq, self.heads, hd)
         k = self.k(memory).reshape(batch*time, nk, self.heads, hd)
         v = self.v(memory).reshape(batch*time, nk, self.heads, hd)
+        if self.backend == 'triton':
+            from nanochat.state_attention import state_attention
+            y = state_attention(q, k, v)
+            return self.out(y.reshape(batch, time, nq, width))
         from nanochat import flash_attention
         short_slots = nq <= 4 and nk <= 5
         if self.backend == 'auto' and not short_slots and flash_attention.USE_FA3:
@@ -67,7 +71,6 @@ class StateTokenResidual(nn.Module):
     def reset_parameters(self):
         # A centered tetrahedron in every head: mean=0, RMS=1, cross dot=-1/3.
         # Copies of the same embedding alone would remain exactly symmetric.
-        hd = self.width // self.heads
         basis = self.slots.new_tensor([[0, 1, 1, 1], [0, 1, -1, -1],
                                       [0, -1, 1, -1], [0, -1, -1, 1]])
         self.slots.copy_(basis.repeat(1, self.width // 4) * math.sqrt(4/3))
@@ -76,13 +79,13 @@ class StateTokenResidual(nn.Module):
                 nn.init.eye_(projection.weight)
         # Read initially averages memory, while retaining a full-rank Q map.
         self.read.q.weight.mul_(.01)
-        # Initial self-vs-other-slot logit margin=10 for centered slots. The
-        # identity V/O transports memory; random V/O would repeatedly rotate
-        # and rescale it. This is weight initialization, not a runtime gate,
-        # diagonal attention bias, hard mask, or extra residual connection.
-        gain = math.sqrt(10 / ((4/3) * math.sqrt(hd)))
-        self.write.q.weight.mul_(gain)
-        self.write.k.weight.mul_(gain)
+        # The user switched Write to an additive state residual. Its identity
+        # path now carries memory, so remove the old strong self-retention
+        # initialization and start the learned write at zero (not2*state).
+        bound = math.sqrt(3/self.width)
+        nn.init.uniform_(self.write.q.weight, -bound, bound)
+        nn.init.uniform_(self.write.k.weight, -bound, bound)
+        nn.init.zeros_(self.write.out.weight)
 
     def initialize(self, embedding):
         return embedding.unsqueeze(-2) + self.slots.to(embedding.dtype)
@@ -91,7 +94,7 @@ class StateTokenResidual(nn.Module):
         query = h_new.unsqueeze(-2)
         h_next = h_new + self.read(query, state).squeeze(-2)
         # Both operations read the old state. Write receives h_new, not h_next.
-        next_state = self.write(state, torch.cat((state, query), dim=-2))
+        next_state = state + self.write(state, torch.cat((state, query), dim=-2))
         return h_next, next_state
 
 

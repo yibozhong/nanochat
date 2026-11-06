@@ -36,13 +36,16 @@ class ConnectionConfig:
     attention_kernel: str = 'original'
     compact_routing: bool = False
     state_attention_backend: str = 'auto'
+    state_write_residual: bool = True
 
     def __post_init__(self):
-        if self.state_attention_backend not in ('auto', 'sdpa', 'math'):
+        if self.state_attention_backend not in ('auto', 'sdpa', 'math', 'triton'):
             raise ValueError('Unknown state attention backend')
         if self.state_attention_backend != 'auto' and self.variant != 'state_tokens':
             raise ValueError('State attention backend applies only to state_tokens')
         if self.variant == 'state_tokens':
+            if not self.state_write_residual:
+                raise ValueError('The direct-overwrite state-token architecture is retired')
             if self.architecture != 'vanilla' or self.fused_connection_grad or self.compact_routing:
                 raise ValueError('State tokens initially support vanilla without NVIDIA connector flags')
             if self.streams != 4 or self.heads < 1 or self.width % self.heads or (self.width // self.heads) % 4:
@@ -78,6 +81,8 @@ class ConnectionConfig:
     def from_checkpoint(cls, config):
         """Read pre-cleanup NVIDIA/vanilla metadata; reject retired model weights."""
         config = dict(config)
+        if config.get('variant') == 'state_tokens' and not config.get('state_write_residual', False):
+            raise ValueError('Checkpoint belongs to the retired direct-overwrite state-token architecture')
         if config.pop('attention_statistic', 'none') != 'none':
             raise ValueError('Checkpoint belongs to a retired attention-statistics experiment')
         config.pop('moment_query_chunk', None)

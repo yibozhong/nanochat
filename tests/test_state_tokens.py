@@ -42,7 +42,7 @@ def test_all_gradients_against_independent_double_oracle(backend):
     s = torch.randn(2, 3, 4, 32, dtype=torch.float64, requires_grad=True)
     a, b = m(h, s)
     ar = h + oracle_attention(m.read, h.unsqueeze(-2), s).squeeze(-2)
-    br = oracle_attention(m.write, s, torch.cat((s, h.unsqueeze(-2)), -2))
+    br = s + oracle_attention(m.write, s, torch.cat((s, h.unsqueeze(-2)), -2))
     weights = (torch.randn_like(a), torch.randn_like(b))
     params = (h, s, *m.read.parameters(), *m.write.parameters())
     ga = torch.autograd.grad((a, b), params, weights, retain_graph=True)
@@ -51,7 +51,7 @@ def test_all_gradients_against_independent_double_oracle(backend):
         torch.testing.assert_close(x, y, rtol=1e-10, atol=1e-11)
 
 
-def test_replace_old_state_and_token_locality():
+def test_add_old_state_and_token_locality():
     torch.manual_seed(12)
     m = StateTokenResidual(32, 2, 'math').double()
     h = torch.randn(2, 7, 32, dtype=torch.float64, requires_grad=True)
@@ -69,7 +69,7 @@ def test_replace_old_state_and_token_locality():
     with torch.no_grad(): m.write.v.weight.zero_()
     after_read, replaced = m(h, s)
     assert torch.equal(after_read, a)
-    assert torch.count_nonzero(replaced) == 0, 'Write added an identity bypass'
+    assert torch.equal(replaced, s), 'Zero write must preserve the old state exactly'
 
 
 def test_initial_information_and_gradient_retention():
@@ -109,6 +109,9 @@ def test_shared_parameters_backbone_optimizer_and_metadata():
     ids = [id(p) for g in opt.param_groups for p in g['params']]
     assert len(ids) == len(set(ids)) == len(names)
     assert ConnectionConfig.from_checkpoint(asdict(c)) == c
+    obsolete = asdict(c); obsolete.pop('state_write_residual')
+    with pytest.raises(ValueError, match='retired'): ConnectionConfig.from_checkpoint(obsolete)
+    assert torch.count_nonzero(m.state_residual.write.out.weight) == 0
     old = asdict(ConnectionConfig()); old.pop('state_attention_backend')
     assert ConnectionConfig.from_checkpoint(old) == ConnectionConfig()
     for kwargs in (dict(architecture='native'), dict(streams=3), dict(fused_connection_grad=True)):
@@ -117,13 +120,14 @@ def test_shared_parameters_backbone_optimizer_and_metadata():
 
 def randomize_branches(m):
     with torch.no_grad():
+        m.state_residual.write.out.weight.normal_(std=.01)
         for b in m.blocks:
             b.attn.c_proj.weight.normal_(std=.02)
             b.mlp.c_proj.weight.normal_(std=.02)
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason='GPU implementation gate')
-@pytest.mark.parametrize('backend', ['auto', 'sdpa'])
+@pytest.mark.parametrize('backend', ['auto', 'sdpa', 'triton'])
 def test_slot_attention_bf16_vjp(backend):
     torch.manual_seed(17)
     m = StateTokenResidual(128, 2, backend).cuda()
@@ -148,9 +152,10 @@ def test_slot_attention_bf16_vjp(backend):
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason='GPU implementation gate')
-def test_bf16_initial_state_depth_retention():
+@pytest.mark.parametrize('backend', ['auto', 'triton'])
+def test_bf16_initial_state_depth_retention(backend):
     torch.manual_seed(42)
-    m = StateTokenResidual(512, 4, 'auto').cuda()
+    m = StateTokenResidual(512, 4, backend).cuda()
     e = norm(torch.randn(2, 32, 512, device='cuda', dtype=torch.bfloat16)).requires_grad_()
     state = m.initialize(e)
     probe = torch.randn_like(e)
@@ -159,14 +164,16 @@ def test_bf16_initial_state_depth_retention():
     result = dict(embedding_error=((h-e).float().norm()/e.float().norm()).item(),
         slot_rms=(state.float()-state.float().mean(-2,keepdim=True)).square().mean().sqrt().item(),
         gradient_error=((gradient-probe).float().norm()/probe.float().norm()).item())
-    record('bf16-initialization', result)
+    record('bf16-initialization-'+backend, result)
     assert result['embedding_error']<.1 and result['slot_rms']>.25 and result['gradient_error']<.2, result
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason='GPU implementation gate')
-def test_2k_causal_cache_cce_compile_recompute():
+@pytest.mark.parametrize('backend', ['auto', 'triton'])
+def test_2k_causal_cache_cce_compile_recompute(backend):
     torch.manual_seed(42)
-    c = ConnectionConfig(variant='state_tokens', width=128, heads=2, depth=2, vocab_size=128)
+    c = ConnectionConfig(variant='state_tokens', width=128, heads=2, depth=2, vocab_size=128,
+                         state_attention_backend=backend)
     m = build_connection_model(c).prepare()
     randomize_branches(m)
     ids = torch.randint(0, 128, (2, 2048), device='cuda')
@@ -201,14 +208,36 @@ def test_2k_causal_cache_cce_compile_recompute():
     errors2 = {n: ((p.grad-grads[n]).float().norm()/grads[n].float().norm().clamp_min(1e-9)).item()
                for n, p in m.named_parameters()}
     assert max(errors2.values()) < .03, errors2
-    record('model', dict(ce=loss.item(), compile_gradient_errors=errors,
+    record('model-'+backend, dict(ce=loss.item(), compile_gradient_errors=errors,
                         recompute_gradient_errors=errors2, causal_tokens=2048))
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason='GPU implementation gate')
+def test_full_model_triton_matches_compiled_torch():
+    torch.manual_seed(42)
+    c = ConnectionConfig(variant='state_tokens', width=128, heads=2, depth=2,
+                         vocab_size=128, state_attention_backend='triton')
+    model = build_connection_model(c).prepare()
+    randomize_branches(model)
+    other = copy.deepcopy(model)
+    other.config.state_attention_backend = 'auto'
+    other.state_residual.read.backend = other.state_residual.write.backend = 'auto'
+    model.prepare(compile_blocks=True); other.prepare(compile_blocks=True)
+    x = torch.randint(0, 128, (2, 128), device='cuda')
+    a = model(x[:, :-1], x[:, 1:]); b = other(x[:, :-1], x[:, 1:])
+    a.backward(); b.backward()
+    torch.testing.assert_close(a, b, atol=2e-4, rtol=2e-4)
+    errors = {name: ((p.grad-q.grad).float().norm()/q.grad.float().norm().clamp_min(1e-9)).item()
+              for (name,p),q in zip(model.named_parameters(),other.parameters())}
+    assert max(errors.values()) < .03, errors
+    record('full-model-backends', dict(triton_ce=a.item(), torch_ce=b.item(), gradient_errors=errors))
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason='GPU implementation gate')
 def test_model_optimizer_checkpoint_fixed_next_update(tmp_path):
     torch.manual_seed(42)
-    c = ConnectionConfig(variant='state_tokens', width=128, heads=2, depth=2, vocab_size=128)
+    c = ConnectionConfig(variant='state_tokens', width=128, heads=2, depth=2, vocab_size=128,
+                         state_attention_backend='triton')
     m = build_connection_model(c).prepare(); opt, _ = optimizer_for(m)
     ids = torch.randint(0, 128, (2, 33), device='cuda')
     m(ids[:, :-1], ids[:, 1:]).backward(); opt.step(); opt.zero_grad(set_to_none=True)

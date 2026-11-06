@@ -35,7 +35,7 @@ def main():
     p.add_argument('--connection-backend', choices=('nvidia','nvidia_precise'), default='nvidia')
     p.add_argument('--fused-connection-grad', action=argparse.BooleanOptionalAction, default=False)
     p.add_argument('--compact-routing', action=argparse.BooleanOptionalAction, default=False)
-    p.add_argument('--state-attention-backend', choices=('auto','sdpa','math'), default='auto')
+    p.add_argument('--state-attention-backend', choices=('auto','sdpa','math','triton'), default='auto')
     p.add_argument('--steps', type=int, required=True)
     p.add_argument('--schedule-steps', type=int, default=30518)
     p.add_argument('--microbatch', type=int, default=16)
@@ -122,7 +122,7 @@ def main():
         residual_mixing=('sinkhorn' if a.variant=='mhc' else
                          'unconstrained_raw' if a.variant=='mhc_no_sinkhorn' else
                          'local_channel_unconstrained_raw' if a.variant=='mhc_channel_no_sinkhorn' else
-                         'token_local_cross_attention_replace' if a.variant=='state_tokens' else
+                         'token_local_cross_attention_residual_write' if a.variant=='state_tokens' else
                          'additive'),
         applied_sinkhorn_iterations=c.sinkhorn_iterations if a.variant=='mhc' else 0,
         optimizer='native MuonAdamW; connector AdamW at native unembedding LR, no decay',

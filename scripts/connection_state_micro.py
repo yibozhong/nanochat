@@ -54,7 +54,7 @@ def main():
     torch.backends.cuda.matmul.allow_tf32 = False
     rows = []
     for nq, nk in ((1,4), (4,5)):
-        for backend in ('sdpa','auto'):
+        for backend in ('auto','triton'):
             result = measure(nq, nk, backend)
             rows.append(result); print(json.dumps(result), flush=True)
     Path('results/state-slot-micro.json').write_text(json.dumps(dict(

@@ -424,5 +424,184 @@
     "reference": "https://raw.githubusercontent.com/pytorch/pytorch/v2.10.0/aten/src/ATen/native/transformers/cuda/flash_attn/flash_api.cpp",
     "collector_issue": "condor_q -json prints empty when job exits;handle as empty list",
     "restart_check_ran": false
+  },
+  {
+    "job": "7909854.0",
+    "source": "17857191a6171e4fbe2aa62dcdef58a444f159b6",
+    "exit_code": 1,
+    "device": {
+      "gpu": "NVIDIA A100-SXM4-40GB",
+      "capability": [
+        8,
+        0
+      ],
+      "torch": "2.10.0+cu130"
+    },
+    "checks": {
+      "tests": 10,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "slot_profile": {
+      "gpu": "NVIDIA A100-SXM4-40GB",
+      "checks": "Fixed weights;forward/backward only;no optimizer/W&B",
+      "theoretical_flash_dq_workspace_bytes": 8589934592,
+      "results": [
+        {
+          "nq": 1,
+          "nk": 4,
+          "backend": "sdpa",
+          "folded_batch": 32768,
+          "heads": 4,
+          "head_dimension": 128,
+          "median_seconds": 0.02815328538417816,
+          "step_seconds": [
+            0.03931156359612942,
+            0.02812655083835125,
+            0.02814307063817978,
+            0.028074489906430244,
+            0.02829020842909813,
+            0.028163500130176544
+          ],
+          "initial_allocated_bytes": 272629760,
+          "peak_allocated_bytes": 9636414464,
+          "peak_reserved_bytes": 9640607744,
+          "large_device_allocations": [
+            {
+              "name": "aten::empty",
+              "device_memory_bytes": 8589934592
+            }
+          ]
+        },
+        {
+          "nq": 1,
+          "nk": 4,
+          "backend": "auto",
+          "folded_batch": 32768,
+          "heads": 4,
+          "head_dimension": 128,
+          "median_seconds": 0.00954931229352951,
+          "step_seconds": [
+            0.015979651361703873,
+            0.009429411962628365,
+            0.009319445118308067,
+            0.013477159664034843,
+            0.009669212624430656,
+            0.009365053847432137
+          ],
+          "initial_allocated_bytes": 272629760,
+          "peak_allocated_bytes": 1051197440,
+          "peak_reserved_bytes": 1184890880
+        },
+        {
+          "nq": 4,
+          "nk": 5,
+          "backend": "sdpa",
+          "folded_batch": 32768,
+          "heads": 4,
+          "head_dimension": 128,
+          "median_seconds": 0.030892517417669296,
+          "step_seconds": [
+            0.040765443816781044,
+            0.031167160719633102,
+            0.030934331938624382,
+            0.030418194830417633,
+            0.03085070289671421,
+            0.0307641439139843
+          ],
+          "initial_allocated_bytes": 507510784,
+          "peak_allocated_bytes": 10510402560,
+          "peak_reserved_bytes": 10533994496,
+          "large_device_allocations": [
+            {
+              "name": "aten::empty",
+              "device_memory_bytes": 8589934592
+            }
+          ]
+        },
+        {
+          "nq": 4,
+          "nk": 5,
+          "backend": "auto",
+          "folded_batch": 32768,
+          "heads": 4,
+          "head_dimension": 128,
+          "median_seconds": 0.02330003771930933,
+          "step_seconds": [
+            0.027985908091068268,
+            0.023539146408438683,
+            0.023648077622056007,
+            0.023060929030179977,
+            0.023013291880488396,
+            0.023028308525681496
+          ],
+          "initial_allocated_bytes": 507510784,
+          "peak_allocated_bytes": 2036858880,
+          "peak_reserved_bytes": 2728394752
+        }
+      ]
+    },
+    "profile": {
+      "complete": false,
+      "variant": "state_tokens",
+      "sequence_length": 2048,
+      "microbatch": 16,
+      "grad_accum": 1,
+      "batch_tokens": 32768,
+      "repetition": 0,
+      "probe": false,
+      "model": {
+        "variant": "state_tokens",
+        "depth": 8,
+        "width": 512,
+        "heads": 4,
+        "sequence_length": 2048,
+        "vocab_size": 32768,
+        "streams": 4,
+        "sinkhorn_iterations": 20,
+        "activation_checkpoint": false,
+        "connection_backend": "nvidia",
+        "fused_connection_grad": false,
+        "architecture": "vanilla",
+        "window_pattern": "SSSL",
+        "attention_kernel": "original",
+        "compact_routing": false,
+        "state_attention_backend": "auto"
+      },
+      "logging_backend": "local",
+      "gpu": "NVIDIA A100-SXM4-40GB",
+      "gpu_uuid": "a01fc79b-9baa-ae11-8938-6b070a3ada9c",
+      "device_total_bytes": 42406903808,
+      "torch": "2.10.0+cu130",
+      "cuda": "13.0",
+      "attention_backend": "fa2",
+      "actual_attention_backend": "fa2",
+      "minimum_gpu_bytes": 23068672000,
+      "memory_limit_bytes": 20761804800,
+      "nvidia_tf32_override": null,
+      "source": {
+        "commit": "17857191a6171e4fbe2aa62dcdef58a444f159b6",
+        "formal_training": false,
+        "purpose": "Token-local persistent state cross-attention: correctness, initialization, cost and restart; no formal training"
+      },
+      "seed": 42,
+      "data_note": "Re-segment existing packed tokens for performance, not long-document quality.\n\n    Original 2049-token rows are independent packed examples. Flattening them\n    does not recover original document continuity. All variants use the same\n    deterministic examples at a given context length; no new cache is saved.\n    ",
+      "timing_includes": "CPU data copy/H2D, CCE, backward, finite checks, MuonAdamW",
+      "warmup_steps": 20,
+      "timed_steps": 40,
+      "input_sha256": "d48c02ea5fc901d04770addea3ff74a997f1e76d31985439fae15a1ae477560d",
+      "parameters": 60819456,
+      "setup_and_warmup_seconds": 65.18282152153552,
+      "status": "error",
+      "error": "FloatingPointError('Nonfinite loss/gradient before optimizer update')"
+    },
+    "last_logged_step": 20,
+    "last_logged_loss": 7.813323020935059,
+    "failed_step": "After20 and before40; old harness did not save exact failure step",
+    "diagnosis": "Compact auto path removes8GiBFA2 workspace; fullmicro16 executed NTP updates but then nonfinite loss/gradient. Correctness tests alone do not establish training stability.",
+    "action": "User requests additive state Write; new zero-output initialization. Optional Triton port tested against compiled PyTorch on same revised architecture.",
+    "restart_check_ran": false,
+    "formal_training": false
   }
 ]
