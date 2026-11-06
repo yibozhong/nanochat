@@ -82,7 +82,7 @@ def test_token_locality_and_saved_statistics():
     assert torch.count_nonzero(gp.flatten(0,1)[mask])==0 and torch.count_nonzero(gb[mask])==0
 
 
-@pytest.mark.parametrize('block_size',[1,2,3])
+@pytest.mark.parametrize('block_size',[2,4,6])
 def test_model_block_boundaries_against_independent_reference(block_size):
     configure_attention('hardware_auto'); seed_all(42)
     c=ConnectionConfig(variant='attnres',depth=4,width=128,heads=1,vocab_size=128,attnres_block_size=block_size)
@@ -101,7 +101,7 @@ def test_model_block_boundaries_against_independent_reference(block_size):
                 bank=torch.stack(history,dim=2).flatten(0,1) if history else prefix.new_empty(128,0,128)
                 return reference_mix(prefix.flatten(0,1),bank,reader.norm_weight,reader.proj_weight).view_as(prefix)
             h=mix(m.depth_reads[i][0])
-            if i%block_size==0:
+            if (2*i)%block_size==0:
                 history.append(prefix); prefix=None
             a=b.attention_branch(h,cos,sin)
             prefix=a if prefix is None else prefix+a
@@ -132,7 +132,18 @@ def test_full_size_initialization_and_optimizer_ownership():
         assert {k:v for k,v in g.items() if k!='params'}=={k:v for k,v in same[0].items() if k!='params'}
     assert all(torch.equal(r.norm_weight,torch.ones_like(r.norm_weight)) for pair in m.depth_reads for r in pair)
     assert ConnectionConfig.from_checkpoint(asdict(m.config))==m.config
-    for kwargs in (dict(architecture='native'),dict(attnres_block_size=0),dict(depth=17)):
+    legacy=asdict(m.config)
+    legacy.pop('attnres_block_size_unit')
+    legacy['attnres_block_size']=1
+    assert ConnectionConfig.from_checkpoint(legacy)==m.config
+    assert legacy['attnres_block_size']==1  # loader must not mutate saved metadata
+    for size in (2,4,6):
+        current=ConnectionConfig(variant='attnres',attnres_block_size=size)
+        old=asdict(current);old.pop('attnres_block_size_unit');old['attnres_block_size']=size//2
+        assert ConnectionConfig.from_checkpoint(old)==current
+        assert ConnectionConfig.from_checkpoint(asdict(current))==current
+    for kwargs in (dict(architecture='native'),dict(attnres_block_size=0),dict(attnres_block_size=1),
+                   dict(attnres_block_size=3),dict(attnres_block_size_unit='unknown'),dict(depth=17)):
         with pytest.raises(ValueError):ConnectionConfig(variant='attnres',**kwargs)
 
 

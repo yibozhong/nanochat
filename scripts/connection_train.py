@@ -35,7 +35,8 @@ def main():
     p.add_argument('--connection-backend', choices=('nvidia','nvidia_precise'), default='nvidia')
     p.add_argument('--fused-connection-grad', action=argparse.BooleanOptionalAction, default=False)
     p.add_argument('--compact-routing', action=argparse.BooleanOptionalAction, default=False)
-    p.add_argument('--attnres-block-size', type=int, default=1)
+    p.add_argument('--attnres-block-size', type=int, default=2,
+                   help='Moonshot paper S: Attention/MLP sublayers per residual block; even >=2, default2 = one Transformer layer')
     p.add_argument('--steps', type=int, required=True)
     p.add_argument('--schedule-steps', type=int, default=30518)
     p.add_argument('--microbatch', type=int, default=16)

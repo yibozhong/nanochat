@@ -4,7 +4,8 @@
 # Provenance and license: research/connections/attnres/.
 """Block Attention Residuals with NVIDIA's unchanged Triton math.
 
-Block size counts complete Transformer layers (attention + MLP), as in NeMo.
+Block size uses Moonshot's sublayer count: Attention and MLP each count once.
+Even S maps to S//2 complete Transformer layers in NeMo's recurrence.
 History stores the embedding and completed block sums, never mixed readouts.
 Only the current token's history is read. No cross-token residual mixing.
 """
@@ -97,7 +98,7 @@ class AttnResModel(ConnectionModel):
         # With empty history the mix is exactly prefix (zero score gradients).
         # Still run it, keeping the first query/norm in the autograd graph.
         h = read_attn(prefix, history)
-        boundary = index % self.config.attnres_block_size == 0
+        boundary = index % self.config.attnres_block_layers == 0
         if boundary:
             history = torch.cat((history, prefix.flatten(0, 1).unsqueeze(1)), dim=1)
         delta = (block.compiled_attention or block.attention_branch)(h, cos, sin, kv_cache)

@@ -20,7 +20,7 @@ def main(root):
         assert not subprocess.check_output(['git','status','--porcelain'],cwd=REPO,text=True).strip()
         for name in ('bundles','logs','results'):(root/name).mkdir(exist_ok=True)
         commit=subprocess.check_output(['git','rev-parse','HEAD'],cwd=REPO,text=True).strip()
-        source=dict(commit=commit,formal_training=False,purpose='NVIDIA Block Attention Residuals: vanilla8layers D512 2K, block size1 Transformer layer')
+        source=dict(commit=commit,formal_training=False,purpose='NVIDIA Block Attention Residuals: vanilla8layers D512 2K, block size S=2 sublayers (1 Transformer layer)')
         (root/'bundles/source.json').write_text(json.dumps(source,indent=2)+'\n')
         subprocess.run(['git','archive','--format=tar','--prefix=nanochat-src/','-o',str(root/'bundles/source.tar'),'HEAD'],cwd=REPO,check=True)
         for name in ('gate-data.tar','transformer_engine_torch-2.20.2-cp311-cp311-linux_x86_64.whl'):

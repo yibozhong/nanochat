@@ -8,14 +8,29 @@ backward Triton kernels. Only its optional-import decorator import is adapted;
 all kernel bodies and launch tuning are unchanged. Autograd and FP32 reference
 come from the same commit's kimi_k3/situ.py. Apache2.0 license retained.
 
-Architecture follows kimi_k3/model.py's block recurrence, with block size in
-complete Transformer layers. Default1:8 Transformer blocks,16 sublayer reads
+Architecture follows kimi_k3/model.py's block recurrence. Our public block size
+now uses Moonshot's paper/official README convention: Attention and MLP each
+count as one sublayer. Default S=2:8 residual blocks,16 sublayer reads
 plus final read, embedding preserved as the first history entry. Completed
 blocks are sums of their raw branch outputs. Each read uses per-token softmax
 over RMS-normalized history/prefix scores and combines unnormalized values.
 History is reset each forward; token positions never share depth state.
 No full QKV projections, Sinkhorn, explicit gates, auxiliary losses, or extra
 identity bypass. Normal branch pre-norm and vanilla attention/MLP stay intact.
+
+`--attnres-block-size` accepts even S>=2; it maps internally to S//2 complete
+Transformer layers. Full AttnRes (S=1) and odd boundaries are not implemented
+and are rejected explicitly. This unit conversion preserves the existing
+grouping; it does not implement a new architecture. New model/checkpoint
+metadata records `attnres_block_size_unit="sublayers"`. `from_checkpoint`
+converts legacy unmarked sizes from Transformer layers by multiplying by2,
+without modifying the supplied metadata or tensors. Marked new metadata is
+not converted again.
+
+Historical `validation.json` and the running10B's immutable source/config stay
+as originally recorded: their unmarked block_size1 means S=2, not Full AttnRes.
+The running job is not restarted for a units-only change. NVIDIA's vendored
+kernel comments retain their upstream NeMo units; kernel code is unchanged.
 
 NVIDIA initialization: score vectors normal(std=.02), score RMSNorm weights1,
 epsilon1e-5. Vanilla backbone initialized first and explicitly matched to seed42.
@@ -30,7 +45,7 @@ MuonAdamW groups and schedules are unchanged. This is an adaptation to nanochat,
 not a complete replication of Kimi's training recipe.
 
 Gate:21 checks including independent FP64 all-VJP reference, zero/tiny/ragged
-inputs, locality, block sizes1/2/3, matched parameters and optimizer ownership,
+inputs, locality, block sizes S=2/4/6, matched parameters and optimizer ownership,
 2K causality, cache, CCE, branch compile and recomputation, real kernel dispatch,
 model gradients against eager reference, optimizer/RNG serialization, and
 retained mHC/backend checks. Same-device baseline/new60-step profiles;128 real

@@ -14,7 +14,7 @@ def model_cost(config, batch=1, activation_bytes=2):
         history=0;entries=0
         for i in range(depth):
             entries+=history+1
-            if i%c.attnres_block_size==0:history+=1
+            if i%c.attnres_block_layers==0:history+=1
             entries+=history+1
         entries+=history+1
         mixing=7*batch*t*d*entries

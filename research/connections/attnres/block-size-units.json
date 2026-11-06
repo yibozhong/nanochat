@@ -1,0 +1,31 @@
+{
+  "complete": true,
+  "kind": "units-only static and pure-Python configuration audit; no new GPU execution",
+  "base_commit": "8585cf56f47064e6767dc9fe2e7bdb048e56e710",
+  "default_sublayers": 2,
+  "equivalent_legacy_layers": 1,
+  "accepted_geometry_cases": 510,
+  "rejected_history_limit_cases": 18,
+  "all_boundary_decisions_and_flops_identical": true,
+  "checkpoint_roundtrip_and_legacy_conversion": true,
+  "invalid_units_and_sizes_rejected": true,
+  "layer_tensor_ast_identical_except_unit_lookup": true,
+  "unchanged_files": [
+    "nanochat/attnres_triton.py",
+    "nanochat/gpt.py",
+    "nanochat/optim.py",
+    "nanochat/nvidia_connections.py",
+    "research/connections/attnres/validation.json"
+  ],
+  "formal_run": {
+    "job": "7913860.0",
+    "source": "931eca8294b454a3c6722f31ac897e35b7740cb7",
+    "recorded_block_size": 1,
+    "recorded_unit": "transformer_layers",
+    "attnres_block_size": 2,
+    "attnres_block_size_unit": "sublayers",
+    "transformer_layers": 8,
+    "residual_blocks": 8,
+    "immutable_inputs_unchanged": true
+  }
+}

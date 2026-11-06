@@ -35,17 +35,20 @@ class ConnectionConfig:
     window_pattern: str = 'SSSL'  # native only; vanilla is always full attention
     attention_kernel: str = 'original'
     compact_routing: bool = False
-    attnres_block_size: int = 1  # complete Transformer layers, not sublayers
+    attnres_block_size: int = 2  # Moonshot paper's S: Attention and MLP each count once
+    attnres_block_size_unit: str = 'sublayers'
 
     def __post_init__(self):
-        if self.attnres_block_size < 1:
-            raise ValueError('AttnRes block size must be positive')
+        if self.attnres_block_size_unit != 'sublayers':
+            raise ValueError('AttnRes block size uses sublayers; load legacy metadata with from_checkpoint')
+        if type(self.attnres_block_size) is not int or self.attnres_block_size < 2 or self.attnres_block_size % 2:
+            raise ValueError('AttnRes block size counts Attention/MLP sublayers and must be even and >=2; Full AttnRes (S=1) is not implemented')
         if self.variant == 'attnres':
             if self.width > 16384:
                 raise ValueError('NVIDIA AttnRes supports hidden width at most16384')
             if self.architecture != 'vanilla' or self.fused_connection_grad:
                 raise ValueError('Initial AttnRes port uses vanilla and its own NVIDIA autograd')
-            if math.ceil(self.depth / self.attnres_block_size) > 16:
+            if math.ceil(self.depth / self.attnres_block_layers) > 16:
                 raise ValueError('NVIDIA AttnRes supports at most16 completed history entries')
         if self.compact_routing and self.variant != 'mhc_channel_no_sinkhorn':
             raise ValueError('Compact routing applies only to the8-coefficient channel connector')
@@ -74,10 +77,24 @@ class ConnectionConfig:
         if self.variant not in ('baseline', 'attnres') and (self.streams != 4 or self.width % 128):
             raise ValueError('NVIDIA mHC kernels require four streams and width divisible by 128')
 
+    @property
+    def attnres_block_layers(self):
+        """Complete Transformer layers per block, for NeMo's layer-boundary recurrence."""
+        return self.attnres_block_size // 2
+
     @classmethod
     def from_checkpoint(cls, config):
         """Read pre-cleanup NVIDIA/vanilla metadata; reject retired model weights."""
         config = dict(config)
+        # Metadata written before the unit marker counted complete Transformer
+        # layers. Convert once, without changing grouping or checkpoint tensors.
+        unit = config.get('attnres_block_size_unit', 'transformer_layers')
+        if unit == 'transformer_layers':
+            size = config.get('attnres_block_size', 1)
+            if type(size) is not int or size < 1:
+                raise ValueError('Invalid legacy AttnRes block size')
+            config['attnres_block_size'] = 2 * size
+            config['attnres_block_size_unit'] = 'sublayers'
         if config.pop('attention_statistic', 'none') != 'none':
             raise ValueError('Checkpoint belongs to a retired attention-statistics experiment')
         config.pop('moment_query_chunk', None)
