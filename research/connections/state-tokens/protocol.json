@@ -31,7 +31,7 @@
     "wandb": false,
     "return_checkpoints": false
   },
-  "implementation_status": "A10080 gate7910438 passed25/26 (including primitive VJPs and each backend model checks); last cross-backend test blocked by global compile-cache accumulation. Test cache isolated; complete new gate pending.",
+  "implementation_status": "H2007911140:26/26 correctness checks passed;residual Write NTP nonfinite gradients atstep38(compiledTorch) andstep23(Triton);baseline60finite. No restart check/formal10B. Automatic launch blocked; exact numerical root cause unlocated.",
   "automatic_formal_training": {
     "authorized": true,
     "count": 1,
