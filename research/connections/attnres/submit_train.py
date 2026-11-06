@@ -10,7 +10,7 @@ import time
 import uuid
 
 REPO=Path(__file__).resolve().parents[3]
-GATE=Path('/home/yzhong239/attnres-gate-20261106-r2')
+GATE=Path('/home/yzhong239/attnres-gate-20261106-r3')
 ASSETS=Path('/home/yzhong239/nanochat-runtime-assets')
 KEY='attnres-10b-20261106'
 STEPS=305176
@@ -93,6 +93,7 @@ def main(root):
         template='\n'.join(lines)+'\n'
         template=template.replace('gpus_minimum_capability = 9.0','gpus_minimum_capability = 8.0')
         template=template.replace('(Capability == 9.0)', '((Capability == 9.0) || ((Capability == 8.0) && regexp("A100",DeviceName)))')
+        template=template.replace('!regexp("MIG",DeviceName)', '!regexp("MIG",DeviceName) && (DeviceUuid =!= "7067f38b-b4c2-5568-ec82-f698473ddd07")')
         template=template.replace('queue 1','hold = true\nqueue 1')
         (root/'train.sub').write_text(template)
         command(['condor_submit','-dry-run','train-dryrun.ad','train.sub'],root)

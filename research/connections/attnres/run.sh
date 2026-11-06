@@ -37,6 +37,7 @@ if [ "$SYSTEM_CUDA_DRIVER" -lt 13010 ]; then
     dpkg-deb -x cuda-compat-13-1_590.48.01-1_amd64.deb cuda-compat
     export LD_LIBRARY_PATH="$PWD/cuda-compat/usr/local/cuda-13.1/compat:$LD_LIBRARY_PATH"
 fi
+python nanochat-src/research/connections/attnres/device_probe.py
 source nanochat-src/research/connections/runtime/hardware-device.sh
 cd nanochat-src
 ln -sfn ../results results

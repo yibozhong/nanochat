@@ -34,7 +34,6 @@ def main():
     p=argparse.ArgumentParser();p.add_argument('--preflight',action='store_true')
     p.add_argument('--microbatch',type=int,default=16)
     a=p.parse_args()
-    import torch
     root=Path('results/attnres' if not a.preflight else 'results/attnres-preflight')
     root.mkdir(parents=True,exist_ok=True)
     counts=checks(root)
@@ -72,6 +71,9 @@ def main():
     assert [r['step'] for r in rows]==list(range(1,steps+1)) and all(math.isfinite(r['loss']) for r in rows)
     assert summary['final_dev_ce']<summary['initial_dev_ce'] and math.isfinite(summary['final_dev_ce'])
     assert config['logging_backend']=='local' and config['protocol']['schedule_steps']==305176
+    # The orchestration parent must not own a CUDA context while child tests
+    # or training run (also supports GPUs configured for exclusive-process use).
+    import torch
     state=torch.load('../attnres-check-checkpoints/latest.pt',map_location='cpu',weights_only=False)
     assert all(torch.isfinite(v).all() for v in state['model'].values())
     assert summary['peak_reserved_bytes']<.9*22000*1024**2

@@ -35,6 +35,7 @@ def main(root):
         template=template.replace('nanochat-depth-diagnostic','nanochat-attnres-gate').replace('DepthDiagnosticKey','AttnResGateKey').replace('depth-diagnostic-20261103',root.name)
         template=template.replace('gpus_minimum_capability = 9.0','gpus_minimum_capability = 8.0')
         template=template.replace('(Capability == 9.0)', '((Capability == 9.0) || ((Capability == 8.0) && regexp("A100",DeviceName)))')
+        template=template.replace('!regexp("MIG",DeviceName)', '!regexp("MIG",DeviceName) && (DeviceUuid =!= "7067f38b-b4c2-5568-ec82-f698473ddd07")')
         template=template.replace('queue 1','hold = true\nqueue 1')
         (root/'gate.sub').write_text(template)
         subprocess.run(['condor_submit','-dry-run',str(root/'dry-run.ads'),'gate.sub'],cwd=root,check=True,capture_output=True)

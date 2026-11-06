@@ -1,0 +1,22 @@
+[
+  {
+    "job": "7913774.0",
+    "source": "4f8acce5d4daaf8f26cc3362de02dc5e612a5bfc",
+    "exit_code": 1,
+    "phase": "first CUDA tensor allocation; before AttnRes execution",
+    "gpu": "NVIDIA A100-SXM4-80GB",
+    "host": "gpu2008.chtc.wisc.edu",
+    "uuid": "7067f38b-b4c2-5568-ec82-f698473ddd07",
+    "error": "CUDA-capable device(s) is/are busy or unavailable",
+    "tests": {
+      "tests": 21,
+      "failures": 21,
+      "errors": 0,
+      "skipped": 0
+    },
+    "classification": "CUDA environment/device availability failure; exact root cause unconfirmed",
+    "formal_training_submitted": false,
+    "action": "Retain failure audit; quarantine only affected UUID for this workflow; add real allocation/matmul/backward probe; keep coordinator CPU-only until all child jobs finish; retry once after review with unchanged model/kernel/tests/thresholds",
+    "log_sha256": "cb4be2b69fe201e5ccfbe828408664376928dcc31758494db2499949de784a20"
+  }
+]
