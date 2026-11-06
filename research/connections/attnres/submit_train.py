@@ -91,8 +91,9 @@ def main(root):
             line=line.replace('DepthDiagnosticKey','AttnResTrainKey').replace('depth-diagnostic-20261103',KEY)
             lines.append(line)
         template='\n'.join(lines)+'\n'
-        template=template.replace('gpus_minimum_capability = 9.0','gpus_minimum_capability = 8.0')
-        template=template.replace('(Capability == 9.0)', '((Capability == 9.0) || ((Capability == 8.0) && regexp("A100",DeviceName)))')
+        # Formal training is Hopper-only; A100 remains allowed in submit.py's validation jobs.
+        template=template.replace('(Capability == 9.0)', '(Capability == 9.0) && regexp("H100|H200",DeviceName)')
+        assert 'gpus_minimum_capability = 9.0' in template
         template=template.replace('!regexp("MIG",DeviceName)', '!regexp("MIG",DeviceName) && (DeviceUuid =!= "7067f38b-b4c2-5568-ec82-f698473ddd07")')
         template=template.replace('queue 1','hold = true\nqueue 1')
         (root/'train.sub').write_text(template)
@@ -109,6 +110,8 @@ def main(root):
         ad=rows[0]
         assert ad['JobStatus']==5 and ad.get('NumJobStarts',0)==0
         assert ad['RequestGPUs']==1 and ad['RequestMemory']==16384 and ad['RequestDisk']==80*1024**2
+        assert ad['GPUsMinCapability']==9.0
+        assert 'H100|H200' in ad['RequireGPUs'] and 'A100' not in ad['RequireGPUs']
         assert ad['SuccessCheckpointExitCode']==85
         assert set(ad['TransferCheckpoint'].split(','))=={'checkpoints.tar','results.tar'}
         assert set(ad['TransferOutput'].split(','))=={'checkpoints.tar','results.tar'}
@@ -116,7 +119,7 @@ def main(root):
         assert data_name in ad['TransferInput'] and 'gate-data.tar' not in ad['TransferInput']
         assert ad['AttnResTrainKey']==KEY
         keys=['ClusterId','ProcId','JobStatus','NumJobStarts','RequestGPUs','RequestMemory','RequestDisk',
-              'RequireGPUs','Rank','WantGPULab','SuccessCheckpointExitCode','TransferCheckpoint',
+              'RequireGPUs','GPUsMinCapability','Rank','WantGPULab','SuccessCheckpointExitCode','TransferCheckpoint',
               'TransferOutput','TransferInput','EncryptInputFiles','ContainerImage','AttnResTrainKey']
         (root/'submission-verified.json').write_text(json.dumps({k:ad.get(k) for k in keys},indent=2)+'\n')
         command(['condor_release',job],root)

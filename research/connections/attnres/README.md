@@ -41,9 +41,10 @@ After passing, collector validates source/results, commits the report, pushes
 and verifies main, then submits one formal10B from seed42, using the tested
 source archive and existing FineWeb-Edu2K cache.305176 updates=10,000,007,168
 tokens. W&B nanochat/group attnres-10b-20261106; latest500 overwrite plus separate
-best; exit85/1800s for scheduler persistence. HopperFA3 or A100FA2; unseen family
-passes the21 checks and25→60 local NTP recovery before formal work. No test
-weights enter training. Shared runtime, data and existing checkpoints untouched.
+best; exit85/1800s for scheduler persistence. Formal training is restricted to
+H100/H200 with FA3. A100 with FA2 remains allowed for validation only, following
+the user's2026-11-06 hardware preference. No test weights enter training. Shared
+runtime, data and existing checkpoints untouched.
 
 Automatic watcher polls300s and stops at the first finite formal training step.
 Failures stop for attention; no automatic retry or weakened test tolerance.
