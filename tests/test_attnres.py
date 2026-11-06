@@ -34,7 +34,7 @@ def record(name, value):
 def oracle(prefix, history, nw, pw):
     # Separate entries; explicit per-entry norm/dot rather than kernel formulas.
     values = list(history.unbind(1)) + [prefix]
-    scores = torch.stack([((v/(v.square().mean(-1, keepdim=True)+1e-6).sqrt())*nw*pw).sum(-1)
+    scores = torch.stack([((v/(v.square().mean(-1, keepdim=True)+1e-5).sqrt())*nw*pw).sum(-1)
                           for v in values], -1)
     weights = scores.softmax(-1)
     return sum(v*weights[:, i:i+1] for i, v in enumerate(values))
@@ -50,7 +50,7 @@ def test_forward_and_every_vjp(n,d,k,amplitude):
           (torch.randn(n*2,k,d,device='cuda',dtype=torch.bfloat16)[::2]*amplitude).requires_grad_(),
           (1+torch.randn(d,device='cuda')*.1).requires_grad_(),
           (torch.randn(d,device='cuda')*.05).requires_grad_()]
-    actual = _AttnResTritonFunction.apply(*args, 1e-6)
+    actual = _AttnResTritonFunction.apply(*args, 1e-5)
     go = torch.randn_like(actual)
     grads = torch.autograd.grad(actual, args, go)
     refs = [p.detach().double().requires_grad_() for p in args]
@@ -62,7 +62,7 @@ def test_forward_and_every_vjp(n,d,k,amplitude):
     assert errors['output'] < .006, errors
     assert max(errors['gradients']) < .015, errors
     assert all(torch.isfinite(g).all() for g in grads)
-    again = torch.autograd.grad(_AttnResTritonFunction.apply(*args,1e-6), args, go)
+    again = torch.autograd.grad(_AttnResTritonFunction.apply(*args,1e-5), args, go)
     assert all(torch.equal(a,b) for a,b in zip(grads,again))
 
 

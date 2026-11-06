@@ -39,7 +39,7 @@ class _AttnResTritonFunction(torch.autograd.Function):
         return d_prefix, d_block, d_norm, d_proj, None
 
 
-def reference_mix(prefix, history, norm_weight, proj_weight, eps=1e-6):
+def reference_mix(prefix, history, norm_weight, proj_weight, eps=1e-5):
     """NeMo FP32 reference, for validation only; training always uses Triton."""
     values = torch.cat((history, prefix.unsqueeze(1)), dim=1).float()
     keys = values * torch.rsqrt(values.square().mean(-1, keepdim=True) + eps)
@@ -54,7 +54,7 @@ class AttnResMix(nn.Module):
         self.proj_weight = nn.Parameter(torch.empty(width))
         # NVIDIA K3 initialization, not a claim of baseline-equivalent averaging.
         nn.init.normal_(self.proj_weight, mean=0., std=.02)
-        self.eps = 1e-6
+        self.eps = 1e-5
 
     def forward(self, prefix, history):
         shape = prefix.shape

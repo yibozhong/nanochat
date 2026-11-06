@@ -10,7 +10,7 @@ import time
 import uuid
 
 REPO=Path(__file__).resolve().parents[3]
-GATE=Path('/home/yzhong239/attnres-gate-20261106')
+GATE=Path('/home/yzhong239/attnres-gate-20261106-r2')
 ASSETS=Path('/home/yzhong239/nanochat-runtime-assets')
 KEY='attnres-10b-20261106'
 STEPS=305176

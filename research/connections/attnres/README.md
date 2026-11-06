@@ -18,7 +18,7 @@ No full QKV projections, Sinkhorn, explicit gates, auxiliary losses, or extra
 identity bypass. Normal branch pre-norm and vanilla attention/MLP stay intact.
 
 NVIDIA initialization: score vectors normal(std=.02), score RMSNorm weights1,
-epsilon1e-6. Vanilla backbone initialized first and explicitly matched to seed42.
+epsilon1e-5. Vanilla backbone initialized first and explicitly matched to seed42.
 Keep nanochat's zero-initialized attention/MLP output projections; short real
 training must pass before launch. Averaging is not exact vanilla residual sum.
 The first read has one entry and consequently zero score/norm gradients.
