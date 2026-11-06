@@ -14,7 +14,7 @@ import numpy as np
 import torch
 
 from nanochat.connection_experiment import configure_attention, match_vanilla_initialization
-from nanochat.connection_model import ConnectionConfig, build_connection_model, optimizer_for, schedule, CONNECTION_VARIANTS
+from nanochat.connection_model import ConnectionConfig, ConnectionModel, optimizer_for, schedule, CONNECTION_VARIANTS
 from nanochat.packed_training import PackedData, json_write, seed_all, train_step
 
 BATCH_TOKENS = 32768
@@ -51,7 +51,6 @@ def main():
     p.add_argument('--repetition', type=int, default=0)
     p.add_argument('--probe', action='store_true')
     p.add_argument('--compact-routing', action=argparse.BooleanOptionalAction, default=False)
-    p.add_argument('--state-attention-backend', choices=('auto','sdpa','math','triton'), default='auto')
     p.add_argument('--data-dir', default='../data')
     p.add_argument('--output', required=True)
     a = p.parse_args()
@@ -63,8 +62,7 @@ def main():
     actual_attention_backend = configure_attention(a.attention_backend)
     seed_all(42)
     props = torch.cuda.get_device_properties(0)
-    cfg = ConnectionConfig(variant=a.variant, sequence_length=a.sequence_length, compact_routing=a.compact_routing,
-                           state_attention_backend=a.state_attention_backend)
+    cfg = ConnectionConfig(variant=a.variant, sequence_length=a.sequence_length, compact_routing=a.compact_routing)
     record = dict(complete=False, variant=a.variant, sequence_length=a.sequence_length,
         microbatch=a.microbatch, grad_accum=rows//a.microbatch, batch_tokens=BATCH_TOKENS,
         repetition=a.repetition, probe=a.probe, model=asdict(cfg), logging_backend='local',
@@ -77,9 +75,8 @@ def main():
         data_note=TimingData.__doc__, timing_includes='CPU data copy/H2D, CCE, backward, finite checks, MuonAdamW',
         warmup_steps=4 if a.probe else 20, timed_steps=0 if a.probe else 40)
     output = Path(a.output); output.parent.mkdir(parents=True, exist_ok=True)
-    losses = []; times = []; step = -1; model = None
     try:
-        model = build_connection_model(cfg).prepare(compile_blocks=True)
+        model = ConnectionModel(cfg).prepare(compile_blocks=True)
         match_vanilla_initialization(model, 42)
         opt, wd = optimizer_for(model, BATCH_TOKENS)
         data = TimingData(a.data_dir, a.sequence_length)
@@ -137,14 +134,7 @@ def main():
     except torch.cuda.OutOfMemoryError as exc:
         record.update(status='oom', error=str(exc)[:2000], fits_minimum_gpu_budget=False)
     except Exception as exc:
-        record.update(status='error', error=repr(exc), failed_step=step+1,
-                      losses=losses, optimizer_updates=len(losses), step_seconds=times)
-        if model is not None:
-            record['nonfinite_gradients'] = [n for n,p in model.named_parameters()
-                if p.grad is not None and not torch.isfinite(p.grad).all()]
-            record['peak_allocated_bytes'] = torch.cuda.max_memory_allocated()
-            record['peak_reserved_bytes'] = torch.cuda.max_memory_reserved()
-        json_write(output, record); raise
+        record.update(status='error', error=repr(exc)); json_write(output, record); raise
     json_write(output, record)
     print(json.dumps({k:v for k,v in record.items() if k not in ('source','model','losses','step_seconds')}), flush=True)
 

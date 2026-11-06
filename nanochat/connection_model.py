@@ -15,7 +15,7 @@ from nanochat.gpt import Block, GPTConfig, Linear, norm
 from nanochat.nvidia_connections import NvidiaHyperConnection, NvidiaHyperHead, expand_streams, check_nvidia_device
 from nanochat.optim import MuonAdamW
 
-CONNECTION_VARIANTS = ('baseline', 'mhc', 'mhc_no_sinkhorn', 'mhc_channel_no_sinkhorn', 'state_tokens')
+CONNECTION_VARIANTS = ('baseline', 'mhc', 'mhc_no_sinkhorn', 'mhc_channel_no_sinkhorn')
 
 
 @dataclass
@@ -35,21 +35,8 @@ class ConnectionConfig:
     window_pattern: str = 'SSSL'  # native only; vanilla is always full attention
     attention_kernel: str = 'original'
     compact_routing: bool = False
-    state_attention_backend: str = 'auto'
-    state_write_residual: bool = True
 
     def __post_init__(self):
-        if self.state_attention_backend not in ('auto', 'sdpa', 'math', 'triton'):
-            raise ValueError('Unknown state attention backend')
-        if self.state_attention_backend != 'auto' and self.variant != 'state_tokens':
-            raise ValueError('State attention backend applies only to state_tokens')
-        if self.variant == 'state_tokens':
-            if not self.state_write_residual:
-                raise ValueError('The direct-overwrite state-token architecture is retired')
-            if self.architecture != 'vanilla' or self.fused_connection_grad or self.compact_routing:
-                raise ValueError('State tokens initially support vanilla without NVIDIA connector flags')
-            if self.streams != 4 or self.heads < 1 or self.width % self.heads or (self.width // self.heads) % 4:
-                raise ValueError('State tokens require four slots and head dimension divisible by four')
         if self.compact_routing and self.variant != 'mhc_channel_no_sinkhorn':
             raise ValueError('Compact routing applies only to the8-coefficient channel connector')
         if self.attention_kernel not in ('original','fla_triton'):
@@ -74,15 +61,13 @@ class ConnectionConfig:
             raise ValueError('RoPE requires an even integral head dimension')
         if self.sinkhorn_iterations < 1:
             raise ValueError('Sinkhorn needs at least one iteration')
-        if self.variant not in ('baseline', 'state_tokens') and (self.streams != 4 or self.width % 128):
+        if self.variant != 'baseline' and (self.streams != 4 or self.width % 128):
             raise ValueError('NVIDIA mHC kernels require four streams and width divisible by 128')
 
     @classmethod
     def from_checkpoint(cls, config):
         """Read pre-cleanup NVIDIA/vanilla metadata; reject retired model weights."""
         config = dict(config)
-        if config.get('variant') == 'state_tokens' and not config.get('state_write_residual', False):
-            raise ValueError('Checkpoint belongs to the retired direct-overwrite state-token architecture')
         if config.pop('attention_statistic', 'none') != 'none':
             raise ValueError('Checkpoint belongs to a retired attention-statistics experiment')
         config.pop('moment_query_chunk', None)
@@ -147,8 +132,6 @@ class ConnectionBlock(Block):
 class ConnectionModel(nn.Module):
     def __init__(self, config):
         super().__init__()
-        if config.variant == 'state_tokens':
-            raise ValueError('Use build_connection_model for state_tokens')
         if config.architecture != 'vanilla':
             raise ValueError('Use build_connection_model for native nanochat')
         self.config = config
@@ -260,8 +243,6 @@ def optimizer_for(model, batch_tokens=32768):
             (routing if '_connection.' in name else matrices).append(p)
     if model.stream_head is not None:
         routing.extend(model.stream_head.parameters())
-    if c.variant == 'state_tokens':
-        routing.extend(model.state_residual.parameters())
     if routing:
         groups.append(dict(kind='adamw', params=routing, lr=.008*batch_scale*width_scale,
                            betas=(.8, .96), eps=1e-10, weight_decay=0.))
@@ -270,7 +251,7 @@ def optimizer_for(model, batch_tokens=32768):
             lr=.02*batch_scale, momentum=.95, ns_steps=5, beta2=.9, weight_decay=wd))
     ids = [id(p) for g in groups for p in g['params']]
     assert len(ids) == len(set(ids)) and set(ids) == {id(p) for p in model.parameters()}
-    if c.variant in ('mhc_channel_no_sinkhorn', 'state_tokens'):
+    if c.variant == 'mhc_channel_no_sinkhorn':
         # Like native.setup_optimizer: the unchanged compiled AdamW function
         # specializes once per routing shape/dtype. Local generators introduce
         # two extra tensor ranks; this is a compiler cache budget, not an LR or
@@ -285,9 +266,6 @@ def optimizer_for(model, batch_tokens=32768):
 
 
 def build_connection_model(config):
-    if config.variant == 'state_tokens':
-        from nanochat.state_tokens import StateTokenModel
-        return StateTokenModel(config)
     if config.architecture == 'native':
         from nanochat.native_connection_model import NativeConnectionModel
         return NativeConnectionModel(config)

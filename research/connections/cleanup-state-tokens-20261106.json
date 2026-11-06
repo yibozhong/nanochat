@@ -1,0 +1,50 @@
+{
+  "complete": true,
+  "action": "Stop/revert/clear state-token exploration",
+  "prior_head": "a8d2240d61c3790afcef0605a2dda1524b5ebc45",
+  "restore_base": "06551969a56e55cab68a8386d8c766dd25ebe9a9",
+  "deleted_roots": [
+    "/home/yzhong239/state-token-kernel-references",
+    "/home/yzhong239/state-tokens-cpu-20261105",
+    "/home/yzhong239/state-tokens-cpu-20261105-r2",
+    "/home/yzhong239/state-tokens-gate-20261105",
+    "/home/yzhong239/state-tokens-gate-20261105-r2",
+    "/home/yzhong239/state-tokens-gate-20261105-r3",
+    "/home/yzhong239/state-tokens-triton-gate-20261105",
+    "/home/yzhong239/state-tokens-triton-gate-20261105-r2"
+  ],
+  "removed_regular_files": 118,
+  "removed_links": 15,
+  "removed_bytes": 61144833,
+  "protected_files_unchanged": 172,
+  "formal_training_ever_submitted": false,
+  "wandb": "No state-token formal run created; no remote W&B mutation",
+  "conclusion": {
+    "gpu_gate": "7911140.0",
+    "checks_passed": 26,
+    "compiled_torch_failed_step": 38,
+    "triton_failed_step": 23,
+    "baseline_steps": 60,
+    "baseline_final_ce": 6.407550811767578,
+    "full10b": false,
+    "first_nonfinite_operator": "not localized"
+  },
+  "evidence_directory": "/home/yzhong239/research-cleanup-20261106/state-tokens",
+  "verification": {
+    "python_ast_files": 114,
+    "shell_syntax_files": 23,
+    "all_tracked_content_identical_to_base": true,
+    "retained_config_combinations": 14,
+    "actual_channel_config_loads": true,
+    "retired_state_checkpoints_rejected": true,
+    "gpu_rerun": false,
+    "reason": "Exact restoration to previously published baseline; no retained computation changed",
+    "metadata_note": "Existing baseline loader canonicalizes unused connector backend to nvidia"
+  },
+  "active_jobs": 0,
+  "active_monitors": 0,
+  "scheduler_spool_directories_present": 0,
+  "automatic_10b_authorization": "revoked by user stop",
+  "git_history_preserved": true,
+  "remaining_code": "vanilla/native/NVIDIA mHC/noSinkhorn/channel-local/compact routing and shared A100FA2/HopperFA3 runtime"
+}
