@@ -9,6 +9,26 @@ import sys
 import time
 
 
+def first_formal_step(lines):
+    """Exclude the unseen-device preflight's real but non-formal NTP steps."""
+    preflight = False
+    for line in lines:
+        if line.startswith('BEGIN '):
+            preflight = True
+        if not line.startswith('{'):
+            continue
+        try:
+            value = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if value.get('preflight') is True and value.get('complete') is True:
+            preflight = False
+            continue
+        if not preflight and 'step' in value and 'loss' in value and value['step'] >= 1 and math.isfinite(value['loss']):
+            return value
+    return None
+
+
 def main(root):
     root=Path(root)
     with (root/'monitor.lock').open('a') as lock:
@@ -24,13 +44,9 @@ def main(root):
                 state['last_job']=rows[0] if rows else None
                 log=root/'logs'/f'train.{job}.out'
                 if log.exists():
-                    for line in log.read_text(errors='replace').splitlines():
-                        if not line.startswith('{'):continue
-                        try:value=json.loads(line)
-                        except json.JSONDecodeError:continue
-                        if 'step' in value and 'loss' in value and value['step']>=1 and math.isfinite(value['loss']):
-                            state.update(status='training_started',first_observed_step=value,monitor_complete=True)
-                            break
+                    value=first_formal_step(log.read_text(errors='replace').splitlines())
+                    if value is not None:
+                        state.update(status='training_started',first_observed_step=value,monitor_complete=True)
                 if rows and rows[0]['JobStatus'] in (3,4,5) and state['status']!='training_started':
                     state.update(status='needs_attention',monitor_complete=True)
             except Exception as exc:
