@@ -16,8 +16,9 @@
   "initialization": {
     "slots": "Embedding + learned centered tetrahedral offsets with unit RMS per head",
     "read": "V/O identity,K identity,Q=.01I",
-    "write": "V/O identity,Q/K scaled identity targeting logit margin6 between distinct slots",
-    "limitations": "Approximate initial self retention, not exact identity or a guarantee against later collapse. The new-output key initially receives small nonzero mass. No diagonal mask/bias or residual bypass."
+    "write": "V/O identity,Q/K scaled identity targeting logit margin10 between distinct slots",
+    "limitations": "Approximate initial self retention, not exact identity or a guarantee against later collapse. The new-output key initially receives small nonzero mass. No diagonal mask/bias or residual bypass.",
+    "selection": "Smallest tested margin passing unchanged16-step retention criteria on3 CPU seeds; GPU and training validation pending"
   },
   "normalization": "Original embedding RMSNorm, branch pre-RMSNorm, backbone QK norm and final RMSNorm remain. No new state/query norm.",
   "loss": "Standard NTP only",

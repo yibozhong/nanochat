@@ -27,7 +27,7 @@ def main():
          '"--junitxml=results/state-tokens/tests.xml"]))'], 'tests')
     suites = ET.parse(root/'tests.xml').getroot().findall('testsuite')
     counts = {k: sum(int(s.get(k, 0)) for s in suites) for k in ('tests','failures','errors','skipped')}
-    assert counts == dict(tests=8, failures=0, errors=0, skipped=0), counts
+    assert counts == dict(tests=9, failures=0, errors=0, skipped=0), counts
     profiles = {}
     for v in ('baseline', 'state_tokens'):
         run(['-m','scripts.connection_context_profile','--variant',v,'--sequence-length','2048',

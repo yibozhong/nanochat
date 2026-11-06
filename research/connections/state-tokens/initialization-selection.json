@@ -1,0 +1,82 @@
+{
+  "records": [
+    {
+      "margin": 8.0,
+      "seed": 42,
+      "embedding_error": 0.11913507431745529,
+      "slot_rms": 0.943311333656311,
+      "gradient_error": 0.25896090269088745,
+      "passed": false
+    },
+    {
+      "margin": 8.0,
+      "seed": 1337,
+      "embedding_error": 0.0953129306435585,
+      "slot_rms": 0.9463223814964294,
+      "gradient_error": 0.15719813108444214,
+      "passed": true
+    },
+    {
+      "margin": 8.0,
+      "seed": 2026,
+      "embedding_error": 0.11177769303321838,
+      "slot_rms": 0.9430054426193237,
+      "gradient_error": 0.22497832775115967,
+      "passed": false
+    },
+    {
+      "margin": 10.0,
+      "seed": 42,
+      "embedding_error": 0.005068214610219002,
+      "slot_rms": 0.9940119385719299,
+      "gradient_error": 0.007574358023703098,
+      "passed": true
+    },
+    {
+      "margin": 10.0,
+      "seed": 1337,
+      "embedding_error": 0.005184672307223082,
+      "slot_rms": 0.9943376779556274,
+      "gradient_error": 0.005727407522499561,
+      "passed": true
+    },
+    {
+      "margin": 10.0,
+      "seed": 2026,
+      "embedding_error": 0.007577094249427319,
+      "slot_rms": 0.9937499761581421,
+      "gradient_error": 0.010106576606631279,
+      "passed": true
+    },
+    {
+      "margin": 12.0,
+      "seed": 42,
+      "embedding_error": 0.0009425924508832395,
+      "slot_rms": 0.9990300536155701,
+      "gradient_error": 0.0013082401128485799,
+      "passed": true
+    },
+    {
+      "margin": 12.0,
+      "seed": 1337,
+      "embedding_error": 0.0009327405714429915,
+      "slot_rms": 0.9990985989570618,
+      "gradient_error": 0.0008708171080797911,
+      "passed": true
+    },
+    {
+      "margin": 12.0,
+      "seed": 2026,
+      "embedding_error": 0.0010692317737266421,
+      "slot_rms": 0.9990257024765015,
+      "gradient_error": 0.0012928977375850081,
+      "passed": true
+    }
+  ],
+  "selected_margin": 10.0,
+  "criteria": {
+    "embedding_relative_error": 0.1,
+    "min_slot_rms": 0.25,
+    "gradient_relative_error": 0.2
+  }
+}

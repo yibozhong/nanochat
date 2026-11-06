@@ -1,0 +1,184 @@
+[
+  {
+    "cpu_job": "7907361.0",
+    "source_snapshot": "state-tokens-cpu-20261105/source.json",
+    "checks": "4 passed;16-step signal/gradient retention failed",
+    "initialization": {
+      "layers": [
+        {
+          "sublayer": 1,
+          "relative_embedding_error": 4.921449914263576e-08,
+          "slot_rms": 0.987625002861023
+        },
+        {
+          "sublayer": 2,
+          "relative_embedding_error": 0.005753050092607737,
+          "slot_rms": 0.9730865955352783
+        },
+        {
+          "sublayer": 3,
+          "relative_embedding_error": 0.013202964328229427,
+          "slot_rms": 0.9554263949394226
+        },
+        {
+          "sublayer": 4,
+          "relative_embedding_error": 0.023614458739757538,
+          "slot_rms": 0.9329038858413696
+        },
+        {
+          "sublayer": 5,
+          "relative_embedding_error": 0.040246061980724335,
+          "slot_rms": 0.9028998017311096
+        },
+        {
+          "sublayer": 6,
+          "relative_embedding_error": 0.07133257389068604,
+          "slot_rms": 0.8642666935920715
+        },
+        {
+          "sublayer": 7,
+          "relative_embedding_error": 0.11989819258451462,
+          "slot_rms": 0.8151366710662842
+        },
+        {
+          "sublayer": 8,
+          "relative_embedding_error": 0.17562009394168854,
+          "slot_rms": 0.7520092725753784
+        },
+        {
+          "sublayer": 9,
+          "relative_embedding_error": 0.24140994250774384,
+          "slot_rms": 0.6754561066627502
+        },
+        {
+          "sublayer": 10,
+          "relative_embedding_error": 0.317932665348053,
+          "slot_rms": 0.5832024216651917
+        },
+        {
+          "sublayer": 11,
+          "relative_embedding_error": 0.39001426100730896,
+          "slot_rms": 0.4680751860141754
+        },
+        {
+          "sublayer": 12,
+          "relative_embedding_error": 0.4556374251842499,
+          "slot_rms": 0.31952500343322754
+        },
+        {
+          "sublayer": 13,
+          "relative_embedding_error": 0.5102832913398743,
+          "slot_rms": 0.15462039411067963
+        },
+        {
+          "sublayer": 14,
+          "relative_embedding_error": 0.544312059879303,
+          "slot_rms": 0.036521151661872864
+        },
+        {
+          "sublayer": 15,
+          "relative_embedding_error": 0.5520328879356384,
+          "slot_rms": 0.0013034078292548656
+        },
+        {
+          "sublayer": 16,
+          "relative_embedding_error": 0.5521261096000671,
+          "slot_rms": 2.261714598716935e-06
+        }
+      ],
+      "gradient_relative_error": 0.7363847494125366
+    },
+    "cancelled_gpu_job": "7908762.0",
+    "gpu_job_starts": 0,
+    "gpu_job_status": 3,
+    "reason": "Known CPU initialization failure; do not run GPU on obsolete source",
+    "action": "Compare stronger initial self attention margins8/10/12 on3 seeds without relaxing criteria or changing model equations"
+  },
+  {
+    "cpu_job": "7909224.0",
+    "checks": "Initialization candidates evaluated;pytest against still-default margin8 failed;4 other CPU checks passed",
+    "result": {
+      "records": [
+        {
+          "margin": 8.0,
+          "seed": 42,
+          "embedding_error": 0.11913507431745529,
+          "slot_rms": 0.943311333656311,
+          "gradient_error": 0.25896090269088745,
+          "passed": false
+        },
+        {
+          "margin": 8.0,
+          "seed": 1337,
+          "embedding_error": 0.0953129306435585,
+          "slot_rms": 0.9463223814964294,
+          "gradient_error": 0.15719813108444214,
+          "passed": true
+        },
+        {
+          "margin": 8.0,
+          "seed": 2026,
+          "embedding_error": 0.11177769303321838,
+          "slot_rms": 0.9430054426193237,
+          "gradient_error": 0.22497832775115967,
+          "passed": false
+        },
+        {
+          "margin": 10.0,
+          "seed": 42,
+          "embedding_error": 0.005068214610219002,
+          "slot_rms": 0.9940119385719299,
+          "gradient_error": 0.007574358023703098,
+          "passed": true
+        },
+        {
+          "margin": 10.0,
+          "seed": 1337,
+          "embedding_error": 0.005184672307223082,
+          "slot_rms": 0.9943376779556274,
+          "gradient_error": 0.005727407522499561,
+          "passed": true
+        },
+        {
+          "margin": 10.0,
+          "seed": 2026,
+          "embedding_error": 0.007577094249427319,
+          "slot_rms": 0.9937499761581421,
+          "gradient_error": 0.010106576606631279,
+          "passed": true
+        },
+        {
+          "margin": 12.0,
+          "seed": 42,
+          "embedding_error": 0.0009425924508832395,
+          "slot_rms": 0.9990300536155701,
+          "gradient_error": 0.0013082401128485799,
+          "passed": true
+        },
+        {
+          "margin": 12.0,
+          "seed": 1337,
+          "embedding_error": 0.0009327405714429915,
+          "slot_rms": 0.9990985989570618,
+          "gradient_error": 0.0008708171080797911,
+          "passed": true
+        },
+        {
+          "margin": 12.0,
+          "seed": 2026,
+          "embedding_error": 0.0010692317737266421,
+          "slot_rms": 0.9990257024765015,
+          "gradient_error": 0.0012928977375850081,
+          "passed": true
+        }
+      ],
+      "selected_margin": 10.0,
+      "criteria": {
+        "embedding_relative_error": 0.1,
+        "min_slot_rms": 0.25,
+        "gradient_relative_error": 0.2
+      }
+    },
+    "action": "Use margin10, the smallest candidate passing all3 seeds; no threshold changes"
+  }
+]

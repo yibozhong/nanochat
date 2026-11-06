@@ -72,11 +72,11 @@ class StateTokenResidual(nn.Module):
                 nn.init.eye_(projection.weight)
         # Read initially averages memory, while retaining a full-rank Q map.
         self.read.q.weight.mul_(.01)
-        # Initial self-vs-other-slot logit margin=6 for centered slots. The
+        # Initial self-vs-other-slot logit margin=10 for centered slots. The
         # identity V/O transports memory; random V/O would repeatedly rotate
         # and rescale it. This is weight initialization, not a runtime gate,
         # diagonal attention bias, hard mask, or extra residual connection.
-        gain = math.sqrt(6 / ((4/3) * math.sqrt(hd)))
+        gain = math.sqrt(10 / ((4/3) * math.sqrt(hd)))
         self.write.q.weight.mul_(gain)
         self.write.k.weight.mul_(gain)
 

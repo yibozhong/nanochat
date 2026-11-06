@@ -147,6 +147,22 @@ def test_flash_slot_attention_bf16_vjp():
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason='GPU implementation gate')
+def test_bf16_initial_state_depth_retention():
+    torch.manual_seed(42)
+    m = StateTokenResidual(512, 4, 'auto').cuda()
+    e = norm(torch.randn(2, 32, 512, device='cuda', dtype=torch.bfloat16)).requires_grad_()
+    state = m.initialize(e)
+    probe = torch.randn_like(e)
+    for _ in range(16): h, state = m(torch.zeros_like(e), state)
+    gradient, = torch.autograd.grad(h, e, probe)
+    result = dict(embedding_error=((h-e).float().norm()/e.float().norm()).item(),
+        slot_rms=(state.float()-state.float().mean(-2,keepdim=True)).square().mean().sqrt().item(),
+        gradient_error=((gradient-probe).float().norm()/probe.float().norm()).item())
+    record('bf16-initialization', result)
+    assert result['embedding_error']<.1 and result['slot_rms']>.25 and result['gradient_error']<.2, result
+
+
+@pytest.mark.skipif(not torch.cuda.is_available(), reason='GPU implementation gate')
 def test_2k_causal_cache_cce_compile_recompute():
     torch.manual_seed(42)
     c = ConnectionConfig(variant='state_tokens', width=128, heads=2, depth=2, vocab_size=128)
