@@ -15,6 +15,18 @@ from nanochat.gpt import norm
 from nanochat.engine import KVCache
 
 
+@pytest.fixture(autouse=True)
+def isolated_compile_cache():
+    # Each case compiles different models/shapes/backends. Dynamo caches the
+    # functools.partial wrapper globally; previous cases must not consume the
+    # next case's specialization budget. Keep production limits unchanged.
+    torch._dynamo.reset()
+    try:
+        yield
+    finally:
+        torch._dynamo.reset()
+
+
 def record(name, data):
     root = Path('results/state-checks'); root.mkdir(parents=True, exist_ok=True)
     (root / (name + '.json')).write_text(json.dumps(data, indent=2) + '\n')

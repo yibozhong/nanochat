@@ -31,5 +31,5 @@
     "wandb": false,
     "return_checkpoints": false
   },
-  "implementation_status": "Residual Write and optional Triton implemented; GPU validation pending. Prior overwrite version passed10 math checks but failed NTP afterstep20 beforestep40; not reused."
+  "implementation_status": "A10080 gate7910438 passed25/26 (including primitive VJPs and each backend model checks); last cross-backend test blocked by global compile-cache accumulation. Test cache isolated; complete new gate pending."
 }

@@ -603,5 +603,159 @@
     "action": "User requests additive state Write; new zero-output initialization. Optional Triton port tested against compiled PyTorch on same revised architecture.",
     "restart_check_ran": false,
     "formal_training": false
+  },
+  {
+    "job": "7910438.0",
+    "source": "7675a6ab80e2ab4400860af933f41f35c696aa97",
+    "exit_code": 1,
+    "device": {
+      "gpu": "NVIDIA A100-SXM4-80GB",
+      "capability": [
+        8,
+        0
+      ],
+      "torch": "2.10.0+cu130"
+    },
+    "checks": {
+      "tests": 26,
+      "passed": 25,
+      "failures": 1,
+      "errors": 0,
+      "skipped": 0
+    },
+    "failures": [
+      {
+        "name": "test_full_model_triton_matches_compiled_torch",
+        "message": "torch._dynamo.exc.FailOnRecompileLimitHit: recompile_limit reached with fullgraph=True. Excessive recompilations can degrade performance due to the compilation overhead of each recompilation. To monitor recompilations, enable TORCH_LOGS=recompiles. If recompilations are expected, consider increasing torch._dynamo.config.cache_size_limit to an appropriate value."
+      }
+    ],
+    "model_auto": {
+      "ce": 4.851417541503906,
+      "compile_gradient_errors": {
+        "wte.weight": 0.005199682433158159,
+        "blocks.0.attn.c_q.weight": 0.010248154401779175,
+        "blocks.0.attn.c_k.weight": 0.010458340868353844,
+        "blocks.0.attn.c_v.weight": 0.008715065196156502,
+        "blocks.0.attn.c_proj.weight": 0.008117809891700745,
+        "blocks.0.mlp.c_fc.weight": 0.009587397798895836,
+        "blocks.0.mlp.c_proj.weight": 0.009483534842729568,
+        "blocks.1.attn.c_q.weight": 0.011774089187383652,
+        "blocks.1.attn.c_k.weight": 0.011282437480986118,
+        "blocks.1.attn.c_v.weight": 0.009371892549097538,
+        "blocks.1.attn.c_proj.weight": 0.009045608341693878,
+        "blocks.1.mlp.c_fc.weight": 0.006029132753610611,
+        "blocks.1.mlp.c_proj.weight": 0.00638114009052515,
+        "lm_head.weight": 0.002390944864600897,
+        "state_residual.slots": 0.006606280338019133,
+        "state_residual.read.q.weight": 0.008077463135123253,
+        "state_residual.read.k.weight": 0.008838839828968048,
+        "state_residual.read.v.weight": 0.002395837800577283,
+        "state_residual.read.out.weight": 0.002609232673421502,
+        "state_residual.write.q.weight": 0.00391396414488554,
+        "state_residual.write.k.weight": 0.004034518264234066,
+        "state_residual.write.v.weight": 0.0028157560154795647,
+        "state_residual.write.out.weight": 0.00256218365393579
+      },
+      "recompute_gradient_errors": {
+        "wte.weight": 0.005199682433158159,
+        "blocks.0.attn.c_q.weight": 0.010248154401779175,
+        "blocks.0.attn.c_k.weight": 0.010458340868353844,
+        "blocks.0.attn.c_v.weight": 0.008715065196156502,
+        "blocks.0.attn.c_proj.weight": 0.008117809891700745,
+        "blocks.0.mlp.c_fc.weight": 0.009587397798895836,
+        "blocks.0.mlp.c_proj.weight": 0.009483534842729568,
+        "blocks.1.attn.c_q.weight": 0.011774089187383652,
+        "blocks.1.attn.c_k.weight": 0.011282437480986118,
+        "blocks.1.attn.c_v.weight": 0.009371892549097538,
+        "blocks.1.attn.c_proj.weight": 0.009045608341693878,
+        "blocks.1.mlp.c_fc.weight": 0.006029132753610611,
+        "blocks.1.mlp.c_proj.weight": 0.00638114009052515,
+        "lm_head.weight": 0.002390944864600897,
+        "state_residual.slots": 0.006606280338019133,
+        "state_residual.read.q.weight": 0.008077463135123253,
+        "state_residual.read.k.weight": 0.008838839828968048,
+        "state_residual.read.v.weight": 0.002395837800577283,
+        "state_residual.read.out.weight": 0.002609232673421502,
+        "state_residual.write.q.weight": 0.00391396414488554,
+        "state_residual.write.k.weight": 0.004034518264234066,
+        "state_residual.write.v.weight": 0.0028157560154795647,
+        "state_residual.write.out.weight": 0.00256218365393579
+      },
+      "causal_tokens": 2048
+    },
+    "model_triton": {
+      "ce": 4.851415634155273,
+      "compile_gradient_errors": {
+        "wte.weight": 0.005262455902993679,
+        "blocks.0.attn.c_q.weight": 0.010451839305460453,
+        "blocks.0.attn.c_k.weight": 0.010597527027130127,
+        "blocks.0.attn.c_v.weight": 0.008608113043010235,
+        "blocks.0.attn.c_proj.weight": 0.008030534721910954,
+        "blocks.0.mlp.c_fc.weight": 0.009679299779236317,
+        "blocks.0.mlp.c_proj.weight": 0.009536700323224068,
+        "blocks.1.attn.c_q.weight": 0.011769557371735573,
+        "blocks.1.attn.c_k.weight": 0.011387476697564125,
+        "blocks.1.attn.c_v.weight": 0.009392247535288334,
+        "blocks.1.attn.c_proj.weight": 0.009020315483212471,
+        "blocks.1.mlp.c_fc.weight": 0.006053974851965904,
+        "blocks.1.mlp.c_proj.weight": 0.006380719598382711,
+        "lm_head.weight": 0.0024087466299533844,
+        "state_residual.slots": 0.006770099978893995,
+        "state_residual.read.q.weight": 0.008029958233237267,
+        "state_residual.read.k.weight": 0.008845658972859383,
+        "state_residual.read.v.weight": 0.0023893932811915874,
+        "state_residual.read.out.weight": 0.002642709296196699,
+        "state_residual.write.q.weight": 0.0038823154754936695,
+        "state_residual.write.k.weight": 0.004123795311897993,
+        "state_residual.write.v.weight": 0.002819610061123967,
+        "state_residual.write.out.weight": 0.0025667266454547644
+      },
+      "recompute_gradient_errors": {
+        "wte.weight": 0.005262455902993679,
+        "blocks.0.attn.c_q.weight": 0.010451839305460453,
+        "blocks.0.attn.c_k.weight": 0.010597527027130127,
+        "blocks.0.attn.c_v.weight": 0.008608113043010235,
+        "blocks.0.attn.c_proj.weight": 0.008030534721910954,
+        "blocks.0.mlp.c_fc.weight": 0.009679299779236317,
+        "blocks.0.mlp.c_proj.weight": 0.009536700323224068,
+        "blocks.1.attn.c_q.weight": 0.011769557371735573,
+        "blocks.1.attn.c_k.weight": 0.011387476697564125,
+        "blocks.1.attn.c_v.weight": 0.009392247535288334,
+        "blocks.1.attn.c_proj.weight": 0.009020315483212471,
+        "blocks.1.mlp.c_fc.weight": 0.006053974851965904,
+        "blocks.1.mlp.c_proj.weight": 0.006380719598382711,
+        "lm_head.weight": 0.0024087466299533844,
+        "state_residual.slots": 0.006770099978893995,
+        "state_residual.read.q.weight": 0.008029958233237267,
+        "state_residual.read.k.weight": 0.008845658972859383,
+        "state_residual.read.v.weight": 0.0023893932811915874,
+        "state_residual.read.out.weight": 0.002642709296196699,
+        "state_residual.write.q.weight": 0.0038823154754936695,
+        "state_residual.write.k.weight": 0.004123795311897993,
+        "state_residual.write.v.weight": 0.002819610061123967,
+        "state_residual.write.out.weight": 0.0025667266454547644
+      },
+      "causal_tokens": 2048
+    },
+    "slot_vjp_triton": {
+      "relative_errors": [
+        0.0022727615922591045,
+        0.002185392698662313,
+        0.0027405362205363652,
+        0.0038528754001184475,
+        0.003949285139565044,
+        0.0038585767431319968,
+        0.003219655995782307,
+        0.0031173579701754047,
+        0.0038816937433155487,
+        0.003870177135778836,
+        0.0031842551674318813,
+        0.003156163053330227
+      ]
+    },
+    "cause": "Dynamo partial-wrapper cache reached8 entries from preceding test cases; full-model comparison failed before first model forward",
+    "action": "Reset Dynamo cache before/after each state-token test. Production code/limits/math/tolerances unchanged; rerun26 checks and pending profiles/restart.",
+    "short_training_ran": false,
+    "formal_training": false
   }
 ]
