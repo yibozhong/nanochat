@@ -1,0 +1,21 @@
+{
+  "complete": true,
+  "gpu_validation": false,
+  "launch_negative_cases": [
+    "failedcheck",
+    "nonfinite",
+    "source",
+    "card",
+    "partial",
+    "profile",
+    "infiniteinitial",
+    "micro"
+  ],
+  "watch_preflight_exclusion": true,
+  "retained_implementations_unchanged": [
+    "channel_mixing",
+    "channel_connections",
+    "nvidia_connections",
+    "attnres_triton"
+  ]
+}

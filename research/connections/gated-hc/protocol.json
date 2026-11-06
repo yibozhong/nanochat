@@ -1,0 +1,63 @@
+{
+  "variant": "gated_hc",
+  "gate": "silu",
+  "location": "residual input before shared H",
+  "streams": 4,
+  "local_gate_shape": [
+    512,
+    4,
+    4
+  ],
+  "bias_shape": [
+    512,
+    4
+  ],
+  "epsilon": 1.1920928955078125e-07,
+  "initial_weight": 0,
+  "initial_bias": 1.2784645427610737,
+  "parameters": 59679157,
+  "architecture": "vanilla",
+  "depth": 8,
+  "width": 512,
+  "heads": 4,
+  "sequence_length": 2048,
+  "global_batch_tokens": 32768,
+  "seed": 42,
+  "steps": 305176,
+  "training_tokens": 10000007168,
+  "formal_hardware": [
+    "H100",
+    "H200"
+  ],
+  "validation_hardware": [
+    "H100",
+    "H200",
+    "A100"
+  ],
+  "checks": 25,
+  "profile_steps": 60,
+  "comparisons": [
+    "baseline",
+    "mhc_no_sinkhorn",
+    "mhc_channel_no_sinkhorn",
+    "gated_hc"
+  ],
+  "resume_steps": [
+    25,
+    128
+  ],
+  "unseen_family_resume_steps": [
+    25,
+    60
+  ],
+  "microbatches": [
+    16,
+    8,
+    4
+  ],
+  "wandb_group": "gated-hc-10b-20261106",
+  "checkpoint_every": 500,
+  "checkpoint_upload_seconds": 1800,
+  "automatic_retry_after_failure": false,
+  "formal_runs": 1
+}
