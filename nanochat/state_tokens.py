@@ -33,12 +33,16 @@ class SlotAttention(nn.Module):
         k = self.k(memory).reshape(batch*time, nk, self.heads, hd)
         v = self.v(memory).reshape(batch*time, nk, self.heads, hd)
         from nanochat import flash_attention
-        if self.backend == 'auto' and flash_attention.USE_FA3:
+        short_slots = nq <= 4 and nk <= 5
+        if self.backend == 'auto' and not short_slots and flash_attention.USE_FA3:
             y = flash_attention.flash_attn_func(q, k, v, causal=False)
         else:
             q, k, v = (a.transpose(1, 2) for a in (q, k, v))
-            if self.backend == 'math':
-                # Small independent reference/debug path. Keep FP64 for audits.
+            if self.backend == 'math' or (self.backend == 'auto' and short_slots):
+                # At1/4 queries and4/5 keys, explicit tiny attention compiled
+                # with the block avoids FA2 backward's padded128-query
+                # workspace per token (8GiB at B*T=32768,H=4,Dh=128).
+                # FP32 accumulation/softmax, BF16 activations; FP64 for audits.
                 dtype = torch.float64 if q.dtype == torch.float64 else torch.float32
                 logits = (q.to(dtype) @ k.to(dtype).transpose(-1, -2)) / math.sqrt(hd)
                 y = (logits.softmax(-1) @ v.to(dtype)).to(v.dtype)

@@ -24,13 +24,13 @@
   "loss": "Standard NTP only",
   "optimizer": "Backbone unchanged;9 shared connector tensors use existing connector AdamW at unembedding LR, zero decay",
   "parameters_added": 2099200,
-  "backend": "Existing FA3 on Hopper; explicitly noncausal SDPA/FA2 for slot attention on A100. No causal masking along the slot axis. FP32 oracle/debug alternative.",
+  "backend": "Original FA3/FA2 backbone;auto selects explicit tiny token-local attention compiled with each block,FP32 accumulation/softmax andBF16 activations.Explicit SDPA remains for reference/audits.",
   "validation": {
     "cpu": "FP64 outputs/all VJPs; state replacement/locality/sharing;16-step initial signal and gradient retention",
-    "gpu": "2K causality;KV-cache;CCE;compile/recompute;optimizer checkpoint;60-step same-card profiles;25->50 real process resume",
+    "gpu": "10 checks including both BF16 implementations;production slot workspace microprofile;new andbaseline60step profiles at same microbatch;25->50 resume",
     "formal_training": false,
     "wandb": false,
     "return_checkpoints": false
   },
-  "implementation_status": "Implemented; validation pending"
+  "implementation_status": "Initial GPU9checks passed;full micro16 FA2 OOM.Compact local attention revision pending GPU verification"
 }

@@ -27,21 +27,34 @@ def main():
          '"--junitxml=results/state-tokens/tests.xml"]))'], 'tests')
     suites = ET.parse(root/'tests.xml').getroot().findall('testsuite')
     counts = {k: sum(int(s.get(k, 0)) for s in suites) for k in ('tests','failures','errors','skipped')}
-    assert counts == dict(tests=9, failures=0, errors=0, skipped=0), counts
+    assert counts == dict(tests=10, failures=0, errors=0, skipped=0), counts
+    run(['-m','scripts.connection_state_micro'], 'slot-backend-profile')
     profiles = {}
-    for v in ('baseline', 'state_tokens'):
-        run(['-m','scripts.connection_context_profile','--variant',v,'--sequence-length','2048',
-             '--microbatch','16','--attention-backend',backend,
-             '--output',str(root/(v+'.json'))], 'profile-'+v)
-        result = json.loads((root/(v+'.json')).read_text())
+    attempts = []
+    # Profile the new implementation first; use the same selected microbatch
+    # for the baseline. Keep global batch32768 and report every failed shape.
+    for microbatch in (16, 8, 4):
+        output = root/('state_tokens-micro'+str(microbatch)+'.json')
+        run(['-m','scripts.connection_context_profile','--variant','state_tokens','--sequence-length','2048',
+             '--microbatch',str(microbatch),'--attention-backend',backend,
+             '--output',str(output)], 'profile-state_tokens-micro'+str(microbatch))
+        result = json.loads(output.read_text()); attempts.append(result)
+        if result['status']=='oom': continue
         assert result['complete'] and result['causality_passed'], result
-        assert result['peak_reserved_bytes'] < .9*result['device_total_bytes'], result
-        profiles[v] = result
+        if result['peak_reserved_bytes'] >= .9*result['device_total_bytes']: continue
+        profiles['state_tokens'] = result
+        break
+    assert 'state_tokens' in profiles, attempts
+    run(['-m','scripts.connection_context_profile','--variant','baseline','--sequence-length','2048',
+         '--microbatch',str(microbatch),'--attention-backend',backend,
+         '--output',str(root/'baseline.json')], 'profile-baseline')
+    profiles['baseline'] = json.loads((root/'baseline.json').read_text())
+    assert profiles['baseline']['complete'] and profiles['baseline']['causality_passed']
     assert profiles['baseline']['input_sha256'] == profiles['state_tokens']['input_sha256']
     assert profiles['baseline']['gpu_uuid'] == profiles['state_tokens']['gpu_uuid']
 
     args = ['-m','scripts.connection_train','--variant','state_tokens','--matched-backbone-init',
-            '--steps','50','--schedule-steps','305176','--microbatch','16','--data-dir','../data',
+            '--steps','50','--schedule-steps','305176','--microbatch',str(microbatch),'--data-dir','../data',
             '--attention-backend',backend,'--output-dir',str(root/'restart'),
             '--checkpoint-dir','../state-gate-checkpoints','--run-id','state-token-check',
             '--segment-seconds','3600','--segment-steps','25']
@@ -60,6 +73,8 @@ def main():
     assert all(torch.isfinite(p).all() for p in state['model'].values())
     assert not list(Path('results').rglob('*.wandb'))
     report = dict(complete=True, formal_training=False, checks=counts, profiles=profiles, restart=summary,
+        profile_attempts=attempts, microbatch=microbatch,
+        slot_backend_profile=json.loads(Path('results/state-slot-micro.json').read_text()),
         source=json.loads(Path('source.json').read_text()),
         time_ratio=profiles['state_tokens']['mean_seconds']/profiles['baseline']['mean_seconds'],
         additional_peak_allocated_bytes=profiles['state_tokens']['peak_allocated_bytes']-profiles['baseline']['peak_allocated_bytes'],

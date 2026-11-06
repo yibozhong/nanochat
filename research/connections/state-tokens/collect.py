@@ -8,6 +8,12 @@ import tarfile
 import time
 
 
+def read_ads(command):
+    # An absent job is printed as an empty string by this schedd, not "[]".
+    raw = subprocess.check_output(command, text=True).strip()
+    return json.loads(raw) if raw else []
+
+
 def main(root):
     root = Path(root).resolve()
     with (root/'collect.lock').open('a') as lock:
@@ -23,19 +29,18 @@ def main(root):
         try:
             for _ in range(288):
                 if (root/'STOPPED.json').exists(): return
-                queue = json.loads(subprocess.check_output(['condor_q', job, '-json'], text=True))
+                queue = read_ads(['condor_q', job, '-json'])
                 if queue:
                     if queue[0]['JobStatus'] == 5:
                         raise RuntimeError(queue[0].get('HoldReason', 'Held gate'))
                 else:
-                    history = json.loads(subprocess.check_output(
-                        ['condor_history', job, '-limit', '1', '-json'], text=True))
+                    history = read_ads(['condor_history', job, '-limit', '1', '-json'])
                     if history:
                         assert history[0]['JobStatus']==4 and history[0].get('ExitCode')==0, history
                         with tarfile.open(archive) as bundle:
                             result = json.load(bundle.extractfile('results/state-tokens/validation.json'))
                             assert result['complete'] and not result['formal_training']
-                            assert result['checks']==dict(tests=9, failures=0, errors=0, skipped=0)
+                            assert result['checks']==dict(tests=10, failures=0, errors=0, skipped=0)
                             assert result['source']==state['source']
                             (root/'validation.json').write_text(json.dumps(result, indent=2)+'\n')
                         save('validation_complete', collector_complete=True, formal_training=False)

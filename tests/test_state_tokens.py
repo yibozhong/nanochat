@@ -123,9 +123,10 @@ def randomize_branches(m):
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason='GPU implementation gate')
-def test_flash_slot_attention_bf16_vjp():
+@pytest.mark.parametrize('backend', ['auto', 'sdpa'])
+def test_slot_attention_bf16_vjp(backend):
     torch.manual_seed(17)
-    m = StateTokenResidual(128, 2, 'auto').cuda()
+    m = StateTokenResidual(128, 2, backend).cuda()
     with torch.no_grad():
         for p in m.parameters(): p.normal_(std=.08)
     ref = copy.deepcopy(m).double()
@@ -142,7 +143,7 @@ def test_flash_slot_attention_bf16_vjp():
                              tuple(x.double() for x in probe))
     errors = [((x.double()-y).norm()/y.norm().clamp_min(1e-12)).item()
               for x, y in zip((*a, *ga), (*b, *gb))]
-    record('flash-vjp', dict(relative_errors=errors))
+    record('slot-vjp-'+backend, dict(relative_errors=errors))
     assert max(errors) < .025, errors
 
 
