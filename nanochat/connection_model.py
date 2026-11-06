@@ -15,7 +15,7 @@ from nanochat.gpt import Block, GPTConfig, Linear, norm
 from nanochat.nvidia_connections import NvidiaHyperConnection, NvidiaHyperHead, expand_streams, check_nvidia_device
 from nanochat.optim import MuonAdamW
 
-CONNECTION_VARIANTS = ('baseline', 'mhc', 'mhc_no_sinkhorn', 'mhc_channel_no_sinkhorn')
+CONNECTION_VARIANTS = ('baseline', 'mhc', 'mhc_no_sinkhorn', 'mhc_channel_no_sinkhorn', 'attnres')
 
 
 @dataclass
@@ -35,8 +35,18 @@ class ConnectionConfig:
     window_pattern: str = 'SSSL'  # native only; vanilla is always full attention
     attention_kernel: str = 'original'
     compact_routing: bool = False
+    attnres_block_size: int = 1  # complete Transformer layers, not sublayers
 
     def __post_init__(self):
+        if self.attnres_block_size < 1:
+            raise ValueError('AttnRes block size must be positive')
+        if self.variant == 'attnres':
+            if self.width > 16384:
+                raise ValueError('NVIDIA AttnRes supports hidden width at most16384')
+            if self.architecture != 'vanilla' or self.fused_connection_grad:
+                raise ValueError('Initial AttnRes port uses vanilla and its own NVIDIA autograd')
+            if math.ceil(self.depth / self.attnres_block_size) > 16:
+                raise ValueError('NVIDIA AttnRes supports at most16 completed history entries')
         if self.compact_routing and self.variant != 'mhc_channel_no_sinkhorn':
             raise ValueError('Compact routing applies only to the8-coefficient channel connector')
         if self.attention_kernel not in ('original','fla_triton'):
@@ -61,7 +71,7 @@ class ConnectionConfig:
             raise ValueError('RoPE requires an even integral head dimension')
         if self.sinkhorn_iterations < 1:
             raise ValueError('Sinkhorn needs at least one iteration')
-        if self.variant != 'baseline' and (self.streams != 4 or self.width % 128):
+        if self.variant not in ('baseline', 'attnres') and (self.streams != 4 or self.width % 128):
             raise ValueError('NVIDIA mHC kernels require four streams and width divisible by 128')
 
     @classmethod
@@ -132,6 +142,8 @@ class ConnectionBlock(Block):
 class ConnectionModel(nn.Module):
     def __init__(self, config):
         super().__init__()
+        if config.variant == 'attnres':
+            raise ValueError('Use build_connection_model for AttnRes')
         if config.architecture != 'vanilla':
             raise ValueError('Use build_connection_model for native nanochat')
         self.config = config
@@ -243,6 +255,8 @@ def optimizer_for(model, batch_tokens=32768):
             (routing if '_connection.' in name else matrices).append(p)
     if model.stream_head is not None:
         routing.extend(model.stream_head.parameters())
+    if c.variant == 'attnres':
+        routing.extend(model.residual_parameters())
     if routing:
         groups.append(dict(kind='adamw', params=routing, lr=.008*batch_scale*width_scale,
                            betas=(.8, .96), eps=1e-10, weight_decay=0.))
@@ -266,6 +280,9 @@ def optimizer_for(model, batch_tokens=32768):
 
 
 def build_connection_model(config):
+    if config.variant == 'attnres':
+        from nanochat.attention_residuals import AttnResModel
+        return AttnResModel(config)
     if config.architecture == 'native':
         from nanochat.native_connection_model import NativeConnectionModel
         return NativeConnectionModel(config)

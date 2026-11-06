@@ -59,4 +59,4 @@ def match_vanilla_initialization(model, seed):
         reference = ConnectionModel(ConnectionConfig(**options))
     missing, unexpected = model.load_state_dict(reference.state_dict(), strict=False)
     assert not unexpected
-    assert all('_connection.' in name or name.startswith('stream_head.') for name in missing)
+    assert all('_connection.' in name or name.startswith(('stream_head.', 'depth_reads.', 'output_attnres.')) for name in missing)

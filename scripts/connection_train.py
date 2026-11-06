@@ -35,6 +35,7 @@ def main():
     p.add_argument('--connection-backend', choices=('nvidia','nvidia_precise'), default='nvidia')
     p.add_argument('--fused-connection-grad', action=argparse.BooleanOptionalAction, default=False)
     p.add_argument('--compact-routing', action=argparse.BooleanOptionalAction, default=False)
+    p.add_argument('--attnres-block-size', type=int, default=1)
     p.add_argument('--steps', type=int, required=True)
     p.add_argument('--schedule-steps', type=int, default=30518)
     p.add_argument('--microbatch', type=int, default=16)
@@ -68,6 +69,7 @@ def main():
     seed_all(a.seed)
     c=ConnectionConfig(variant=a.variant,streams=a.streams,sinkhorn_iterations=a.sinkhorn_iterations,
                        sequence_length=a.sequence_length, compact_routing=a.compact_routing,
+                       attnres_block_size=a.attnres_block_size,
                        attention_kernel=a.attention_kernel,
                        architecture=a.architecture, window_pattern=a.window_pattern,
                        activation_checkpoint=a.activation_checkpoint,

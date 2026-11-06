@@ -3,13 +3,28 @@
 
 def model_cost(config, batch=1, activation_bytes=2):
     c=config
-    if c.architecture!='vanilla' or c.variant!='baseline':
+    if c.architecture!='vanilla' or c.variant not in ('baseline','attnres'):
         return None
     t,d,depth=c.sequence_length,c.width,c.depth
     projections=24*batch*t*depth*d*d
     head=2*batch*t*d*c.vocab_size
     attention=4*batch*d*depth*(t*(t+1)//2)
     forward=projections+head+attention
+    if c.variant=='attnres':
+        history=0;entries=0
+        for i in range(depth):
+            entries+=history+1
+            if i%c.attnres_block_size==0:history+=1
+            entries+=history+1
+        entries+=history+1
+        mixing=7*batch*t*d*entries
+        return dict(estimated_forward_flops=forward+mixing,
+            estimated_training_flops=3*(forward+mixing),
+            components_forward=dict(backbone_projections=projections,vocab_head=head,
+                attention=attention,attnres_norm_score_mix=mixing),
+            accounting='FMA=2; causal attention pairs; AttnRes approximated7 operations per entry/channel. Backward approximated2x forward. Excludes scalar softmax/rsqrt, other norms/activations, optimizer, copies and recomputation; not measured hardware FLOPs.',
+            final_history_state_bytes=batch*t*d*history*activation_bytes,
+            memory_note='History alone excludes saved intermediate banks, gradients and allocator peak; measure full training peak.')
     return dict(estimated_forward_flops=forward,estimated_training_flops=3*forward,
         components_forward=dict(backbone_projections=projections,vocab_head=head,
             attention=attention),

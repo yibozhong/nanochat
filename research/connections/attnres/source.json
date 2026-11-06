@@ -1,0 +1,11 @@
+{
+  "repository": "https://github.com/NVIDIA-NeMo/Automodel",
+  "commit": "0e8940d7bb354b2df9ab9098d75c6c8030d83fcc",
+  "sha256": {
+    "nemo_automodel/components/models/kimi_k3/attn_res_triton.py": "58ac26f335646be1042a53d6d6c5680cde4824d26b9ce6b3a13e0a167c52c033",
+    "nemo_automodel/components/models/kimi_k3/situ.py": "5fb3ea779aa5d41d1cd3e4b2ee0da573e5e3d2e083a6182e1c130c56a8340c96",
+    "nemo_automodel/components/models/kimi_k3/model.py": "c3134b836249efd00ddb31255d53015a9a9f71db795096ef8998ceb9dc325006",
+    "LICENSE": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4"
+  },
+  "adaptation": "attn_res_triton.py: replace only optional-dependency null_decorator import with nanochat local equivalent; kernel bodies unchanged"
+}
