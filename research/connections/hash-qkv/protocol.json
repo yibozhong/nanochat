@@ -1,0 +1,55 @@
+{
+  "purpose": "Implement and validate QKV-only16-bucket balanced hash; measure speed",
+  "formal_training": false,
+  "buckets": 16,
+  "hash": "greedy descending train-input-frequency, frozen lookup, shared across Q/K/V and layers",
+  "frequency_source": "4.194304M existing train gate tokens only; no dev/test/label-only column",
+  "architecture": {
+    "backbone": "vanilla",
+    "depth": 8,
+    "width": 512,
+    "heads": 4,
+    "sequence_length": 2048,
+    "mlp": "original ReLU squared",
+    "output_projection": "original dense"
+  },
+  "seed": 42,
+  "parameters": 153092096,
+  "added_parameters": 94371840,
+  "activation_dtype": "BF16",
+  "master_and_weight_grad_dtype": "FP32",
+  "optimizer": "original MuonAdamW; each expert Q/K/V remains independent2D; original LR/WD rules",
+  "backend": "DeepGEMM2.2.0 same pinned proven build and BF16 kernels",
+  "source_baseline": "14cdbfb3d61c3047679f878fa02ff0dc560cb169",
+  "checks": 12,
+  "projection_vjp_threshold": {
+    "relative_l2": 0.02,
+    "absolute_floor": 1e-07
+  },
+  "model_grad_threshold": 0.03,
+  "timing": {
+    "order": [
+      "baseline",
+      "hash",
+      "hash",
+      "baseline"
+    ],
+    "warmup_steps": 20,
+    "timed_steps": 40,
+    "microbatch": 16,
+    "batch_tokens": 32768,
+    "include_per_batch_plan": true,
+    "include_optimizer": true
+  },
+  "padding": "fixed ceil(N/128)*128 +15*128; zeros; no token dropping; stable compiled shape",
+  "persistence": "lookup saved in state_dict; optimizer/RNG restore and fixed-gradient update checked",
+  "resources": {
+    "gpu": "single full H100/H200 >=40GB",
+    "cpus": 2,
+    "ram_gb": 16,
+    "scratch_gb": 40
+  },
+  "outputs": "small local reports and frozen routing table; no credentials, W&B, or checkpoint transfer",
+  "automatic_retry": false,
+  "automatic_training": false
+}
