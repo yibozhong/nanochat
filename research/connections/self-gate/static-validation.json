@@ -1,0 +1,29 @@
+{
+  "complete": true,
+  "gpu_validation": false,
+  "python_ast_files": 9,
+  "bash_syntax": true,
+  "preserved_source_hashes": {
+    "nanochat/gated_mixing.py": "c05c9f3e6b239b8a0ccf96061654e029d367222f7c88820ed1a28b6c612dd6d1",
+    "nanochat/gated_connections.py": "930fc85abe7d90693052916448c41075d7993b069224ef4ae20a683de1548666",
+    "nanochat/channel_mixing.py": "c88e4582360906c198ff1c9cf3caeb904b335c3f9be0167623a82b83662278d8",
+    "nanochat/channel_connections.py": "f8545aa66a0fe129511d9041c065d48d7f40ec4741793caafbb4351dfd3997c8",
+    "nanochat/compact_routing.py": "f8f03e8aad7680d929609e2139358d07c04f98505a6c1a63ef5434d096d989af",
+    "nanochat/nvidia_connections.py": "45a98ee4a183bf9d4b4bb10cbe036d619532a102a3608963ff403b32ddc915ba",
+    "nanochat/nvidia_ops.py": "012d4dc4d17ec1ba585c3a3a8ae76202a414b72f990b44367e267eed5de669f3",
+    "nanochat/gpt.py": "f0832791a77302b46c413646417efd916fa858d2bb8fa6640bf3e036aa7d7bcc",
+    "nanochat/optim.py": "7c9b714c6f76e3a9d50fc530044b2767d0cd89391237e609548f1cd730afed8f",
+    "nanochat/connection_experiment.py": "a62692fd8aa1f58a111998206d59bf8ba65b9a5c3bf52ed7c8a586cda3aba27b",
+    "nanochat/attnres_triton.py": "051fbc6063cba01e3473f7beb39face0a1b9bda6af536c699347c4f596d569b0",
+    "scripts/connection_context_profile.py": "fb7f6e29a18a593bea1fd02a0039738c595e6c88f73720f6da434faca4ca0fc4"
+  },
+  "existing_training_input_hashes_unchanged": 8,
+  "config_roundtrips": 11,
+  "invalid_config_rejections": 3,
+  "expected_gpu_checks": 17,
+  "collector_rejection_cases": 8,
+  "formula": "silu(x)=x*sigmoid(x)",
+  "added_gate_parameters": 0,
+  "automatic_training": false,
+  "automatic_publish": false
+}

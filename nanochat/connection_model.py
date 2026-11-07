@@ -15,7 +15,7 @@ from nanochat.gpt import Block, GPTConfig, Linear, norm
 from nanochat.nvidia_connections import NvidiaHyperConnection, NvidiaHyperHead, expand_streams, check_nvidia_device
 from nanochat.optim import MuonAdamW
 
-CONNECTION_VARIANTS = ('baseline', 'mhc', 'mhc_no_sinkhorn', 'mhc_channel_no_sinkhorn', 'attnres', 'gated_hc')
+CONNECTION_VARIANTS = ('baseline', 'mhc', 'mhc_no_sinkhorn', 'mhc_channel_no_sinkhorn', 'attnres', 'gated_hc', 'self_gated_hc')
 
 
 @dataclass
@@ -68,6 +68,8 @@ class ConnectionConfig:
             raise ValueError('Local channel mixing initially supports vanilla and unfused gradient accumulation')
         if self.variant == 'gated_hc' and (self.architecture != 'vanilla' or self.fused_connection_grad):
             raise ValueError('Gated HC supports vanilla and ordinary gradient accumulation')
+        if self.variant == 'self_gated_hc' and (self.architecture != 'vanilla' or self.fused_connection_grad):
+            raise ValueError('Self-gated HC supports vanilla and ordinary gradient accumulation')
         if self.sinkhorn_iterations != 20:
             raise ValueError('The NVIDIA composite API requires 20 Sinkhorn iterations')
         if min(self.depth, self.width, self.heads, self.sequence_length, self.vocab_size, self.streams) < 1:
@@ -137,6 +139,9 @@ class ConnectionBlock(Block):
             if self.variant == 'gated_hc':
                 from nanochat.gated_connections import GatedHyperConnection
                 connection = GatedHyperConnection
+            if self.variant == 'self_gated_hc':
+                from nanochat.self_gated_connections import SelfGatedHyperConnection
+                connection = SelfGatedHyperConnection
             kwargs = dict(use_tf32=config.connection_backend == 'nvidia', fused_grad_acc=config.fused_connection_grad,
                           sinkhorn=config.variant != 'mhc_no_sinkhorn')
             if config.variant == 'mhc_channel_no_sinkhorn':
