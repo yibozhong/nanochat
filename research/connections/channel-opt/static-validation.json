@@ -73,5 +73,39 @@
       8,
       true
     ]
-  }
+  },
+  "r6_ast_files": 39,
+  "r6_thresholds_and_tests_unchanged": true,
+  "r6_kernel_functions_unchanged": true,
+  "r6_forward_geometry_restored": true,
+  "r6_geometries": {
+    "split": [
+      32,
+      8,
+      8,
+      128,
+      8,
+      8,
+      false
+    ],
+    "fused": [
+      32,
+      8,
+      8,
+      128,
+      8,
+      8,
+      true
+    ],
+    "fused_wide": [
+      32,
+      8,
+      8,
+      64,
+      16,
+      8,
+      true
+    ]
+  },
+  "r6_retained_and_formal_inputs_unchanged": true
 }

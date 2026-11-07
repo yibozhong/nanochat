@@ -79,5 +79,22 @@
     "speed_measured": false,
     "numerical_thresholds_changed": false,
     "new_formal_run": false
+  },
+  {
+    "job": "7918606.0",
+    "source": "b5ce0e2764dc13aaee5a9f0398fb2482c0b4c665",
+    "exit_code": 1,
+    "host": "slot2_7@gpu5000.chtc.wisc.edu",
+    "passed": 45,
+    "failed": 3,
+    "max_relative_gradient_error": 0.021871130459872382,
+    "crossed_fast_backward_max": 4.332282396063804e-05,
+    "crossed_fast_forward_max": 0.021871093546045165,
+    "reason": "Only three non-compact fullmodel comparisons fail at2.1871% against original2% threshold; compact comparisons pass their original3% threshold",
+    "attribution": "Crossed controls isolate remaining error to forward launch geometry: original forward plus candidate backward has maximum relative error4.33e-5",
+    "action": "Restore original forward32x8/8warps for all candidates; retain tested backward geometry and optional fusion",
+    "numerical_thresholds_changed": false,
+    "speed_measured": false,
+    "new_formal_run": false
   }
 ]

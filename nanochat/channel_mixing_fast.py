@@ -10,11 +10,13 @@ import triton.language as tl
 from torch.autograd.function import once_differentiable
 from nanochat.channel_mixing import _backward_branch, _coeff, _forward as _channel_fast_forward
 
+# Keep the legacy forward launch geometry: changing its layout perturbs BF16
+# rounding enough to fail the full-model routing-gradient tolerance.
 # forward BT/BC/warps, backward BT/BC/warps, fuse branch backward.
 GEOMETRIES = {
-    'split': (32,16,8,128,8,8,False),
-    'fused': (32,16,8,128,8,8,True),
-    'fused_wide': (16,32,8,64,16,8,True),
+    'split': (32,8,8,128,8,8,False),
+    'fused': (32,8,8,128,8,8,True),
+    'fused_wide': (32,8,8,64,16,8,True),
 }
 
 
