@@ -1,0 +1,61 @@
+{
+  "job": "7934577.0",
+  "source": {
+    "commit": "14401b93a902dcccf5edfda4b57459c90076a89f",
+    "formal_training": false,
+    "purpose": "Four independent D-to-D sigmoid gates, per-stream token RMS input; HC residual after shared H, branch write ungated; bounded correctness and efficiency validation"
+  },
+  "gpu": "NVIDIA H200",
+  "gpu_uuid": "08f96c4f-e762-71a2-c44a-4bdcc4ada04a",
+  "checks": {
+    "tests": 36,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "all_recorded_loss_and_gradients_finite": true,
+  "resume_steps": [
+    25,
+    128
+  ],
+  "dev_ce": {
+    "initial": 10.397237777709961,
+    "final": 5.962246894836426
+  },
+  "max_post_vjp_gradient_relative_error": 0.0016860360924943103,
+  "max_post_model_reference_gradient_relative_error": 0.001359328330312887,
+  "microbatch": 16,
+  "sequence_length": 2048,
+  "batch_tokens": 32768,
+  "total_parameters": 76292533,
+  "extra_gate_parameters": 16777216,
+  "extra_parameters_over_pre": 0,
+  "full_step_ms": {
+    "pre_fused_abba": 104.56863104191144,
+    "post_fused_abba": 136.65160964883398,
+    "post_compiled_torch_single_60step_profile": 107.221770536853
+  },
+  "post_fused_latency_change_percent": 30.681264818379027,
+  "post_torch_latency_change_percent_vs_pre_abba": 2.5372231313597116,
+  "local_all_vjp_ms": {
+    "pre_fused": 1.6764815663918853,
+    "post_fused": 3.7624306743964553,
+    "post_torch": 1.8747603811789304
+  },
+  "backward_kernel_trace_ms": {
+    "pre": 0.495795,
+    "post": 2.5317965
+  },
+  "allocated_gib": {
+    "pre_fused": 10.883780479431152,
+    "post_fused": 10.883780479431152,
+    "post_torch": 12.756979942321777
+  },
+  "diagnosis": "Current hand-written post-mix backward is the main measured regression; compiledTorch evaluates the same formula much faster. Specific register/layout causes are not established by these traces.",
+  "post_fused_speedup_validated": false,
+  "formal_training": false,
+  "new_formal_run": false,
+  "collector_exited": true,
+  "matching_gpu_snapshot_source_files": 167,
+  "limitations": "Single GPU and seed; ABBA for fused pre/post, one60step full profile for postTorch. Only128steps of post-mix NTP: no10B quality or long-term stability conclusion. No backend switched or further job submitted."
+}
