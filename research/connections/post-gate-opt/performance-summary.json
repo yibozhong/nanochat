@@ -1,0 +1,86 @@
+{
+  "job": "7944836.0",
+  "source": {
+    "commit": "7f13333fb799fdcf0e50a860f92a636b1360064b",
+    "formal_training": false,
+    "purpose": "Post-H sigmoid gate backward optimization only; unchanged formula, parameters and precision; bounded validation and same-card implementation benchmarks"
+  },
+  "gpu": "NVIDIA H200",
+  "gpu_uuid": "9b145c79-e451-f767-912c-585d33b2f6a6",
+  "checks": {
+    "tests": 36,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "all_recorded_loss_and_gradients_finite": true,
+  "resume_steps": [
+    25,
+    128
+  ],
+  "dev_ce": {
+    "initial": 10.397237777709961,
+    "final": 5.979311466217041
+  },
+  "max_vjp_gradient_relative_error": 0.0016860360924943103,
+  "max_model_reference_gradient_relative_error": 0.0010336606096405202,
+  "production_shape_errors": {
+    "output": 0.0,
+    "gradients": [
+      1.4841075426375028e-05,
+      0.0,
+      7.649988731373014e-08,
+      1.1060485149982924e-07,
+      5.658010195475072e-05
+    ]
+  },
+  "microbatch": 16,
+  "sequence_length": 2048,
+  "batch_tokens": 32768,
+  "total_parameters": 76292533,
+  "extra_gate_parameters": 16777216,
+  "parameters_changed_by_optimization": 0,
+  "full_step_ms": {
+    "pre_fused_single": 104.91888406104408,
+    "post_legacy_single": 136.82097983546555,
+    "post_torch_abba": 107.6177808456123,
+    "post_optimized_abba": 104.08418313018048
+  },
+  "latency_reduction_vs_legacy_percent": 23.926737511054807,
+  "latency_reduction_vs_torch_percent": 3.2834701549004253,
+  "backward_kernel_ms": {
+    "legacy": 2.511419,
+    "optimized": 0.458447
+  },
+  "local_all_vjp_ms": {
+    "pre": 1.6817902505863458,
+    "legacy": 3.7137150182388723,
+    "optimized": 1.6591972496826202,
+    "torch": 1.8241330864839256
+  },
+  "kernel_resources": {
+    "legacy": {
+      "registers": 80,
+      "spills": 0,
+      "shared_bytes": 8192,
+      "num_warps": 8
+    },
+    "optimized": {
+      "registers": 80,
+      "spills": 0,
+      "shared_bytes": 2048,
+      "num_warps": 4
+    }
+  },
+  "allocated_gib": {
+    "optimized": 10.883780479431152,
+    "torch": 12.756979942321777
+  },
+  "decision": "Keep optimized rowwise post-H backward; it passes original thresholds and is faster than legacy and compiledTorch on this Hopper test.",
+  "diagnosis": "Replace repeated where+stream-reduce extraction with four explicit channel vectors and scalar mixing coefficients; use4 rather than8 warps. Both measured kernels have80 registers/thread and0spills; shared scratch8192to2048bytes. Measurements do not isolate the contribution of each change.",
+  "limitations": "Single H200, same-card ABBA for optimized vsTorch; legacy and pre each60steps. Short128step recovery only, no10B quality or long-term stability conclusion. Forward is unchanged; changed backward sum order is not bitwise equivalent.",
+  "formal_training": false,
+  "new_formal_run": false,
+  "matching_gpu_snapshot_source_files": 174,
+  "optimized_retained": true
+}
