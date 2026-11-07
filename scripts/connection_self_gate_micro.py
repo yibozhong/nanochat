@@ -45,7 +45,7 @@ def main():
                 grads=torch.autograd.grad(fn(*args),args,probe);del grads
                 torch.cuda.synchronize();prof.step()
         path=root/(name+'.trace.json');prof.export_chrome_trace(str(path));traces[name]=trace_summary(path,2);path.unlink()
-    result=dict(complete=True,shape=list(x.shape),formula='silu(x)=x*sigmoid(x)',
+    result=dict(complete=True,shape=list(x.shape),formula='x*silu(x)',
         source=json.loads(Path('source.json').read_text()),gpu_uuid=str(torch.cuda.get_device_properties(0).uuid),
         results=results,traces=traces,optimizer_updates=0,includes='Write forward and all four VJPs; no routing generation, branch network or optimizer')
     (root/'summary.json').write_text(json.dumps(result,indent=2)+'\n')

@@ -17,7 +17,8 @@ def save(root,state):
 
 def validate(v,state):
     assert v['complete'] and not v['formal_training'] and not v['new_formal_run']
-    assert v['source']==state['source'] and v['formula']=='silu(x)=x*sigmoid(x)' and v['extra_gate_parameters']==0
+    assert v['source']==state['source'] and v['formula']=='x*silu(x)' and v['extra_gate_parameters']==0
+    assert v['first_step_probe']['passed'] and v['first_step_probe']['source']==state['source']
     assert v['checks']==dict(tests=17,failures=0,errors=0,skipped=0)
     assert set(v['profiles'])=={'baseline','mhc_no_sinkhorn','gated_hc','self_gated_hc',*[f'abba-{i}' for i in range(4)]}
     for name,p in v['profiles'].items():

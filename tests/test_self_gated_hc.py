@@ -37,7 +37,7 @@ def test_scalar_vjp_fp64(amplitude):
     seed_all(209)
     x=(torch.randn(2,131,128,4,device='cuda',dtype=torch.bfloat16)*amplitude).requires_grad_()
     probe=torch.randn_like(x);out=impl.self_gate(x);gx,=torch.autograd.grad(out,x,probe)
-    xx=x.detach().double().requires_grad_();ref=xx*torch.sigmoid(xx)
+    xx=x.detach().double().requires_grad_();ref=xx.square()*torch.sigmoid(xx)
     expected,=torch.autograd.grad(ref,xx,probe.double())
     errors=dict(output=relative(out,ref),gradient=relative(gx,expected))
     record('scalar-'+str(amplitude),errors)
@@ -53,7 +53,7 @@ def test_scalar_locality_and_no_parameters():
     gx,=torch.autograd.grad(before[0,3,7,1],x)
     assert torch.count_nonzero(gx[mask])==0
     assert before[0,3,7,1]!=after[0,3,7,1]
-    record('locality',dict(no_other_token_channel_or_stream_dependency=True,formula='x*sigmoid(x)'))
+    record('locality',dict(no_other_token_channel_or_stream_dependency=True,formula='x*silu(x)'))
 
 
 @pytest.mark.parametrize('n,c',[(1,128),(131,128),(129,512)])
@@ -67,7 +67,7 @@ def test_write_all_vjps_fp64(n,c):
     args=[x,y,post,h];probe=torch.randn_like(x)
     out=conn.write(y,x,(post,h,None));actual=torch.autograd.grad(out,args,probe)
     xx,yy,pp,hh=[a.detach().double().requires_grad_() for a in args]
-    ref=torch.einsum('btci,btij->btcj',xx*torch.sigmoid(xx),hh)+yy.unsqueeze(-1)*pp.unsqueeze(-2)
+    ref=torch.einsum('btci,btij->btcj',xx.square()*torch.sigmoid(xx),hh)+yy.unsqueeze(-1)*pp.unsqueeze(-2)
     expected=torch.autograd.grad(ref,[xx,yy,pp,hh],probe.double())
     errors=dict(output=relative(out,ref),gradients=[relative(a,b) for a,b in zip(actual,expected)])
     record(f'write-{n}-{c}',errors)

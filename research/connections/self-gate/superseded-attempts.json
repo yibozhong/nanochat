@@ -1,0 +1,13 @@
+[
+  {
+    "job": "7928474.0",
+    "source": "07a02a3ab273038c7810c3bac847f27ed4597f58",
+    "reason": "Explicit user selection changed stated direct-SiLU assumption to x*SiLU(x)",
+    "history": {
+      "ClusterId": 7928474,
+      "JobStatus": 3,
+      "NumJobStarts": 0
+    },
+    "gpu_executed": false
+  }
+]

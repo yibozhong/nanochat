@@ -1,6 +1,6 @@
-"""Elementwise SiLU on the residual input of shared no-Sinkhorn HC.
+"""Elementwise input-times-SiLU on the residual input of shared no-Sinkhorn HC.
 
-Each scalar gates itself: s(x) = x * sigmoid(x). No gate parameters,
+Each scalar gates itself: s(x) = x * SiLU(x) = x**2 * sigmoid(x). No gate parameters,
 projection, extra normalization, or cross-stream/channel gate dependency.
 The pointwise operation is compiled separately; NVIDIA routing/write stay intact.
 """
@@ -11,7 +11,8 @@ from nanochat.nvidia_connections import NvidiaHyperConnection
 
 
 def self_gate_reference(x):
-    return F.silu(x.float()).to(x.dtype)
+    value=x.float()
+    return (value*F.silu(value)).to(x.dtype)
 
 
 self_gate = torch.compile(self_gate_reference, fullgraph=True, dynamic=False)

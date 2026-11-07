@@ -1,7 +1,7 @@
 {
   "variant": "self_gated_hc",
-  "formula": "silu(x)=x*sigmoid(x)",
-  "formula_status": "Simple direct-SiLU interpretation stated to user; not an extra x*silu(x)",
+  "formula": "x*silu(x)",
+  "formula_status": "Explicit user selection: SiLU as gate, y=x*SiLU(x)",
   "location": "residual input before original shared no-Sinkhorn H",
   "gate_parameters": 0,
   "gate_projection": false,
@@ -9,7 +9,7 @@
   "gate_cross_stream_dependency": false,
   "gate_cross_channel_dependency": false,
   "custom_gate_kernel": false,
-  "implementation": "Separate torch.compile pointwise FP32 SiLU, cast to BF16, then unchanged NVIDIA write",
+  "implementation": "Separate torch.compile FP32 x*SiLU(x), cast to BF16, then unchanged NVIDIA write",
   "connection_positions": "Existing8layers times attention/MLP2;16 calls per step",
   "architecture": "vanilla",
   "depth": 8,
@@ -40,5 +40,15 @@
   "returned_checkpoints": false,
   "automatic_retry": false,
   "initial_gate_identity": false,
-  "existing_training_unchanged": true
+  "existing_training_unchanged": true,
+  "first_step_probe": {
+    "variants": [
+      "mhc_no_sinkhorn",
+      "self_gated_hc"
+    ],
+    "updates": 1,
+    "microbatch": 16,
+    "activation_statistics": true,
+    "diagnostic_overhead_not_timed": true
+  }
 }
