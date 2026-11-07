@@ -1,0 +1,124 @@
+{
+  "status": "needs_attention",
+  "job": "7928556.0",
+  "source": {
+    "commit": "4ffc4d88d637eba37daee3572524f52289d5115e",
+    "formal_training": false,
+    "purpose": "User-confirmed elementwise x*SiLU(x) before shared no-Sinkhorn H; zero gate parameters; bounded checks only"
+  },
+  "exit_code": 1,
+  "formula": "x*silu(x)",
+  "variant": "self_gated_hc",
+  "implementation": "Independent scalar x*SiLU(x), FP32 pointwise computation then BF16, before the unchanged NVIDIA shared no-Sinkhorn H write; compiled pointwise operator, not a new fused kernel",
+  "gpu": {
+    "gpu": "NVIDIA H200",
+    "capability": [
+      9,
+      0
+    ],
+    "torch": "2.10.0+cu130"
+  },
+  "checks": {
+    "tests": 17,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "ownership": {
+    "added_parameters": 0,
+    "same_rng": true,
+    "unchanged_routing": true,
+    "identity_initial_gate": false
+  },
+  "first_step_probe": {
+    "configuration": {
+      "seed": 42,
+      "layers": 8,
+      "width": 512,
+      "heads": 4,
+      "sequence_length": 2048,
+      "microbatch": 16,
+      "batch_tokens": 32768
+    },
+    "baseline": {
+      "variant": "mhc_no_sinkhorn",
+      "finite": true,
+      "optimizer_updates": 1,
+      "loss": 10.397916793823242
+    },
+    "self_gate": {
+      "finite": false,
+      "optimizer_updates": 0,
+      "error": "FloatingPointError('Nonfinite loss/gradient before optimizer update')",
+      "nonfinite_gradient_count": 101,
+      "first_nonfinite_event": {
+        "connection": "blocks.2.mlp_connection",
+        "stage": "gate_output",
+        "finite": false,
+        "max_abs": null
+      },
+      "gate_output_chain": [
+        {
+          "connection": "blocks.0.attn_connection",
+          "stage": "gate_output",
+          "finite": true,
+          "max_abs": 27.375
+        },
+        {
+          "connection": "blocks.0.mlp_connection",
+          "stage": "gate_output",
+          "finite": true,
+          "max_abs": 812.0
+        },
+        {
+          "connection": "blocks.1.attn_connection",
+          "stage": "gate_output",
+          "finite": true,
+          "max_abs": 671744.0
+        },
+        {
+          "connection": "blocks.1.mlp_connection",
+          "stage": "gate_output",
+          "finite": true,
+          "max_abs": 446676598784.0
+        },
+        {
+          "connection": "blocks.2.attn_connection",
+          "stage": "gate_output",
+          "finite": true,
+          "max_abs": 1.9007525093550322e+23
+        },
+        {
+          "connection": "blocks.2.mlp_connection",
+          "stage": "gate_output",
+          "finite": false,
+          "max_abs": null
+        }
+      ]
+    }
+  },
+  "diagnosis": "In the observed first forward pass, positive residual values grow through repeated x*SiLU(x), asymptotically x squared. The third-layer MLP connector receives finite magnitude 1.888946593147858e23 and its gate output is the first nonfinite recorded activation. This happens before any optimizer update.",
+  "not_run": [
+    "local kernel microbenchmark",
+    "60-update full-step profiles and ABBA comparison",
+    "25-to-128 training/resume"
+  ],
+  "no_throughput_claim": true,
+  "no_training_quality_claim": true,
+  "formal_training": false,
+  "new_formal_run": false,
+  "existing_training": {
+    "job": "7916187.0",
+    "immutable_input_files_checked": 8,
+    "unchanged": true
+  },
+  "automatic_retry": false,
+  "automatic_publish": false,
+  "collector_exited": true,
+  "evidence": {
+    "first_step_probe_sha256": "f54b3f44cac6fc30a370d665d818eb5ff90ac4fbdafd804220a2addcd101797a",
+    "tests_xml_sha256": "57089326c4fd218c8f53ef8e0a3fb63854a6722f0747e768ed49ff1c2846e699",
+    "results_archive_sha256": "d8f787a5fe5673b3f0db49ab5f903976572fd9e0b044c20682b40abd05e92728",
+    "root": "/home/yzhong239/simple-gate-check-20261106-r2"
+  }
+}
