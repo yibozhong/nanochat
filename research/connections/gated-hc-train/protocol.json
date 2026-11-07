@@ -1,0 +1,43 @@
+{
+  "variant": "gated_hc",
+  "gate": "channel_local_cross_stream_RMS_4_to_4_SiLU_before_shared_H",
+  "kernel": "original_validated_fused_Triton",
+  "gate_job": "7915083.0",
+  "validated_source": "ebf51bf38f2d038af89679293b95c21d6129f41c",
+  "seed": 42,
+  "initialization": "fresh, no old or validation weights",
+  "steps": 305176,
+  "tokens": 10000007168,
+  "batch_tokens": 32768,
+  "microbatch": 16,
+  "depth": 8,
+  "width": 512,
+  "heads": 4,
+  "streams": 4,
+  "sequence_length": 2048,
+  "mlp": "original ReLU-squared",
+  "total_parameters": 59679157,
+  "optimizer": "unchanged MuonAdamW and connector AdamW/noWD",
+  "hardware": "full H100/H200 SM90 only, FA3",
+  "minimum_gpu_memory_mib": 22000,
+  "checkpoint_latest_steps": 500,
+  "best_checkpoint_separate": true,
+  "checkpoint_transfer_seconds": 1800,
+  "checkpoint_exit_code": 85,
+  "wandb_project": "nanochat",
+  "wandb_group": "gated-hc-silu-10b-20261107",
+  "formal_run_count": 1,
+  "old_10b_remains_stopped": true,
+  "validation_reused": true,
+  "additional_gate_parameters": 163840,
+  "retired_sigmoid_jobs": [
+    "7952576.0",
+    "7960531.0"
+  ],
+  "gate_initialization": {
+    "weight": 0,
+    "bias": 1.2784645427610737,
+    "gate": 1
+  },
+  "historical_training_resume": false
+}

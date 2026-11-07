@@ -1,0 +1,11 @@
+{
+  "stopped_by_user": true,
+  "date": "2026-11-07",
+  "reason": "Keep restored old cross-stream SiLU gated_hc; independent-stream sigmoid workflows retired",
+  "jobs": [
+    "7952576.0",
+    "7960531.0"
+  ],
+  "automatic_continuation": false,
+  "historical_source": "b367426a76d234f9c30965b2c392426df017ee7a"
+}

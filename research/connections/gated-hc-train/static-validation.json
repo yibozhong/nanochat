@@ -1,0 +1,60 @@
+{
+  "complete": true,
+  "new_gpu_tests": false,
+  "reused_gpu_job": "7915083.0",
+  "reused_gpu_checks": 25,
+  "reused_training_resume_steps": [
+    25,
+    128
+  ],
+  "reused_same_card_profile_updates": 60,
+  "restored_source": "ebf51bf38f2d038af89679293b95c21d6129f41c",
+  "exact_original_gpu_archive_sha256": "187d16662ed29ea437f216aa8df5e926d8fb86edfab799fee62e393d8d3ba4cf",
+  "production_tests_runtime_files_exact": 88,
+  "python_ast": 84,
+  "bash_syntax": 3,
+  "embedded_python_ast": 4,
+  "negative_gate_evidence_cases": 10,
+  "first_formal_step_parser_cases": 6,
+  "config_cases": 19,
+  "both_sigmoid_jobs_stopped": [
+    {
+      "root": "post-gated-hc-10b-20261107",
+      "job": "7952576.0",
+      "history": {
+        "ClusterId": 7952576,
+        "ExitCode": 143,
+        "JobStatus": 3,
+        "NumJobStarts": 1,
+        "ProcId": 0
+      },
+      "last_observed_step": {
+        "step": 21200,
+        "tokens": 694681600,
+        "loss": 3.4725637435913086,
+        "seconds": 0.11423981375992298,
+        "lr_multiplier": 1.0
+      }
+    },
+    {
+      "root": "pre-gated-hc-10b-20261107",
+      "job": "7960531.0",
+      "history": {
+        "ClusterId": 7960531,
+        "ExitCode": 143,
+        "JobStatus": 3,
+        "NumJobStarts": 1,
+        "ProcId": 0
+      },
+      "last_observed_step": {
+        "step": 10210,
+        "tokens": 334561280,
+        "loss": 3.6980128288269043,
+        "seconds": 0.10250356793403625,
+        "lr_multiplier": 1.0
+      }
+    }
+  ],
+  "fresh_seed42_no_old_weights": true,
+  "formal_runs_authorized": 1
+}

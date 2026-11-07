@@ -1,0 +1,45 @@
+{
+  "restored_from": "ebf51bf38f2d038af89679293b95c21d6129f41c",
+  "previous_head": "b367426a76d234f9c30965b2c392426df017ee7a",
+  "restored_or_removed_core_paths": [
+    "nanochat/connection_model.py",
+    "nanochat/gated_connections.py",
+    "nanochat/gated_mixing.py",
+    "nanochat/packed_training.py",
+    "nanochat/post_stream_gate_mixing.py",
+    "nanochat/post_stream_gated_connections.py",
+    "nanochat/stream_gate_mixing.py",
+    "nanochat/stream_gated_connections.py",
+    "scripts/connection_gated_hc_gate.py",
+    "scripts/connection_gated_hc_micro.py",
+    "scripts/connection_post_gate_opt_check.py",
+    "scripts/connection_post_gate_opt_micro.py",
+    "scripts/connection_post_gate_opt_profile.py",
+    "scripts/connection_post_stream_gate_check.py",
+    "scripts/connection_post_stream_gate_micro.py",
+    "scripts/connection_stream_gate_check.py",
+    "scripts/connection_stream_gate_micro.py",
+    "scripts/connection_stream_gate_probe.py",
+    "scripts/connection_stream_gate_profile.py",
+    "scripts/connection_train.py",
+    "tests/test_gated_hc.py",
+    "tests/test_post_stream_gated_hc.py",
+    "tests/test_stream_gated_hc.py"
+  ],
+  "archived_workflows": [
+    "stream-gate",
+    "post-stream-gate",
+    "post-gate-opt",
+    "pre-gate-train",
+    "post-gate-train"
+  ],
+  "all_nanochat_scripts_tests_exactly_equal_validated_source": true,
+  "source_archive_sha256": "187d16662ed29ea437f216aa8df5e926d8fb86edfab799fee62e393d8d3ba4cf",
+  "reused_gate_job": "7915083.0",
+  "reused_checks": 25,
+  "reused_resume_steps": [
+    25,
+    128
+  ],
+  "new_gpu_tests": false
+}
