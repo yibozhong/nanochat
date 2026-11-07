@@ -35,10 +35,15 @@ class ConnectionConfig:
     window_pattern: str = 'SSSL'  # native only; vanilla is always full attention
     attention_kernel: str = 'original'
     compact_routing: bool = False
+    channel_mixing_kernel: str = 'legacy'
     attnres_block_size: int = 2  # Moonshot paper's S: Attention and MLP each count once
     attnres_block_size_unit: str = 'sublayers'
 
     def __post_init__(self):
+        if self.channel_mixing_kernel not in ('legacy','split','fused','fused_wide'):
+            raise ValueError('Unknown channel mixing kernel')
+        if self.channel_mixing_kernel != 'legacy' and self.variant != 'mhc_channel_no_sinkhorn':
+            raise ValueError('Channel mixing kernels apply only to channelwise HC')
         if self.attnres_block_size_unit != 'sublayers':
             raise ValueError('AttnRes block size uses sublayers; load legacy metadata with from_checkpoint')
         if type(self.attnres_block_size) is not int or self.attnres_block_size < 2 or self.attnres_block_size % 2:
@@ -141,6 +146,7 @@ class ConnectionBlock(Block):
                           sinkhorn=config.variant != 'mhc_no_sinkhorn')
             if config.variant == 'mhc_channel_no_sinkhorn':
                 kwargs['compact_routing']=config.compact_routing
+                kwargs['channel_mixing_kernel']=config.channel_mixing_kernel
             self.attn_connection = connection(config.width, config.streams, 2*index, config.sinkhorn_iterations, **kwargs)
             self.mlp_connection = connection(config.width, config.streams, 2*index+1, config.sinkhorn_iterations, **kwargs)
 

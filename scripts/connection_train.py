@@ -35,6 +35,7 @@ def main():
     p.add_argument('--connection-backend', choices=('nvidia','nvidia_precise'), default='nvidia')
     p.add_argument('--fused-connection-grad', action=argparse.BooleanOptionalAction, default=False)
     p.add_argument('--compact-routing', action=argparse.BooleanOptionalAction, default=False)
+    p.add_argument('--channel-mixing-kernel', choices=('legacy','split','fused','fused_wide'), default='legacy')
     p.add_argument('--attnres-block-size', type=int, default=2,
                    help='Moonshot paper S: Attention/MLP sublayers per residual block; even >=2, default2 = one Transformer layer')
     p.add_argument('--steps', type=int, required=True)
@@ -70,6 +71,7 @@ def main():
     seed_all(a.seed)
     c=ConnectionConfig(variant=a.variant,streams=a.streams,sinkhorn_iterations=a.sinkhorn_iterations,
                        sequence_length=a.sequence_length, compact_routing=a.compact_routing,
+                       channel_mixing_kernel=a.channel_mixing_kernel,
                        attnres_block_size=a.attnres_block_size,
                        attention_kernel=a.attention_kernel,
                        architecture=a.architecture, window_pattern=a.window_pattern,

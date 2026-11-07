@@ -1,0 +1,29 @@
+{
+  "complete": true,
+  "gpu_validation": false,
+  "python_ast_files": 67,
+  "shell_syntax": true,
+  "retained_implementation_hashes": {
+    "nanochat/channel_mixing.py": "c88e4582360906c198ff1c9cf3caeb904b335c3f9be0167623a82b83662278d8",
+    "nanochat/compact_routing.py": "f8f03e8aad7680d929609e2139358d07c04f98505a6c1a63ef5434d096d989af",
+    "nanochat/nvidia_connections.py": "45a98ee4a183bf9d4b4bb10cbe036d619532a102a3608963ff403b32ddc915ba",
+    "nanochat/gated_mixing.py": "c05c9f3e6b239b8a0ccf96061654e029d367222f7c88820ed1a28b6c612dd6d1",
+    "nanochat/gated_connections.py": "930fc85abe7d90693052916448c41075d7993b069224ef4ae20a683de1548666",
+    "nanochat/attnres_triton.py": "051fbc6063cba01e3473f7beb39face0a1b9bda6af536c699347c4f596d569b0",
+    "nanochat/gpt.py": "f0832791a77302b46c413646417efd916fa858d2bb8fa6640bf3e036aa7d7bcc",
+    "nanochat/optim.py": "7c9b714c6f76e3a9d50fc530044b2767d0cd89391237e609548f1cd730afed8f",
+    "nanochat/packed_training.py": "8392be99a92f1e4d217af88264aaf761d823f51be977afe9881b93e86819a124"
+  },
+  "configuration_roundtrips": 9,
+  "invalid_variant_rejections": 3,
+  "publish_negative_cases": [
+    "checks",
+    "nan",
+    "gpu",
+    "source",
+    "partial",
+    "trace",
+    "target",
+    "formal"
+  ]
+}
