@@ -9,5 +9,13 @@
   "unchanged_production_files": 34,
   "embedded_python_ast": true,
   "trainer_cli": true,
-  "bootstrap_filesystem_twice": true
+  "bootstrap_filesystem_twice": true,
+  "unresolved_global_scan_modules": 11,
+  "benchmark_profile_ast_unchanged": true,
+  "prior_gpu_checks_only": {
+    "tests": 15,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  }
 }

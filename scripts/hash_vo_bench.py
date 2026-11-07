@@ -2,6 +2,7 @@
 import argparse
 import hashlib
 import json
+import time
 from pathlib import Path
 from scripts.hash_qkv_bench import write
 

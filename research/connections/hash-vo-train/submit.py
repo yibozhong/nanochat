@@ -12,7 +12,7 @@ import time
 import uuid
 
 REPO=Path(__file__).resolve().parents[3]
-GATE=Path('/home/yzhong239/hash-vo-gate-20261107')
+GATE=Path('/home/yzhong239/hash-vo-gate-20261107-r2')
 ASSETS=Path('/home/yzhong239/nanochat-runtime-assets')
 KEY='hash-vo-10b-20261107'
 STEPS=305176
