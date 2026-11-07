@@ -32,5 +32,10 @@
   "r3_production_code_unchanged": true,
   "r3_thresholds_unchanged": true,
   "r3_matched_compilation_restored": true,
-  "r3_legacy_mode_control_added": true
+  "r3_legacy_mode_control_added": true,
+  "r4_ast_files": 39,
+  "r4_original_kernels_unchanged": true,
+  "r4_thresholds_unchanged": true,
+  "r4_changes": "Optional kernel restores four-stream reduction expression and RMS VJP; failure-only crossed forward/backward diagnostic added",
+  "r4_existing_training_input_hashes_unchanged": true
 }

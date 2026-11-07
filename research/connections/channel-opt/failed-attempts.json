@@ -34,5 +34,24 @@
     "kernel_changed": false,
     "numerical_thresholds_changed": false,
     "new_formal_run": false
+  },
+  {
+    "job": "7917836.0",
+    "source": "22fe9aee6fecdcd4a3457525f013171d5904f4e9",
+    "exit_code": 1,
+    "passed": 42,
+    "failed": 6,
+    "max_relative_gradient_error": 0.03358213848740313,
+    "losses_equal": true,
+    "legacy_compiled_vs_compiled_max": 0.0,
+    "legacy_compiled_vs_eager_max": 0.28032009591678836,
+    "reason": "Matched execution modes removed the large confound but six model gradient comparisons still exceed fixed thresholds; max remaining error is first attention routing scales",
+    "attribution": "Rowwise FP32 accumulation/FMA differs from legacy reduction expression; targeted kernel revision restores four-stream reduction expressions, requires GPU validation",
+    "kernel_fp64_vjps_passed": true,
+    "compiled_primitive_passed": true,
+    "optimizer_rng_resume_passed": true,
+    "speed_measured": false,
+    "numerical_thresholds_changed": false,
+    "new_formal_run": false
   }
 ]

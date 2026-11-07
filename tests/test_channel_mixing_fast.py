@@ -20,6 +20,41 @@ def record(name,value):
     (root/(name+'.json')).write_text(json.dumps(value,indent=2)+'\n')
 
 
+def diagnose_model_parity(model,x,y,reference,kernel):
+    """On failure only, separate the new forward from its new backward."""
+    class Crossed(torch.autograd.Function):
+        @staticmethod
+        def forward(ctx,x,y,p,w,b,a,fast_forward):
+            ctx.save_for_backward(x,y,p,w,b,a);ctx.fast_forward=fast_forward
+            fn=partial(channel_mix_fast,kernel=kernel) if fast_forward else original.channel_mix
+            return fn(x,y,p,w,b,a)
+
+        @staticmethod
+        def backward(ctx,go):
+            # Diagnostic only: reevaluate the opposite implementation's VJP
+            # on exactly the forward inputs, with no optimizer/state update.
+            with torch.enable_grad():
+                args=[t.detach().requires_grad_(True) for t in ctx.saved_tensors]
+                fn=original.channel_mix if ctx.fast_forward else partial(channel_mix_fast,kernel=kernel)
+                grads=torch.autograd.grad(fn(*args),args,go)
+            return *grads,None
+
+    connections=[getattr(block,name) for block in model.blocks for name in ('attn_connection','mlp_connection')]
+    result={}
+    for fast_forward in (False,True):
+        for conn in connections:
+            def write(output,residual,post,conn=conn,ff=fast_forward):
+                return Crossed.apply(residual,output.contiguous(),post,conn.mix_weight,conn.mix_bias,conn.mix_scale,ff)
+            conn.write=write
+        try:
+            model.zero_grad(set_to_none=True);loss=model(x,y);loss.backward()
+            result['fast_forward' if fast_forward else 'fast_backward']=dict(loss=loss.item(),
+                gradients={n:original.relative(p.grad,reference[n]) for n,p in model.named_parameters()})
+        finally:
+            for conn in connections:del conn.write
+    return result
+
+
 @pytest.fixture(autouse=True)
 def fresh_compile_cache():
     torch._dynamo.reset()
@@ -92,7 +127,12 @@ def test_model_parity_causality_cache_cce_recompute(kernel,compact):
         loss=m(x,y);loss.backward();losses.append(loss.detach())
         grads.append({n:p.grad.clone() for n,p in m.named_parameters()})
     errors={n:original.relative(grads[1][n],grads[0][n]) for n in grads[0]}
-    record(f'parity-{kernel}-{compact}',dict(gradients=errors,losses=[x.item() for x in losses],both_backbones_compiled=True))
+    detail=dict(gradients=errors,losses=[x.item() for x in losses],both_backbones_compiled=True,
+        gradient_norms={n:dict(old=grads[0][n].double().norm().item(),new=grads[1][n].double().norm().item(),
+            difference=(grads[1][n].double()-grads[0][n].double()).norm().item()) for n in grads[0]})
+    if max(errors.values())>=(.03 if compact else .02):
+        detail['crossed']=diagnose_model_parity(new,x,y,grads[0],kernel)
+    record(f'parity-{kernel}-{compact}',detail)
     assert max(errors.values())<(.03 if compact else .02),errors
     assert all(torch.isfinite(g).all() for g in grads[1].values())
     assert all(g.norm()>0 for n,g in grads[1].items() if '_connection.' in n)

@@ -34,6 +34,22 @@ def _select(a,b,c,d,i:tl.constexpr):
 
 
 @tr.jit
+def _stack4(a,b,c,d):
+    # Preserve the original four-stream reduction expression. Sequential
+    # accumulation can contract product+sum into FMA before BF16 rounding.
+    if len(a.shape)==2:
+        return tl.reshape(tl.join(tl.join(a,c),tl.join(b,d)),(a.shape[0],a.shape[1],4))
+    else:
+        return tl.reshape(tl.join(tl.join(a,c),tl.join(b,d)),(a.shape[0],a.shape[1],a.shape[2],4))
+
+
+@tr.jit
+def _sum_input_rows(a,b,c,d):
+    rows=tl.trans(_stack4(a,b,c,d),(0,1,3,2))
+    return tl.sum(rows,2)
+
+
+@tr.jit
 def _load_state(X,t,c,N:tl.constexpr,C:tl.constexpr):
     r=tl.arange(0,4)
     x=tl.load(X+(t[:,None,None]*C+c[None,:,None])*4+r[None,None,:],
@@ -65,17 +81,19 @@ def _channel_row_forward(X,Y,P,W,B,A,O,N:tl.constexpr,C:tl.constexpr,
     c=tl.program_id(1)*BC+tl.arange(0,BC);j=tl.arange(0,4)
     x0,x1,x2,x3,inv=_load_state(X,t,c,N,C)
     v0=x0*inv;v1=x1*inv;v2=x2*inv;v3=x3*inv;a=tl.load(A)
-    lo=tl.full((BT,BC,4),0.,tl.float32);hi=tl.full((BT,BC,4),0.,tl.float32)
     for i in tl.static_range(4):
         raw,w0,w1,w2,w3=_row(W,c,v0,v1,v2,v3,i,C)
         b=tl.load(B+c[:,None]*16+i*4+j[None,:],c[:,None]<C,0)
         m=b[None,:,:]+a*raw
         xi=_select(x0,x1,x2,x3,i)
-        if i<2:lo=lo+xi[:,:,None]*m
-        else:hi=hi+xi[:,:,None]*m
+        product=xi[:,:,None]*m
+        if i==0:z0=product
+        elif i==1:z1=product
+        elif i==2:z2=product
+        else:z3=product
     y=tl.load(Y+t[:,None]*C+c[None,:],(t[:,None]<N)&(c[None,:]<C),0).to(tl.float32)
     p=tl.load(P+t[:,None]*4+j[None,:],t[:,None]<N,0)
-    out=(lo+hi)+y[:,:,None]*p[:,None,:]
+    out=_sum_input_rows(z0,z1,z2,z3)+y[:,:,None]*p[:,None,:]
     tl.store(O+(t[:,None,None]*C+c[None,:,None])*4+j[None,None,:],out,
              (t[:,None,None]<N)&(c[None,:,None]<C))
 
@@ -89,11 +107,8 @@ def _channel_row_backward(X,Y,P,W,B,A,GO,GX,GY,Parts,PostParts,
     v0=x0*inv;v1=x1*inv;v2=x2*inv;v3=x3*inv;a=tl.load(A)
     go=tl.load(GO+(t[:,None,None]*C+c[None,:,None])*4+j[None,None,:],
                (t[:,None,None]<N)&(c[None,:,None]<C),0).to(tl.float32)
-    dv0=tl.full((BT,BC),0.,tl.float32);dv1=tl.full((BT,BC),0.,tl.float32)
-    dv2=tl.full((BT,BC),0.,tl.float32);dv3=tl.full((BT,BC),0.,tl.float32)
     dx0=tl.full((BT,BC),0.,tl.float32);dx1=tl.full((BT,BC),0.,tl.float32)
     dx2=tl.full((BT,BC),0.,tl.float32);dx3=tl.full((BT,BC),0.,tl.float32)
-    da=tl.full((BT,BC),0.,tl.float32)
     for i in tl.static_range(4):
         raw,w0,w1,w2,w3=_row(W,c,v0,v1,v2,v3,i,C)
         b=tl.load(B+c[:,None]*16+i*4+j[None,:],c[:,None]<C,0)
@@ -104,23 +119,24 @@ def _channel_row_backward(X,Y,P,W,B,A,GO,GX,GY,Parts,PostParts,
         elif i==1:dx1=direct
         elif i==2:dx2=direct
         else:dx3=direct
-        dv0=dv0+tl.sum(dm*w0[None,:,:],2)
-        dv1=dv1+tl.sum(dm*w1[None,:,:],2)
-        dv2=dv2+tl.sum(dm*w2[None,:,:],2)
-        dv3=dv3+tl.sum(dm*w3[None,:,:],2)
-        da=da+tl.sum(dm*raw,2)
+        dvrow=_stack4(tl.sum(dm*w0[None,:,:],2),tl.sum(dm*w1[None,:,:],2),
+                      tl.sum(dm*w2[None,:,:],2),tl.sum(dm*w3[None,:,:],2))
+        darow=tl.sum(dm*raw,2)
+        if i==0:dvrow0=dvrow;da0=darow
+        elif i==1:dvrow1=dvrow;da1=darow
+        elif i==2:dvrow2=dvrow;da2=darow
+        else:dvrow3=dvrow;da3=darow
         for k in tl.static_range(4):
             vk=_select(v0,v1,v2,v3,k)
             dw=tl.sum(dm*(a*vk[:,:,None]),0)
             tl.store(Parts+(split*C+c[:,None])*81+i*16+j[None,:]*4+k,dw,c[:,None]<C)
         tl.store(Parts+(split*C+c[:,None])*81+64+i*4+j[None,:],tl.sum(dm,0),c[:,None]<C)
-    dv0=dv0*a;dv1=dv1*a;dv2=dv2*a;dv3=dv3*a
-    dot=((dv0*v0+dv1*v1)+(dv2*v2+dv3*v3))*.25
-    for k in tl.static_range(4):
-        dx=_select(dx0,dx1,dx2,dx3,k)
-        dv=_select(dv0,dv1,dv2,dv3,k);vk=_select(v0,v1,v2,v3,k)
-        dx=dx+inv*(dv-vk*dot)
-        tl.store(GX+(t[:,None]*C+c[None,:])*4+k,dx,(t[:,None]<N)&(c[None,:]<C))
+    dv=a*_sum_input_rows(dvrow0,dvrow1,dvrow2,dvrow3)
+    v=_stack4(v0,v1,v2,v3);dx=_stack4(dx0,dx1,dx2,dx3)
+    dx=dx+inv[:,:,None]*(dv-v*(tl.sum(dv*v,2)*.25)[:,:,None])
+    tl.store(GX+(t[:,None,None]*C+c[None,:,None])*4+j[None,None,:],dx,
+             (t[:,None,None]<N)&(c[None,:,None]<C))
+    da=tl.sum(_stack4(da0,da1,da2,da3),2)
     tl.store(Parts+(split*C+c)*81+80,tl.sum(da,0),c<C)
     if FUSE:
         p=tl.load(P+t[:,None]*4+j[None,:],t[:,None]<N,0)
