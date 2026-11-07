@@ -6,6 +6,7 @@ import hashlib
 import importlib.metadata
 import json
 import math
+import os
 from pathlib import Path
 import statistics
 import subprocess
@@ -229,7 +230,27 @@ def correctness(outdir, backends=('dg', 'te')):
     return reports
 
 
-def timed(fn, iterations=10, warmup=3):
+def timed(fn, iterations=10, warmup=3, prepare=None):
+    if prepare is not None:
+        # Some custom autograd functions release private state on backward even
+        # with retain_graph=True. Build a fresh graph outside every timed region.
+        started = time.perf_counter()
+        for _ in range(warmup):
+            prepare(); fn()
+        torch.cuda.synchronize()
+        warmup_seconds = time.perf_counter() - started
+        wall, cuda = [], []
+        begin, end = [torch.cuda.Event(enable_timing=True) for _ in range(2)]
+        for _ in range(iterations):
+            prepare()
+            torch.cuda.synchronize()
+            started = time.perf_counter()
+            begin.record(); fn(); end.record(); end.synchronize()
+            wall.append((time.perf_counter() - started) * 1000)
+            cuda.append(begin.elapsed_time(end))
+        return dict(wall_ms=statistics.mean(wall), cuda_stream_ms=statistics.mean(cuda),
+                    iterations=iterations, warmup=warmup,
+                    setup_warmup_seconds=warmup_seconds, fresh_forward_excluded=True)
     started = time.perf_counter()
     for _ in range(warmup):
         fn()
@@ -267,11 +288,14 @@ def profile_one(case, backend, assignment, repetition, outdir):
     xp = plan.pack(x).detach().requires_grad_()
     dyp = plan.pack(dy).detach()
     measurements['packed_forward'] = timed(lambda: model.packed(xp, plan))
-    yp = model.packed(xp, plan)
-    def backward_only():
+    yp = None
+    def prepare_backward():
+        nonlocal yp
         model.zero_grad(set_to_none=True); xp.grad = None
-        yp.backward(dyp, retain_graph=True)
-    measurements['packed_backward'] = timed(backward_only)
+        yp = model.packed(xp, plan)
+    def backward_only():
+        yp.backward(dyp)
+    measurements['packed_backward'] = timed(backward_only, prepare=prepare_backward)
     del yp, xp, dyp
     def reorder():
         x.grad = None
@@ -334,6 +358,7 @@ def main():
                   deepgemm=getattr(dg, '__version__', 'unknown'), te=importlib.metadata.version('transformer-engine'),
                   cublaslt=tex.get_cublasLt_version(),
                   te_native_grouped_available=is_module_grouped_tensor_path_supported(None, torch.bfloat16),
+                  te_tensor_handle_pool_mb=os.environ.get('NVTE_TENSOR_HANDLE_POOL_SIZE_MB', 'default'),
                   nvidia_smi=smi, nvidia_smi_unavailable=smi_error,
                   device_probe=json.loads(probe_path.read_text()) if probe_path.exists() else None)
     save(outdir/'device.json', device)

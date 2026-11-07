@@ -84,5 +84,35 @@
     ],
     "manual_reviewed_retry": true,
     "automatic_retry": false
+  },
+  {
+    "job": "8013101.0",
+    "source": "70ab7794d00aaa8b5779617ccecde65d18084aeb",
+    "gpu": "NVIDIA H100 80GB HBM3",
+    "exit_code": 1,
+    "toolchain_preflight_passed": true,
+    "benchmark_checks_passed": 10,
+    "max_relative_l2": 0.0017193424303860963,
+    "profiles_completed": 30,
+    "failed_profiles": 14,
+    "backend_counts": {
+      "torch": 2,
+      "dg": 28
+    },
+    "diagnosis": "TE restore_from_func_ctx consumes tensor_objects on first backward, so retain_graph=True cannot support repeated backward. One 4096-expert case also exceeded the default 20 MiB TE host tensor-handle pool.",
+    "changes": [
+      "Build fresh forward graph before each packed-backward timing interval, synchronize and exclude that forward from the measurement for both backends.",
+      "Increase only the private benchmark NVTE_TENSOR_HANDLE_POOL_SIZE_MB to 128."
+    ],
+    "unchanged": [
+      "kernel math",
+      "forward/backward/optimizer complete-step timing path",
+      "precision",
+      "correctness thresholds",
+      "case dimensions",
+      "production training inputs"
+    ],
+    "manual_reviewed_retry": true,
+    "automatic_retry": false
   }
 ]

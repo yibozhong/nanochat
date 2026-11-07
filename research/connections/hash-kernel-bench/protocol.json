@@ -55,5 +55,7 @@
   "failure_policy": "Keep failures and resource skips; no threshold relaxation, automatic resubmission, formal run or automatic production backend switch",
   "cuobjdump_version": "13.1.115",
   "correctness_isolation": "TE and DeepGEMM each run all five unchanged checks in independent child processes. Only fully passing backends are profiled. Any failed backend keeps the overall report incomplete; no failed check is waived.",
-  "te_master_weight_interface": "BF16 torch.autocast with cache disabled, FP32 master parameters unchanged."
+  "te_master_weight_interface": "BF16 torch.autocast with cache disabled, FP32 master parameters unchanged.",
+  "backward_timing": "Fresh forward graph per iteration for both backends, synchronization before backward; forward is excluded from the packed-backward timing. Complete forward/backward and optimizer timing paths unchanged.",
+  "te_tensor_handle_pool_mb": 128
 }

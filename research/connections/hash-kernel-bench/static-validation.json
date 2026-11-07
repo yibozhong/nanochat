@@ -6,16 +6,18 @@
   "production_files_changed": false,
   "planned_results": 58,
   "gpu_tests_run": false,
-  "unchanged_math_timing_functions": [
+  "unchanged_math_functions": [
     "_gather",
     "gather",
     "Permute",
     "Plan",
     "DGLinear",
+    "ExpertFFN",
     "activation",
     "compare",
-    "timed",
-    "profile_one"
+    "correctness"
   ],
-  "revision": "Complete binary utility preflight; TE AMP; isolate backend validation"
+  "ordinary_timing_path_unchanged": true,
+  "fresh_graph_lifetime_and_timer_order_passed": true,
+  "revision": "Fresh graph for isolated backward; TE host handle capacity for 4096 experts"
 }

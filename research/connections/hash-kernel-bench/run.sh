@@ -23,6 +23,8 @@ export PATH="$CUDA_HOME/bin:$PATH"
 export LD_LIBRARY_PATH="$PWD/runtime/.venv/lib/python3.11/site-packages/nvidia/cu13/lib:${LD_LIBRARY_PATH:-}"
 export NANOCHAT_DTYPE=bfloat16 PYTHONUNBUFFERED=1 WANDB_MODE=disabled HF_HUB_OFFLINE=1
 export OMP_NUM_THREADS=2 TORCHINDUCTOR_COMPILE_THREADS=2 MAX_JOBS=2
+# 4096-expert FFNs exceed TE's default 20 MiB host tensor-handle pool.
+export NVTE_TENSOR_HANDLE_POOL_SIZE_MB=128
 export CC=/usr/bin/gcc CXX=/usr/bin/g++ CUBLAS_WORKSPACE_CONFIG=:4096:8
 export TRITON_CACHE_DIR="$PWD/triton-cache" TORCHINDUCTOR_CACHE_DIR="$PWD/inductor-cache"
 # DeepGEMM's host extension uses C++17, but its NVCC JIT defaults to C++20.
