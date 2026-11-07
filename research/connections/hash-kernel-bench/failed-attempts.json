@@ -54,5 +54,35 @@
     "automatic_retry": false,
     "te_cublaslt_version": 130100,
     "te_native_grouped_available": false
+  },
+  {
+    "job": "8013047.0",
+    "source": "ae695d6d3c9725c7a40bca2a1d1ca51dbe50d1d5",
+    "gpu": "NVIDIA H200",
+    "exit_code": 1,
+    "device_bf16_forward_backward_probe_passed": true,
+    "deepgemm_extension_build_passed": true,
+    "first_kernel_nvcc_compile_passed": true,
+    "benchmark_checks_completed": 0,
+    "profiles_completed": 0,
+    "stage": "DeepGEMM CUBIN symbol discovery before kernel launch",
+    "error": "kernel_runtime.hpp:45 exit_code == 0 assertion on cuobjdump -symbols",
+    "diagnosis": "Minimal pinned CUDA toolchain omits cuobjdump. Upstream assertion discards command stderr; failure location and package manifest identify the missing dependency.",
+    "changes": [
+      "Supply NVIDIA cuobjdump 13.1.115 from matching CUDA 13.1.1 redistrib with verified SHA256.",
+      "Preflight NVCC compile and cuobjdump symbol discovery.",
+      "Audit TE interface: add required BF16 autocast for FP32 master parameters.",
+      "Run each backend correctness suite in an independent process and retain evidence; failed backend cannot be profiled or passed."
+    ],
+    "unchanged": [
+      "GEMM dependency versions",
+      "kernel sources",
+      "precision contract",
+      "correctness thresholds",
+      "profile cases",
+      "production training inputs"
+    ],
+    "manual_reviewed_retry": true,
+    "automatic_retry": false
   }
 ]

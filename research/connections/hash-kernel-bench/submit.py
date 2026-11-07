@@ -32,9 +32,9 @@ def main(root):
             (root/'bundles'/name).symlink_to(ASSETS/'bundles'/name)
         hashes = json.loads((ASSETS/'state.json').read_text())['source']['hashes'].copy()
         for dep in dependencies:
-            origin = REFERENCES/(dep['name']+'-'+dep['commit']+'.tar.gz')
+            origin = REFERENCES/dep.get('source_filename', dep['name']+'-'+dep['commit']+'.tar.gz')
             assert hashlib.sha256(origin.read_bytes()).hexdigest() == dep['sha256']
-            destination = root/'bundles'/(dep['name']+'.tar.gz')
+            destination = root/'bundles'/dep.get('archive_name', dep['name']+'.tar.gz')
             shutil.copy2(origin, destination)
             hashes[destination.name] = dep['sha256']
         for name in ('source.json', 'source.tar', 'dependencies.json'):
@@ -45,7 +45,7 @@ def main(root):
         template = template.replace('stream-$(Cluster)', 'bench-$(Cluster)').replace('logs/stream.', 'logs/bench.')
         template = template.replace('nanochat-depth-diagnostic', 'nanochat-hash-kernel-benchmark').replace('DepthDiagnosticKey', 'HashKernelBenchKey').replace('depth-diagnostic-20261103', root.name)
         template = template.replace('22000', '40000').replace('(Capability == 9.0)', '(Capability == 9.0) && regexp("H100|H200",DeviceName)')
-        template = template.replace('transfer_input_files = ', 'transfer_input_files = bundles/deepgemm.tar.gz,bundles/cutlass.tar.gz,bundles/fmt.tar.gz,bundles/dependencies.json,')
+        template = template.replace('transfer_input_files = ', 'transfer_input_files = bundles/deepgemm.tar.gz,bundles/cutlass.tar.gz,bundles/fmt.tar.gz,bundles/cuobjdump.tar.xz,bundles/dependencies.json,')
         template = template.replace('queue 1', 'hold = true\nqueue 1')
         (root/'bench.sub').write_text(template)
         subprocess.run(['condor_submit', '-dry-run', str(root/'dry-run.ads'), 'bench.sub'], cwd=root, check=True, capture_output=True)

@@ -163,7 +163,9 @@ class ExpertFFN(nn.Module):
             return DGLinear.apply(activation(h), self.down_bank, plan, *self.down)
         if self.backend == 'te':
             splits = plan.sizes_gpu.to(torch.int64) if self.native_grouped else plan.sizes_cpu
-            return self.down(activation(self.up(x, splits)), splits)
+            # TE requires AMP for BF16 activations with FP32 master parameters.
+            with torch.autocast('cuda', dtype=torch.bfloat16, cache_enabled=False):
+                return self.down(activation(self.up(x, splits)), splits)
         # Reference only (and dense E=1 anchor). Weight casts match nanochat Linear.
         outputs = []
         for i, part in enumerate(x.split(plan.sizes)):
@@ -195,7 +197,7 @@ def compare(actual, expected):
     return ratio
 
 
-def correctness(outdir):
+def correctness(outdir, backends=('dg', 'te')):
     reports = []
     for n, e, d, h, magnitude in [(257, 4, 64, 256, 1.), (19, 8, 64, 256, 1.),
                                  (129, 4, 64, 256, 0.), (129, 4, 64, 256, 1e-4),
@@ -210,7 +212,7 @@ def correctness(outdir):
         rg = torch.autograd.grad(ry, [rx] + reference.ordered_params(), dy)
         expected = [ry.detach().cpu()] + [v.detach().cpu() for v in rg]
         del ry, rg, reference, rx
-        for backend in ['dg', 'te']:
+        for backend in backends:
             model = ExpertFFN(backend, e, d, h)
             tx = x.detach().requires_grad_()
             y = model(tx, Plan(assignment, e, 128 if backend == 'dg' else 1))
@@ -312,6 +314,7 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--data', type=Path, required=True)
     parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--check-backend', choices=('dg', 'te'))
     args = parser.parse_args()
     outdir = args.output; outdir.mkdir(parents=True, exist_ok=True)
     assert torch.cuda.device_count() == 1 and torch.cuda.get_device_capability() == (9, 0)
@@ -334,7 +337,34 @@ def main():
                   nvidia_smi=smi, nvidia_smi_unavailable=smi_error,
                   device_probe=json.loads(probe_path.read_text()) if probe_path.exists() else None)
     save(outdir/'device.json', device)
-    checks = correctness(outdir)
+    if args.check_backend:
+        try:
+            correctness(outdir, (args.check_backend,))
+        except Exception as error:
+            save(outdir/'check-failure.json', dict(backend=args.check_backend,
+                 error=repr(error), traceback=traceback.format_exc()))
+            raise
+        return
+    # Independent CUDA processes preserve the other backend's evidence on failure.
+    checks, check_failures, passed_backends = [], [], set()
+    for backend in ('te', 'dg'):
+        check_dir = outdir/f'checks-{backend}'
+        process = subprocess.run([sys.executable, str(Path(__file__).resolve()),
+                                  '--data', str(args.data), '--output', str(check_dir),
+                                  '--check-backend', backend], check=False)
+        checks_path = check_dir/'checks.json'
+        backend_checks = json.loads(checks_path.read_text()) if checks_path.exists() else []
+        checks.extend(backend_checks)
+        if process.returncode == 0 and len(backend_checks) == 5 and all(c['passed'] for c in backend_checks):
+            passed_backends.add(backend)
+        else:
+            failure_path = check_dir/'check-failure.json'
+            failure = json.loads(failure_path.read_text()) if failure_path.exists() else {}
+            check_failures.append(dict(stage='correctness', backend=backend,
+                                       returncode=process.returncode, detail=failure))
+        save(outdir/'checks.json', checks)
+        save(outdir/'check-status.json', dict(passed_backends=sorted(passed_backends),
+                                            failures=check_failures))
     data = np.memmap(args.data, dtype=np.uint16, mode='r').reshape(-1, 2049)
     tokens = np.array(data[:16, :-1]).reshape(-1).astype(np.int64)
     assert len(tokens) == 32768
@@ -349,11 +379,13 @@ def main():
     report = dict(complete=False, formal_training=False, device=device, checks=checks,
                   source=json.loads(Path('source.json').read_text()), token_sha256=token_hash,
                   scope='Single FFN and Muon operator benchmark; no NTP/full-model speed or quality claim',
-                  results=[], failures=[])
+                  results=[], failures=check_failures)
+    save(outdir/'report.json', report)
     for index, case in enumerate(cases):
         assignment = (np.arange(32768) % case['experts'] if case['routing'] == 'uniform'
                       else lookup[tokens] % case['experts'])
         order = ['torch', 'torch'] if case['experts'] == 1 else ['dg', 'te', 'te', 'dg']
+        order = [backend for backend in order if backend == 'torch' or backend in passed_backends]
         counts = Counter()
         failed = set()
         for backend in order:

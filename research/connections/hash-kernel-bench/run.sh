@@ -16,6 +16,9 @@ cp -r nanochat-src/research/connections/toolchain toolchain
 uv sync --frozen --project toolchain --python /opt/project/.venv/bin/python
 export PATH="$PWD/runtime/.venv/bin:$PATH"
 export CUDA_HOME="$PWD/toolchain/.venv/lib/python3.11/site-packages/nvidia/cu13"
+mkdir cuda-binary-tools
+tar -xJf cuobjdump.tar.xz --strip-components=1 -C cuda-binary-tools
+ln -s "$TASK_ROOT/cuda-binary-tools/bin/cuobjdump" "$CUDA_HOME/bin/cuobjdump"
 export PATH="$CUDA_HOME/bin:$PATH"
 export LD_LIBRARY_PATH="$PWD/runtime/.venv/lib/python3.11/site-packages/nvidia/cu13/lib:${LD_LIBRARY_PATH:-}"
 export NANOCHAT_DTYPE=bfloat16 PYTHONUNBUFFERED=1 WANDB_MODE=disabled HF_HUB_OFFLINE=1
@@ -70,6 +73,26 @@ print(':'.join(includes))
 PY
 )
 export CPATH="$HASH_CUDA_HEADERS${CPATH:+:$CPATH}"
+# Exercise both external commands used by DeepGEMM before building its extension.
+python - <<'PY'
+import json
+import os
+from pathlib import Path
+import subprocess
+root = Path.cwd()
+sdk = Path(os.environ['CUDA_HOME'])
+report = {}
+for name in ('nvcc', 'cuobjdump'):
+    report[name] = subprocess.check_output([str(sdk/'bin'/name), '--version'], text=True)
+source = root/'cache/toolchain-probe.cu'
+cubin = root/'cache/toolchain-probe.cubin'
+source.write_text('#include <string>\nextern "C" __global__ void hash_toolchain_probe(float* x) { if (threadIdx.x == 0) *x += 1; }\n')
+subprocess.run([str(sdk/'bin/nvcc'), str(source), '-std=c++20', '--compiler-options=-fconcepts', '-arch=sm_90a', '-cubin', '-o', str(cubin)], check=True)
+report['symbols'] = subprocess.check_output([str(sdk/'bin/cuobjdump'), '-symbols', str(cubin)], text=True)
+assert 'hash_toolchain_probe' in report['symbols']
+(root/'results/toolchain-probe.json').write_text(json.dumps(report, indent=2)+'\n')
+source.unlink(); cubin.unlink()
+PY
 mkdir -p "$TASK_ROOT/cuda-link-libs"
 python - <<'PY'
 import os

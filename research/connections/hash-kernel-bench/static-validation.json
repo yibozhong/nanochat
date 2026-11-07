@@ -1,11 +1,21 @@
 {
   "python_ast": 3,
   "bash_syntax": true,
-  "embedded_python": 3,
+  "embedded_python": 4,
   "protected_hashes": 92,
   "production_files_changed": false,
   "planned_results": 58,
   "gpu_tests_run": false,
-  "benchmark_python_unchanged": true,
-  "revision": "Restore upstream NVCC JIT C++20; host extension remains C++17"
+  "unchanged_math_timing_functions": [
+    "_gather",
+    "gather",
+    "Permute",
+    "Plan",
+    "DGLinear",
+    "activation",
+    "compare",
+    "timed",
+    "profile_one"
+  ],
+  "revision": "Complete binary utility preflight; TE AMP; isolate backend validation"
 }
