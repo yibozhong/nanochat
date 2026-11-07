@@ -124,6 +124,7 @@ def main():
                          'unconstrained_raw' if a.variant=='mhc_no_sinkhorn' else
                          'local_channel_unconstrained_raw' if a.variant=='mhc_channel_no_sinkhorn' else
                          'block_attention_residuals' if a.variant=='attnres' else
+                         'independent_stream_sigmoid_shared_raw' if a.variant=='stream_gated_hc' else
                          'additive'),
         applied_sinkhorn_iterations=c.sinkhorn_iterations if a.variant=='mhc' else 0,
         optimizer='native MuonAdamW; connector AdamW at native unembedding LR, no decay',
