@@ -320,11 +320,19 @@ def main():
     torch.backends.cuda.matmul.allow_tf32 = False
     torch._dynamo.config.recompile_limit = 128
     torch._dynamo.config.accumulated_recompile_limit = 1024
+    # The container exposes CUDA even when the optional nvidia-smi CLI is absent.
+    try:
+        smi = subprocess.check_output(['nvidia-smi', '--query-gpu=uuid,name,driver_version,memory.total', '--format=csv,noheader'], text=True).strip()
+        smi_error = None
+    except (OSError, subprocess.CalledProcessError) as error:
+        smi, smi_error = None, repr(error)
+    probe_path = Path('results/device-probe.json')
     device = dict(gpu=torch.cuda.get_device_name(), torch=torch.__version__, cuda=torch.version.cuda,
                   deepgemm=getattr(dg, '__version__', 'unknown'), te=importlib.metadata.version('transformer-engine'),
                   cublaslt=tex.get_cublasLt_version(),
                   te_native_grouped_available=is_module_grouped_tensor_path_supported(None, torch.bfloat16),
-                  nvidia_smi=subprocess.check_output(['nvidia-smi', '--query-gpu=uuid,name,driver_version,memory.total', '--format=csv,noheader'], text=True).strip())
+                  nvidia_smi=smi, nvidia_smi_unavailable=smi_error,
+                  device_probe=json.loads(probe_path.read_text()) if probe_path.exists() else None)
     save(outdir/'device.json', device)
     checks = correctness(outdir)
     data = np.memmap(args.data, dtype=np.uint16, mode='r').reshape(-1, 2049)

@@ -1,9 +1,11 @@
 {
   "python_ast": 3,
   "bash_syntax": true,
-  "embedded_python": 2,
+  "embedded_python": 3,
   "protected_hashes": 92,
   "production_files_changed": false,
   "planned_results": 58,
-  "gpu_tests_run": false
+  "gpu_tests_run": false,
+  "benchmark_math_and_timing_functions_unchanged": true,
+  "revision": "CUDA header include paths and optional nvidia-smi telemetry"
 }

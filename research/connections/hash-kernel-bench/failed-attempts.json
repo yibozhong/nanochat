@@ -1,0 +1,28 @@
+[
+  {
+    "job": "8012748.0",
+    "source": "1f5f238f82b88df0b120061778f91d7783223b48",
+    "gpu": "NVIDIA H200",
+    "exit_code": 1,
+    "device_bf16_forward_backward_probe_passed": true,
+    "benchmark_checks_run": 0,
+    "profiles_completed": 0,
+    "stage": "DeepGEMM extension build",
+    "error": "fatal error: cusparse.h: No such file or directory",
+    "diagnosis": "Compiler/core CUDA_HOME omitted the math-library header directories from the separately pinned NVIDIA runtime wheels.",
+    "changes": [
+      "Expose installed runtime header directories through CPATH and assert required headers before build.",
+      "Make optional nvidia-smi telemetry tolerate a missing CLI; keep actual CUDA device assertions and preflight."
+    ],
+    "unchanged": [
+      "DeepGEMM/TE versions",
+      "kernel arithmetic",
+      "precision",
+      "correctness thresholds",
+      "profile cases",
+      "production training inputs"
+    ],
+    "manual_reviewed_retry": true,
+    "automatic_retry": false
+  }
+]

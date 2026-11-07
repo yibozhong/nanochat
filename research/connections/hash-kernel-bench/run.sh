@@ -45,6 +45,27 @@ tar -xzf cutlass.tar.gz --strip-components=1 -C deepgemm/third-party/cutlass
 tar -xzf fmt.tar.gz --strip-components=1 -C deepgemm/third-party/fmt
 # Install only in this worker's private environment; keep torch/TE/runtime frozen.
 uv pip install --python "$TASK_ROOT/runtime/.venv/bin/python" setuptools==80.9.0 wheel==0.45.1 ninja==1.13.0 packaging==25.0
+# CUDA_HOME contains the compiler/core SDK; PyTorch's math-library headers live
+# in the separate, already pinned runtime wheels. Expose both to host/JIT builds.
+HASH_CUDA_HEADERS=$(python - <<'PY'
+import json
+import os
+from pathlib import Path
+root = Path.cwd()
+sdk = Path(os.environ['CUDA_HOME'])
+runtime = root/'runtime/.venv/lib/python3.11/site-packages/nvidia'
+includes = [sdk/'include', sdk/'include/cccl']
+includes += sorted(p for p in runtime.rglob('include') if p.is_dir())
+includes = list(dict.fromkeys(str(p.resolve()) for p in includes if p.is_dir()))
+required = ('cusparse.h', 'cublas_v2.h', 'cublasLt.h', 'cusolverDn.h', 'nvrtc.h')
+headers = {name: next((str(Path(p)/name) for p in includes if (Path(p)/name).is_file()), None)
+           for name in required}
+(root/'results/build-headers.json').write_text(json.dumps(dict(include_paths=includes, headers=headers), indent=2)+'\n')
+assert all(headers.values()), headers
+print(':'.join(includes))
+PY
+)
+export CPATH="$HASH_CUDA_HEADERS${CPATH:+:$CPATH}"
 mkdir -p "$TASK_ROOT/cuda-link-libs"
 python - <<'PY'
 import os
