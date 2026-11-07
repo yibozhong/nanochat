@@ -1,0 +1,13 @@
+{
+  "static_passed": true,
+  "python_ast": 11,
+  "shell_syntax": 2,
+  "gpu_tests_planned": 15,
+  "gpu_passed": false,
+  "rejected_bad_gate_cases": 8,
+  "formal_step_parser_cases": 5,
+  "unchanged_production_files": 34,
+  "embedded_python_ast": true,
+  "trainer_cli": true,
+  "bootstrap_filesystem_twice": true
+}
