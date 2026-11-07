@@ -24,7 +24,7 @@ def save(root,state):
 
 def validate(v,state):
     assert v['complete'] and not v['formal_training'] and not v['new_formal_run'] and not v['default_changed']
-    assert v['source']==state['source'] and v['checks']==dict(tests=47,failures=0,errors=0,skipped=0)
+    assert v['source']==state['source'] and v['checks']==dict(tests=48,failures=0,errors=0,skipped=0)
     assert v['restart']['complete'] and v['restart']['steps']==128
     assert all(math.isfinite(v['restart'][k]) for k in ('initial_dev_ce','final_dev_ce'))
     assert v['restart']['final_dev_ce']<v['restart']['initial_dev_ce']
@@ -101,7 +101,7 @@ def main(root):
                     with p.open('r+') as f:
                         fcntl.flock(f,fcntl.LOCK_EX);s=f.read();h='## 新授权：Channelwise kernel优化与90ms目标（2026-11-06）\n'
                         assert h in s
-                        note=f'\nGate{state["job"]}已exit0，47检查、生产形状CUDA trace、13组60步profile及25→128恢复通过。选择{state["selected_kernel"]}/compact={state["compact_routing"]}，ABBA旧{state["old_ms"]:.3f}ms/新{state["new_ms"]:.3f}ms，90ms目标达成={state["target_reached"]}。main{state["pushed_commit"]}已push；默认legacy保留，当前两正式训练inputs不变，无新正式run。collector已退出。\n'
+                        note=f'\nGate{state["job"]}已exit0，48检查、生产形状CUDA trace、13组60步profile及25→128恢复通过。选择{state["selected_kernel"]}/compact={state["compact_routing"]}，ABBA旧{state["old_ms"]:.3f}ms/新{state["new_ms"]:.3f}ms，90ms目标达成={state["target_reached"]}。main{state["pushed_commit"]}已push；默认legacy保留，当前两正式训练inputs不变，无新正式run。collector已退出。\n'
                         f.seek(0);f.write(s.replace(h,h+note,1));f.truncate()
                     return
                 attrs='ClusterId,ProcId,JobStatus,ExitCode,HoldReason,RemoteHost'

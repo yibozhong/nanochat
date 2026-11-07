@@ -28,5 +28,9 @@
   ],
   "matched_reference_config_cases": 8,
   "matched_reference_only_metadata_changed": true,
-  "kernels_and_numerical_thresholds_unchanged_from_failed_gate": true
+  "kernels_and_numerical_thresholds_unchanged_from_failed_gate": true,
+  "r3_production_code_unchanged": true,
+  "r3_thresholds_unchanged": true,
+  "r3_matched_compilation_restored": true,
+  "r3_legacy_mode_control_added": true
 }

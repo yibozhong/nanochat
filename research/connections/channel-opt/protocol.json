@@ -19,7 +19,7 @@
   "sequence_length": 2048,
   "depth": 8,
   "width": 512,
-  "checks": 47,
+  "checks": 48,
   "full_profiles": 13,
   "updates_each": 60,
   "abba": true,
@@ -36,5 +36,6 @@
   ],
   "precision": "BF16 activations, FP32 coefficients/reductions; unchanged TF32 policy for existing routing",
   "selection": "Fastest preliminary full-step combination, then ABBA confirmation; recommended only if >=2% faster;90ms independently recorded",
-  "limitations": "Short training does not establish quality; this workflow never replaces existing formal inputs or starts another10B"
+  "limitations": "Short training does not establish quality; this workflow never replaces existing formal inputs or starts another10B",
+  "additional_control": "Legacy compiled-vs-compiled and compiled-vs-eager gradients, unchanged thresholds"
 }

@@ -78,16 +78,21 @@ def test_model_parity_causality_cache_cce_recompute(kernel,compact):
     with torch.no_grad():
         a,b=new(ids),new(changed)
         assert torch.equal(a[0,:1024],b[0,:1024]) and torch.equal(a[1],b[1])
+        compiled=[(block.compiled_attention,block.compiled_mlp) for block in new.blocks]
         for block in new.blocks:block.compiled_attention=block.compiled_mlp=None
         cache=KVCache(2,2,32,64,2,'cuda',torch.bfloat16)
         pre=new(ids[:,:7],kv_cache=cache);one=new(ids[:,7:8],kv_cache=cache);full=new(ids[:,:8])
         torch.testing.assert_close(pre,full[:,:7],atol=.004,rtol=.03)
         torch.testing.assert_close(one,full[:,7:],atol=.004,rtol=.03)
+        for block,(attention,mlp) in zip(new.blocks,compiled):
+            block.compiled_attention=attention;block.compiled_mlp=mlp
+    assert all(block.compiled_attention is not None and block.compiled_mlp is not None for m in models for block in m.blocks)
     x,y=ids[:,:128].contiguous(),ids[:,1:129].contiguous();grads=[];losses=[]
     for m in models:
         loss=m(x,y);loss.backward();losses.append(loss.detach())
         grads.append({n:p.grad.clone() for n,p in m.named_parameters()})
     errors={n:original.relative(grads[1][n],grads[0][n]) for n in grads[0]}
+    record(f'parity-{kernel}-{compact}',dict(gradients=errors,losses=[x.item() for x in losses],both_backbones_compiled=True))
     assert max(errors.values())<(.03 if compact else .02),errors
     assert all(torch.isfinite(g).all() for g in grads[1].values())
     assert all(g.norm()>0 for n,g in grads[1].items() if '_connection.' in n)
@@ -98,6 +103,34 @@ def test_model_parity_causality_cache_cce_recompute(kernel,compact):
     re={n:original.relative(p.grad,grads[1][n]) for n,p in new.named_parameters()}
     assert max(re.values())<.02,re
     record(f'model-{kernel}-{compact}',dict(gradients=errors,recompute=re,losses=[x.item() for x in losses]))
+
+
+def test_legacy_execution_mode_control():
+    """Quantify the previous harness's compiled/eager confound with unchanged HC."""
+    configure_attention('hardware_auto');torch.backends.cuda.matmul.allow_tf32=False;models=[]
+    for _ in range(2):
+        seed_all(42)
+        m=ConnectionModel(ConnectionConfig(variant=original.VARIANT,width=128,heads=2,depth=2,
+            vocab_size=128)).prepare(compile_blocks=True)
+        match_vanilla_initialization(m,42)
+        with torch.no_grad():
+            for block in m.blocks:
+                block.attn.c_proj.weight.normal_(std=.03);block.mlp.c_proj.weight.normal_(std=.03)
+        models.append(m)
+    assert all(torch.equal(p,models[1].state_dict()[n]) for n,p in models[0].state_dict().items())
+    ids=torch.randint(0,128,(2,2048),device='cuda')
+    x,y=ids[:,:128].contiguous(),ids[:,1:129].contiguous();grads=[]
+    for m in models:
+        m(x,y).backward();grads.append({n:p.grad.clone() for n,p in m.named_parameters()})
+    matched={n:original.relative(grads[1][n],grads[0][n]) for n in grads[0]}
+    other=models[1];other.zero_grad(set_to_none=True)
+    for block in other.blocks:block.compiled_attention=block.compiled_mlp=None
+    other(x,y).backward()
+    unmatched={n:original.relative(p.grad,grads[0][n]) for n,p in other.named_parameters()}
+    record('legacy-execution-control',dict(compiled_vs_compiled=matched,compiled_vs_eager=unmatched,
+        compiled_vs_compiled_max=max(matched.values()),compiled_vs_eager_max=max(unmatched.values())))
+    assert max(matched.values())<.02,matched
+    assert all(torch.isfinite(p.grad).all() for p in other.parameters())
 
 
 @pytest.mark.parametrize('kernel',list(GEOMETRIES))

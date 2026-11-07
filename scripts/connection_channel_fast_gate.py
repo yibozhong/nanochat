@@ -17,7 +17,7 @@ def main():
         'tests/test_connection_hardware_backend.py','--junitxml='+str(root/'tests.xml')],root,'tests')
     suites=ET.parse(root/'tests.xml').getroot().findall('testsuite')
     counts={k:sum(int(s.get(k,0)) for s in suites) for k in ('tests','failures','errors','skipped')}
-    assert counts==dict(tests=47,failures=0,errors=0,skipped=0),counts
+    assert counts==dict(tests=48,failures=0,errors=0,skipped=0),counts
     run(['-m','scripts.connection_channel_fast_micro'],root,'micro')
     profiles={}
     def measure(name,kernel,compact,variant='mhc_channel_no_sinkhorn'):

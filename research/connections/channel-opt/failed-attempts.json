@@ -15,5 +15,24 @@
     "kernel_changed": false,
     "numerical_thresholds_changed": false,
     "new_formal_run": false
+  },
+  {
+    "job": "7917790.0",
+    "source": "d92265e2e35a6104122f93326de290ee23cc69b0",
+    "exit_code": 1,
+    "host": "slot2_5@gpu4004.chtc.wisc.edu",
+    "passed": 41,
+    "failed": 6,
+    "reason": "Fullmodel gradient parity failed; test leaves new backbone eager after cache while old backbone remains compiled",
+    "max_relative_gradient_error": 0.2758485423482488,
+    "attribution": "Execution-mode confound confirmed in test code; whether it explains all numerical error requires new legacy control and matched-mode comparison",
+    "kernel_fp64_vjps_passed": true,
+    "compiled_primitive_passed": true,
+    "optimizer_rng_resume_passed": true,
+    "fullmodel_executed": true,
+    "speed_measured": false,
+    "kernel_changed": false,
+    "numerical_thresholds_changed": false,
+    "new_formal_run": false
   }
 ]
