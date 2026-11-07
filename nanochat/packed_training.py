@@ -82,10 +82,6 @@ def train_step(model,opt,data,step,microbatch=16,batch_tokens=32768):
     grads=[p.grad for p in model.parameters() if p.grad is not None]
     finite=torch.stack([torch.isfinite(g).all() for g in grads]).all()
     if not bool(finite) or not torch.isfinite(total):
-        if model.config.variant in ('gated_hc','self_gated_hc'):
-            print(json.dumps(dict(event='nonfinite_'+model.config.variant,step=step+1,loss=total.item(),
-                nonfinite_gradients=[n for n,p in model.named_parameters()
-                                     if p.grad is not None and not bool(torch.isfinite(p.grad).all())])),flush=True)
         raise FloatingPointError('Nonfinite loss/gradient before optimizer update')
     opt.step()
     return total.item()
