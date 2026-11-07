@@ -292,7 +292,7 @@ def optimizer_for(model, batch_tokens=32768):
             lr=.02*batch_scale, momentum=.95, ns_steps=5, beta2=.9, weight_decay=wd))
     ids = [id(p) for g in groups for p in g['params']]
     assert len(ids) == len(set(ids)) and set(ids) == {id(p) for p in model.parameters()}
-    if c.variant in ('mhc_channel_no_sinkhorn', 'gated_hc'):
+    if c.variant in ('mhc_channel_no_sinkhorn', 'gated_hc', 'self_gated_hc'):
         # Like native.setup_optimizer: the unchanged compiled AdamW function
         # specializes once per routing shape/dtype. Local generators introduce
         # two extra tensor ranks; this is a compiler cache budget, not an LR or

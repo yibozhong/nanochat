@@ -20,7 +20,7 @@ def main(root):
         assert not subprocess.check_output(['git','status','--porcelain'],cwd=REPO,text=True).strip()
         for name in ('bundles','logs','results'):(root/name).mkdir(exist_ok=True)
         commit=subprocess.check_output(['git','rev-parse','HEAD'],cwd=REPO,text=True).strip()
-        source=dict(commit=commit,formal_training=False,purpose='User-confirmed elementwise x*SiLU(x) before shared no-Sinkhorn H; zero gate parameters; bounded checks only')
+        source=dict(commit=commit,formal_training=False,purpose='Simple diagonal SiLU gate x*SiLU(a*x+b), identity initialization; no extra normalization or cross-channel/stream projection; bounded checks only')
         (root/'bundles/source.json').write_text(json.dumps(source,indent=2)+'\n')
         subprocess.run(['git','archive','--format=tar','--prefix=nanochat-src/','-o',str(root/'bundles/source.tar'),'HEAD'],cwd=REPO,check=True)
         for name in ('gate-data.tar','transformer_engine_torch-2.20.2-cp311-cp311-linux_x86_64.whl'):

@@ -17,12 +17,13 @@ def save(root,state):
 
 def validate(v,state):
     assert v['complete'] and not v['formal_training'] and not v['new_formal_run']
-    assert v['source']==state['source'] and v['formula']=='x*silu(x)' and v['extra_gate_parameters']==0
+    assert v['source']==state['source'] and v['formula']=='x*silu(a*x+b)' and v['extra_gate_parameters']==65536
     assert v['first_step_probe']['passed'] and v['first_step_probe']['source']==state['source']
+    assert v['first_step_probe']['formula']==v['formula']
     assert v['checks']==dict(tests=17,failures=0,errors=0,skipped=0)
-    assert set(v['profiles'])=={'baseline','mhc_no_sinkhorn','gated_hc','self_gated_hc',*[f'abba-{i}' for i in range(4)]}
+    assert set(v['profiles'])=={f'abba-{i}' for i in range(4)}
     for name,p in v['profiles'].items():
-        expected=('mhc_no_sinkhorn' if name in ('abba-0','abba-3') else 'self_gated_hc') if name.startswith('abba-') else name
+        expected='mhc_no_sinkhorn' if name in ('abba-0','abba-3') else 'self_gated_hc'
         assert p['variant']==expected and p['source']==state['source']
         assert p['complete'] and p['status']=='fits' and p['optimizer_updates']==60 and p['causality_passed']
         assert p['microbatch']==16 and p['batch_tokens']==32768 and p['sequence_length']==2048
@@ -32,13 +33,14 @@ def validate(v,state):
         assert len(p['step_seconds'])==40 and all(math.isfinite(x) and x>0 for x in p['step_seconds'])
     assert len({p['gpu_uuid'] for p in v['profiles'].values()})==1
     assert len({p['input_sha256'] for p in v['profiles'].values()})==1
-    assert v['profiles']['self_gated_hc']['parameters']==v['profiles']['mhc_no_sinkhorn']['parameters']
+    assert v['profiles']['abba-1']['parameters']-v['profiles']['abba-0']['parameters']==65536
     assert v['restart']['complete'] and v['restart']['steps']==128
     assert v['restart']['source']==state['source']
     assert all(math.isfinite(v['restart'][k]) for k in ('initial_dev_ce','final_dev_ce'))
     assert v['restart']['final_dev_ce']<v['restart']['initial_dev_ce']
     m=v['micro'];assert m['complete'] and m['optimizer_updates']==0 and m['source']==state['source']
-    assert m['gpu_uuid']==v['profiles']['self_gated_hc']['gpu_uuid']
+    assert m['formula']==v['formula']
+    assert m['gpu_uuid']==v['profiles']['abba-1']['gpu_uuid']
     assert set(m['results'])=={'hc_write','eager_self_gate','compiled_self_gate'}
     for name,rows in m['results'].items():
         assert len(rows)==2 and m['traces'][name]['kernel_count']>0

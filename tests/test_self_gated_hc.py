@@ -36,39 +36,47 @@ def fresh_compile_cache():
 def test_scalar_vjp_fp64(amplitude):
     seed_all(209)
     x=(torch.randn(2,131,128,4,device='cuda',dtype=torch.bfloat16)*amplitude).requires_grad_()
-    probe=torch.randn_like(x);out=impl.self_gate(x);gx,=torch.autograd.grad(out,x,probe)
-    xx=x.detach().double().requires_grad_();ref=xx.square()*torch.sigmoid(xx)
-    expected,=torch.autograd.grad(ref,xx,probe.double())
-    errors=dict(output=relative(out,ref),gradient=relative(gx,expected))
+    w=(torch.randn(128,4,device='cuda')*.1).requires_grad_()
+    b=(torch.randn(128,4,device='cuda')*.1+impl.SILU_IDENTITY_BIAS).requires_grad_()
+    args=[x,w,b];probe=torch.randn_like(x);out=impl.self_gate(*args)
+    grads=torch.autograd.grad(out,args,probe)
+    xx,ww,bb=[a.detach().double().requires_grad_() for a in args]
+    z=xx*ww+bb;ref=xx*z*torch.sigmoid(z)
+    expected=torch.autograd.grad(ref,[xx,ww,bb],probe.double())
+    errors=dict(output=relative(out,ref),gradients=[relative(a,b) for a,b in zip(grads,expected)])
     record('scalar-'+str(amplitude),errors)
-    assert errors['output']<.006 and errors['gradient']<.012,errors
-    assert torch.isfinite(out).all() and torch.isfinite(gx).all()
+    assert errors['output']<.006 and max(errors['gradients'])<.012,errors
+    assert torch.isfinite(out).all() and all(torch.isfinite(g).all() for g in grads)
 
 
-def test_scalar_locality_and_no_parameters():
+def test_scalar_locality():
     x=torch.randn(2,17,128,4,device='cuda',dtype=torch.bfloat16,requires_grad=True)
-    before=impl.self_gate(x);changed=x.detach().clone();changed[0,3,7,1]+=2
-    after=impl.self_gate(changed);mask=torch.ones_like(x,dtype=torch.bool);mask[0,3,7,1]=False
+    w=torch.full((128,4),.2,device='cuda');b=torch.full_like(w,impl.SILU_IDENTITY_BIAS)
+    before=impl.self_gate(x,w,b);changed=x.detach().clone();changed[0,3,7,1]+=2
+    after=impl.self_gate(changed,w,b);mask=torch.ones_like(x,dtype=torch.bool);mask[0,3,7,1]=False
     assert torch.equal(before[mask],after[mask])
     gx,=torch.autograd.grad(before[0,3,7,1],x)
     assert torch.count_nonzero(gx[mask])==0
     assert before[0,3,7,1]!=after[0,3,7,1]
-    record('locality',dict(no_other_token_channel_or_stream_dependency=True,formula='x*silu(x)'))
+    record('locality',dict(no_other_token_channel_or_stream_dependency=True,formula='x*silu(a*x+b)'))
 
 
 @pytest.mark.parametrize('n,c',[(1,128),(131,128),(129,512)])
 def test_write_all_vjps_fp64(n,c):
     configure_attention('hardware_auto');seed_all(19)
     conn=impl.SelfGatedHyperConnection(c,4,0).cuda();conn.reset_parameters()
+    with torch.no_grad():
+        conn.gate_weight.normal_(std=.1);conn.gate_bias.add_(torch.randn_like(conn.gate_bias)*.1)
     x=torch.randn(1,n,c,4,device='cuda',dtype=torch.bfloat16,requires_grad=True)
     y=torch.randn(1,n,c,device='cuda',dtype=torch.bfloat16,requires_grad=True)
     post=torch.randn(1,n,4,device='cuda',requires_grad=True)
     h=(torch.randn(1,n,4,4,device='cuda')*.3+torch.eye(4,device='cuda')).requires_grad_()
-    args=[x,y,post,h];probe=torch.randn_like(x)
+    args=[x,y,post,h,conn.gate_weight,conn.gate_bias];probe=torch.randn_like(x)
     out=conn.write(y,x,(post,h,None));actual=torch.autograd.grad(out,args,probe)
-    xx,yy,pp,hh=[a.detach().double().requires_grad_() for a in args]
-    ref=torch.einsum('btci,btij->btcj',xx.square()*torch.sigmoid(xx),hh)+yy.unsqueeze(-1)*pp.unsqueeze(-2)
-    expected=torch.autograd.grad(ref,[xx,yy,pp,hh],probe.double())
+    xx,yy,pp,hh,ww,bb=[a.detach().double().requires_grad_() for a in args]
+    z=xx*ww+bb
+    ref=torch.einsum('btci,btij->btcj',xx*z*torch.sigmoid(z),hh)+yy.unsqueeze(-1)*pp.unsqueeze(-2)
+    expected=torch.autograd.grad(ref,[xx,yy,pp,hh,ww,bb],probe.double())
     errors=dict(output=relative(out,ref),gradients=[relative(a,b) for a,b in zip(actual,expected)])
     record(f'write-{n}-{c}',errors)
     assert errors['output']<.006 and max(errors['gradients'])<.012,errors
@@ -84,23 +92,31 @@ def build(variant=VARIANT):
 def test_unchanged_parameters_routing_rng_optimizer():
     old=build('mhc_no_sinkhorn');old_rng=torch.cuda.get_rng_state()
     new=build();assert torch.equal(old_rng,torch.cuda.get_rng_state())
-    assert old.state_dict().keys()==new.state_dict().keys()
+    extra={n for n in new.state_dict() if n not in old.state_dict()}
+    assert len(extra)==8 and all(n.endswith(('.gate_weight','.gate_bias')) for n in extra)
     assert all(torch.equal(p,new.state_dict()[name]) for name,p in old.state_dict().items())
     a,b=old.blocks[0].attn_connection,new.blocks[0].attn_connection
     assert isinstance(b,NvidiaHyperConnection) and not b.sinkhorn
     x=torch.randn(2,31,128,4,device='cuda',dtype=torch.bfloat16)
     av,_,am=a.read(x);bv,_,bm=b.read(x)
     assert torch.equal(av,bv) and torch.equal(am[0],bm[0]) and torch.equal(am[1],bm[1])
+    assert torch.equal(impl.self_gate(x,b.gate_weight,b.gate_bias),x)
+    y=torch.randn(2,31,128,device='cuda',dtype=torch.bfloat16)
+    assert torch.equal(a.write(y,x,am),b.write(y,x,bm))
     opt,_=optimizer_for(new);routed={id(p) for g in opt.param_groups if g['kind']=='adamw' for p in g['params']}
     assert all(id(p) in routed for name,p in new.named_parameters() if '_connection.' in name)
     assert ConnectionConfig.from_checkpoint(asdict(new.config))==new.config
-    record('ownership',dict(added_parameters=0,same_rng=True,unchanged_routing=True,identity_initial_gate=False))
+    added=sum(p.numel() for p in new.parameters())-sum(p.numel() for p in old.parameters())
+    assert added==2*128*4*4
+    record('ownership',dict(added_parameters=added,shape=[2,128,4],same_rng=True,unchanged_routing=True,identity_initial_gate=True))
 
 
 def nonzero_model():
     m=build()
     with torch.no_grad():
         for b in m.blocks:b.attn.c_proj.weight.normal_(std=.03);b.mlp.c_proj.weight.normal_(std=.03)
+        for mod in m.modules():
+            if isinstance(mod,impl.SelfGatedHyperConnection):mod.gate_weight.normal_(std=.03)
     return m
 
 

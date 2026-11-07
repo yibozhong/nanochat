@@ -26,9 +26,9 @@ def one(variant):
     seed_all(42);model=build_connection_model(ConnectionConfig(variant=variant)).prepare(compile_blocks=True)
     match_vanilla_initialization(model,42);opt,wd=optimizer_for(model,32768);data=TimingData('../data',2048)
     events=[];current={'name':None};gate=impl.self_gate
-    def observed_gate(x):
+    def observed_gate(x,weight,bias):
         events.append(dict(connection=current['name'],stage='gate_input',**stats(x)))
-        out=gate(x);events.append(dict(connection=current['name'],stage='gate_output',**stats(out)))
+        out=gate(x,weight,bias);events.append(dict(connection=current['name'],stage='gate_output',**stats(out)))
         return out
     if variant=='self_gated_hc':
         impl.self_gate=observed_gate
@@ -61,7 +61,7 @@ def main():
     for variant in ('mhc_no_sinkhorn','self_gated_hc'):
         rows[variant]=one(variant);print(json.dumps(rows[variant]),flush=True)
         gc.collect();torch.cuda.empty_cache();torch._dynamo.reset()
-    value=dict(complete=True,source=json.loads(Path('source.json').read_text()),formula='x*silu(x)',
+    value=dict(complete=True,source=json.loads(Path('source.json').read_text()),formula='x*silu(a*x+b)',
         cases=rows,passed=all(r['finite'] and r['optimizer_updates']==1 for r in rows.values()),
         no_throughput_claim=True,weights_reused_in_later_tests=False,formal_training=False)
     root=Path('results/self-gate');root.mkdir(parents=True,exist_ok=True)

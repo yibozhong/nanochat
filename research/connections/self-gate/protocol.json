@@ -1,15 +1,15 @@
 {
   "variant": "self_gated_hc",
-  "formula": "x*silu(x)",
-  "formula_status": "Explicit user selection: SiLU as gate, y=x*SiLU(x)",
+  "formula": "x*silu(a*x+b)",
+  "formula_status": "Simple learned diagonal SiLU gate following user correction; formula stated to user before implementation",
   "location": "residual input before original shared no-Sinkhorn H",
-  "gate_parameters": 0,
-  "gate_projection": false,
+  "gate_parameters": 65536,
+  "gate_projection": "diagonal elementwise affine only",
   "gate_normalization": false,
   "gate_cross_stream_dependency": false,
   "gate_cross_channel_dependency": false,
   "custom_gate_kernel": false,
-  "implementation": "Separate torch.compile FP32 x*SiLU(x), cast to BF16, then unchanged NVIDIA write",
+  "implementation": "Separate torch.compile FP32 x*SiLU(a*x+b), cast BF16, then unchanged NVIDIA write",
   "connection_positions": "Existing8layers times attention/MLP2;16 calls per step",
   "architecture": "vanilla",
   "depth": 8,
@@ -20,7 +20,7 @@
   "microbatch": 16,
   "checks": 17,
   "profile_steps": 60,
-  "full_profiles": 8,
+  "full_profiles": 4,
   "abba": true,
   "resume": [
     25,
@@ -28,9 +28,7 @@
   ],
   "seed": 42,
   "comparisons": [
-    "baseline",
     "mhc_no_sinkhorn",
-    "gated_hc",
     "self_gated_hc"
   ],
   "hardware": "full H200",
@@ -39,7 +37,7 @@
   "wandb": false,
   "returned_checkpoints": false,
   "automatic_retry": false,
-  "initial_gate_identity": false,
+  "initial_gate_identity": true,
   "existing_training_unchanged": true,
   "first_step_probe": {
     "variants": [
@@ -50,5 +48,14 @@
     "microbatch": 16,
     "activation_statistics": true,
     "diagnostic_overhead_not_timed": true
-  }
+  },
+  "gate_parameter_shape": [
+    512,
+    4
+  ],
+  "gate_parameter_tensors_per_connector": 2,
+  "initial_gate_weight": 0,
+  "initial_gate_bias": 1.2784645427610737,
+  "extra_nonlinearity": false,
+  "stability_guaranteed": false
 }

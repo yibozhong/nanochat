@@ -28,9 +28,8 @@ def main():
         assert p['complete'] and p['status']=='fits' and p['optimizer_updates']==60 and p['causality_passed']
         assert len(p['losses'])==60 and all(math.isfinite(v) for v in p['losses'])
         profiles[name]=p
-    for variant in ('baseline','mhc_no_sinkhorn','gated_hc','self_gated_hc'):measure(variant,variant)
-    assert profiles['self_gated_hc']['parameters']==profiles['mhc_no_sinkhorn']['parameters']
     for i,v in enumerate(('mhc_no_sinkhorn','self_gated_hc','self_gated_hc','mhc_no_sinkhorn')):measure('abba-'+str(i),v)
+    assert profiles['abba-1']['parameters']-profiles['abba-0']['parameters']==65536
     assert len({p['gpu_uuid'] for p in profiles.values()})==1 and len({p['input_sha256'] for p in profiles.values()})==1
     args=['-m','scripts.connection_train','--variant','self_gated_hc','--matched-backbone-init',
           '--steps','128','--schedule-steps','305176','--microbatch','16','--data-dir','../data',
@@ -51,12 +50,12 @@ def main():
     old=statistics.mean(profiles['abba-'+str(i)]['mean_seconds'] for i in (0,3))
     new=statistics.mean(profiles['abba-'+str(i)]['mean_seconds'] for i in (1,2))
     result=dict(complete=True,formal_training=False,new_formal_run=False,
-        source=json.loads(Path('source.json').read_text()),formula='x*silu(x)',first_step_probe=probe,
+        source=json.loads(Path('source.json').read_text()),formula='x*silu(a*x+b)',first_step_probe=probe,
         placement='residual input before shared no-Sinkhorn H at attention and MLP connections',
-        extra_gate_parameters=0,checks=counts,profiles=profiles,restart=restart,
+        extra_gate_parameters=65536,checks=counts,profiles=profiles,restart=restart,
         micro=json.loads((root/'micro/summary.json').read_text()),old_seconds=old,new_seconds=new,
         overhead_percent=100*(new/old-1),target90ms_reached=new<=.09,
-        limitations='One H200 and short NTP validation only; x*silu(x) is not identity-initialized; no10B quality claim.')
+        limitations='One H200 and short NTP validation only; identity initialization does not guarantee long-term stability; no10B quality claim.')
     (root/'validation.json').write_text(json.dumps(result,indent=2)+'\n')
     print(json.dumps({k:v for k,v in result.items() if k not in ('profiles','restart','micro','source')}),flush=True)
 

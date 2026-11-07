@@ -6,7 +6,7 @@ import time
 import torch
 from torch.profiler import profile, ProfilerActivity
 
-from nanochat.self_gated_connections import self_gate, self_gate_reference
+from nanochat.self_gated_connections import self_gate, self_gate_reference, SILU_IDENTITY_BIAS
 from nanochat.nvidia_connections import NvidiaHyperConnection
 from nanochat.connection_experiment import configure_attention
 from scripts.connection_profile import trace_summary
@@ -20,14 +20,17 @@ def main():
     y=torch.randn(16,2048,512,device='cuda',dtype=torch.bfloat16,requires_grad=True)
     p=torch.randn(16,2048,4,device='cuda',requires_grad=True)
     h=(torch.randn(16,2048,4,4,device='cuda')*.1+torch.eye(4,device='cuda')).requires_grad_()
-    args=(x,y,p,h);probe=torch.randn_like(x)
+    w=(torch.randn(512,4,device='cuda')*.03).requires_grad_()
+    b=torch.full((512,4),SILU_IDENTITY_BIAS,device='cuda',requires_grad=True)
+    probe=torch.randn_like(x)
     funcs=dict(hc_write=lambda x,y,p,h:conn.write(y,x,(p,h,None)),
-        eager_self_gate=lambda x,y,p,h:conn.write(y,self_gate_reference(x),(p,h,None)),
-        compiled_self_gate=lambda x,y,p,h:conn.write(y,self_gate(x),(p,h,None)))
+        eager_self_gate=lambda x,y,p,h,w,b:conn.write(y,self_gate_reference(x,w,b),(p,h,None)),
+        compiled_self_gate=lambda x,y,p,h,w,b:conn.write(y,self_gate(x,w,b),(p,h,None)))
     results={};traces={}
     for repeat,order in enumerate([list(funcs),list(reversed(funcs))]):
         for name in order:
             fn=funcs[name]
+            args=(x,y,p,h) if name=='hc_write' else (x,y,p,h,w,b)
             for _ in range(5):
                 out=fn(*args);grads=torch.autograd.grad(out,args,probe)
             assert torch.isfinite(out).all() and all(torch.isfinite(g).all() for g in grads)
@@ -40,14 +43,15 @@ def main():
             item=dict(mean_seconds=statistics.mean(times),seconds=times,extra_peak_allocated_bytes=torch.cuda.max_memory_allocated()-initial)
             results.setdefault(name,[]).append(item);print(json.dumps(dict(name=name,repeat=repeat,**item)),flush=True)
     for name,fn in funcs.items():
+        args=(x,y,p,h) if name=='hc_write' else (x,y,p,h,w,b)
         with profile(activities=[ProfilerActivity.CPU,ProfilerActivity.CUDA]) as prof:
             for _ in range(2):
                 grads=torch.autograd.grad(fn(*args),args,probe);del grads
                 torch.cuda.synchronize();prof.step()
         path=root/(name+'.trace.json');prof.export_chrome_trace(str(path));traces[name]=trace_summary(path,2);path.unlink()
-    result=dict(complete=True,shape=list(x.shape),formula='x*silu(x)',
+    result=dict(complete=True,shape=list(x.shape),formula='x*silu(a*x+b)',
         source=json.loads(Path('source.json').read_text()),gpu_uuid=str(torch.cuda.get_device_properties(0).uuid),
-        results=results,traces=traces,optimizer_updates=0,includes='Write forward and all four VJPs; no routing generation, branch network or optimizer')
+        results=results,traces=traces,optimizer_updates=0,includes='Write forward and all VJPs, including both gate parameter gradients; no routing generation, branch network or optimizer')
     (root/'summary.json').write_text(json.dumps(result,indent=2)+'\n')
 
 
