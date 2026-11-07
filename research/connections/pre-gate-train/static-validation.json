@@ -1,0 +1,53 @@
+{
+  "complete": true,
+  "new_gpu_tests": false,
+  "reused_current_gate_checks": 36,
+  "reused_pre_gate_checks": 17,
+  "reused_pre_resume": [
+    25,
+    128
+  ],
+  "current_h200_pre_profile_steps": 60,
+  "pre_core_files_unchanged": [
+    "nanochat/stream_gate_mixing.py",
+    "nanochat/stream_gated_connections.py",
+    "nanochat/nvidia_connections.py",
+    "nanochat/nvidia_ops.py",
+    "nanochat/gpt.py",
+    "nanochat/packed_training.py",
+    "nanochat/optim.py",
+    "tests/test_stream_gated_hc.py"
+  ],
+  "launchers_identical_except_variant_and_group": true,
+  "matched_protocol_fields": [
+    "validated_source",
+    "seed",
+    "initialization",
+    "steps",
+    "tokens",
+    "batch_tokens",
+    "microbatch",
+    "depth",
+    "width",
+    "heads",
+    "streams",
+    "sequence_length",
+    "mlp",
+    "total_parameters",
+    "optimizer",
+    "hardware",
+    "minimum_gpu_memory_mib",
+    "checkpoint_latest_steps",
+    "best_checkpoint_separate",
+    "checkpoint_transfer_seconds",
+    "checkpoint_exit_code",
+    "wandb_project"
+  ],
+  "python_ast": 2,
+  "embedded_python_ast": 4,
+  "bash_syntax": true,
+  "negative_evidence_cases": 8,
+  "first_step_parser_cases": 6,
+  "existing_post_immutable_files_unchanged": 5,
+  "existing_post_classad_unchanged": true
+}
