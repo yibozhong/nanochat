@@ -41,7 +41,7 @@
   "old_pending_check_num_starts": 0,
   "records_and_existing_checkpoints_preserved": true,
   "no_automatic_restart": true,
-  "new_gate_implementation_pending": true,
+  "new_gate_implementation_pending": false,
   "static_validation": {
     "python_ast": 116,
     "bash_syntax": 21,
@@ -66,5 +66,14 @@
       "RemoveReason": "via condor_rm (by user yzhong239)"
     }
   ],
-  "old_monitors_running": false
+  "old_monitors_running": false,
+  "external_old_code_removed": {
+    "removed_count": 18,
+    "removed_bytes": 43860339,
+    "retained_files_unchanged": 164,
+    "records_and_checkpoints_preserved": true,
+    "source_recoverable_from_git": true
+  },
+  "external_removal_audit": "research-cleanup-20261107/gated-hc/external-code-removal.json",
+  "replacement_variant": "stream_gated_hc"
 }
