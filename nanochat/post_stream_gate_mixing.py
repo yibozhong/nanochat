@@ -28,30 +28,38 @@ def _post_forward(X,Y,P,H,Z,O,N:tl.constexpr,C:tl.constexpr,BT:tl.constexpr,BC:t
 
 
 @tr.jit
-def _post_backward(X,Y,P,H,Z,GO,DIRECT,GZ,GY,GP,GH,N:tl.constexpr,C:tl.constexpr,K:tl.constexpr):
+def _post_backward_rowwise(X,Y,P,H,Z,GO,DIRECT,GZ,GY,GP,GH,N:tl.constexpr,C:tl.constexpr,K:tl.constexpr):
+    # Branch write has the same reduction layout as the validated version.
     t=tl.program_id(0);c=tl.arange(0,K);s=tl.arange(0,4)
-    x=tl.load(X+(t*C+c[:,None])*4+s[None,:],c[:,None]<C,0).to(tl.float32)
-    go=tl.load(GO+(t*C+c[:,None])*4+s[None,:],c[:,None]<C,0).to(tl.float32)
-    z=tl.load(Z+(s[None,:]*N+t)*C+c[:,None],c[:,None]<C,0).to(tl.float32)
-    gate=tl.sigmoid(z)
-    mixed=tl.full((K,4),0.,tl.float32)
-    for i in tl.static_range(4):
-        xi=tl.sum(tl.where(s[None,:]==i,x,0.),1)
-        h=tl.load(H+t*16+i*4+s)
-        mixed+=xi[:,None]*h[None,:]
-    tl.store(GZ+(s[None,:]*N+t)*C+c[:,None],go*mixed*gate*(1.-gate),c[:,None]<C)
-    gm=go*gate
-    direct=tl.full((K,4),0.,tl.float32)
-    for i in tl.static_range(4):
-        xi=tl.sum(tl.where(s[None,:]==i,x,0.),1)
-        h=tl.load(H+t*16+i*4+s)
-        dx=tl.sum(gm*h[None,:],1)
-        direct+=tl.where(s[None,:]==i,dx[:,None],0.)
-        tl.store(GH+t*16+i*4+s,tl.sum(gm*xi[:,None],0))
-    tl.store(DIRECT+(t*C+c[:,None])*4+s[None,:],direct,c[:,None]<C)
+    go4=tl.load(GO+(t*C+c[:,None])*4+s[None,:],c[:,None]<C,0).to(tl.float32)
     post=tl.load(P+t*4+s);y=tl.load(Y+t*C+c,c<C,0).to(tl.float32)
-    tl.store(GY+t*C+c,tl.sum(go*post[None,:],1),c<C)
-    tl.store(GP+t*4+s,tl.sum(go*y[:,None],0))
+    tl.store(GY+t*C+c,tl.sum(go4*post[None,:],1),c<C)
+    tl.store(GP+t*4+s,tl.sum(go4*y[:,None],0))
+
+    # Keep each stream as a channel vector. Avoid selecting a stream with
+    # where+reduce and repeatedly converting the [channel,stream] layout.
+    base=(t*C+c)*4
+    x0=tl.load(X+base+0,c<C,0).to(tl.float32)
+    x1=tl.load(X+base+1,c<C,0).to(tl.float32)
+    x2=tl.load(X+base+2,c<C,0).to(tl.float32)
+    x3=tl.load(X+base+3,c<C,0).to(tl.float32)
+    dx0=tl.full((K,),0.,tl.float32);dx1=tl.full((K,),0.,tl.float32)
+    dx2=tl.full((K,),0.,tl.float32);dx3=tl.full((K,),0.,tl.float32)
+    for j in tl.static_range(4):
+        h0=tl.load(H+t*16+0*4+j);h1=tl.load(H+t*16+1*4+j)
+        h2=tl.load(H+t*16+2*4+j);h3=tl.load(H+t*16+3*4+j)
+        mixed=((x0*h0+x1*h1)+x2*h2)+x3*h3
+        z=tl.load(Z+(j*N+t)*C+c,c<C,0).to(tl.float32)
+        gate=tl.sigmoid(z);go=tl.load(GO+base+j,c<C,0).to(tl.float32)
+        tl.store(GZ+(j*N+t)*C+c,go*mixed*gate*(1.-gate),c<C)
+        gm=go*gate
+        dx0+=gm*h0;dx1+=gm*h1;dx2+=gm*h2;dx3+=gm*h3
+        tl.store(GH+t*16+0*4+j,tl.sum(gm*x0,0))
+        tl.store(GH+t*16+1*4+j,tl.sum(gm*x1,0))
+        tl.store(GH+t*16+2*4+j,tl.sum(gm*x2,0))
+        tl.store(GH+t*16+3*4+j,tl.sum(gm*x3,0))
+    tl.store(DIRECT+base+0,dx0,c<C);tl.store(DIRECT+base+1,dx1,c<C)
+    tl.store(DIRECT+base+2,dx2,c<C);tl.store(DIRECT+base+3,dx3,c<C)
 
 
 class _PostStreamGateMix(torch.autograd.Function):
@@ -80,7 +88,7 @@ class _PostStreamGateMix(torch.autograd.Function):
         go=go.contiguous();c=x.shape[-2];n=x.numel()//(4*c)
         direct=torch.empty_like(x,dtype=torch.float32)
         gz=torch.empty_like(z);gy=torch.empty_like(y);gp=torch.empty_like(post);gh=torch.empty_like(h)
-        _post_backward[(n,)](x,y,post,h,z,go,direct,gz,gy,gp,gh,n,c,tr.next_power_of_2(c),num_warps=8)
+        _post_backward_rowwise[(n,)](x,y,post,h,z,go,direct,gz,gy,gp,gh,n,c,tr.next_power_of_2(c),num_warps=4)
         u=torch.empty_like(gz)
         _norm_pack[(n,)](x,u,r,n,c,tr.next_power_of_2(c),RMS_EPS,True,num_warps=8)
         gw=torch.bmm(gz.transpose(1,2),u).float();del u

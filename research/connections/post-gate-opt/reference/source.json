@@ -1,0 +1,6 @@
+{
+  "commit": "1d2963384df2659ff6d15fbeaa26857b9d39d354",
+  "path": "nanochat/post_stream_gate_mixing.py",
+  "sha256": "8d89269687751870c24a0609bfd2b2c26b7b56bc8cce73a12476c0b77eff922f",
+  "purpose": "Exact previously validated post-gate implementation, benchmark only"
+}
