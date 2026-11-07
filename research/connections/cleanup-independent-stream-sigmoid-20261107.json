@@ -1,0 +1,305 @@
+{
+  "date": "2026-11-07",
+  "status": "removed_by_user",
+  "reason": "Independent-stream sigmoid gate direction ended; user also requested checkpoint removal",
+  "retired_variants": [
+    "stream_gated_hc",
+    "stream_gated_hc_post"
+  ],
+  "historical_git_commit": "ea5a3da0b6065dbb0b60415d2666e3074a5ac22a",
+  "removed_roots": [
+    "/home/yzhong239/stream-sigmoid-gate-20261107",
+    "/home/yzhong239/post-stream-gate-20261107",
+    "/home/yzhong239/post-stream-gate-20261107-r2",
+    "/home/yzhong239/post-gate-opt-20261107",
+    "/home/yzhong239/post-gated-hc-10b-20261107",
+    "/home/yzhong239/pre-gated-hc-10b-20261107",
+    "/home/yzhong239/gradformer/repos/nanochat/research/connections/archive/independent-stream-gates-20261107"
+  ],
+  "retired_jobs": [
+    7929480,
+    7934390,
+    7934577,
+    7944836,
+    7952576,
+    7960531
+  ],
+  "automatic_continuation": false,
+  "checkpoint_policy": "No sigmoid checkpoint copies retained; no checkpoints present in the six workflow roots at cleanup; all six scheduler spool directories already absent",
+  "local_checkpoint_files_found": 0,
+  "remote_wandb_modified": false,
+  "production_code_already_removed": true,
+  "removed_regular_files": 311,
+  "removed_symlinks": 10,
+  "removed_bytes": 57099967,
+  "shared_symlink_targets_preserved": true,
+  "protected_silu_job": "7972371.0",
+  "results": {
+    "stream-gate": {
+      "complete": true,
+      "job": "7929480.0",
+      "source": {
+        "commit": "5bed636212a07475385464d2dfb1a6a9a91431e8",
+        "formal_training": false,
+        "purpose": "Four independent D-to-D sigmoid gates, per-stream token RMS input; HC residual before shared H; bounded correctness and efficiency validation"
+      },
+      "gpu": "NVIDIA H100 80GB HBM3",
+      "gpu_uuid": "d9edf92c-50c2-1c6a-fcb3-fdfeff4a708a",
+      "formula": "g_s=sigmoid(RMS_channel(x_s) @ Wg_s.T); output=(x*g) @ H + branch*post",
+      "gate_parameters": 16777216,
+      "total_parameters": 76292533,
+      "microbatch": 16,
+      "batch_tokens": 32768,
+      "checks": {
+        "tests": 17,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "max_fp64_production_cast_output_relative_error": 0.0016841226214517268,
+      "max_fp64_production_cast_gradient_relative_error": 0.0016860360924943103,
+      "max_model_reference_gradient_relative_error": 0.005421827695098256,
+      "whole_step_ms": {
+        "original_no_sinkhorn_hc": 91.25684075988829,
+        "compiled_torch_gate_abba": 116.63150931708515,
+        "fused_gate_abba": 112.51048068515956
+      },
+      "fused_time_reduction_vs_torch_percent": 3.533375033947106,
+      "overhead_vs_hc_percent": 23.289914211684227,
+      "peak_allocated_gib": {
+        "hc": 8.530417442321777,
+        "compiled_torch": 16.756979942321777,
+        "fused": 10.883780479431152
+      },
+      "peak_reserved_gib": {
+        "compiled_torch": 16.88671875,
+        "fused": 10.9609375
+      },
+      "reserved_reduction_percent": 35.0913717325931,
+      "micro_fwd_all_vjp_ms": {
+        "hc_write": 0.3766954876482486,
+        "compiled_torch": 2.047424390912056,
+        "fused": 1.7903554718941448
+      },
+      "trace_kernel_count_per_connector": {
+        "hc_write": 2.0,
+        "compiled_torch": 15.0,
+        "fused": 11.0
+      },
+      "restart": {
+        "from_step": 25,
+        "to_step": 128,
+        "complete": true,
+        "initial_dev_ce": 10.397237539291382,
+        "final_dev_ce": 5.976725459098816
+      },
+      "source_files_match_gpu_snapshot": 147,
+      "source_archive_sha256": "23978c101de1499caf781062e2533c1af95c8cecb04e0a784ff38e08aa73c341",
+      "results_archive_sha256": "734c6d8e7b2960c2c7253438ac7f288ad444f9f8de177886c75476421330c793",
+      "no_formal_training": true,
+      "no_new_wandb": true,
+      "old_silu_routes_retired": true,
+      "limitations": [
+        "One H100; both implementations tested at identical batch and data",
+        "Short NTP finite updates and restart do not prove10B stability or quality",
+        "Implementation is an HC residual adaptation, not an SDPA-output gating reproduction",
+        "Batched BF16 gate GEMMs introduce approximately3.299TF additional matrix forward/backward operations per32K-token step; norms and pointwise operations excluded"
+      ]
+    },
+    "post-stream-gate": {
+      "job": "7934577.0",
+      "source": {
+        "commit": "14401b93a902dcccf5edfda4b57459c90076a89f",
+        "formal_training": false,
+        "purpose": "Four independent D-to-D sigmoid gates, per-stream token RMS input; HC residual after shared H, branch write ungated; bounded correctness and efficiency validation"
+      },
+      "gpu": "NVIDIA H200",
+      "gpu_uuid": "08f96c4f-e762-71a2-c44a-4bdcc4ada04a",
+      "checks": {
+        "tests": 36,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "all_recorded_loss_and_gradients_finite": true,
+      "resume_steps": [
+        25,
+        128
+      ],
+      "dev_ce": {
+        "initial": 10.397237777709961,
+        "final": 5.962246894836426
+      },
+      "max_post_vjp_gradient_relative_error": 0.0016860360924943103,
+      "max_post_model_reference_gradient_relative_error": 0.001359328330312887,
+      "microbatch": 16,
+      "sequence_length": 2048,
+      "batch_tokens": 32768,
+      "total_parameters": 76292533,
+      "extra_gate_parameters": 16777216,
+      "extra_parameters_over_pre": 0,
+      "full_step_ms": {
+        "pre_fused_abba": 104.56863104191144,
+        "post_fused_abba": 136.65160964883398,
+        "post_compiled_torch_single_60step_profile": 107.221770536853
+      },
+      "post_fused_latency_change_percent": 30.681264818379027,
+      "post_torch_latency_change_percent_vs_pre_abba": 2.5372231313597116,
+      "local_all_vjp_ms": {
+        "pre_fused": 1.6764815663918853,
+        "post_fused": 3.7624306743964553,
+        "post_torch": 1.8747603811789304
+      },
+      "backward_kernel_trace_ms": {
+        "pre": 0.495795,
+        "post": 2.5317965
+      },
+      "allocated_gib": {
+        "pre_fused": 10.883780479431152,
+        "post_fused": 10.883780479431152,
+        "post_torch": 12.756979942321777
+      },
+      "diagnosis": "Current hand-written post-mix backward is the main measured regression; compiledTorch evaluates the same formula much faster. Specific register/layout causes are not established by these traces.",
+      "post_fused_speedup_validated": false,
+      "formal_training": false,
+      "new_formal_run": false,
+      "collector_exited": true,
+      "matching_gpu_snapshot_source_files": 167,
+      "limitations": "Single GPU and seed; ABBA for fused pre/post, one60step full profile for postTorch. Only128steps of post-mix NTP: no10B quality or long-term stability conclusion. No backend switched or further job submitted."
+    },
+    "post-gate-opt": {
+      "job": "7944836.0",
+      "source": {
+        "commit": "7f13333fb799fdcf0e50a860f92a636b1360064b",
+        "formal_training": false,
+        "purpose": "Post-H sigmoid gate backward optimization only; unchanged formula, parameters and precision; bounded validation and same-card implementation benchmarks"
+      },
+      "gpu": "NVIDIA H200",
+      "gpu_uuid": "9b145c79-e451-f767-912c-585d33b2f6a6",
+      "checks": {
+        "tests": 36,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "all_recorded_loss_and_gradients_finite": true,
+      "resume_steps": [
+        25,
+        128
+      ],
+      "dev_ce": {
+        "initial": 10.397237777709961,
+        "final": 5.979311466217041
+      },
+      "max_vjp_gradient_relative_error": 0.0016860360924943103,
+      "max_model_reference_gradient_relative_error": 0.0010336606096405202,
+      "production_shape_errors": {
+        "output": 0.0,
+        "gradients": [
+          1.4841075426375028e-05,
+          0.0,
+          7.649988731373014e-08,
+          1.1060485149982924e-07,
+          5.658010195475072e-05
+        ]
+      },
+      "microbatch": 16,
+      "sequence_length": 2048,
+      "batch_tokens": 32768,
+      "total_parameters": 76292533,
+      "extra_gate_parameters": 16777216,
+      "parameters_changed_by_optimization": 0,
+      "full_step_ms": {
+        "pre_fused_single": 104.91888406104408,
+        "post_legacy_single": 136.82097983546555,
+        "post_torch_abba": 107.6177808456123,
+        "post_optimized_abba": 104.08418313018048
+      },
+      "latency_reduction_vs_legacy_percent": 23.926737511054807,
+      "latency_reduction_vs_torch_percent": 3.2834701549004253,
+      "backward_kernel_ms": {
+        "legacy": 2.511419,
+        "optimized": 0.458447
+      },
+      "local_all_vjp_ms": {
+        "pre": 1.6817902505863458,
+        "legacy": 3.7137150182388723,
+        "optimized": 1.6591972496826202,
+        "torch": 1.8241330864839256
+      },
+      "kernel_resources": {
+        "legacy": {
+          "registers": 80,
+          "spills": 0,
+          "shared_bytes": 8192,
+          "num_warps": 8
+        },
+        "optimized": {
+          "registers": 80,
+          "spills": 0,
+          "shared_bytes": 2048,
+          "num_warps": 4
+        }
+      },
+      "allocated_gib": {
+        "optimized": 10.883780479431152,
+        "torch": 12.756979942321777
+      },
+      "decision": "Keep optimized rowwise post-H backward; it passes original thresholds and is faster than legacy and compiledTorch on this Hopper test.",
+      "diagnosis": "Replace repeated where+stream-reduce extraction with four explicit channel vectors and scalar mixing coefficients; use4 rather than8 warps. Both measured kernels have80 registers/thread and0spills; shared scratch8192to2048bytes. Measurements do not isolate the contribution of each change.",
+      "limitations": "Single H200, same-card ABBA for optimized vsTorch; legacy and pre each60steps. Short128step recovery only, no10B quality or long-term stability conclusion. Forward is unchanged; changed backward sum order is not bitwise equivalent.",
+      "formal_training": false,
+      "new_formal_run": false,
+      "matching_gpu_snapshot_source_files": 174,
+      "optimized_retained": true
+    }
+  },
+  "stopped_training": [
+    {
+      "root": "post-gated-hc-10b-20261107",
+      "job": "7952576.0",
+      "history": {
+        "ClusterId": 7952576,
+        "ExitCode": 143,
+        "JobStatus": 3,
+        "NumJobStarts": 1,
+        "ProcId": 0
+      },
+      "last_observed_step": {
+        "step": 21200,
+        "tokens": 694681600,
+        "loss": 3.4725637435913086,
+        "seconds": 0.11423981375992298,
+        "lr_multiplier": 1.0
+      }
+    },
+    {
+      "root": "pre-gated-hc-10b-20261107",
+      "job": "7960531.0",
+      "history": {
+        "ClusterId": 7960531,
+        "ExitCode": 143,
+        "JobStatus": 3,
+        "NumJobStarts": 1,
+        "ProcId": 0
+      },
+      "last_observed_step": {
+        "step": 10210,
+        "tokens": 334561280,
+        "loss": 3.6980128288269043,
+        "seconds": 0.10250356793403625,
+        "lr_multiplier": 1.0
+      }
+    }
+  ],
+  "validation": {
+    "preserved_source_and_silu_inputs": 103,
+    "preserved_shared_files": 23,
+    "all_preserved_files_unchanged": true,
+    "silu_job_immutable_classad_unchanged": true,
+    "sigmoid_jobs_in_queue": false,
+    "sigmoid_core_code_references": 0,
+    "no_new_gpu_tests": true,
+    "reason": "Only archived workflows and retired experiment files removed; retained computation unchanged"
+  }
+}
