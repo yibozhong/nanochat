@@ -1,0 +1,604 @@
+{
+  "complete": true,
+  "device": {
+    "gpu": "NVIDIA H200",
+    "torch": "2.10.0+cu130",
+    "cuda": "13.0",
+    "deepgemm": "2.2.0",
+    "te": "2.20.2",
+    "cublaslt": 130100,
+    "te_native_grouped_available": false,
+    "te_tensor_handle_pool_mb": "128",
+    "nvidia_smi": null,
+    "nvidia_smi_unavailable": "FileNotFoundError(2, 'No such file or directory')",
+    "device_probe": {
+      "cuda_visible_devices": "GPU-13f451a8-dc18-468e-a911-45bcf565bb8e",
+      "hostname": "mrudolphgpu4000",
+      "pid": 580,
+      "passed": true,
+      "nvidia_smi_unavailable": "[Errno 2] No such file or directory: 'nvidia-smi'",
+      "gpu": "NVIDIA H200",
+      "uuid": "13f451a8-dc18-468e-a911-45bcf565bb8e",
+      "capability": [
+        9,
+        0
+      ],
+      "torch": "2.10.0+cu130",
+      "runtime": "13.0",
+      "loaded_cuda_driver_version": 13010,
+      "libcuda_mappings": [
+        "/var/lib/condor/execute/slot1/dir_1128217/scratch/cuda-compat/usr/local/cuda-13.1/compat/libcuda.so.590.48.01"
+      ],
+      "allocation_and_matmul_backward": true
+    }
+  },
+  "passed_checks": 10,
+  "failures": [],
+  "rows": [
+    {
+      "width": 512,
+      "hidden": 2048,
+      "experts": 1,
+      "routing": "uniform",
+      "measurements": {
+        "torch": {
+          "complete_fwd_bwd": 0.9816884063184261,
+          "packed_forward": 0.3972376696765423,
+          "packed_backward": 0.7025136612355709,
+          "pack_unpack_fwd_bwd": 0.2003905363380909,
+          "optimizer_only": 2.066081389784813,
+          "complete_with_muon": 3.03456773981452,
+          "repetitions": 2,
+          "with_muon_min_ms": 3.00701130181551,
+          "with_muon_max_ms": 3.06212417781353,
+          "peak_allocated_GiB": 0.6392827033996582,
+          "padding_ratio": 1.0,
+          "empty_experts": 0
+        }
+      }
+    },
+    {
+      "width": 512,
+      "hidden": 2048,
+      "experts": 4,
+      "routing": "uniform",
+      "measurements": {
+        "dg": {
+          "complete_fwd_bwd": 1.0645207948982716,
+          "packed_forward": 0.380562711507082,
+          "packed_backward": 0.639825128018856,
+          "pack_unpack_fwd_bwd": 0.19774818792939186,
+          "optimizer_only": 2.016993146389723,
+          "complete_with_muon": 2.983675803989172,
+          "repetitions": 2,
+          "with_muon_min_ms": 2.9716046527028084,
+          "with_muon_max_ms": 2.9957469552755356,
+          "peak_allocated_GiB": 0.8131756782531738,
+          "padding_ratio": 1.0,
+          "empty_experts": 0
+        },
+        "te": {
+          "complete_fwd_bwd": 1.7740113660693169,
+          "packed_forward": 0.5924098193645477,
+          "packed_backward": 1.0577769950032234,
+          "pack_unpack_fwd_bwd": 0.1986735500395298,
+          "optimizer_only": 2.0138188265264034,
+          "complete_with_muon": 4.046835657209158,
+          "repetitions": 2,
+          "with_muon_min_ms": 4.041861742734909,
+          "with_muon_max_ms": 4.051809571683407,
+          "peak_allocated_GiB": 1.0553631782531738,
+          "padding_ratio": 1.0,
+          "empty_experts": 0
+        }
+      },
+      "te_over_dg_fwd_bwd": 1.6664882213398622,
+      "te_over_dg_with_muon": 1.3563255269887373
+    },
+    {
+      "width": 512,
+      "hidden": 2048,
+      "experts": 4,
+      "routing": "fixed_token_hash",
+      "measurements": {
+        "dg": {
+          "complete_fwd_bwd": 1.1088443920016289,
+          "packed_forward": 0.38333721458911896,
+          "packed_backward": 0.6618312560021877,
+          "pack_unpack_fwd_bwd": 0.20346539095044136,
+          "optimizer_only": 2.015766315162182,
+          "complete_with_muon": 2.997025288641453,
+          "repetitions": 2,
+          "with_muon_min_ms": 2.9879823327064514,
+          "with_muon_max_ms": 3.006068244576454,
+          "peak_allocated_GiB": 0.8200769424438477,
+          "padding_ratio": 1.01171875,
+          "empty_experts": 0
+        },
+        "te": {
+          "complete_fwd_bwd": 1.7797010019421577,
+          "packed_forward": 0.6007736548781395,
+          "packed_backward": 1.0568030178546906,
+          "pack_unpack_fwd_bwd": 0.1991529017686844,
+          "optimizer_only": 2.005110029131174,
+          "complete_with_muon": 4.074545856565237,
+          "repetitions": 2,
+          "with_muon_min_ms": 4.070282727479935,
+          "with_muon_max_ms": 4.078808985650539,
+          "peak_allocated_GiB": 1.0553631782531738,
+          "padding_ratio": 1.0,
+          "empty_experts": 0
+        }
+      },
+      "te_over_dg_fwd_bwd": 1.6050051880855285,
+      "te_over_dg_with_muon": 1.359530021987977
+    },
+    {
+      "width": 512,
+      "hidden": 2048,
+      "experts": 16,
+      "routing": "uniform",
+      "measurements": {
+        "dg": {
+          "complete_fwd_bwd": 1.1983538046479225,
+          "packed_forward": 0.4221106879413128,
+          "packed_backward": 0.7658391259610653,
+          "pack_unpack_fwd_bwd": 0.2060101367533207,
+          "optimizer_only": 2.1758311428129673,
+          "complete_with_muon": 3.415716253221035,
+          "repetitions": 2,
+          "with_muon_min_ms": 3.3055244013667107,
+          "with_muon_max_ms": 3.5259081050753593,
+          "peak_allocated_GiB": 1.122075080871582,
+          "padding_ratio": 1.0,
+          "empty_experts": 0
+        },
+        "te": {
+          "complete_fwd_bwd": 3.739430382847786,
+          "packed_forward": 1.434315461665392,
+          "packed_backward": 1.899288222193718,
+          "pack_unpack_fwd_bwd": 0.21096952259540558,
+          "optimizer_only": 2.2433518432080746,
+          "complete_with_muon": 6.2552266754209995,
+          "repetitions": 2,
+          "with_muon_min_ms": 6.251142546534538,
+          "with_muon_max_ms": 6.259310804307461,
+          "peak_allocated_GiB": 1.3133587837219238,
+          "padding_ratio": 1.0,
+          "empty_experts": 0
+        }
+      },
+      "te_over_dg_fwd_bwd": 3.1204727421434892,
+      "te_over_dg_with_muon": 1.8313074657540112
+    },
+    {
+      "width": 512,
+      "hidden": 2048,
+      "experts": 16,
+      "routing": "fixed_token_hash",
+      "measurements": {
+        "dg": {
+          "complete_fwd_bwd": 1.2404737994074821,
+          "packed_forward": 0.4283573478460312,
+          "packed_backward": 0.8055943995714188,
+          "pack_unpack_fwd_bwd": 0.21243132650852203,
+          "optimizer_only": 2.2399730049073696,
+          "complete_with_muon": 3.537220321595669,
+          "repetitions": 2,
+          "with_muon_min_ms": 3.5311589017510414,
+          "with_muon_max_ms": 3.543281741440296,
+          "peak_allocated_GiB": 1.108046531677246,
+          "padding_ratio": 1.02734375,
+          "empty_experts": 0
+        },
+        "te": {
+          "complete_fwd_bwd": 3.7850061431527138,
+          "packed_forward": 1.3582701794803143,
+          "packed_backward": 1.9398401491343975,
+          "pack_unpack_fwd_bwd": 0.21086754277348518,
+          "optimizer_only": 2.242527436465025,
+          "complete_with_muon": 6.318424828350544,
+          "repetitions": 2,
+          "with_muon_min_ms": 6.317164376378059,
+          "with_muon_max_ms": 6.319685280323029,
+          "peak_allocated_GiB": 1.3133587837219238,
+          "padding_ratio": 1.0,
+          "empty_experts": 0
+        }
+      },
+      "te_over_dg_fwd_bwd": 3.051258434447095,
+      "te_over_dg_with_muon": 1.7862683841814668
+    },
+    {
+      "width": 512,
+      "hidden": 2048,
+      "experts": 64,
+      "routing": "uniform",
+      "measurements": {
+        "dg": {
+          "complete_fwd_bwd": 1.9065250642597675,
+          "packed_forward": 0.5809871479868889,
+          "packed_backward": 1.173953339457512,
+          "pack_unpack_fwd_bwd": 0.2000844106078148,
+          "optimizer_only": 6.553617212921381,
+          "complete_with_muon": 8.296968508511782,
+          "repetitions": 2,
+          "with_muon_min_ms": 8.288544602692127,
+          "with_muon_max_ms": 8.305392414331436,
+          "peak_allocated_GiB": 3.470344066619873,
+          "padding_ratio": 1.0,
+          "empty_experts": 0
+        },
+        "te": {
+          "complete_fwd_bwd": 10.596670769155025,
+          "packed_forward": 3.9294661954045296,
+          "packed_backward": 5.98641037940979,
+          "pack_unpack_fwd_bwd": 0.21156007423996925,
+          "optimizer_only": 6.5472593531012535,
+          "complete_with_muon": 13.695810176432133,
+          "repetitions": 2,
+          "with_muon_min_ms": 13.673877902328968,
+          "with_muon_max_ms": 13.717742450535297,
+          "peak_allocated_GiB": 3.470344066619873,
+          "padding_ratio": 1.0,
+          "empty_experts": 0
+        }
+      },
+      "te_over_dg_fwd_bwd": 5.558107243278922,
+      "te_over_dg_with_muon": 1.6507005133720503
+    },
+    {
+      "width": 512,
+      "hidden": 2048,
+      "experts": 64,
+      "routing": "fixed_token_hash",
+      "measurements": {
+        "dg": {
+          "complete_fwd_bwd": 1.9207952544093132,
+          "packed_forward": 0.6297089159488678,
+          "packed_backward": 1.1962857097387314,
+          "pack_unpack_fwd_bwd": 0.21653985604643822,
+          "optimizer_only": 6.554453261196613,
+          "complete_with_muon": 8.381337951868773,
+          "repetitions": 2,
+          "with_muon_min_ms": 8.369984477758408,
+          "with_muon_max_ms": 8.392691425979137,
+          "peak_allocated_GiB": 3.470388412475586,
+          "padding_ratio": 1.12109375,
+          "empty_experts": 0
+        },
+        "te": {
+          "complete_fwd_bwd": 10.80732150003314,
+          "packed_forward": 4.009221028536558,
+          "packed_backward": 6.083331163972616,
+          "pack_unpack_fwd_bwd": 0.21132323890924454,
+          "optimizer_only": 6.549979653209448,
+          "complete_with_muon": 13.925302401185036,
+          "repetitions": 2,
+          "with_muon_min_ms": 13.91175128519535,
+          "with_muon_max_ms": 13.93885351717472,
+          "peak_allocated_GiB": 3.470344066619873,
+          "padding_ratio": 1.0,
+          "empty_experts": 0
+        }
+      },
+      "te_over_dg_fwd_bwd": 5.626482820188261,
+      "te_over_dg_with_muon": 1.6614653270341087
+    },
+    {
+      "width": 512,
+      "hidden": 2048,
+      "experts": 256,
+      "routing": "uniform",
+      "measurements": {
+        "dg": {
+          "complete_fwd_bwd": 5.32928416505456,
+          "packed_forward": 1.3032373040914536,
+          "packed_backward": 3.2047261483967304,
+          "pack_unpack_fwd_bwd": 0.21361187100410461,
+          "optimizer_only": 24.49168749153614,
+          "complete_with_muon": 28.493621200323105,
+          "repetitions": 2,
+          "with_muon_min_ms": 28.43788005411625,
+          "with_muon_max_ms": 28.54936234652996,
+          "peak_allocated_GiB": 13.03577995300293,
+          "padding_ratio": 1.0,
+          "empty_experts": 0
+        },
+        "te": {
+          "complete_fwd_bwd": 38.487573992460966,
+          "packed_forward": 13.95568111911416,
+          "packed_backward": 23.527404479682446,
+          "pack_unpack_fwd_bwd": 0.2212129533290863,
+          "optimizer_only": 24.37646072357893,
+          "complete_with_muon": 43.9449000172317,
+          "repetitions": 2,
+          "with_muon_min_ms": 43.94343551248312,
+          "with_muon_max_ms": 43.946364521980286,
+          "peak_allocated_GiB": 13.03577995300293,
+          "padding_ratio": 1.0,
+          "empty_experts": 0
+        }
+      },
+      "te_over_dg_fwd_bwd": 7.221903130036403,
+      "te_over_dg_with_muon": 1.5422715037965546
+    },
+    {
+      "width": 512,
+      "hidden": 2048,
+      "experts": 256,
+      "routing": "fixed_token_hash",
+      "measurements": {
+        "dg": {
+          "complete_fwd_bwd": 5.34987673163414,
+          "packed_forward": 1.4405320398509502,
+          "packed_backward": 3.208773024380207,
+          "pack_unpack_fwd_bwd": 0.21536555141210556,
+          "optimizer_only": 24.42811317741871,
+          "complete_with_muon": 28.722990583628416,
+          "repetitions": 2,
+          "with_muon_min_ms": 28.702313639223576,
+          "with_muon_max_ms": 28.743667528033257,
+          "peak_allocated_GiB": 13.035948753356934,
+          "padding_ratio": 1.4609375,
+          "empty_experts": 0
+        },
+        "te": {
+          "complete_fwd_bwd": 38.77241974696517,
+          "packed_forward": 14.086956903338432,
+          "packed_backward": 23.702035006135702,
+          "pack_unpack_fwd_bwd": 0.21239826455712318,
+          "optimizer_only": 24.476282112300396,
+          "complete_with_muon": 44.51827276498079,
+          "repetitions": 2,
+          "with_muon_min_ms": 44.39088273793459,
+          "with_muon_max_ms": 44.645662792027,
+          "peak_allocated_GiB": 13.03577995300293,
+          "padding_ratio": 1.0,
+          "empty_experts": 0
+        }
+      },
+      "te_over_dg_fwd_bwd": 7.24734824593276,
+      "te_over_dg_with_muon": 1.5499177439537024
+    },
+    {
+      "width": 64,
+      "hidden": 256,
+      "experts": 256,
+      "routing": "uniform",
+      "measurements": {
+        "dg": {
+          "complete_fwd_bwd": 5.342329572886229,
+          "packed_forward": 1.2187405489385128,
+          "packed_backward": 3.2045671716332436,
+          "pack_unpack_fwd_bwd": 0.2122250385582447,
+          "optimizer_only": 3.10619892552495,
+          "complete_with_muon": 8.68529099971056,
+          "repetitions": 2,
+          "with_muon_min_ms": 8.600309304893017,
+          "with_muon_max_ms": 8.770272694528103,
+          "peak_allocated_GiB": 0.48548126220703125,
+          "padding_ratio": 1.0,
+          "empty_experts": 0
+        },
+        "te": {
+          "complete_fwd_bwd": 38.433036394417286,
+          "packed_forward": 13.925491273403168,
+          "packed_backward": 23.50969659164548,
+          "pack_unpack_fwd_bwd": 0.21273130550980568,
+          "optimizer_only": 3.2473155297338963,
+          "complete_with_muon": 41.74664793536067,
+          "repetitions": 2,
+          "with_muon_min_ms": 41.703370586037636,
+          "with_muon_max_ms": 41.789925284683704,
+          "peak_allocated_GiB": 0.39954376220703125,
+          "padding_ratio": 1.0,
+          "empty_experts": 0
+        }
+      },
+      "te_over_dg_fwd_bwd": 7.194059421095129,
+      "te_over_dg_with_muon": 4.806591735009442
+    },
+    {
+      "width": 64,
+      "hidden": 256,
+      "experts": 256,
+      "routing": "fixed_token_hash",
+      "measurements": {
+        "dg": {
+          "complete_fwd_bwd": 5.350254755467176,
+          "packed_forward": 1.118517480790615,
+          "packed_backward": 3.224165365099907,
+          "pack_unpack_fwd_bwd": 0.21489504724740982,
+          "optimizer_only": 3.12582328915596,
+          "complete_with_muon": 8.740700781345367,
+          "repetitions": 2,
+          "with_muon_min_ms": 8.728238195180893,
+          "with_muon_max_ms": 8.753163367509842,
+          "peak_allocated_GiB": 0.39971256256103516,
+          "padding_ratio": 1.4609375,
+          "empty_experts": 0
+        },
+        "te": {
+          "complete_fwd_bwd": 38.78857893869281,
+          "packed_forward": 14.023810438811779,
+          "packed_backward": 23.72011635452509,
+          "pack_unpack_fwd_bwd": 0.21552611142396927,
+          "optimizer_only": 3.101537749171257,
+          "complete_with_muon": 42.027416825294495,
+          "repetitions": 2,
+          "with_muon_min_ms": 42.019070126116276,
+          "with_muon_max_ms": 42.03576352447271,
+          "peak_allocated_GiB": 0.39954376220703125,
+          "padding_ratio": 1.0,
+          "empty_experts": 0
+        }
+      },
+      "te_over_dg_fwd_bwd": 7.24985644824792,
+      "te_over_dg_with_muon": 4.808243397942475
+    },
+    {
+      "width": 64,
+      "hidden": 256,
+      "experts": 1024,
+      "routing": "uniform",
+      "measurements": {
+        "dg": {
+          "complete_fwd_bwd": 17.806152626872063,
+          "packed_forward": 4.093403648585081,
+          "packed_backward": 11.6666822694242,
+          "pack_unpack_fwd_bwd": 0.2173732966184616,
+          "optimizer_only": 5.704990122467279,
+          "complete_with_muon": 23.642480466514826,
+          "repetitions": 2,
+          "with_muon_min_ms": 23.29552862793207,
+          "with_muon_max_ms": 23.98943230509758,
+          "peak_allocated_GiB": 1.0437126159667969,
+          "padding_ratio": 4.0,
+          "empty_experts": 0
+        },
+        "te": {
+          "complete_fwd_bwd": 179.23952843993902,
+          "packed_forward": 53.51894395425916,
+          "packed_backward": 124.65330203995109,
+          "pack_unpack_fwd_bwd": 0.245021004229784,
+          "optimizer_only": 5.791972670704126,
+          "complete_with_muon": 185.48190435394645,
+          "repetitions": 2,
+          "with_muon_min_ms": 185.21534390747547,
+          "with_muon_max_ms": 185.74846480041742,
+          "peak_allocated_GiB": 0.9986686706542969,
+          "padding_ratio": 1.0,
+          "empty_experts": 0
+        }
+      },
+      "te_over_dg_fwd_bwd": 10.06615702987071,
+      "te_over_dg_with_muon": 7.8452810658613865
+    },
+    {
+      "width": 64,
+      "hidden": 256,
+      "experts": 1024,
+      "routing": "fixed_token_hash",
+      "measurements": {
+        "dg": {
+          "complete_fwd_bwd": 17.83743929117918,
+          "packed_forward": 4.088679328560829,
+          "packed_backward": 11.577245220541954,
+          "pack_unpack_fwd_bwd": 0.23413756862282753,
+          "optimizer_only": 5.808838363736868,
+          "complete_with_muon": 23.905823286622763,
+          "repetitions": 2,
+          "with_muon_min_ms": 23.853702656924725,
+          "with_muon_max_ms": 23.9579439163208,
+          "peak_allocated_GiB": 1.0007739067077637,
+          "padding_ratio": 4.25390625,
+          "empty_experts": 0
+        },
+        "te": {
+          "complete_fwd_bwd": 179.669903870672,
+          "packed_forward": 53.77091411501169,
+          "packed_backward": 124.8698496259749,
+          "pack_unpack_fwd_bwd": 0.22685034200549126,
+          "optimizer_only": 5.773826502263546,
+          "complete_with_muon": 185.86209435015917,
+          "repetitions": 2,
+          "with_muon_min_ms": 185.5009026825428,
+          "with_muon_max_ms": 186.22328601777554,
+          "peak_allocated_GiB": 0.9986686706542969,
+          "padding_ratio": 1.0,
+          "empty_experts": 0
+        }
+      },
+      "te_over_dg_fwd_bwd": 10.072628752240286,
+      "te_over_dg_with_muon": 7.774762329735952
+    },
+    {
+      "width": 64,
+      "hidden": 256,
+      "experts": 4096,
+      "routing": "uniform",
+      "measurements": {
+        "dg": {
+          "complete_fwd_bwd": 66.03992693126202,
+          "packed_forward": 15.318332985043526,
+          "packed_backward": 44.223139714449644,
+          "pack_unpack_fwd_bwd": 0.2192925661802292,
+          "optimizer_only": 15.680776443332434,
+          "complete_with_muon": 93.34135577082634,
+          "repetitions": 2,
+          "with_muon_min_ms": 92.93908067047596,
+          "with_muon_max_ms": 93.74363087117672,
+          "peak_allocated_GiB": 3.4006690979003906,
+          "padding_ratio": 16.0,
+          "empty_experts": 0
+        },
+        "te": {
+          "complete_fwd_bwd": 1294.7740503586829,
+          "packed_forward": 226.34679479524493,
+          "packed_backward": 1064.3026895821095,
+          "pack_unpack_fwd_bwd": 0.2419775351881981,
+          "optimizer_only": 17.312156409025192,
+          "complete_with_muon": 1331.0201573185623,
+          "repetitions": 2,
+          "with_muon_min_ms": 1330.2527317777276,
+          "with_muon_max_ms": 1331.787582859397,
+          "peak_allocated_GiB": 3.3951759338378906,
+          "padding_ratio": 1.0,
+          "empty_experts": 0
+        }
+      },
+      "te_over_dg_fwd_bwd": 19.605927966976022,
+      "te_over_dg_with_muon": 14.259704568535634
+    },
+    {
+      "width": 64,
+      "hidden": 256,
+      "experts": 4096,
+      "routing": "fixed_token_hash",
+      "measurements": {
+        "dg": {
+          "complete_fwd_bwd": 65.93819875270128,
+          "packed_forward": 15.300451405346394,
+          "packed_backward": 44.46336468681693,
+          "pack_unpack_fwd_bwd": 0.21836170926690102,
+          "optimizer_only": 15.676316618919373,
+          "complete_with_muon": 96.51093576103449,
+          "repetitions": 2,
+          "with_muon_min_ms": 93.43216866254807,
+          "with_muon_max_ms": 99.58970285952091,
+          "peak_allocated_GiB": 3.400668144226074,
+          "padding_ratio": 13.59375,
+          "empty_experts": 679
+        },
+        "te": {
+          "complete_fwd_bwd": 1263.8153691776097,
+          "packed_forward": 214.82958560809493,
+          "packed_backward": 1044.125045556575,
+          "pack_unpack_fwd_bwd": 0.26871953159570694,
+          "optimizer_only": 17.605327535420656,
+          "complete_with_muon": 1297.795632481575,
+          "repetitions": 2,
+          "with_muon_min_ms": 1297.6045349612832,
+          "with_muon_max_ms": 1297.9867300018668,
+          "peak_allocated_GiB": 3.3951759338378906,
+          "padding_ratio": 1.0,
+          "empty_experts": 679
+        }
+      },
+      "te_over_dg_fwd_bwd": 19.166665045211523,
+      "te_over_dg_with_muon": 13.447135521460249
+    }
+  ],
+  "job": "8013129.0",
+  "source": "4d569c738c49da25f7071a29f87ce0c7fde702f2",
+  "metric": "Synchronized amortized wall milliseconds per 32768-token FFN forward/backward plus current MuonAdamW update; per-backend mean of two ABBA repetitions.",
+  "limitations": [
+    "Single FFN operator benchmark with synthetic activations and real cached input token IDs, not full-model training throughput or NTP quality.",
+    "Pinned DeepGEMM 2.2.0 versus TE 2.20.2; cuBLASLt 13.1 forces the TE compatibility path. This is not a ranking of the latest or best NVIDIA grouped GEMM.",
+    "Many experts are represented by separate 2D parameters for the current Muon interface. Python, autograd, casts and optimizer costs are included. No claim that observed small-bucket latency is purely hardware GEMM or padding.",
+    "Standalone forward/backward and optimizer timings are not additive because queued execution can overlap host dispatch with GPU work.",
+    "4096-bucket DeepGEMM fixed-hash total samples span 93.43 to 99.59 ms; report their mean, not a more precise universal speed."
+  ],
+  "recommendation": "Prefer DeepGEMM for the current runtime and adapter. Four to sixteen full-size experts are the practical next full-model candidates; very many small experts require bank/parameter-overhead optimization before throughput conclusions transfer."
+}
