@@ -25,5 +25,8 @@
     "trace",
     "target",
     "formal"
-  ]
+  ],
+  "matched_reference_config_cases": 8,
+  "matched_reference_only_metadata_changed": true,
+  "kernels_and_numerical_thresholds_unchanged_from_failed_gate": true
 }

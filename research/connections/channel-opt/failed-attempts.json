@@ -1,0 +1,19 @@
+[
+  {
+    "job": "7917640.0",
+    "source": "4395d43d90362a03c70141a58416bb73456714b2",
+    "exit_code": 1,
+    "host": "slot2_7@gpu4004.chtc.wisc.edu",
+    "passed": 38,
+    "failed": 9,
+    "reason": "Matched vanilla reference inherited channel_mixing_kernel from optimized channel config; validation correctly rejected non-channel variant before forward",
+    "failed_checks": "Six fullmodel parity tests and three optimizer resume tests, all at vanilla reference config construction",
+    "kernel_fp64_vjps_passed": true,
+    "compiled_primitive_passed": true,
+    "fullmodel_executed": false,
+    "speed_measured": false,
+    "kernel_changed": false,
+    "numerical_thresholds_changed": false,
+    "new_formal_run": false
+  }
+]
