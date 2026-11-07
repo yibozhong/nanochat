@@ -22,7 +22,11 @@ export NANOCHAT_DTYPE=bfloat16 PYTHONUNBUFFERED=1 WANDB_MODE=disabled HF_HUB_OFF
 export OMP_NUM_THREADS=2 TORCHINDUCTOR_COMPILE_THREADS=2 MAX_JOBS=2
 export CC=/usr/bin/gcc CXX=/usr/bin/g++ CUBLAS_WORKSPACE_CONFIG=:4096:8
 export TRITON_CACHE_DIR="$PWD/triton-cache" TORCHINDUCTOR_CACHE_DIR="$PWD/inductor-cache"
-export DG_JIT_CACHE_DIR="$PWD/deepgemm-cache" DG_JIT_USE_NVRTC=0 DG_JIT_CPP_STANDARD=17
+# DeepGEMM's host extension uses C++17, but its NVCC JIT defaults to C++20.
+# Keep that default: its host -fconcepts flag is incompatible with a C++17
+# device parser when GCC 12 standard-library headers expose concepts.
+export DG_JIT_CACHE_DIR="$PWD/deepgemm-cache" DG_JIT_USE_NVRTC=0 DG_JIT_CPP_STANDARD=20
+export DG_JIT_PRINT_COMPILER_COMMAND=1
 export DG_CACHE_DIR="$PWD/deepgemm-cache"
 cp source.json inputs.sha256 dependencies.json results/
 cp runtime/uv.lock results/runtime-uv.lock

@@ -6,7 +6,7 @@
   "production_model_modified": false,
   "deepgemm_commit": "9b680f428484625f4f35dc3617f134187c6bcd4a",
   "deepgemm_version": "2.2.0",
-  "deepgemm_version_reason": "Pinned SM90 BF16 implementation compatible with the existing C++17 runtime; latest 2.8.2 requires C++20 format support. This is not a latest-version ranking.",
+  "deepgemm_version_reason": "Pinned SM90 BF16 implementation uses fmt rather than the std::format required by latest 2.8.2. Host extension builds with C++17; NVCC JIT keeps upstream's C++20 default. This is not a latest-version ranking.",
   "transformer_engine_version": "2.20.2",
   "torch_version": "2.10.0",
   "gpu": "single complete H100 or H200, at least 40000 MiB for large weight-bank optimizer buffers",

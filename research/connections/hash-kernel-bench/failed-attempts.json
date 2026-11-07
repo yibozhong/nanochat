@@ -24,5 +24,35 @@
     ],
     "manual_reviewed_retry": true,
     "automatic_retry": false
+  },
+  {
+    "job": "8013016.0",
+    "source": "5730814a79070d88207dc99a798685bcaea53423",
+    "gpu": "NVIDIA H200",
+    "exit_code": 1,
+    "device_bf16_forward_backward_probe_passed": true,
+    "deepgemm_extension_build_passed": true,
+    "benchmark_checks_completed": 0,
+    "profiles_completed": 0,
+    "stage": "First DeepGEMM kernel NVCC JIT compilation",
+    "error": "GCC 12 concepts headers parsed by C++17 CUDA frontend; requires parse errors",
+    "diagnosis": "Harness overrode upstream JIT default C++20 with C++17 while upstream passes host -fconcepts; extension C++17 and kernel JIT standards were conflated.",
+    "changes": [
+      "Restore upstream DG_JIT_CPP_STANDARD=20.",
+      "Print JIT compiler commands for diagnosis."
+    ],
+    "unchanged": [
+      "benchmark Python byte-for-byte",
+      "dependency versions",
+      "kernel sources",
+      "precision",
+      "thresholds",
+      "profile cases",
+      "production training inputs"
+    ],
+    "manual_reviewed_retry": true,
+    "automatic_retry": false,
+    "te_cublaslt_version": 130100,
+    "te_native_grouped_available": false
   }
 ]
