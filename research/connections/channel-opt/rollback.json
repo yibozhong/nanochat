@@ -1,0 +1,57 @@
+{
+  "status": "rolled_back",
+  "pre_optimization_commit": "cf0d4cdd4f23e291824de943e26d958dc7c5e4be",
+  "retired_implementation_head": "80617f5e75f30c327b9b751144be8195943c1257",
+  "restored_files": [
+    "nanochat/channel_connections.py",
+    "nanochat/connection_experiment.py",
+    "nanochat/connection_model.py",
+    "scripts/connection_context_profile.py",
+    "scripts/connection_train.py"
+  ],
+  "removed_files": [
+    "nanochat/channel_mixing_fast.py",
+    "scripts/connection_channel_fast_gate.py",
+    "scripts/connection_channel_fast_micro.py",
+    "tests/test_channel_mixing_fast.py",
+    "research/connections/channel-opt/collect.py",
+    "research/connections/channel-opt/device_probe.py",
+    "research/connections/channel-opt/run.sh",
+    "research/connections/channel-opt/submit.py"
+  ],
+  "retained_reports": {
+    "research/connections/channel-opt/failed-attempts.json": "201eda79d970d9da34ecbd17a0787be0e66d82d7ad511fd795dfa9c7d77d8a5a",
+    "research/connections/channel-opt/static-validation.json": "3d9098162b49233c1b0f38033604aeb1e122eab2bea343a55a47a83560533941",
+    "research/connections/channel-opt/validation.json": "2a64c3feb545f745f53cf1bb8bb0dd7ebbe17ba3ff2300fcdcecf8ec0e1f6a11",
+    "research/connections/channel-opt/protocol.json": "36cf2821e0c1530f07f66e4290f5394cad1d9c97e93dd99ed0a52fc847032ccf"
+  },
+  "checks": {
+    "source_files_byte_identical_to_base": 86,
+    "python_ast_files": 81,
+    "bash_syntax_files": 23,
+    "retained_config_roundtrips": 10,
+    "retired_selector_rejections": 3,
+    "cli_checks": [
+      "scripts/connection_train.py",
+      "scripts/connection_context_profile.py"
+    ],
+    "formal_job_immutable_attributes_unchanged": true,
+    "formal_input_hashes_unchanged": 8,
+    "active_collectors": 0
+  },
+  "compact_routing_preserved": true,
+  "compact_routing_default": false,
+  "existing_training_unchanged": true,
+  "new_gpu_test": false,
+  "gpu_test_note": "No new GPU execution: restored source is byte-identical to the validated pre-optimization code",
+  "retired_workflows": [
+    "channel-opt-gate-20261106",
+    "channel-opt-gate-20261106-r2",
+    "channel-opt-gate-20261106-r3",
+    "channel-opt-gate-20261106-r4",
+    "channel-opt-gate-20261106-r5",
+    "channel-opt-gate-20261106-r6"
+  ],
+  "archives_preserved": true,
+  "automatic_continuation": false
+}

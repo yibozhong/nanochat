@@ -51,7 +51,6 @@ def main():
     p.add_argument('--repetition', type=int, default=0)
     p.add_argument('--probe', action='store_true')
     p.add_argument('--compact-routing', action=argparse.BooleanOptionalAction, default=False)
-    p.add_argument('--channel-mixing-kernel', choices=('legacy','split','fused','fused_wide'), default='legacy')
     p.add_argument('--data-dir', default='../data')
     p.add_argument('--output', required=True)
     a = p.parse_args()
@@ -63,8 +62,7 @@ def main():
     actual_attention_backend = configure_attention(a.attention_backend)
     seed_all(42)
     props = torch.cuda.get_device_properties(0)
-    cfg = ConnectionConfig(variant=a.variant, sequence_length=a.sequence_length, compact_routing=a.compact_routing,
-                           channel_mixing_kernel=a.channel_mixing_kernel)
+    cfg = ConnectionConfig(variant=a.variant, sequence_length=a.sequence_length, compact_routing=a.compact_routing)
     record = dict(complete=False, variant=a.variant, sequence_length=a.sequence_length,
         microbatch=a.microbatch, grad_accum=rows//a.microbatch, batch_tokens=BATCH_TOKENS,
         repetition=a.repetition, probe=a.probe, model=asdict(cfg), logging_backend='local',

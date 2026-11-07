@@ -12,8 +12,7 @@ from nanochat.nvidia_ops import nvidia_ops
 
 class ChannelHyperConnection(nn.Module):
     def __init__(self, width, streams, branch_index, iterations=20, *,
-                 use_tf32=True, fused_grad_acc=False, compact_routing=False,
-                 channel_mixing_kernel='legacy', **unused):
+                 use_tf32=True, fused_grad_acc=False, compact_routing=False, **unused):
         super().__init__()
         if streams != 4 or fused_grad_acc:
             raise ValueError('Local mixing uses four streams and ordinary gradient accumulation')
@@ -21,9 +20,6 @@ class ChannelHyperConnection(nn.Module):
         self.use_tf32 = use_tf32
         self.sinkhorn = False
         self.compact_routing = compact_routing
-        if channel_mixing_kernel not in ('legacy','split','fused','fused_wide'):
-            raise ValueError('Unknown channel mixing kernel')
-        self.channel_mixing_kernel = channel_mixing_kernel
         self.phi = nn.Parameter(torch.empty(8,4*width))
         self.bias = nn.Parameter(torch.empty(8))
         self.scales = nn.Parameter(torch.empty(2))
@@ -69,9 +65,5 @@ class ChannelHyperConnection(nn.Module):
         return branch,x,post.reshape(b,t,n).contiguous()
 
     def write(self, output, residual, post):
-        if self.channel_mixing_kernel != 'legacy':
-            from nanochat.channel_mixing_fast import channel_mix_fast
-            return channel_mix_fast(residual,output.contiguous(),post,
-                self.mix_weight,self.mix_bias,self.mix_scale,kernel=self.channel_mixing_kernel)
         return channel_mix(residual,output.contiguous(),post,
             self.mix_weight,self.mix_bias,self.mix_scale)
