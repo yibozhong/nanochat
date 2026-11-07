@@ -9,7 +9,7 @@ import torch
 from torch.profiler import profile,ProfilerActivity
 import triton as tr
 from nanochat.channel_mixing import channel_mix
-from nanochat.channel_mixing_fast import channel_mix_fast,GEOMETRIES,_channel_row_forward,_channel_row_backward
+from nanochat.channel_mixing_fast import channel_mix_fast,GEOMETRIES,_channel_fast_forward,_channel_fast_backward
 from scripts.connection_profile import trace_summary
 
 
@@ -62,8 +62,8 @@ def main():
             out=torch.empty_like(x);gx=torch.empty_like(x);gy=torch.empty_like(y)
             parts=torch.empty((tr.cdiv(n,bt),c,81),device='cuda')
             pp=torch.empty((n,tr.cdiv(c,bc),4),device='cuda') if fuse else torch.empty_like(p)
-            kernels=[_channel_row_forward[(tr.cdiv(n,ft),tr.cdiv(c,fc))](x,y,p,w,b,a,out,n,c,ft,fc,num_warps=fw),
-                     _channel_row_backward[(tr.cdiv(n,bt),tr.cdiv(c,bc))](x,y,p,w,b,a,go,gx,gy,parts,pp,n,c,bt,bc,fuse,num_warps=bw)]
+            kernels=[_channel_fast_forward[(tr.cdiv(n,ft),tr.cdiv(c,fc))](x,y,p,w,b,a,out,n,c,ft,fc,num_warps=fw),
+                     _channel_fast_backward[(tr.cdiv(n,bt),tr.cdiv(c,bc))](x,y,p,w,b,a,go,gx,gy,parts,pp,n,c,bt,bc,fuse,num_warps=bw)]
             resources[name]=[]
             for kind,kernel in zip(['forward','backward'],kernels):
                 ptx=kernel.asm['ptx'];(root/(name+'-'+kind+'.ptx')).write_text(ptx)

@@ -37,5 +37,41 @@
   "r4_original_kernels_unchanged": true,
   "r4_thresholds_unchanged": true,
   "r4_changes": "Optional kernel restores four-stream reduction expression and RMS VJP; failure-only crossed forward/backward diagnostic added",
-  "r4_existing_training_input_hashes_unchanged": true
+  "r4_existing_training_input_hashes_unchanged": true,
+  "r5_ast_files": 39,
+  "r5_thresholds_unchanged": true,
+  "r5_retained_hashes_unchanged": true,
+  "r5_existing_training_input_hashes_unchanged": true,
+  "r5_original_forward_jit_reused": true,
+  "r5_original_backward_ast_identical_before_branch_fusion": true,
+  "r5_rowwise_rewrite_removed": true,
+  "r5_geometries": {
+    "split": [
+      32,
+      16,
+      8,
+      128,
+      8,
+      8,
+      false
+    ],
+    "fused": [
+      32,
+      16,
+      8,
+      128,
+      8,
+      8,
+      true
+    ],
+    "fused_wide": [
+      16,
+      32,
+      8,
+      64,
+      16,
+      8,
+      true
+    ]
+  }
 }

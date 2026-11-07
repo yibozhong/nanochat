@@ -53,5 +53,31 @@
     "speed_measured": false,
     "numerical_thresholds_changed": false,
     "new_formal_run": false
+  },
+  {
+    "job": "7918524.0",
+    "source": "2678d62fae535c7a90c7aaf4d3190bdd8495b3c6",
+    "exit_code": 1,
+    "host": "backfill1_1@ssilwalgpu4000.chtc.wisc.edu",
+    "passed": 42,
+    "failed": 6,
+    "max_relative_gradient_error": 0.046741875169386035,
+    "losses_equal": true,
+    "crossed_fast_backward_max": 0.033582099446965386,
+    "crossed_fast_forward_max": 0.02966910940177115,
+    "max_error_parameter": "blocks.0.attn_connection.scales",
+    "max_error_parameter_norm": {
+      "old": 3.7212278450364437e-06,
+      "new": 3.758785578065639e-06,
+      "difference": 1.7393620298435355e-07
+    },
+    "reason": "Rowwise reduction revision still fails six model comparisons; crossed controls show differences from both forward and backward",
+    "action": "Withdraw rowwise arithmetic rewrite. Reuse original forward and exact original backward AST, optimizing only geometry and optional branch-gradient fusion",
+    "kernel_fp64_vjps_passed": true,
+    "compiled_primitive_passed": true,
+    "optimizer_rng_resume_passed": true,
+    "speed_measured": false,
+    "numerical_thresholds_changed": false,
+    "new_formal_run": false
   }
 ]
