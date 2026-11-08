@@ -1,0 +1,32 @@
+{
+  "complete": true,
+  "job": "8051564.0",
+  "run_id": "80d5e3f6",
+  "job_status": 3,
+  "exit_code": 143,
+  "last_observed": {
+    "step": 28670,
+    "tokens": 939458560,
+    "loss": 3.5176212787628174,
+    "seconds": 0.06400155276060104,
+    "lr_multiplier": 1.0
+  },
+  "removed": [
+    {
+      "root": "/home/yzhong239/qk-scale-gate-20261108",
+      "regular_files": 60,
+      "symlinks": 2,
+      "bytes": 9848040
+    },
+    {
+      "root": "/home/yzhong239/qk-scale-10b-20261108",
+      "regular_files": 24,
+      "symlinks": 1,
+      "bytes": 10170320
+    }
+  ],
+  "retained_runs_unchanged": true,
+  "original_attnres_artifacts_unchanged": true,
+  "remote_wandb_deleted": false,
+  "history_commit": "b11f6a934878a307b63628c17833c5a16db06ad3"
+}

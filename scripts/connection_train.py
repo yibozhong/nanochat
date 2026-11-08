@@ -58,7 +58,7 @@ def main():
     p.add_argument('--seed', type=int, default=42)
     a = p.parse_args()
     if a.streams is None:
-        a.streams = 1 if a.variant in ('skip_scale', 'qk_scale') else 4
+        a.streams = 1 if a.variant == 'skip_scale' else 4
     assert torch.cuda.is_available() and torch.cuda.device_count()==1
     assert a.sequence_length>0 and 32768%a.sequence_length==0
     rows_per_step=32768//a.sequence_length
@@ -132,7 +132,6 @@ def main():
                          'static_per_channel_identity_skip_scale' if a.variant=='skip_scale' else
                          'additive'),
         applied_sinkhorn_iterations=c.sinkhorn_iterations if a.variant=='mhc' else 0,
-        attention_score_scaling='static_per_head_rope_pair_after_qk_norm' if a.variant=='qk_scale' else 'original',
         optimizer='native MuonAdamW; connector AdamW at native unembedding LR, no decay',
         optimizer_groups=initial_groups,
         loss='full-token full-vocabulary CCE; no gradient filtering',

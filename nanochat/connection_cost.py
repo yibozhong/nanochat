@@ -3,22 +3,13 @@
 
 def model_cost(config, batch=1, activation_bytes=2):
     c=config
-    if c.architecture!='vanilla' or c.variant not in ('baseline','attnres','skip_scale','qk_scale'):
+    if c.architecture!='vanilla' or c.variant not in ('baseline','attnres','skip_scale'):
         return None
     t,d,depth=c.sequence_length,c.width,c.depth
     projections=24*batch*t*depth*d*d
     head=2*batch*t*d*c.vocab_size
     attention=4*batch*d*depth*(t*(t+1)//2)
     forward=projections+head+attention
-    if c.variant=='qk_scale':
-        extra_forward=depth*batch*t*d
-        parameters=depth*d//2
-        return dict(estimated_forward_flops=forward+extra_forward,
-            estimated_training_flops=3*forward+4*extra_forward-parameters,
-            components_forward=dict(backbone_projections=projections,vocab_head=head,
-                attention=attention,additional_qk_scale=extra_forward),
-            additional_scale_parameters=parameters,
-            accounting='FMA=2; causal attention pairs; backbone backward approximately2x forward. Extra scale counts Q multiply, dQ multiply and paired parameter-gradient multiply/reduction. Excludes other elementwise work, optimizer, copies and recomputation; not measured hardware FLOPs.')
     if c.variant=='skip_scale':
         # Relative to vanilla's already-present residual adds: one multiply
         # forward; dx multiply plus dscale multiply/reduction in backward.

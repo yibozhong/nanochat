@@ -64,6 +64,5 @@ def match_vanilla_initialization(model, seed):
     missing, unexpected = model.load_state_dict(reference.state_dict(), strict=False)
     assert not unexpected
     assert all('_connection.' in name or name.startswith(('stream_head.', 'depth_reads.', 'output_attnres.')) or
-               (model.config.variant == 'skip_scale' and name.endswith(('.attn_skip_scale', '.mlp_skip_scale'))) or
-               (model.config.variant == 'qk_scale' and name.endswith('.attn.qk_scale'))
+               (model.config.variant == 'skip_scale' and name.endswith(('.attn_skip_scale', '.mlp_skip_scale')))
                for name in missing)
