@@ -1,0 +1,98 @@
+--- NVIDIA TE2.20.2 originals
++++ Scaled HC adaptations
+@@ -1,9 +1,10 @@
+-def _mhc_expand_combine_fwd(
++def _nvidia_scaled_fwd(
+     f_ptr,  # (M, C)
+     bias_ptr,  # (C,), or None if HAS_BIAS is False
+     H_post_ptr,  # (M, n)
+     x_ptr,  # (M, C, n)
+     H_res_ptr,  # (M, n, n)
++    a_ptr,  # Added static FP32 channel/input-stream scale (C,n)
+     output_ptr,  # # (M, C, n)
+     M,
+     C,
+@@ -62,7 +63,6 @@
+     out_acc = tl.zeros((BLOCK_SIZE_M, BLOCK_SIZE_C, n), dtype=tl.float32)
+     if HAS_BIAS:
+         out_acc = tl.fma(bias[None, :, None], H_post[:, None, :], out_acc)
+-    out_acc = tl.fma(f[:, :, None], H_post[:, None, :], out_acc)
+ 
+     H_res_offs = pid_m * BLOCK_SIZE_M * n * n + tl.arange(0, BLOCK_SIZE_M * n * n)
+     H_res = tl.load(
+@@ -74,6 +74,10 @@
+     x = tl.load(
+         x_ptrs, mask=mask_m[:, None] & mask_cn[None, :], other=0.0
+     )  # (BLOCK_SIZE_M, BLOCK_SIZE_C, n)
++
++    # Added modulation, staying in FP32: no new BF16 rounding of x*a.
++    a = tl.load(a_ptr + offs_cn, mask=mask_cn, other=0.0)
++    x = x.to(tl.float32) * a[None, :]
+ 
+     # Manifold connection path: manifold_out = H_res @ x:
+     # (BLOCK_SIZE_M, BLOCK_SIZE_C, n) @ (BLOCK_SIZE_M, n, n) = (BLOCK_SIZE_M, BLOCK_SIZE_C, n)
+@@ -100,7 +104,9 @@
+     out_acc = tl.fma(x2[:, :, None], H_res2[:, None, :], out_acc)
+     out_acc = tl.fma(x3[:, :, None], H_res3[:, None, :], out_acc)
+ 
+-    out = out_acc.to(x.dtype)
++    # Preserve the accepted scale implementation's branch-last FMA order.
++    out_acc = tl.fma(f[:, :, None], H_post[:, None, :], out_acc)
++    out = out_acc.to(output_ptr.dtype.element_ty)
+     out = tl.reshape(out, (BLOCK_SIZE_M, BLOCK_SIZE_C * n))  # (BLOCK_SIZE_M, BLOCK_SIZE_C*n)
+ 
+     output_ptrs = (
+@@ -108,7 +114,7 @@
+     )
+     tl.store(output_ptrs, out, mask=mask_m[:, None] & mask_cn[None, :])
+ 
+-def _mhc_expand_combine_bwd(
++def _nvidia_scaled_bwd(
+     grad_output_ptr,  # (M, C, n)
+     f_ptr,  # (M, C)
+     bias_ptr,  # (C,), or None if HAS_BIAS is False
+@@ -121,6 +127,8 @@
+     grad_bias_ws_ptr,  # (grid_m, C), or None if HAS_BIAS is False or DETERMINISTIC is False
+     grad_H_res_ptr,  # (M, n, n)
+     grad_x_ptr,  # (M, C, n)
++    a_ptr,  # Added static FP32 input scale (C,n)
++    grad_a_ws_ptr,  # Added deterministic partials (ceil(M/4),C,n)
+     M,
+     C,
+     n: tl.constexpr,
+@@ -263,12 +271,18 @@
+         )  # (BLOCK_SIZE_M, STEP_SIZE_C*n)
+         x = tl.reshape(x, (BLOCK_SIZE_M, STEP_SIZE_C, n))  # (BLOCK_SIZE_M, STEP_SIZE_C, n)
+ 
++        # Added modulation inside NVIDIA's existing read/compute/write loop.
++        a = tl.load(a_ptr + offs_cn, mask=mask_cn, other=0.0)
++        a = tl.reshape(a, (STEP_SIZE_C, n))
++        scaled_x = x.to(tl.float32) * a[None, :, :]
++
+         # grad_H_res = x.T @ grad_output: (BLOCK_SIZE_M, n, STEP_SIZE_C) @ (BLOCK_SIZE_M, STEP_SIZE_C, n) = (BLOCK_SIZE_M, n, n)
+         grad_H_res_acc = tl.dot(
+-            tl.trans(x, (0, 2, 1)),
+-            grad_out,
++            tl.trans(scaled_x, (0, 2, 1)),
++            grad_out.to(tl.float32),
+             acc=grad_H_res_acc,
+-            input_precision=precision,
++            # Preserve FP32 scaled-input precision, including scale near zero.
++            input_precision="ieee",
+             out_dtype=tl.float32,
+         )  # (BLOCK_SIZE_M, n, n)
+ 
+@@ -335,6 +349,13 @@
+         grad_x_acc = tl.fma(grad_out2[:, :, None], H_res2[:, None, :], grad_x_acc)
+         grad_x_acc = tl.fma(grad_out3[:, :, None], H_res3[:, None, :], grad_x_acc)
+ 
++        # grad_x_acc is dL/d(x*a), before multiplying by a.
++        # Sum this CTA's token rows; the small final kernel sums CTA partials.
++        grad_a = tl.sum(grad_x_acc * x.to(tl.float32), axis=0)
++        tl.store(grad_a_ws_ptr + pid_m*C*n + offs_cn,
++                 tl.reshape(grad_a, (STEP_SIZE_C*n,)), mask=mask_cn)
++        grad_x_acc *= a[None, :, :]
++
+         if FUSE_GRAD_X_ACC:
+             grad_x = grad_x_acc  # If fusing gradient accumulation, the buffer should be always fp32 so we don't cast here
+         else:

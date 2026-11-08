@@ -1,0 +1,18 @@
+{
+  "repository": "https://github.com/NVIDIA/TransformerEngine",
+  "tag": "v2.20.2",
+  "path": "transformer_engine/common/triton/mhc.py",
+  "source_sha256": "0045990824e46034a2d3162a4690fec1fa87f880dbbab0f43c546ba29d62ff7f",
+  "license": "Apache-2.0",
+  "license_sha256": "bea1b4266f1499fa4bbb16d6e7577e6b5b53d1ef010835a9d460876022cc8722",
+  "legacy_sha256": "7d9fce3b78faee7b4ca803a474cca1218723a9f3208af54dd0add2634829fbc7",
+  "adaptations": [
+    "a_ptr scale in FP32 before residual mixing",
+    "all five gradients in original one-pass backward",
+    "deterministic grad_a workspace reduced separately",
+    "IEEE FP32 dot for scaled_x routing gradient; no BF16 intermediate",
+    "preserve accepted branch-last forward FMA order",
+    "keep NVIDIA launch search: backwardBM4,SC64/128,warps1/2,stages2/3"
+  ],
+  "production_shared_nvidia_unchanged": true
+}

@@ -1,0 +1,10 @@
+{
+  "ast_and_undefined_globals": "passed9files",
+  "nvidia_wrapper_signatures": "passed",
+  "retained_files_hash_identical": true,
+  "legacy_hash_identical": true,
+  "original_27_checks_unchanged": true,
+  "additional_checks": 4,
+  "gpu": "pending",
+  "formal_training": false
+}
