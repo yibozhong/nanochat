@@ -1,0 +1,16 @@
+{
+  "upstream": "NVIDIA TransformerEngine v2.20.2",
+  "path": "transformer_engine/common/triton/mhc.py",
+  "sha256": "0045990824e46034a2d3162a4690fec1fa87f880dbbab0f43c546ba29d62ff7f",
+  "functions": [
+    "_mhc_aggregate_fwd",
+    "_mhc_aggregate_bwd"
+  ],
+  "license": "../scaled-hc-nvidia/LICENSE.NVIDIA",
+  "changes": [
+    "FP32 scale in aggregate scan and all3VJPs",
+    "optional post scale in existing write and all6VJPs",
+    "Config objects precreated for torch.compile",
+    "deterministic coalesced parameter partial reduction"
+  ]
+}

@@ -1,0 +1,40 @@
+{
+  "variant": "scaled_hc_all",
+  "current_training_untouched": "8015499.0",
+  "formal_training": false,
+  "automatic_training": false,
+  "wandb": false,
+  "formulas": {
+    "read": "h[t,c]=sum_i pre[t,i]*read_scale[c,i]*x[t,c,i]",
+    "write": "out[t,c,j]=sum_i H[t,i,j]*input_scale[c,i]*x[t,c,i]+post[t,j]*post_scale[c,j]*y[t,c]",
+    "head": "z[t,c]=sum_i head_pre[t,i]*head_scale[c,i]*x[t,c,i]"
+  },
+  "independent_scale_tables": 49,
+  "parameters": 59615669,
+  "additional_vs_mix_only": 67584,
+  "initialization": "all scales1; backbone/routing/RNG unchanged",
+  "precision": "BF16 activations, FP32 scale arithmetic and reductions; no scaled activation bank or extra BF16 intermediate",
+  "kernel": "NVIDIA TE2.20.2 aggregate and existing NVIDIA-adapted write; one scan per main backward; deterministic two-stage parameter reductions; no active atomics",
+  "checks": 52,
+  "profile_order": [
+    "mhc_no_sinkhorn",
+    "scaled_hc",
+    "scaled_hc_all",
+    "scaled_hc_all",
+    "scaled_hc",
+    "mhc_no_sinkhorn"
+  ],
+  "profile_steps": 60,
+  "microbatch_candidates": [
+    16,
+    8,
+    4
+  ],
+  "batch_tokens": 32768,
+  "sequence_length": 2048,
+  "restart": [
+    25,
+    128
+  ],
+  "hardware": "complete H100/H200 >=22GB, FA3;2CPU16GBRAM40GBscratch; no credentials; results only"
+}

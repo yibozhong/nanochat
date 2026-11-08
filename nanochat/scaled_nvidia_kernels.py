@@ -26,7 +26,7 @@ def _backward_configs():
             for sc,w,s in itertools.product((64,128),(1,2),(2,3))]
 
 
-@triton.autotune(configs=_forward_configs(),key=['M','C'])
+@triton.autotune(configs=_forward_configs(),key=['M','C','HAS_POST_SCALE'])
 @triton.jit
 def _nvidia_scaled_fwd(
     f_ptr,  # (M, C)
@@ -35,6 +35,7 @@ def _nvidia_scaled_fwd(
     x_ptr,  # (M, C, n)
     H_res_ptr,  # (M, n, n)
     a_ptr,  # Added static FP32 channel/input-stream scale (C,n)
+    post_scale_ptr,  # Optional static (C,n) branch-to-stream scale
     output_ptr,  # # (M, C, n)
     M,
     C,
@@ -50,6 +51,7 @@ def _nvidia_scaled_fwd(
     BLOCK_SIZE_M: tl.constexpr,
     BLOCK_SIZE_C: tl.constexpr,
     HAS_BIAS: tl.constexpr,
+    HAS_POST_SCALE: tl.constexpr,
 ):
     """
     output = (f + bias[None, :, None]) @ H_post: (BLOCK_SIZE_M, BLOCK_SIZE_C, 1) @ (BLOCK_SIZE_M, 1, n)  = (BLOCK_SIZE_M, BLOCK_SIZE_C, n)
@@ -135,7 +137,12 @@ def _nvidia_scaled_fwd(
     out_acc = tl.fma(x3[:, :, None], H_res3[:, None, :], out_acc)
 
     # Preserve the accepted scale implementation's branch-last FMA order.
-    out_acc = tl.fma(f[:, :, None], H_post[:, None, :], out_acc)
+    if HAS_POST_SCALE:
+        post_scale = tl.load(post_scale_ptr + offs_cn, mask=mask_cn, other=0.0).reshape(BLOCK_SIZE_C,n)
+        branch = f.to(tl.float32)[:, :, None] * post_scale[None, :, :]
+        out_acc = tl.fma(branch, H_post[:, None, :], out_acc)
+    else:
+        out_acc = tl.fma(f[:, :, None], H_post[:, None, :], out_acc)
     out = out_acc.to(output_ptr.dtype.element_ty)
     out = tl.reshape(out, (BLOCK_SIZE_M, BLOCK_SIZE_C * n))  # (BLOCK_SIZE_M, BLOCK_SIZE_C*n)
 
@@ -145,7 +152,7 @@ def _nvidia_scaled_fwd(
     tl.store(output_ptrs, out, mask=mask_m[:, None] & mask_cn[None, :])
 
 
-@triton.autotune(configs=_backward_configs(),key=["M","C"])
+@triton.autotune(configs=_backward_configs(),key=["M","C","HAS_POST_SCALE"])
 @triton.jit
 def _nvidia_scaled_bwd(
     grad_output_ptr,  # (M, C, n)
@@ -162,6 +169,8 @@ def _nvidia_scaled_bwd(
     grad_x_ptr,  # (M, C, n)
     a_ptr,  # Added static FP32 input scale (C,n)
     grad_a_ws_ptr,  # Added deterministic partials (ceil(M/4),C,n)
+    post_scale_ptr,
+    grad_post_scale_ws_ptr,
     M,
     C,
     n: tl.constexpr,
@@ -185,6 +194,7 @@ def _nvidia_scaled_bwd(
     STEP_SIZE_C: tl.constexpr,
     precision: tl.constexpr,
     HAS_BIAS: tl.constexpr,
+    HAS_POST_SCALE: tl.constexpr,
     FUSE_GRAD_X_ACC: tl.constexpr,
     DETERMINISTIC: tl.constexpr,  # If True, grad_bias partials go to a workspace (reduced in the wrapper) instead of atomic_add.
 ):
@@ -282,13 +292,22 @@ def _nvidia_scaled_bwd(
         )  # (BLOCK_SIZE_M, STEP_SIZE_C, n)
 
         # grad_H_post =  f.T @ grad_output # (BLOCK_SIZE_M, 1, STEP_SIZE_C) @ (BLOCK_SIZE_M, STEP_SIZE_C, n) = (BLOCK_SIZE_M, 1, n)
-        grad_H_post_acc = tl.dot(
-            tl.reshape(f, (BLOCK_SIZE_M, 1, STEP_SIZE_C)),
-            tl.reshape(grad_out, (BLOCK_SIZE_M, STEP_SIZE_C, n)),
-            acc=grad_H_post_acc,
-            input_precision=precision,
-            out_dtype=tl.float32,
-        )  # (BLOCK_SIZE_M, 1, n)
+        if HAS_POST_SCALE:
+            post_scale = tl.load(post_scale_ptr + offs_cn, mask=mask_cn, other=0.0).reshape(STEP_SIZE_C,n)
+            scaled_grad_out = grad_out.to(tl.float32) * post_scale[None,:,:]
+            grad_H_post_acc = tl.dot(
+                f.to(tl.float32).reshape(BLOCK_SIZE_M,1,STEP_SIZE_C),
+                scaled_grad_out, acc=grad_H_post_acc, input_precision="ieee", out_dtype=tl.float32)
+            post_part = tl.sum(grad_out.to(tl.float32) * f.to(tl.float32)[:,:,None] * H_post.reshape(BLOCK_SIZE_M,n)[:,None,:], axis=0)
+            tl.store(grad_post_scale_ws_ptr + pid_m*C*n + offs_cn,post_part.reshape(STEP_SIZE_C*n),mask=mask_cn)
+        else:
+            grad_H_post_acc = tl.dot(
+                tl.reshape(f, (BLOCK_SIZE_M, 1, STEP_SIZE_C)),
+                tl.reshape(grad_out, (BLOCK_SIZE_M, STEP_SIZE_C, n)),
+                acc=grad_H_post_acc,
+                input_precision=precision,
+                out_dtype=tl.float32,
+            )  # (BLOCK_SIZE_M, 1, n)
         if HAS_BIAS:
             grad_H_post_acc = tl.dot(
                 tl.broadcast_to(bias[None, None, :], (BLOCK_SIZE_M, 1, STEP_SIZE_C)),
@@ -340,12 +359,22 @@ def _nvidia_scaled_bwd(
         #        + grad_out[:, :, 3] @ H_post.T[:, 3, :]
         # where H_post.T[:, i, :] = H_post[:, :, i]
 
-        grad_f_acc = tl.zeros((BLOCK_SIZE_M, STEP_SIZE_C), dtype=tl.float32)
-        # (BLOCK_SIZE_M, STEP_SIZE_C) * (BLOCK_SIZE_M, 1) -> (BLOCK_SIZE_M, STEP_SIZE_C)
-        grad_f_acc = tl.fma(grad_out0, H_post0[:, None], grad_f_acc)
-        grad_f_acc = tl.fma(grad_out1, H_post1[:, None], grad_f_acc)
-        grad_f_acc = tl.fma(grad_out2, H_post2[:, None], grad_f_acc)
-        grad_f_acc = tl.fma(grad_out3, H_post3[:, None], grad_f_acc)
+        if HAS_POST_SCALE:
+            post_scale01,post_scale23 = tl.split(post_scale.reshape(STEP_SIZE_C,2,2))
+            post_scale0,post_scale1 = tl.split(post_scale01)
+            post_scale2,post_scale3 = tl.split(post_scale23)
+            grad_f_acc = tl.zeros((BLOCK_SIZE_M, STEP_SIZE_C),dtype=tl.float32)
+            grad_f_acc = tl.fma(grad_out0,H_post0[:,None]*post_scale0[None,:],grad_f_acc)
+            grad_f_acc = tl.fma(grad_out1,H_post1[:,None]*post_scale1[None,:],grad_f_acc)
+            grad_f_acc = tl.fma(grad_out2,H_post2[:,None]*post_scale2[None,:],grad_f_acc)
+            grad_f_acc = tl.fma(grad_out3,H_post3[:,None]*post_scale3[None,:],grad_f_acc)
+        else:
+            grad_f_acc = tl.zeros((BLOCK_SIZE_M, STEP_SIZE_C), dtype=tl.float32)
+            # (BLOCK_SIZE_M, STEP_SIZE_C) * (BLOCK_SIZE_M, 1) -> (BLOCK_SIZE_M, STEP_SIZE_C)
+            grad_f_acc = tl.fma(grad_out0, H_post0[:, None], grad_f_acc)
+            grad_f_acc = tl.fma(grad_out1, H_post1[:, None], grad_f_acc)
+            grad_f_acc = tl.fma(grad_out2, H_post2[:, None], grad_f_acc)
+            grad_f_acc = tl.fma(grad_out3, H_post3[:, None], grad_f_acc)
         grad_f = grad_f_acc.to(f.dtype)
 
         grad_f_ptrs = (

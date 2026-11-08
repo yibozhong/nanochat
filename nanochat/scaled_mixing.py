@@ -9,6 +9,7 @@ import torch
 import triton as tr
 import triton.language as tl
 from torch.autograd.function import once_differentiable
+from nanochat.scaled_reduction import reduce_scale_partials
 from nanochat.scaled_nvidia_kernels import _nvidia_scaled_fwd, _nvidia_scaled_bwd
 
 
@@ -26,7 +27,7 @@ def _scaled_da_reduce(Parts, GA, K: tl.constexpr, S: tl.constexpr):
 
 class _ScaledMix(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, x, y, post, h, scale):
+    def forward(ctx, x, y, post, h, scale, post_scale):
         if x.ndim != 4 or x.shape[-1] != 4 or not x.is_cuda:
             raise ValueError('Scaled HC expects CUDA [batch,time,channel,4]')
         c = x.shape[-2]; n = x.numel()//(4*c)
@@ -38,37 +39,47 @@ class _ScaledMix(torch.autograd.Function):
             raise ValueError('Routing and scale must be FP32')
         if not all(p.is_contiguous() and p.device == x.device for p in (x,y,post,h,scale)):
             raise ValueError('Scaled HC requires contiguous colocated inputs')
+        if post_scale is not None:
+            if post_scale.shape!=scale.shape or post_scale.dtype!=torch.float32 or post_scale.device!=x.device or not post_scale.is_contiguous():
+                raise ValueError('Post scale must be contiguous FP32 [C,4] on the same device')
+        ctx.has_post_scale=post_scale is not None
         out = torch.empty_like(x)
         _nvidia_scaled_fwd[lambda meta: (tr.cdiv(c,meta['BLOCK_SIZE_C']),tr.cdiv(n,meta['BLOCK_SIZE_M']))](
-            f_ptr=y,bias_ptr=y,H_post_ptr=post,x_ptr=x,H_res_ptr=h,a_ptr=scale,output_ptr=out,
+            f_ptr=y,bias_ptr=y,H_post_ptr=post,x_ptr=x,H_res_ptr=h,a_ptr=scale,post_scale_ptr=post_scale if post_scale is not None else scale,output_ptr=out,
             M=n,C=c,n=4,stride_fm=c,stride_fc=1,stride_bias=1,stride_xm=c*4,stride_xCn=1,
-            stride_output_m=c*4,stride_output_Cn=1,HAS_BIAS=False)
-        ctx.save_for_backward(x,y,post,h,scale)
+            stride_output_m=c*4,stride_output_Cn=1,HAS_BIAS=False,HAS_POST_SCALE=ctx.has_post_scale)
+        ctx.save_for_backward(x,y,post,h,scale,*((post_scale,) if post_scale is not None else ()))
         return out
 
     @staticmethod
     @once_differentiable
     def backward(ctx, go):
-        x,y,post,h,scale = ctx.saved_tensors
+        x,y,post,h,scale = ctx.saved_tensors[:5]
+        post_scale=ctx.saved_tensors[5] if ctx.has_post_scale else None
         go=go.contiguous(); c=x.shape[-2]; n=x.numel()//(4*c)
         gx=torch.empty_like(x);gy=torch.empty_like(y)
         gp=torch.empty_like(post);gh=torch.empty_like(h);ga=torch.empty_like(scale)
         # NVIDIA owns4 tokens per CTA and traverses all channels once.
         # 64MiB deterministic parameter partials at N32768/C512; not a saved state.
         splits=tr.cdiv(n,4)
-        parts=torch.empty((splits,c,4),device=x.device,dtype=torch.float32)
+        parts=torch.empty((2 if ctx.has_post_scale else 1,splits,c,4),device=x.device,dtype=torch.float32)
+        post_parts=parts[1] if ctx.has_post_scale else parts
         _nvidia_scaled_bwd[lambda meta: (tr.cdiv(c,meta['BLOCK_SIZE_C']),tr.cdiv(n,meta['BLOCK_SIZE_M']))](
             grad_output_ptr=go,f_ptr=y,bias_ptr=y,H_post_ptr=post,x_ptr=x,H_res_ptr=h,
             grad_H_post_ptr=gp,grad_f_ptr=gy,grad_bias_ptr=ga,grad_bias_ws_ptr=parts,
-            grad_H_res_ptr=gh,grad_x_ptr=gx,a_ptr=scale,grad_a_ws_ptr=parts,M=n,C=c,n=4,
+            grad_H_res_ptr=gh,grad_x_ptr=gx,a_ptr=scale,grad_a_ws_ptr=parts,
+            post_scale_ptr=post_scale if post_scale is not None else scale,grad_post_scale_ws_ptr=post_parts,M=n,C=c,n=4,
             stride_grad_output_m=c*4,stride_grad_output_Cn=1,stride_fm=c,stride_fc=1,stride_bias=1,
             stride_xm=c*4,stride_xCn=1,stride_grad_fm=c,stride_grad_fc=1,stride_grad_bias=1,
             stride_grad_bias_ws_m=c,stride_grad_bias_ws_c=1,stride_grad_xm=c*4,stride_grad_xCn=1,
-            precision='ieee',HAS_BIAS=False,FUSE_GRAD_X_ACC=False,DETERMINISTIC=True,
+            precision='ieee',HAS_BIAS=False,HAS_POST_SCALE=ctx.has_post_scale,FUSE_GRAD_X_ACC=False,DETERMINISTIC=True,
             BLOCK_SIZE_C=tr.cdiv(c,32)*32)
+        if ctx.has_post_scale:
+            reduced=reduce_scale_partials(parts)
+            return gx,gy,gp,gh,reduced[0],reduced[1]
         _scaled_da_reduce[(tr.cdiv(c*4,16),)](parts,ga,c*4,splits,num_warps=4)
-        return gx,gy,gp,gh,ga
+        return gx,gy,gp,gh,ga,None
 
 
-def scaled_mix(x, y, post, h, scale):
-    return _ScaledMix.apply(x,y,post,h,scale)
+def scaled_mix(x, y, post, h, scale, post_scale=None):
+    return _ScaledMix.apply(x,y,post,h,scale,post_scale)
