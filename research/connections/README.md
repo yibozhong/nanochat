@@ -12,8 +12,14 @@ The dynamic `dynamic_hc_all` run 8087234.0 was already removed (exit 143), and
 its implementation and workflow roots were deleted. The older SiLU `gated_hc`
 implementation, tests and launchers are now also retired; both variants are
 rejected by configuration and checkpoint loading. Historical SiLU reports are
-under `archive/retired-gates-20261108/`; existing results and checkpoints are
-preserved. No gate sweep, new training, or automatic continuation is authorized.
+under `archive/retired-gates-20261108/`; existing metrics and reports are preserved.
+At the user's subsequent request, all local nanochat experiment checkpoints,
+including vanilla/native and HC/mHC baselines, were deleted: 15 training archives
+containing 30 latest/best checkpoints, one recovery probe, and 11 reference links
+(about 11.45 GiB). Data, tokenizer, source and result logs remain unchanged.
+Historical checkpoint paths below and in reports no longer identify available
+weights. See [checkpoint deletion audit](cleanup-checkpoints-20261108.json).
+No gate sweep, new training, or automatic continuation is authorized.
 
 The completed mix-only comparison improves dev CE from 3.084048 to 3.067482
 against no-Sinkhorn HC on the same 64 dev sequences. It is a single-seed result

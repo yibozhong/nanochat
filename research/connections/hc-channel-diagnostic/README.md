@@ -1,5 +1,11 @@
 # Frozen HC channel diagnostics
 
+Checkpoint availability (2026-11-08): the user subsequently requested deletion
+of all local nanochat experiment checkpoints. The shared and scaled checkpoints
+and their diagnostic input links have been deleted. The measurements and reports
+below are retained; rerunning this diagnostic requires the original weights,
+which are no longer available locally. This does not authorize new training.
+
 User requested a mechanism test against **HC without Sinkhorn**, not manifold HC.
 Compare final seed-42 10B checkpoints: shared `6a494b4f` and mix-only static
 channel scale `6df116ef`. Production model, kernels and active training stay unchanged.

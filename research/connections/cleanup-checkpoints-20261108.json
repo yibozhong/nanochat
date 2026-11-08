@@ -1,0 +1,423 @@
+{
+  "complete": true,
+  "date": "2026-11-08",
+  "scope": "Local nanochat experiment model/optimizer checkpoints including vanilla/native baselines, HC/mHC, channel mixing, AttnRes and gates; preserve metrics, code, data and tokenizer",
+  "training_checkpoint_archives_deleted": 15,
+  "training_checkpoint_members_deleted": 30,
+  "recovery_probe_archives_deleted": 1,
+  "checkpoint_symlinks_deleted": 11,
+  "file_bytes_deleted": 12295157760,
+  "allocated_bytes_released": 12295241728,
+  "deleted_archives": [
+    {
+      "path": "/home/yzhong239/attnres-10b-20261106/results/train-7913860.0-checkpoints.tar",
+      "bytes": 705228800,
+      "members": 3,
+      "weight_members": [
+        {
+          "name": "checkpoints/latest.pt",
+          "size": 503792333,
+          "type": "0"
+        },
+        {
+          "name": "checkpoints/best.pt",
+          "size": 201429785,
+          "type": "0"
+        }
+      ],
+      "other_files": [],
+      "allocated_bytes": 705232896
+    },
+    {
+      "path": "/home/yzhong239/attnres-scale-10b-20261108/results/train-8057630.0-checkpoints.tar",
+      "bytes": 705976320,
+      "members": 3,
+      "weight_members": [
+        {
+          "name": "checkpoints/best.pt",
+          "size": 201617721,
+          "type": "0"
+        },
+        {
+          "name": "checkpoints/latest.pt",
+          "size": 504351293,
+          "type": "0"
+        }
+      ],
+      "other_files": [],
+      "allocated_bytes": 705982464
+    },
+    {
+      "path": "/home/yzhong239/channel-mixing-10b-20261105/results/train-7816910.0-checkpoints.tar",
+      "bytes": 719841280,
+      "members": 3,
+      "weight_members": [
+        {
+          "name": "checkpoints/latest.pt",
+          "size": 514753348,
+          "type": "0"
+        },
+        {
+          "name": "checkpoints/best.pt",
+          "size": 205082628,
+          "type": "0"
+        }
+      ],
+      "other_files": [],
+      "allocated_bytes": 719847424
+    },
+    {
+      "path": "/home/yzhong239/gated-hc-silu-10b-20261107/results/train-7972371.0-checkpoints.tar",
+      "bytes": 720353280,
+      "members": 3,
+      "weight_members": [
+        {
+          "name": "checkpoints/best.pt",
+          "size": 205210004,
+          "type": "0"
+        },
+        {
+          "name": "checkpoints/latest.pt",
+          "size": 515134804,
+          "type": "0"
+        }
+      ],
+      "other_files": [],
+      "allocated_bytes": 720359424
+    },
+    {
+      "path": "/home/yzhong239/lookback-16k-10b-20261102/results/baseline-7669762.0-checkpoints.tar",
+      "bytes": 704911360,
+      "members": 3,
+      "weight_members": [
+        {
+          "name": "checkpoints/best.pt",
+          "size": 201349541,
+          "type": "0"
+        },
+        {
+          "name": "checkpoints/latest.pt",
+          "size": 503552997,
+          "type": "0"
+        }
+      ],
+      "other_files": [],
+      "allocated_bytes": 704917504
+    },
+    {
+      "path": "/home/yzhong239/mhc-native-pretrain-20261031/stop-20261101/mhc/last-durable-checkpoints.tar",
+      "bytes": 1254584320,
+      "members": 3,
+      "weight_members": [
+        {
+          "name": "checkpoints/best.pt",
+          "size": 338768435,
+          "type": "0"
+        },
+        {
+          "name": "checkpoints/latest.pt",
+          "size": 915805329,
+          "type": "0"
+        }
+      ],
+      "other_files": [],
+      "allocated_bytes": 1254588416
+    },
+    {
+      "path": "/home/yzhong239/mhc-native-pretrain-20261031/stop-20261101/mhc_no_sinkhorn/last-durable-checkpoints.tar",
+      "bytes": 1254584320,
+      "members": 3,
+      "weight_members": [
+        {
+          "name": "checkpoints/best.pt",
+          "size": 338768435,
+          "type": "0"
+        },
+        {
+          "name": "checkpoints/latest.pt",
+          "size": 915805329,
+          "type": "0"
+        }
+      ],
+      "other_files": [],
+      "allocated_bytes": 1254588416
+    },
+    {
+      "path": "/home/yzhong239/mhc-native-pretrain-20261031/results/baseline-7638116.0-checkpoints.tar",
+      "bytes": 1241794560,
+      "members": 3,
+      "weight_members": [
+        {
+          "name": "checkpoints/latest.pt",
+          "size": 906218209,
+          "type": "0"
+        },
+        {
+          "name": "checkpoints/best.pt",
+          "size": 335572375,
+          "type": "0"
+        }
+      ],
+      "other_files": [],
+      "allocated_bytes": 1241800704
+    },
+    {
+      "path": "/home/yzhong239/mhc-no-sinkhorn-20261031/results/train-7581136.0-checkpoints.tar",
+      "bytes": 717690880,
+      "members": 3,
+      "weight_members": [
+        {
+          "name": "checkpoints/latest.pt",
+          "size": 513136308,
+          "type": "0"
+        },
+        {
+          "name": "checkpoints/best.pt",
+          "size": 204542964,
+          "type": "0"
+        }
+      ],
+      "other_files": [],
+      "allocated_bytes": 717697024
+    },
+    {
+      "path": "/home/yzhong239/mhc-pretrain-20261030/results/baseline-7562105.0-checkpoints.tar",
+      "bytes": 704911360,
+      "members": 3,
+      "weight_members": [
+        {
+          "name": "checkpoints/best.pt",
+          "size": 201348901,
+          "type": "0"
+        },
+        {
+          "name": "checkpoints/latest.pt",
+          "size": 503552357,
+          "type": "0"
+        }
+      ],
+      "other_files": [],
+      "allocated_bytes": 704917504
+    },
+    {
+      "path": "/home/yzhong239/mhc-pretrain-20261030/results/mhc-7562105.1-checkpoints.tar",
+      "bytes": 717690880,
+      "members": 3,
+      "weight_members": [
+        {
+          "name": "checkpoints/best.pt",
+          "size": 204543988,
+          "type": "0"
+        },
+        {
+          "name": "checkpoints/latest.pt",
+          "size": 513137332,
+          "type": "0"
+        }
+      ],
+      "other_files": [],
+      "allocated_bytes": 717697024
+    },
+    {
+      "path": "/home/yzhong239/scaled-hc-10b-20261107/results/train-8015499.0-checkpoints.tar",
+      "bytes": 718243840,
+      "members": 3,
+      "weight_members": [
+        {
+          "name": "checkpoints/latest.pt",
+          "size": 513549028,
+          "type": "0"
+        },
+        {
+          "name": "checkpoints/best.pt",
+          "size": 204683236,
+          "type": "0"
+        }
+      ],
+      "other_files": [],
+      "allocated_bytes": 718249984
+    },
+    {
+      "path": "/home/yzhong239/scaled-hc-all-10b-20261107/results/train-8033761.0-checkpoints.tar",
+      "bytes": 719360000,
+      "members": 3,
+      "weight_members": [
+        {
+          "name": "checkpoints/best.pt",
+          "size": 204963135,
+          "type": "0"
+        },
+        {
+          "name": "checkpoints/latest.pt",
+          "size": 514390971,
+          "type": "0"
+        }
+      ],
+      "other_files": [],
+      "allocated_bytes": 719364096
+    },
+    {
+      "path": "/home/yzhong239/skip-scale-10b-20261108/results/train-8046098.0-checkpoints.tar",
+      "bytes": 705064960,
+      "members": 3,
+      "weight_members": [
+        {
+          "name": "checkpoints/best.pt",
+          "size": 201390661,
+          "type": "0"
+        },
+        {
+          "name": "checkpoints/latest.pt",
+          "size": 503667759,
+          "type": "0"
+        }
+      ],
+      "other_files": [],
+      "allocated_bytes": 705069056
+    },
+    {
+      "path": "/home/yzhong239/triton-moments-10b-20261103/results/none-7802254.0-checkpoints.tar",
+      "bytes": 704911360,
+      "members": 3,
+      "weight_members": [
+        {
+          "name": "checkpoints/best.pt",
+          "size": 201347941,
+          "type": "0"
+        },
+        {
+          "name": "checkpoints/latest.pt",
+          "size": 503551461,
+          "type": "0"
+        }
+      ],
+      "other_files": [],
+      "allocated_bytes": 704917504
+    },
+    {
+      "path": "/home/yzhong239/checkpoint-safety-20261031/probe/checkpoints.tar",
+      "bytes": 10240,
+      "weight_members": [
+        {
+          "name": "checkpoints/probe.pkl",
+          "size": 3830
+        }
+      ],
+      "kind": "synthetic_recovery_probe",
+      "allocated_bytes": 12288
+    }
+  ],
+  "deleted_symlinks": [
+    {
+      "path": "/home/yzhong239/depth-diagnostic-2k-20261103/retry-2/bundles/baseline-7638116.0-checkpoints.tar",
+      "target": "/home/yzhong239/mhc-native-pretrain-20261031/results/baseline-7638116.0-checkpoints.tar"
+    },
+    {
+      "path": "/home/yzhong239/depth-diagnostic-2k-20261103/retry-2/bundles/baseline-7562105.0-checkpoints.tar",
+      "target": "/home/yzhong239/mhc-pretrain-20261030/results/baseline-7562105.0-checkpoints.tar"
+    },
+    {
+      "path": "/home/yzhong239/depth-diagnostic-2k-20261103/retry-2/bundles/mhc-7562105.1-checkpoints.tar",
+      "target": "/home/yzhong239/mhc-pretrain-20261030/results/mhc-7562105.1-checkpoints.tar"
+    },
+    {
+      "path": "/home/yzhong239/depth-diagnostic-2k-20261103/bundles/baseline-7638116.0-checkpoints.tar",
+      "target": "/home/yzhong239/mhc-native-pretrain-20261031/results/baseline-7638116.0-checkpoints.tar"
+    },
+    {
+      "path": "/home/yzhong239/depth-diagnostic-2k-20261103/bundles/baseline-7562105.0-checkpoints.tar",
+      "target": "/home/yzhong239/mhc-pretrain-20261030/results/baseline-7562105.0-checkpoints.tar"
+    },
+    {
+      "path": "/home/yzhong239/depth-diagnostic-2k-20261103/bundles/mhc-7562105.1-checkpoints.tar",
+      "target": "/home/yzhong239/mhc-pretrain-20261030/results/mhc-7562105.1-checkpoints.tar"
+    },
+    {
+      "path": "/home/yzhong239/depth-diagnostic-2k-20261103/retry-3/bundles/baseline-7638116.0-checkpoints.tar",
+      "target": "/home/yzhong239/mhc-native-pretrain-20261031/results/baseline-7638116.0-checkpoints.tar"
+    },
+    {
+      "path": "/home/yzhong239/depth-diagnostic-2k-20261103/retry-3/bundles/baseline-7562105.0-checkpoints.tar",
+      "target": "/home/yzhong239/mhc-pretrain-20261030/results/baseline-7562105.0-checkpoints.tar"
+    },
+    {
+      "path": "/home/yzhong239/depth-diagnostic-2k-20261103/retry-3/bundles/mhc-7562105.1-checkpoints.tar",
+      "target": "/home/yzhong239/mhc-pretrain-20261030/results/mhc-7562105.1-checkpoints.tar"
+    },
+    {
+      "path": "/home/yzhong239/hc-channel-diagnostic-20261108/bundles/train-8015499.0-checkpoints.tar",
+      "target": "/home/yzhong239/scaled-hc-10b-20261107/results/train-8015499.0-checkpoints.tar"
+    },
+    {
+      "path": "/home/yzhong239/hc-channel-diagnostic-20261108/bundles/train-7581136.0-checkpoints.tar",
+      "target": "/home/yzhong239/mhc-no-sinkhorn-20261031/results/train-7581136.0-checkpoints.tar"
+    }
+  ],
+  "non_checkpoint_files_unchanged": 5791,
+  "archives_inspected": 212,
+  "standalone_model_weights_found": 0,
+  "tokenizer_pt_payloads_preserved": 4,
+  "queue_jobs": 0,
+  "scheduler_spools": [
+    {
+      "path": "/var/lib/condor/spool/3860/0/cluster7913860.proc0.subproc0",
+      "exists": false
+    },
+    {
+      "path": "/var/lib/condor/spool/7630/0/cluster8057630.proc0.subproc0",
+      "exists": false
+    },
+    {
+      "path": "/var/lib/condor/spool/6910/0/cluster7816910.proc0.subproc0",
+      "exists": false
+    },
+    {
+      "path": "/var/lib/condor/spool/2371/0/cluster7972371.proc0.subproc0",
+      "exists": false
+    },
+    {
+      "path": "/var/lib/condor/spool/9762/0/cluster7669762.proc0.subproc0",
+      "exists": false
+    },
+    {
+      "path": "/var/lib/condor/spool/8116/0/cluster7638116.proc0.subproc0",
+      "exists": false
+    },
+    {
+      "path": "/var/lib/condor/spool/1136/0/cluster7581136.proc0.subproc0",
+      "exists": false
+    },
+    {
+      "path": "/var/lib/condor/spool/2105/0/cluster7562105.proc0.subproc0",
+      "exists": false
+    },
+    {
+      "path": "/var/lib/condor/spool/2105/1/cluster7562105.proc1.subproc0",
+      "exists": false
+    },
+    {
+      "path": "/var/lib/condor/spool/5499/0/cluster8015499.proc0.subproc0",
+      "exists": false
+    },
+    {
+      "path": "/var/lib/condor/spool/3761/0/cluster8033761.proc0.subproc0",
+      "exists": false
+    },
+    {
+      "path": "/var/lib/condor/spool/6098/0/cluster8046098.proc0.subproc0",
+      "exists": false
+    },
+    {
+      "path": "/var/lib/condor/spool/2254/0/cluster7802254.proc0.subproc0",
+      "exists": false
+    },
+    {
+      "path": "/var/lib/condor/spool/7234/0/cluster8087234.proc0.subproc0",
+      "exists": false
+    }
+  ],
+  "model_code_changed": false,
+  "new_training": false,
+  "remote_wandb_changed": false,
+  "audit_root": "/home/yzhong239/research-cleanup-20261108/nanochat-checkpoints"
+}
