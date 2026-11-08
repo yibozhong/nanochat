@@ -1,0 +1,15 @@
+{
+  "job": "8087406.0",
+  "source": {
+    "commit": "03997f576aaefbe041c1130ab139cfabb0e8e2c1",
+    "formal_training": false,
+    "purpose": "Frozen matched-10B no-Sinkhorn shared HC versus static channel-scaled HC; geometry and channel interventions"
+  },
+  "executed_files": {
+    "scripts/connection_hc_channel_diagnostic.py": "cd03cc80104ae7456ef5861dbe4c241737687056357578a5741ad479e269acf1",
+    "tests/test_hc_channel_diagnostic.py": "ebddb15106a29e36172c83625bd7273b13eba070d62b002653c8928b4fbb104a",
+    "research/connections/hc-channel-diagnostic/run.sh": "aba09dffdac69f210402b5999f6f16281120b0cf9600c17c2e516198690906ec"
+  },
+  "production_unchanged_from": "d83dd5d5c1c9353ca03d9feb07f5b18ad532c030",
+  "retained_training_inputs": 8
+}

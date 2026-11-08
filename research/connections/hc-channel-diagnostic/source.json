@@ -1,0 +1,5 @@
+{
+  "commit": "03997f576aaefbe041c1130ab139cfabb0e8e2c1",
+  "formal_training": false,
+  "purpose": "Frozen matched-10B no-Sinkhorn shared HC versus static channel-scaled HC; geometry and channel interventions"
+}

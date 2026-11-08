@@ -1,0 +1,389 @@
+{
+  "job": "8087406.0",
+  "exit_code": 0,
+  "gpu": "NVIDIA A100-SXM4-80GB",
+  "source": {
+    "commit": "03997f576aaefbe041c1130ab139cfabb0e8e2c1",
+    "formal_training": false,
+    "purpose": "Frozen matched-10B no-Sinkhorn shared HC versus static channel-scaled HC; geometry and channel interventions"
+  },
+  "elapsed_diagnostic_seconds": 55.6689248085022,
+  "checks": {
+    "synthetic": 5,
+    "failed": 0,
+    "observer_forward_exact": true,
+    "weights_and_buffers_unchanged": true,
+    "training_file_hashes_equal": true
+  },
+  "original_ce": {
+    "shared": {
+      "mean": 3.084047969430685,
+      "sequence_se": 0.02963704850210395,
+      "valid_sequences": 64,
+      "ci95": [
+        3.0274210617877544,
+        3.1412194003351033
+      ]
+    },
+    "scaled": {
+      "mean": 3.0674820095300674,
+      "sequence_se": 0.02937523424934445,
+      "valid_sequences": 64,
+      "ci95": [
+        3.0118816470727325,
+        3.1248470989987256
+      ]
+    }
+  },
+  "paired_scaled_minus_shared": {
+    "mean": -0.0165659599006176,
+    "sequence_se": 0.0019012090842610207,
+    "valid_sequences": 64,
+    "ci95": [
+      -0.02045422522351146,
+      -0.012905799131840466
+    ]
+  },
+  "interventions": {
+    "ones": {
+      "ce": {
+        "mean": 11.714938759803772,
+        "sequence_se": 0.14535257721740732,
+        "valid_sequences": 64,
+        "ci95": [
+          11.441315973550081,
+          12.005629839375615
+        ]
+      },
+      "delta_ce": {
+        "mean": 8.647456720471382,
+        "sequence_se": 0.1543814373751059,
+        "valid_sequences": 64,
+        "ci95": [
+          8.357940015010536,
+          8.951773040927947
+        ]
+      }
+    },
+    "channel_mean": {
+      "ce": {
+        "mean": 6.814333058893681,
+        "sequence_se": 0.031527964036258765,
+        "valid_sequences": 64,
+        "ci95": [
+          6.753410730697214,
+          6.877694570831954
+        ]
+      },
+      "delta_ce": {
+        "mean": 3.746851045638323,
+        "sequence_se": 0.04065820804376898,
+        "valid_sequences": 64,
+        "ci95": [
+          3.667059347592294,
+          3.8292600539512933
+        ]
+      }
+    },
+    "calibrated_ls": {
+      "ce": {
+        "mean": 7.321813568472862,
+        "sequence_se": 0.03790991840994788,
+        "valid_sequences": 64,
+        "ci95": [
+          7.247051262669265,
+          7.398071606643498
+        ]
+      },
+      "delta_ce": {
+        "mean": 4.254331558942795,
+        "sequence_se": 0.047545366799136346,
+        "valid_sequences": 64,
+        "ci95": [
+          4.159648418985308,
+          4.348127834126354
+        ]
+      }
+    },
+    "calibrated_energy": {
+      "ce": {
+        "mean": 6.73982410877943,
+        "sequence_se": 0.028338647113822037,
+        "valid_sequences": 64,
+        "ci95": [
+          6.684381912648678,
+          6.796101161651313
+        ]
+      },
+      "delta_ce": {
+        "mean": 3.6723420917987823,
+        "sequence_se": 0.039712289116500224,
+        "valid_sequences": 64,
+        "ci95": [
+          3.5923067296855153,
+          3.750188777782023
+        ]
+      }
+    },
+    "shuffle_42": {
+      "ce": {
+        "mean": 11.816513821482658,
+        "sequence_se": 0.07935981693804114,
+        "valid_sequences": 64,
+        "ci95": [
+          11.659728838875889,
+          11.971680692210793
+        ]
+      },
+      "delta_ce": {
+        "mean": 8.74903179705143,
+        "sequence_se": 0.08162345028976899,
+        "valid_sequences": 64,
+        "ci95": [
+          8.589576752111316,
+          8.910274613648653
+        ]
+      }
+    },
+    "shuffle_1337": {
+      "ce": {
+        "mean": 9.514825984835625,
+        "sequence_se": 0.030952619403381336,
+        "valid_sequences": 64,
+        "ci95": [
+          9.453859754651784,
+          9.575772638618947
+        ]
+      },
+      "delta_ce": {
+        "mean": 6.4473439529538155,
+        "sequence_se": 0.04821437712817553,
+        "valid_sequences": 64,
+        "ci95": [
+          6.350005743466317,
+          6.541009335406125
+        ]
+      }
+    },
+    "shuffle_2026": {
+      "ce": {
+        "mean": 11.364358276128769,
+        "sequence_se": 0.03582392798259814,
+        "valid_sequences": 64,
+        "ci95": [
+          11.291978643089532,
+          11.43326220922172
+        ]
+      },
+      "delta_ce": {
+        "mean": 8.296876281499863,
+        "sequence_se": 0.03823129254867602,
+        "valid_sequences": 64,
+        "ci95": [
+          8.220985120348633,
+          8.370344414748251
+        ]
+      }
+    }
+  },
+  "single_site_delta_ce": {
+    "single_01_attn": {
+      "mean": 0.16121013462543488,
+      "sequence_se": 0.003020892362271657,
+      "valid_sequences": 64,
+      "ci95": [
+        0.15531221237033604,
+        0.16712677087634803
+      ]
+    },
+    "single_01_mlp": {
+      "mean": 0.18173358216881752,
+      "sequence_se": 0.002996095611206202,
+      "valid_sequences": 64,
+      "ci95": [
+        0.17587196929380297,
+        0.18750114385038613
+      ]
+    },
+    "single_02_attn": {
+      "mean": 0.25210505723953247,
+      "sequence_se": 0.004282224128501309,
+      "valid_sequences": 64,
+      "ci95": [
+        0.24385988041758538,
+        0.26046436224132774
+      ]
+    },
+    "single_02_mlp": {
+      "mean": 0.17582004144787788,
+      "sequence_se": 0.0035129356182898846,
+      "valid_sequences": 64,
+      "ci95": [
+        0.16909854281693698,
+        0.18307267380878328
+      ]
+    },
+    "single_03_attn": {
+      "mean": 0.2623271159827709,
+      "sequence_se": 0.004593729092057228,
+      "valid_sequences": 64,
+      "ci95": [
+        0.25347082065418364,
+        0.2713713082484901
+      ]
+    },
+    "single_03_mlp": {
+      "mean": 0.1027432419359684,
+      "sequence_se": 0.0016389602095647291,
+      "valid_sequences": 64,
+      "ci95": [
+        0.09960395228117705,
+        0.10589559618383645
+      ]
+    },
+    "single_04_attn": {
+      "mean": 0.16423283517360687,
+      "sequence_se": 0.003270506486693753,
+      "valid_sequences": 64,
+      "ci95": [
+        0.1582692913711071,
+        0.17104813465848565
+      ]
+    },
+    "single_04_mlp": {
+      "mean": 0.09534234181046486,
+      "sequence_se": 0.001336962084106566,
+      "valid_sequences": 64,
+      "ci95": [
+        0.09282610528171062,
+        0.09797886498272419
+      ]
+    },
+    "single_05_attn": {
+      "mean": 0.08814160153269768,
+      "sequence_se": 0.0012980233696287455,
+      "valid_sequences": 64,
+      "ci95": [
+        0.08556821439415216,
+        0.09071977315470577
+      ]
+    },
+    "single_05_mlp": {
+      "mean": 0.1855984516441822,
+      "sequence_se": 0.0026731355561681112,
+      "valid_sequences": 64,
+      "ci95": [
+        0.18040093425661324,
+        0.19094900395721198
+      ]
+    },
+    "single_06_attn": {
+      "mean": 0.3200979232788086,
+      "sequence_se": 0.0068844476906962685,
+      "valid_sequences": 64,
+      "ci95": [
+        0.30688791451975705,
+        0.33380846986547114
+      ]
+    },
+    "single_06_mlp": {
+      "mean": 0.18379783257842064,
+      "sequence_se": 0.006613735257368827,
+      "valid_sequences": 64,
+      "ci95": [
+        0.17169185318052768,
+        0.19810943072661757
+      ]
+    },
+    "single_07_attn": {
+      "mean": 0.46119094640016556,
+      "sequence_se": 0.01501813589970751,
+      "valid_sequences": 64,
+      "ci95": [
+        0.4322944241575897,
+        0.49141405811533334
+      ]
+    },
+    "single_07_mlp": {
+      "mean": 0.3599102757871151,
+      "sequence_se": 0.011990757153804783,
+      "valid_sequences": 64,
+      "ci95": [
+        0.33677565176039936,
+        0.3845351442694664
+      ]
+    },
+    "single_08_attn": {
+      "mean": 0.16123508661985397,
+      "sequence_se": 0.004140127669733849,
+      "valid_sequences": 64,
+      "ci95": [
+        0.15328307617455722,
+        0.1691011104732752
+      ]
+    },
+    "single_08_mlp": {
+      "mean": 0.22160983830690384,
+      "sequence_se": 0.0035884619713112235,
+      "valid_sequences": 64,
+      "ci95": [
+        0.21451710248366,
+        0.22861227840185167
+      ]
+    }
+  },
+  "geometry": {
+    "shared": {
+      "mean_connector_output_cosine": 0.2743695742006546,
+      "mean_connector_output_effective_rank": 2.6232436795678766,
+      "output_effective_rank_by_site": {
+        "01_attn": 1.6054300538137691,
+        "01_mlp": 1.9667633184852042,
+        "02_attn": 2.3290379921841073,
+        "02_mlp": 2.553506376319243,
+        "03_attn": 2.708845463527425,
+        "03_mlp": 2.8994842088392634,
+        "04_attn": 2.7719811190882826,
+        "04_mlp": 2.6820896081135626,
+        "05_attn": 3.070352937598754,
+        "05_mlp": 2.8645953668068147,
+        "06_attn": 3.1660615016032922,
+        "06_mlp": 3.223330550922592,
+        "07_attn": 2.7243496670467593,
+        "07_mlp": 2.3993071443030516,
+        "08_attn": 2.6014608630605824,
+        "08_mlp": 2.405302701373322
+      }
+    },
+    "scaled": {
+      "mean_connector_output_cosine": 0.1709976941393165,
+      "mean_connector_output_effective_rank": 2.665220842001001,
+      "output_effective_rank_by_site": {
+        "01_attn": 2.4232663083238215,
+        "01_mlp": 2.505658375849317,
+        "02_attn": 2.6455560240012836,
+        "02_mlp": 2.582429494112815,
+        "03_attn": 2.7721606989514322,
+        "03_mlp": 2.6346640620953288,
+        "04_attn": 2.8992027271102216,
+        "04_mlp": 2.651759344102905,
+        "05_attn": 2.5678599650300216,
+        "05_mlp": 2.6186811417384837,
+        "06_attn": 3.165082709076926,
+        "06_mlp": 2.9053454026178978,
+        "07_attn": 3.093774298650583,
+        "07_mlp": 2.9212482530050448,
+        "08_attn": 2.126168279344127,
+        "08_mlp": 2.1306763880058055
+      }
+    }
+  },
+  "rank_increased_sites": 8,
+  "max_calibration_energy_relative_error": 8.566090881068078e-08,
+  "conclusions": [
+    "Learned channel assignment matters to this frozen trained model, including all 16 individually intervened sites.",
+    "No progressive global stream collapse is observed in the no-Sinkhorn baseline on this dev sample.",
+    "Effective rank is not uniformly higher with scales (8/16 sites); a rank-restoration mechanism is not established.",
+    "Frozen ablation does not replace retrained scalar controls or multiple training seeds; original training attention backends differ."
+  ]
+}
