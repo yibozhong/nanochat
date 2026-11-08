@@ -54,8 +54,10 @@ class _ScaledMix(torch.autograd.Function):
     @staticmethod
     @once_differentiable
     def backward(ctx, go):
-        x,y,post,h,scale = ctx.saved_tensors[:5]
-        post_scale=ctx.saved_tensors[5] if ctx.has_post_scale else None
+        # Checkpoint recomputation permits each saved tensor to be unpacked once.
+        saved = ctx.saved_tensors
+        x,y,post,h,scale = saved[:5]
+        post_scale=saved[5] if ctx.has_post_scale else None
         go=go.contiguous(); c=x.shape[-2]; n=x.numel()//(4*c)
         gx=torch.empty_like(x);gy=torch.empty_like(y)
         gp=torch.empty_like(post);gh=torch.empty_like(h);ga=torch.empty_like(scale)

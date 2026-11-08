@@ -36,5 +36,5 @@
     25,
     128
   ],
-  "hardware": "complete H100/H200 >=22GB, FA3;2CPU16GBRAM40GBscratch; no credentials; results only"
+  "hardware": "complete H100/H200 SM90 FA3 or A100 SM80 FA2 >=22GB;2CPU16GBRAM40GBscratch;no credentials;results only;same-card comparisons"
 }

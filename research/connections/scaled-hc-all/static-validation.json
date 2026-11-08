@@ -2,5 +2,6 @@
   "python_ast_files": 13,
   "bash": true,
   "original_write_specialized_ast_identical": true,
-  "gpu": "pending"
+  "gpu": "r1 51/52; corrected r2 pending",
+  "checkpoint_fix": "one saved_tensors unpack in write backward; kernel files unchanged from ecf4535"
 }

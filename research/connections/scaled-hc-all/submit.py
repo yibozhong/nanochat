@@ -33,7 +33,8 @@ def main(root):
         template=(ASSETS/'gate.sub').read_text().replace('executable = validate.sh','executable = run.sh')
         template=template.replace('stream-$(Cluster)','gate-$(Cluster)').replace('logs/stream.','logs/gate.')
         template=template.replace('nanochat-depth-diagnostic','nanochat-scaled-hc-all-gate').replace('DepthDiagnosticKey','ScaledHCAllGateKey').replace('depth-diagnostic-20261103',root.name)
-        template=template.replace('(Capability == 9.0)', '(Capability == 9.0) && regexp("H100|H200",DeviceName)')
+        template=template.replace('gpus_minimum_capability = 9.0','gpus_minimum_capability = 8.0')
+        template=template.replace('(Capability == 9.0)', '((Capability == 9.0 && regexp("H100|H200",DeviceName)) || (Capability == 8.0 && regexp("A100",DeviceName)))')
         template=template.replace('!regexp("MIG",DeviceName)', '!regexp("MIG",DeviceName) && (DeviceUuid =!= "7067f38b-b4c2-5568-ec82-f698473ddd07")')
         template=template.replace('queue 1','hold = true\nqueue 1')
         (root/'gate.sub').write_text(template)
@@ -46,9 +47,9 @@ def main(root):
         ad=json.loads(subprocess.check_output(['condor_q',job,'-json'],text=True))[0]
         assert ad['JobStatus']==5 and ad.get('NumJobStarts',0)==0
         assert ad['RequestGPUs']==1 and ad['RequestCpus']==2 and ad['RequestMemory']==16384 and ad['RequestDisk']==40*1024**2
-        assert ad['GPUsMinCapability']==9.0 and ad['WantGPULab'] is True and 'backfill' in ad['Rank']
+        assert ad['GPUsMinCapability']==8.0 and ad['WantGPULab'] is True and 'backfill' in ad['Rank']
         assert '.netrc' not in ad['TransferInput'] and ad['TransferOutput']=='results.tar'
-        assert ad['ScaledHCAllGateKey']==root.name and 'H100|H200' in ad['RequireGPUs']
+        assert ad['ScaledHCAllGateKey']==root.name and 'H100|H200' in ad['RequireGPUs'] and 'A100' in ad['RequireGPUs']
         (root/'submission-verified.json').write_text(json.dumps(ad,indent=2)+'\n')
         subprocess.run(['condor_release',job],check=True,capture_output=True)
         print(json.dumps(state,indent=2))

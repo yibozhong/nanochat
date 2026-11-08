@@ -1,0 +1,26 @@
+[
+  {
+    "job": "8025401.0",
+    "source": {
+      "commit": "ecf4535357c24267346b253e72ab4bd14a59b3b4",
+      "formal_training": false,
+      "purpose": "Static read/mix/post/head HC scales;52checks,same-card speed,25-to128 restart;no formal training"
+    },
+    "gpu": "NVIDIA H200",
+    "checks": {
+      "tests": 52,
+      "failures": 1,
+      "errors": 0,
+      "skipped": 0
+    },
+    "status": "failed_checkpoint_recomputation",
+    "failed_test": "test_scaled_hc_all.py::test_fullmodel_causal_cache_cce_recompute",
+    "reason": "Post scale backward reads ctx.saved_tensors twice; PyTorch checkpoint raises on second unpack.",
+    "fix": "Unpack saved_tensors once and index the local tuple.",
+    "numerical_vjp_tests_passed": true,
+    "profile_executed": false,
+    "restart_executed": false,
+    "formal_training": false,
+    "thresholds_unchanged": true
+  }
+]
