@@ -64,7 +64,8 @@ class _ScaledMix(torch.autograd.Function):
             stride_grad_output_m=c*4,stride_grad_output_Cn=1,stride_fm=c,stride_fc=1,stride_bias=1,
             stride_xm=c*4,stride_xCn=1,stride_grad_fm=c,stride_grad_fc=1,stride_grad_bias=1,
             stride_grad_bias_ws_m=c,stride_grad_bias_ws_c=1,stride_grad_xm=c*4,stride_grad_xCn=1,
-            precision='ieee',HAS_BIAS=False,FUSE_GRAD_X_ACC=False,DETERMINISTIC=True)
+            precision='ieee',HAS_BIAS=False,FUSE_GRAD_X_ACC=False,DETERMINISTIC=True,
+            BLOCK_SIZE_C=tr.cdiv(c,32)*32)
         _scaled_da_reduce[(tr.cdiv(c*4,16),)](parts,ga,c*4,splits,num_warps=4)
         return gx,gy,gp,gh,ga
 

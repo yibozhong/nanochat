@@ -1,0 +1,21 @@
+[
+  {
+    "job": "8015410.0",
+    "source": {
+      "commit": "b28e7be3b2575ee8a0346079a6d1dc3b9fee4e46",
+      "formal_training": false,
+      "purpose": "NVIDIA one-pass scaled HC write kernels;31checks,shared-legacy-new ABBA,25-to128 restart;no formal training"
+    },
+    "checks": {
+      "tests": 31,
+      "passed": 30,
+      "failed": 1
+    },
+    "failure": "torch._dynamo.exc.Unsupported: Failed to convert UserDefinedObjectVariable(Config) into a Python constant; backward autotune pruner constructed Config objects during trace",
+    "failed_test": "test_no_bank_and_compiled_primitive",
+    "numerical_checks_passed": true,
+    "profiles_executed": false,
+    "fix": "Precreate same eight backward autotune choices at import; caller supplies width-dependent BLOCK_SIZE_C as constexpr",
+    "thresholds_unchanged": true
+  }
+]

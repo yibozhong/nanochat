@@ -12,7 +12,8 @@
     "deterministic grad_a workspace reduced separately",
     "IEEE FP32 dot for scaled_x routing gradient; no BF16 intermediate",
     "preserve accepted branch-last forward FMA order",
-    "keep NVIDIA launch search: backwardBM4,SC64/128,warps1/2,stages2/3"
+    "keep NVIDIA launch search: backwardBM4,SC64/128,warps1/2,stages2/3",
+    "Autotune Config objects precreated; width-dependent BLOCK_SIZE_C supplied by caller for torch.compile compatibility; same eight choices"
   ],
   "production_shared_nvidia_unchanged": true
 }

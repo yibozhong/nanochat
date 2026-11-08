@@ -20,14 +20,9 @@ def _forward_configs():
 
 
 def _backward_configs():
-    return [triton.Config(dict(BLOCK_SIZE_M=4,BLOCK_SIZE_C=512,STEP_SIZE_C=64),num_warps=w)
-            for w in (1,2)]
-
-
-def _backward_prune(configs,named_args,**kwargs):
-    c=named_args.get('C',kwargs.get('C'))
-    return [triton.Config(dict(BLOCK_SIZE_M=4,BLOCK_SIZE_C=triton.cdiv(c,32)*32,STEP_SIZE_C=sc),
-                         num_warps=w,num_stages=s)
+    # Construct Config objects once, outside torch.compile tracing. Width-
+    # dependent BLOCK_SIZE_C is supplied by the caller as a constexpr.
+    return [triton.Config(dict(BLOCK_SIZE_M=4,STEP_SIZE_C=sc),num_warps=w,num_stages=s)
             for sc,w,s in itertools.product((64,128),(1,2),(2,3))]
 
 
@@ -150,8 +145,7 @@ def _nvidia_scaled_fwd(
     tl.store(output_ptrs, out, mask=mask_m[:, None] & mask_cn[None, :])
 
 
-@triton.autotune(configs=_backward_configs(),key=["M","C"],
-    prune_configs_by={"early_config_prune":_backward_prune})
+@triton.autotune(configs=_backward_configs(),key=["M","C"])
 @triton.jit
 def _nvidia_scaled_bwd(
     grad_output_ptr,  # (M, C, n)
