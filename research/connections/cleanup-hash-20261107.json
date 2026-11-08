@@ -1,0 +1,37 @@
+{
+  "status": "complete",
+  "retired_variants": [
+    "hash_qkv",
+    "hash_vo"
+  ],
+  "stopped_job": "8014794.0",
+  "wandb_run": "1cbe78fa",
+  "final_progress": {
+    "step": 18000,
+    "tokens": 589824000,
+    "loss": 3.710049629211426,
+    "seconds": 0.07767699845135212,
+    "lr_multiplier": 1.0
+  },
+  "repository_files_deleted": 48,
+  "external_roots_deleted": [
+    "/home/yzhong239/hash-kernel-bench-20261107",
+    "/home/yzhong239/hash-kernel-bench-20261107-r2",
+    "/home/yzhong239/hash-kernel-bench-20261107-r3",
+    "/home/yzhong239/hash-kernel-bench-20261107-r4",
+    "/home/yzhong239/hash-kernel-bench-20261107-r5",
+    "/home/yzhong239/hash-vo-10b-20261107",
+    "/home/yzhong239/hash-vo-gate-20261107",
+    "/home/yzhong239/hash-vo-gate-20261107-r2",
+    "/home/yzhong239/hash-weight-kernel-references-20261107"
+  ],
+  "external_files": 363,
+  "external_regular_bytes": 394483609,
+  "protected_shared_targets": 17,
+  "retained_source_files": 390,
+  "retained_training_job": "7972371.0",
+  "remote_wandb_unchanged": true,
+  "checkpoint_note": "Dedicated roots and their contents removed; no formal VO checkpoint archive existed before first1800s upload.",
+  "history_commit": "4a410ca9854eb16093942c0ee213d68e9ac05727",
+  "audit_directory": "/home/yzhong239/research-cleanup-20261107/hash-retired"
+}
