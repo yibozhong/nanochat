@@ -1,0 +1,150 @@
+{
+  "complete": true,
+  "formal_training": false,
+  "job": "8015478.0",
+  "source": {
+    "commit": "801da6db737f76da7b35d5fc0e6cee6b84f814c9",
+    "formal_training": false,
+    "purpose": "NVIDIA one-pass scaled HC write kernels;31checks,shared-legacy-new ABBA,25-to128 restart;no formal training"
+  },
+  "gpu": "NVIDIA H100 80GB HBM3",
+  "gpu_uuid": "003470e7-52d4-d990-de26-d973847ef943",
+  "microbatch": 16,
+  "batch_tokens": 32768,
+  "sequence_length": 2048,
+  "timing_includes": "CPU data copy/H2D, CCE, backward, finite checks, MuonAdamW",
+  "warmup_steps": 20,
+  "timed_steps": 40,
+  "full_step_ms": {
+    "shared": 90.22151271346956,
+    "legacy": 97.8841410484165,
+    "nvidia": 94.53731426037848
+  },
+  "repetition_means_ms": {
+    "shared": [
+      90.18537518568337,
+      90.25765024125576
+    ],
+    "legacy": [
+      97.84152316860855,
+      97.92675892822444
+    ],
+    "nvidia": [
+      94.94185345247388,
+      94.13277506828308
+    ]
+  },
+  "new_elapsed_change_percent": {
+    "shared": 4.783561500033007,
+    "legacy": -3.4191716371935854
+  },
+  "removed_overhead_fraction": 0.43677268970154154,
+  "micro_ms": {
+    "shared_hc": 0.39691757410764694,
+    "legacy": 0.784607045352459,
+    "nvidia": 0.6467334926128387,
+    "compiled_torch": 3.513911087065935
+  },
+  "micro_elapsed_change_percent": -17.572306233585376,
+  "kernel_trace_ms": {
+    "shared_hc": {
+      "_mhc_expand_combine_bwd": 0.1605425,
+      "_mhc_expand_combine_fwd": 0.09985499999999999
+    },
+    "legacy": {
+      "_scaled_dx_da": 0.440605,
+      "_scaled_routes": 0.151759,
+      "_scaled_forward": 0.11846350000000001,
+      "_scaled_da_reduce": 0.0043360000000000004
+    },
+    "nvidia": {
+      "_nvidia_scaled_bwd": 0.314862,
+      "_nvidia_scaled_fwd": 0.095311,
+      "_scaled_da_reduce": 0.078607
+    }
+  },
+  "traced_kernel_sum_ms": {
+    "shared_hc": 0.26039750000000006,
+    "legacy": 0.7151635,
+    "nvidia": 0.48878
+  },
+  "nvidia_configs": {
+    "forward": "BLOCK_SIZE_M: 2, BLOCK_SIZE_C: 256, num_warps: 1, num_ctas: 1, num_stages: 2, maxnreg: None",
+    "backward": "BLOCK_SIZE_M: 4, STEP_SIZE_C: 128, num_warps: 2, num_ctas: 1, num_stages: 2, maxnreg: None"
+  },
+  "parameter_workspace_bytes": {
+    "legacy": 4194304,
+    "nvidia": 67108864
+  },
+  "validation": {
+    "tests": 31,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "restart": {
+    "complete": true,
+    "variant": "scaled_hc",
+    "run_id": "scaled-hc-nvidia-restart-check",
+    "steps": 128,
+    "training_tokens": 4194304,
+    "initial_dev_ce": 10.398010730743408,
+    "final_dev_ce": 5.68512237071991,
+    "best_dev_ce": 5.68512237071991,
+    "dev_tokens": 131072,
+    "training_seconds": 21.42838050611317,
+    "elapsed_seconds": 50.114562610164285,
+    "steady_step_seconds": 0.09595095890984741,
+    "gpu": "NVIDIA H100 80GB HBM3",
+    "peak_allocated_bytes": 9260522496,
+    "peak_reserved_bytes": 9443475456,
+    "source": {
+      "commit": "801da6db737f76da7b35d5fc0e6cee6b84f814c9",
+      "formal_training": false,
+      "purpose": "NVIDIA one-pass scaled HC write kernels;31checks,shared-legacy-new ABBA,25-to128 restart;no formal training"
+    },
+    "test_evaluated": false,
+    "checkpoint_files": {
+      "latest.pt": {
+        "bytes": 513542564,
+        "sha256": "a4edad94d14ec924e700154a307ba28a01ba58a99730177932b0e4ed74584281"
+      },
+      "best.pt": {
+        "bytes": 204677028,
+        "sha256": "7e6886a65c305cb839f0ade20f84ed1099ef808f82482f3104873e1ace9f4128"
+      }
+    }
+  },
+  "trained_scale_range": [
+    0.9170576930046082,
+    1.1198650598526
+  ],
+  "peak_allocated_bytes": {
+    "shared": [
+      9159465984,
+      9159465984
+    ],
+    "legacy": [
+      9159859200,
+      9159859200
+    ],
+    "nvidia": [
+      9159859200,
+      9159859200
+    ]
+  },
+  "analysis": [
+    "New backward computes all five gradients in the NVIDIA channel loop, removing the second activation scan.",
+    "New backward trace0.314862ms replaces legacy0.440605ms dx/da plus0.151759ms routing; deterministic parameter reduction grows from0.004336 to0.078607ms.",
+    "Per-connector traced GPU work drops0.715164 to0.488780ms;16connectors imply3.622ms, consistent with3.347ms measured full-step reduction.",
+    "Remaining overhead includes scale-gradient reduction and additional backward FP32 arithmetic. Counts/timings do not isolate each cause perfectly."
+  ],
+  "limitations": [
+    "Two same-card repetitions;94.133 to94.942ms is the observed new-implementation range, not a hardware-independent guarantee.",
+    "Original shared/legacy measurements in the previous gate used a different H100. Use this gate for the implementation comparison.",
+    "Raw validation overhead fields compare individual runs; this summary averages both repetitions per implementation.",
+    "Profiler kernel timings are instrumented and should not be substituted for uninstrumented full-step timings.",
+    "Same formula, parameters and FP32 scaled input; changed FMA/reduction order is not bitwise equivalent to legacy.",
+    "128steps establishes short finite training and real recovery, not10B stability or quality. No formal training or W&B run was created."
+  ]
+}
