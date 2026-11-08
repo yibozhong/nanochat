@@ -1,0 +1,55 @@
+{
+  "variant": "qk_scale",
+  "architecture": "vanilla",
+  "formula": "q_base=1.2*RMSNorm(RoPE(Wq*x)); k_base=1.2*RMSNorm(RoPE(Wk*x)); q=paired_scale*q_base; score=q*k_base/sqrt(head_dim)",
+  "streams": 1,
+  "depth": 8,
+  "width": 512,
+  "heads": 4,
+  "sequence_length": 2048,
+  "activation": "original ReLU squared",
+  "scale_shape": [
+    4,
+    64
+  ],
+  "scale_count": 8,
+  "scale_parameters": 2048,
+  "parameters": 58722304,
+  "scale_initialization": 1,
+  "scale_arithmetic": "FP32 scale and Q multiply; BF16 attention inputs; whole-block Inductor fusion",
+  "optimizer": "original MuonAdamW; FP32 scales use AdamW at unembedding LR with zero decay",
+  "seed": 42,
+  "batch_tokens": 32768,
+  "microbatch_candidates": [
+    16,
+    8,
+    4
+  ],
+  "steps": 305176,
+  "training_tokens": 10000007168,
+  "gate_checks": 18,
+  "gate_speed": "ABBA baseline/qk_scale/qk_scale/baseline,60steps each;20warm40timed",
+  "gate_restart": "25-to128 genuine exit85",
+  "new_family_preflight": "18checks plus25-to60; separate diagnostic weights deleted",
+  "hardware": "H100/H200 first; after3600 continuous idle seconds allow A100/RTX PRO6000 Blackwell Server Edition",
+  "checkpoint": {
+    "latest_steps": 500,
+    "best": "separate",
+    "exit85_seconds": 1800
+  },
+  "wandb": {
+    "project": "nanochat",
+    "entity": "yibozhong657-none",
+    "group": "qk-scale-10b-20261108"
+  },
+  "formal_runs": 1,
+  "existing_runs_unchanged": [
+    "8015499.0",
+    "8033761.0",
+    "8046098.0"
+  ],
+  "rope_pairing": "coordinate c shares scale with c+head_dim/2, preserving real-arithmetic relative-position structure",
+  "no_skip_scale": true,
+  "no_mhc": true,
+  "no_attnres": true
+}
