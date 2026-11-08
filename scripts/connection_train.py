@@ -58,7 +58,7 @@ def main():
     p.add_argument('--seed', type=int, default=42)
     a = p.parse_args()
     if a.streams is None:
-        a.streams = 1 if a.variant == 'skip_scale' else 4
+        a.streams = 1 if a.variant in ('skip_scale','attnres_scale') else 4
     assert torch.cuda.is_available() and torch.cuda.device_count()==1
     assert a.sequence_length>0 and 32768%a.sequence_length==0
     rows_per_step=32768//a.sequence_length
@@ -128,6 +128,7 @@ def main():
                          'input_channel_silu_gated_shared_raw' if a.variant=='gated_hc' else
                          'static_input_channel_scaled_shared_raw' if a.variant=='scaled_hc' else
                          'static_read_mix_post_head_channel_scaled_shared_raw' if a.variant=='scaled_hc_all' else
+                         'block_attention_residuals_static_value_channel_scale' if a.variant=='attnres_scale' else
                          'block_attention_residuals' if a.variant=='attnres' else
                          'static_per_channel_identity_skip_scale' if a.variant=='skip_scale' else
                          'additive'),

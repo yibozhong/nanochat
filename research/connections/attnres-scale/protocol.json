@@ -1,0 +1,43 @@
+{
+  "variant": "attnres_scale",
+  "architecture": "vanilla",
+  "formula": "alpha=original softmax(query*RMSNorm(raw_history)); output[c]=sum_j alpha[j]*value_scale[reader,j,c]*raw_history[j,c]",
+  "depth": 8,
+  "width": 512,
+  "heads": 4,
+  "sequence_length": 2048,
+  "streams": 1,
+  "attnres_block_size": 2,
+  "attnres_block_size_unit": "sublayers",
+  "scale_tables": 16,
+  "scale_parameters": 45056,
+  "parameters": 58782720,
+  "initialization": "all scales one, original backbone/query RNG unchanged; first single-source read has no scale",
+  "history": "original unscaled embedding/completed block sums/current partial; never store mixed or scaled readouts",
+  "scale_dtype": "FP32; BF16 states; FP32 multiplication/reductions",
+  "kernel": "NVIDIA AttnRes forward/coef/grad adapted; deterministic two-stage parameter reduction; no scaled history bank, atomics or added GEMM",
+  "optimizer": "original MuonAdamW; connector AdamW at unembedding LR/noWD; cache budget expanded for distinct small scale shapes",
+  "seed": 42,
+  "steps": 305176,
+  "training_tokens": 10000007168,
+  "batch_tokens": 32768,
+  "microbatch_candidates": [
+    16,
+    8,
+    4
+  ],
+  "gate_checks": 24,
+  "profile": "baseline/attnres/scaled/scaled/attnres/baseline;60steps each,20warm40timed;22GB budget",
+  "gate_restart": "25-to128 real NTP exit85/resume",
+  "family_preflight": "reuse same-family gate; new family24 checks+25-to60 NTP before formal weights",
+  "formal_runs": 1,
+  "formal_init": "fresh seed42, no diagnostic checkpoint",
+  "hardware": "H100/H200 first; after3600 continuous Idle seconds allow A100/PRO6000 Server",
+  "checkpoint": "latest500,best separate,exit85 every1800seconds; resume same run",
+  "wandb_group": "attnres-scale-10b-20261108",
+  "retained_runs": [
+    8015499,
+    8033761,
+    8046098
+  ]
+}

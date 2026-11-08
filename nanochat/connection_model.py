@@ -15,7 +15,7 @@ from nanochat.gpt import Block, GPTConfig, Linear, norm
 from nanochat.nvidia_connections import NvidiaHyperConnection, NvidiaHyperHead, expand_streams, check_nvidia_device
 from nanochat.optim import MuonAdamW
 
-CONNECTION_VARIANTS = ('baseline', 'mhc', 'mhc_no_sinkhorn', 'mhc_channel_no_sinkhorn', 'attnres', 'gated_hc', 'scaled_hc', 'scaled_hc_all', 'skip_scale')
+CONNECTION_VARIANTS = ('baseline', 'mhc', 'mhc_no_sinkhorn', 'mhc_channel_no_sinkhorn', 'attnres', 'gated_hc', 'scaled_hc', 'scaled_hc_all', 'skip_scale', 'attnres_scale')
 
 
 @dataclass
@@ -39,14 +39,14 @@ class ConnectionConfig:
     attnres_block_size_unit: str = 'sublayers'
 
     def __post_init__(self):
-        if self.variant == 'skip_scale':
+        if self.variant in ('skip_scale','attnres_scale'):
             if self.architecture != 'vanilla' or self.streams != 1 or self.fused_connection_grad:
                 raise ValueError('Skip scale uses vanilla, exactly one residual stream, and ordinary gradients')
         if self.attnres_block_size_unit != 'sublayers':
             raise ValueError('AttnRes block size uses sublayers; load legacy metadata with from_checkpoint')
         if type(self.attnres_block_size) is not int or self.attnres_block_size < 2 or self.attnres_block_size % 2:
             raise ValueError('AttnRes block size counts Attention/MLP sublayers and must be even and >=2; Full AttnRes (S=1) is not implemented')
-        if self.variant == 'attnres':
+        if self.variant in ('attnres','attnres_scale'):
             if self.width > 16384:
                 raise ValueError('NVIDIA AttnRes supports hidden width at most16384')
             if self.architecture != 'vanilla' or self.fused_connection_grad:
@@ -81,7 +81,7 @@ class ConnectionConfig:
             raise ValueError('RoPE requires an even integral head dimension')
         if self.sinkhorn_iterations < 1:
             raise ValueError('Sinkhorn needs at least one iteration')
-        if self.variant not in ('baseline', 'attnres', 'skip_scale') and (self.streams != 4 or self.width % 128):
+        if self.variant not in ('baseline', 'attnres', 'attnres_scale', 'skip_scale') and (self.streams != 4 or self.width % 128):
             raise ValueError('NVIDIA mHC kernels require four streams and width divisible by 128')
 
     @property
@@ -182,7 +182,7 @@ class ConnectionBlock(Block):
 class ConnectionModel(nn.Module):
     def __init__(self, config):
         super().__init__()
-        if config.variant == 'attnres':
+        if config.variant in ('attnres','attnres_scale'):
             raise ValueError('Use build_connection_model for AttnRes')
         if config.architecture != 'vanilla':
             raise ValueError('Use build_connection_model for native nanochat')
@@ -299,7 +299,7 @@ def optimizer_for(model, batch_tokens=32768):
             (routing if '_connection.' in name or name in ('attn_skip_scale', 'mlp_skip_scale') else matrices).append(p)
     if model.stream_head is not None:
         routing.extend(model.stream_head.parameters())
-    if c.variant == 'attnres':
+    if c.variant in ('attnres','attnres_scale'):
         routing.extend(model.residual_parameters())
     if routing:
         groups.append(dict(kind='adamw', params=routing, lr=.008*batch_scale*width_scale,
@@ -309,7 +309,7 @@ def optimizer_for(model, batch_tokens=32768):
             lr=.02*batch_scale, momentum=.95, ns_steps=5, beta2=.9, weight_decay=wd))
     ids = [id(p) for g in groups for p in g['params']]
     assert len(ids) == len(set(ids)) and set(ids) == {id(p) for p in model.parameters()}
-    if c.variant in ('mhc_channel_no_sinkhorn', 'gated_hc', 'scaled_hc', 'scaled_hc_all'):
+    if c.variant in ('mhc_channel_no_sinkhorn', 'gated_hc', 'scaled_hc', 'scaled_hc_all', 'attnres_scale'):
         # Like native.setup_optimizer: the unchanged compiled AdamW function
         # specializes once per routing shape/dtype. Local generators introduce
         # two extra tensor ranks; this is a compiler cache budget, not an LR or
@@ -324,6 +324,9 @@ def optimizer_for(model, batch_tokens=32768):
 
 
 def build_connection_model(config):
+    if config.variant == 'attnres_scale':
+        from nanochat.scaled_attention_residuals import ScaledAttnResModel
+        return ScaledAttnResModel(config)
     if config.variant == 'attnres':
         from nanochat.attention_residuals import AttnResModel
         return AttnResModel(config)
