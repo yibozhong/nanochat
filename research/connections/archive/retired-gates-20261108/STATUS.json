@@ -1,0 +1,11 @@
+{
+  "status": "retired_by_user",
+  "date": "2026-11-08",
+  "variants": [
+    "gated_hc",
+    "dynamic_hc_all"
+  ],
+  "automatic_training": false,
+  "automatic_continuation": false,
+  "note": "Historical reports only. Prior launch authorizations and active-implementation statements in these archived reports are superseded. Current added gates are static; original baseline routing remains unchanged."
+}

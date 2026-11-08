@@ -1,5 +1,29 @@
 # Official mHC kernels in nanochat
 
+## Static gate research closed (2026-11-08)
+
+The gate exploration is closed at the user's request and retained as a small
+architecture trick. The supported added gates are static: `scaled_hc` (mix),
+`scaled_hc_all` (read/mix/write/head), `skip_scale`, and `attnres_scale`.
+Original vanilla/native, HC/mHC, channel mixing and AttnRes baselines remain.
+Their existing routing functions and native gates are unchanged.
+
+The dynamic `dynamic_hc_all` run 8087234.0 was already removed (exit 143), and
+its implementation and workflow roots were deleted. The older SiLU `gated_hc`
+implementation, tests and launchers are now also retired; both variants are
+rejected by configuration and checkpoint loading. Historical SiLU reports are
+under `archive/retired-gates-20261108/`; existing results and checkpoints are
+preserved. No gate sweep, new training, or automatic continuation is authorized.
+
+The completed mix-only comparison improves dev CE from 3.084048 to 3.067482
+against no-Sinkhorn HC on the same 64 dev sequences. It is a single-seed result
+with different original training attention backends, not evidence for a broad
+gating principle or a large architectural gain. Frozen interventions show
+dependence on learned channel assignments, not the size or cause of the training
+gain. See [diagnostics](hc-channel-diagnostic/README.md).
+
+This section supersedes historical authorization and support statements below.
+
 ## Supported configurations after cleanup (2026-11-04)
 
 The active models are vanilla, native nanochat, and full NVIDIA mHC (including

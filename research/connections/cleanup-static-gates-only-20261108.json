@@ -1,0 +1,104 @@
+{
+  "complete": true,
+  "date": "2026-11-08",
+  "base_commit": "80d7c7649664b98e3fa47964a3f3e576ed2c8285",
+  "user_request": "Stop and revert dynamic scale all; retain only static added gates; close exploration as a small trick",
+  "retired_variants": [
+    "dynamic_hc_all",
+    "gated_hc"
+  ],
+  "dynamic_job": {
+    "ClusterId": 8087234,
+    "ExitCode": 143,
+    "JobStatus": 3,
+    "ProcId": 0
+  },
+  "queue_empty": true,
+  "automatic_training": false,
+  "automatic_continuation": false,
+  "deleted_executable_files": [
+    "nanochat/gated_connections.py",
+    "nanochat/gated_mixing.py",
+    "research/connections/gated-hc-train/submit.py",
+    "research/connections/gated-hc-train/train.sh",
+    "research/connections/gated-hc-train/watch_start.py",
+    "research/connections/gated-hc/validate.py",
+    "scripts/connection_gated_hc_gate.py",
+    "scripts/connection_gated_hc_micro.py",
+    "tests/test_gated_hc.py"
+  ],
+  "archived_reports": [
+    {
+      "source": "research/connections/gated-hc/README.md",
+      "target": "research/connections/archive/retired-gates-20261108/gated-hc/README.md",
+      "sha256": "d2cb91e5e161c0c490a0f0bd3d9853bb8bedb8f8422fd7e37e9cba0974ddbc72"
+    },
+    {
+      "source": "research/connections/gated-hc/gpu-source-audit.json",
+      "target": "research/connections/archive/retired-gates-20261108/gated-hc/gpu-source-audit.json",
+      "sha256": "ba74404b2fcfa40966d047c97aed9c67eb79da5f49a65ddbf1d173396000d4d5"
+    },
+    {
+      "source": "research/connections/gated-hc/protocol.json",
+      "target": "research/connections/archive/retired-gates-20261108/gated-hc/protocol.json",
+      "sha256": "a595d78a83aa78986581f65f9277a1e497f6063999cffca2594b55f7d38900be"
+    },
+    {
+      "source": "research/connections/gated-hc/restoration-20261107.json",
+      "target": "research/connections/archive/retired-gates-20261108/gated-hc/restoration-20261107.json",
+      "sha256": "bc8d56111e48d746694f8341b63dc9ec7a9a454d14ef2a97985dc7f322d3d2e4"
+    },
+    {
+      "source": "research/connections/gated-hc/validation.json",
+      "target": "research/connections/archive/retired-gates-20261108/gated-hc/validation.json",
+      "sha256": "de6de4dd1595a20d2de22ae3b90adda88d40791ee770c6656b223f95a7f23757"
+    },
+    {
+      "source": "research/connections/gated-hc-train/protocol.json",
+      "target": "research/connections/archive/retired-gates-20261108/gated-hc-train/protocol.json",
+      "sha256": "4bd3d6e208825af1d00d6c4f333397b5d81208742cd50fa07c70b5a87b8bad70"
+    },
+    {
+      "source": "research/connections/gated-hc-train/static-validation.json",
+      "target": "research/connections/archive/retired-gates-20261108/gated-hc-train/static-validation.json",
+      "sha256": "16fa0da97208e69293fd8ec707f32078d721f37be8a7908697f19a4367ae11c9"
+    }
+  ],
+  "retained_variants": [
+    "baseline",
+    "mhc",
+    "mhc_no_sinkhorn",
+    "mhc_channel_no_sinkhorn",
+    "attnres",
+    "scaled_hc",
+    "scaled_hc_all",
+    "skip_scale",
+    "attnres_scale"
+  ],
+  "retained_added_gates": [
+    "scaled_hc",
+    "scaled_hc_all",
+    "skip_scale",
+    "attnres_scale"
+  ],
+  "original_baseline_gates_unchanged": true,
+  "existing_results_checkpoints_preserved": true,
+  "verification": {
+    "unchanged_or_exactly_archived_tracked_files": 472,
+    "retained_artifacts_unchanged": 148,
+    "retained_code_ast_equivalent_after_retired_branch_removal": [
+      "nanochat/connection_model.py",
+      "nanochat/packed_training.py",
+      "scripts/connection_train.py",
+      "tests/test_attnres_scale.py"
+    ],
+    "retained_configurations": 13,
+    "current_and_legacy_roundtrips": true,
+    "retired_config_rejections": 10,
+    "python_ast_files": 168,
+    "bash_files": 33,
+    "new_gpu_tests": false,
+    "reason": "Retained tensor computation and kernels unchanged; only retired branches and entrypoints removed"
+  },
+  "audit_root": "/home/yzhong239/research-cleanup-20261108/static-gates-only"
+}

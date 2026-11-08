@@ -339,7 +339,7 @@ def test_original_attnres_identity_and_reader_independence():
 def test_retained_vanilla_skip_and_hc_metadata():
     from test_skip_scale import test_identity_parameters_rng_optimizer
     test_identity_parameters_rng_optimizer()
-    for variant in ('baseline','mhc','mhc_no_sinkhorn','mhc_channel_no_sinkhorn','gated_hc','scaled_hc','scaled_hc_all','attnres'):
+    for variant in ('baseline','mhc','mhc_no_sinkhorn','mhc_channel_no_sinkhorn','scaled_hc','scaled_hc_all','attnres'):
         c=ConnectionConfig(variant=variant)
         assert ConnectionConfig.from_checkpoint(asdict(c))==c
     with pytest.raises(ValueError):ConnectionConfig(variant='qk_scale')
