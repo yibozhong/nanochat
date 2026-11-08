@@ -384,6 +384,8 @@
     "Learned channel assignment matters to this frozen trained model, including all 16 individually intervened sites.",
     "No progressive global stream collapse is observed in the no-Sinkhorn baseline on this dev sample.",
     "Effective rank is not uniformly higher with scales (8/16 sites); a rank-restoration mechanism is not established.",
-    "Frozen ablation does not replace retrained scalar controls or multiple training seeds; original training attention backends differ."
+    "A static scalar per input stream is absorbable into this no-Sinkhorn H generator; original HC already supplies that function-class baseline. A new scalar training run is not required.",
+    "Stream collapse was an exploratory hypothesis, not an established limitation of this baseline. The local architectural constraint is channel-shared stream-mixing coefficients.",
+    "Frozen ablation measures learned dependence, not the cause or multi-seed reproducibility of the loss improvement; original training attention backends differ."
   ]
 }
