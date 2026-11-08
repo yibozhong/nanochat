@@ -124,6 +124,7 @@ def main():
                          'unconstrained_raw' if a.variant=='mhc_no_sinkhorn' else
                          'local_channel_unconstrained_raw' if a.variant=='mhc_channel_no_sinkhorn' else
                          'input_channel_silu_gated_shared_raw' if a.variant=='gated_hc' else
+                         'static_input_channel_scaled_shared_raw' if a.variant=='scaled_hc' else
                          'block_attention_residuals' if a.variant=='attnres' else
                          'additive'),
         applied_sinkhorn_iterations=c.sinkhorn_iterations if a.variant=='mhc' else 0,

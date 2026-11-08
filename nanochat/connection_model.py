@@ -15,7 +15,7 @@ from nanochat.gpt import Block, GPTConfig, Linear, norm
 from nanochat.nvidia_connections import NvidiaHyperConnection, NvidiaHyperHead, expand_streams, check_nvidia_device
 from nanochat.optim import MuonAdamW
 
-CONNECTION_VARIANTS = ('baseline', 'mhc', 'mhc_no_sinkhorn', 'mhc_channel_no_sinkhorn', 'attnres', 'gated_hc')
+CONNECTION_VARIANTS = ('baseline', 'mhc', 'mhc_no_sinkhorn', 'mhc_channel_no_sinkhorn', 'attnres', 'gated_hc', 'scaled_hc')
 
 
 @dataclass
@@ -68,6 +68,8 @@ class ConnectionConfig:
             raise ValueError('Local channel mixing initially supports vanilla and unfused gradient accumulation')
         if self.variant == 'gated_hc' and (self.architecture != 'vanilla' or self.fused_connection_grad):
             raise ValueError('Gated HC supports vanilla and ordinary gradient accumulation')
+        if self.variant == 'scaled_hc' and (self.architecture != 'vanilla' or self.fused_connection_grad):
+            raise ValueError('Scaled HC supports vanilla and ordinary gradient accumulation')
         if self.sinkhorn_iterations != 20:
             raise ValueError('The NVIDIA composite API requires 20 Sinkhorn iterations')
         if min(self.depth, self.width, self.heads, self.sequence_length, self.vocab_size, self.streams) < 1:
@@ -137,6 +139,9 @@ class ConnectionBlock(Block):
             if self.variant == 'gated_hc':
                 from nanochat.gated_connections import GatedHyperConnection
                 connection = GatedHyperConnection
+            if self.variant == 'scaled_hc':
+                from nanochat.scaled_connections import ScaledHyperConnection
+                connection = ScaledHyperConnection
             kwargs = dict(use_tf32=config.connection_backend == 'nvidia', fused_grad_acc=config.fused_connection_grad,
                           sinkhorn=config.variant != 'mhc_no_sinkhorn')
             if config.variant == 'mhc_channel_no_sinkhorn':
@@ -287,7 +292,7 @@ def optimizer_for(model, batch_tokens=32768):
             lr=.02*batch_scale, momentum=.95, ns_steps=5, beta2=.9, weight_decay=wd))
     ids = [id(p) for g in groups for p in g['params']]
     assert len(ids) == len(set(ids)) and set(ids) == {id(p) for p in model.parameters()}
-    if c.variant in ('mhc_channel_no_sinkhorn', 'gated_hc'):
+    if c.variant in ('mhc_channel_no_sinkhorn', 'gated_hc', 'scaled_hc'):
         # Like native.setup_optimizer: the unchanged compiled AdamW function
         # specializes once per routing shape/dtype. Local generators introduce
         # two extra tensor ranks; this is a compiler cache budget, not an LR or

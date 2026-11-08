@@ -1,0 +1,9 @@
+{
+  "python_ast": true,
+  "undefined_globals": false,
+  "config_roundtrip": true,
+  "unsupported_config_rejected": 3,
+  "retired_variants_rejected": 4,
+  "gpu_tests": "pending",
+  "formal_training": false
+}
