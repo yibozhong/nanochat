@@ -1,0 +1,152 @@
+{
+  "complete": true,
+  "formal_training": false,
+  "job": "8025768.0",
+  "source": {
+    "commit": "9f211a4af09c53c107be79c896815c7bc310f455",
+    "formal_training": false,
+    "purpose": "Static read/mix/post/head HC scales;52checks,same-card speed,25-to128 restart;no formal training"
+  },
+  "gpu": "NVIDIA A100-SXM4-80GB",
+  "gpu_uuid": "0b3215b2-06fa-6326-4af7-f9aed9ecf396",
+  "attention_backend": "fa2",
+  "microbatch": 16,
+  "batch_tokens": 32768,
+  "sequence_length": 2048,
+  "timing_includes": "CPU data copy/H2D, CCE, backward, finite checks, MuonAdamW",
+  "warmup_steps": 20,
+  "timed_steps_per_repetition": 40,
+  "repetitions": 2,
+  "full_step_ms": {
+    "mhc_no_sinkhorn": 160.6333035742864,
+    "scaled_hc": 167.82228832598776,
+    "scaled_hc_all": 178.71370890643448
+  },
+  "repetition_means_ms": {
+    "mhc_no_sinkhorn": [
+      160.7791126705706,
+      160.4874944780022
+    ],
+    "scaled_hc": [
+      167.6281925290823,
+      168.01638412289321
+    ],
+    "scaled_hc_all": [
+      178.6503565032035,
+      178.77706130966544
+    ]
+  },
+  "elapsed_change_percent": {
+    "mix_vs_shared": 4.475401172569882,
+    "all_vs_mix": 6.489853456944039,
+    "all_vs_shared": 11.255701607224067
+  },
+  "parameters": {
+    "mhc_no_sinkhorn": 59515317,
+    "scaled_hc": 59548085,
+    "scaled_hc_all": 59615669
+  },
+  "additional_parameters_vs_mix": 67584,
+  "peak_allocated_bytes": {
+    "mhc_no_sinkhorn": [
+      9130113024,
+      9130113024
+    ],
+    "scaled_hc": [
+      9130506240,
+      9130506240
+    ],
+    "scaled_hc_all": [
+      9131325440,
+      9131325440
+    ]
+  },
+  "micro_forward_all_vjps_ms": {
+    "read_shared": 0.40839817374944687,
+    "read_scaled": 0.5814040079712868,
+    "write_mix_only": 0.9466066025197506,
+    "write_all": 1.287524588406086
+  },
+  "kernel_trace_ms": {
+    "read_shared": {
+      "_mhc_aggregate_bwd": 0.1721765,
+      "_mhc_aggregate_fwd": 0.102704,
+      "void at::native::vectorized_elementwise_kernel<4, at::native::FillFunctor<float>, std::array<char*, 1ul> >(int, at::native::FillFunctor<float>, std::array<char*, 1ul>)": 0.002144
+    },
+    "read_scaled": {
+      "_scaled_aggregate_bwd": 0.274209,
+      "_scaled_aggregate_fwd": 0.09001650000000001,
+      "_scale_partial_reduce": 0.057744
+    },
+    "write_mix_only": {
+      "_nvidia_scaled_bwd": 0.48189,
+      "_scaled_da_reduce": 0.169521,
+      "_nvidia_scaled_fwd": 0.16307299999999997
+    },
+    "write_all": {
+      "_nvidia_scaled_bwd": 0.8852515000000001,
+      "_nvidia_scaled_fwd": 0.16595249999999998,
+      "_scale_partial_reduce": 0.09108850000000002
+    }
+  },
+  "checks": {
+    "tests": 52,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "restart": {
+    "complete": true,
+    "variant": "scaled_hc_all",
+    "run_id": "scaled-hc-all-restart-check",
+    "steps": 128,
+    "training_tokens": 4194304,
+    "initial_dev_ce": 10.398010969161987,
+    "final_dev_ce": 5.672624468803406,
+    "best_dev_ce": 5.672624468803406,
+    "dev_tokens": 131072,
+    "training_seconds": 31.226447895169258,
+    "elapsed_seconds": 101.19299471564591,
+    "steady_step_seconds": 0.17904616553857122,
+    "gpu": "NVIDIA A100-SXM4-80GB",
+    "peak_allocated_bytes": 9231988736,
+    "peak_reserved_bytes": 9445572608,
+    "source": {
+      "commit": "9f211a4af09c53c107be79c896815c7bc310f455",
+      "formal_training": false,
+      "purpose": "Static read/mix/post/head HC scales;52checks,same-card speed,25-to128 restart;no formal training"
+    },
+    "test_evaluated": false,
+    "checkpoint_files": {
+      "latest.pt": {
+        "bytes": 514383355,
+        "sha256": "5943389e3678f413d65bdc6a57d5f644a0c8318c0ce8f25c79285913fd3b89ef"
+      },
+      "best.pt": {
+        "bytes": 204955903,
+        "sha256": "a26756e4f35c90a4a5132ad66a7ae86e846e8ea890e390e60d9612e32315ab3d"
+      }
+    }
+  },
+  "all_49_scales_changed": true,
+  "trained_scale_range": [
+    0.859489917755127,
+    1.1220731735229492
+  ],
+  "analysis": [
+    "All read/post/head scales add10.891421ms per full step versus mix-only on this A100,6.49%.",
+    "The largest added primitive cost is write backward:0.481890ms mix-only to0.885252ms with post scale. Read backward0.172177ms to0.274209ms; read scale gradient reduction0.057744ms. Instrumented micro timings do not exactly sum to full-step wall time.",
+    "All scales use fused arithmetic; deterministic parameter-gradient reduction remains additional GPU work. This measurement does not establish globally optimal kernels.",
+    "These A100/FA2 timings cannot be directly compared with priorH100/FA3 94.54ms. No Hopper throughput is measured for this all-scale implementation.",
+    "128steps test implementation, finite short training and resume. They do not establish10B quality or long-run stability."
+  ],
+  "retained_formal_training": {
+    "job": "8015499.0",
+    "inputs_and_schedule_unchanged": true
+  },
+  "artifacts": {
+    "raw_validation": "validation.json",
+    "numerical_checks": "numerical-checks.json",
+    "source_audit": "gpu-source-audit.json"
+  }
+}
