@@ -1,0 +1,18 @@
+{
+  "complete": true,
+  "retired_roots": [
+    "/home/yzhong239/scaled-hc-gate-20261107",
+    "/home/yzhong239/scaled-hc-nvidia-gate-20261107",
+    "/home/yzhong239/scaled-hc-nvidia-gate-20261107-r2"
+  ],
+  "repo_files_removed": 18,
+  "files_or_links": 230,
+  "bytes": 28711643,
+  "protected_code_files": 37,
+  "protected_artifacts": 22,
+  "retained_production_unchanged": true,
+  "current_validation_retained": "research/connections/scaled-hc-nvidia/validation.json",
+  "historical_commit": "3a3e3f082b0f8d69e109885105814a18623597d9",
+  "checkpoints_deleted": false,
+  "scope": "Superseded static scale kernels, comparisons and validation workflows only; SiLU/channel/baseline results retained"
+}

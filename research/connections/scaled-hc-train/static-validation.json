@@ -1,0 +1,14 @@
+{
+  "complete": true,
+  "python_ast_files": 130,
+  "launcher_bash": true,
+  "embedded_python": 4,
+  "gate_rejections": 10,
+  "submission_guards": 6,
+  "first_step_parser_cases": 4,
+  "validated_execution_files": 45,
+  "retained_model_runtime_byte_identical": true,
+  "reused_gpu_job": "8015478.0",
+  "new_gpu_validation": false,
+  "condor_dryrun": "passed; no submission"
+}
