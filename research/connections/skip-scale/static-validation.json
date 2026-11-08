@@ -1,0 +1,11 @@
+{
+  "complete": true,
+  "gate_source": "043b5f32f7d7dc4dcb3cd7552280cda91bbd5f1d",
+  "execution_files_unchanged": 52,
+  "queue_boundary_cases": 9,
+  "formal_start_cases": 3,
+  "bad_gpu_result_rejections": 10,
+  "bad_family_marker_rejections": 2,
+  "condor_dry_runs": 2,
+  "gpu_tests": "pending; this report is static validation only"
+}
