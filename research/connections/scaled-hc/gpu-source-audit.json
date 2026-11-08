@@ -1,0 +1,21 @@
+{
+  "source": {
+    "commit": "a5d89f9eb0b1619d981b3d679262457ba7db7c2a",
+    "formal_training": false,
+    "purpose": "Static input channel scale on shared no-Sinkhorn HC; correctness, same-card speed and25-to128 restart only"
+  },
+  "files": {
+    "nanochat/scaled_mixing.py": "7d9fce3b78faee7b4ca803a474cca1218723a9f3208af54dd0add2634829fbc7",
+    "nanochat/scaled_connections.py": "9d131c1d45c8ce9b1e03f5d2434bbf5741364425bb783a1e9f58579c9a4dfa2f",
+    "nanochat/connection_model.py": "10e5513e20309fa2e82e66510000d4119762e02865726df505cdb6becc04c02b",
+    "scripts/connection_train.py": "9d4c97ec68fffa51de129421b8cfddd9b84572a23fb9ec9b6a7194be732fe02a",
+    "scripts/connection_scaled_hc_gate.py": "8169d59f400b5ae6e8acaf59fe49f7ac47d46dab10aaa7472732394f97daa5b1",
+    "scripts/connection_scaled_hc_micro.py": "b234768d6c1347da7734248dafabc17dd445ef5fa6e5f61b68afbefdaf351fc8",
+    "tests/test_scaled_hc.py": "f52dbf4ceeb3e4a2df42782b11e0d4a83e0e1a852886b9ef03deaa82ef49fbce",
+    "research/connections/scaled-hc/run.sh": "761f12486d534e5c091353c53227165bc4c99d17290c317af32c2e992a5f78df",
+    "research/connections/scaled-hc/submit.py": "ce30f2b88a04e872e24972e72fe713352f51738db10200039e1de919172bcddb",
+    "research/connections/scaled-hc/collect.py": "a6c8d7bb57bf6431adc11a857dec6b03545c49e082dd5440132b6ba94140e9de"
+  },
+  "source_archive_sha256": "4b3c4e0a02619e973d871e8f2b9a1cad669a4d5b446de4ec4d5dec2e0e63af70",
+  "production_files_unchanged_since_gpu_execution": true
+}
