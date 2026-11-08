@@ -15,7 +15,7 @@ from nanochat.gpt import Block, GPTConfig, Linear, norm
 from nanochat.nvidia_connections import NvidiaHyperConnection, NvidiaHyperHead, expand_streams, check_nvidia_device
 from nanochat.optim import MuonAdamW
 
-CONNECTION_VARIANTS = ('baseline', 'mhc', 'mhc_no_sinkhorn', 'mhc_channel_no_sinkhorn', 'attnres', 'gated_hc', 'scaled_hc', 'scaled_hc_all', 'skip_scale', 'attnres_scale', 'dynamic_hc_all')
+CONNECTION_VARIANTS = ('baseline', 'mhc', 'mhc_no_sinkhorn', 'mhc_channel_no_sinkhorn', 'attnres', 'gated_hc', 'scaled_hc', 'scaled_hc_all', 'skip_scale', 'attnres_scale')
 
 
 @dataclass
@@ -71,9 +71,7 @@ class ConnectionConfig:
             raise ValueError('Local channel mixing initially supports vanilla and unfused gradient accumulation')
         if self.variant == 'gated_hc' and (self.architecture != 'vanilla' or self.fused_connection_grad):
             raise ValueError('Gated HC supports vanilla and ordinary gradient accumulation')
-        if self.variant == 'dynamic_hc_all' and self.width > 1024:
-            raise ValueError('Dynamic HC complete-row kernels support width at most1024')
-        if self.variant in ('scaled_hc','scaled_hc_all','dynamic_hc_all') and (self.architecture != 'vanilla' or self.fused_connection_grad):
+        if self.variant in ('scaled_hc','scaled_hc_all') and (self.architecture != 'vanilla' or self.fused_connection_grad):
             raise ValueError('Scaled HC supports vanilla and ordinary gradient accumulation')
         if self.sinkhorn_iterations != 20:
             raise ValueError('The NVIDIA composite API requires 20 Sinkhorn iterations')
@@ -153,9 +151,6 @@ class ConnectionBlock(Block):
             if self.variant == 'scaled_hc_all':
                 from nanochat.scaled_all_connections import AllScaledHyperConnection
                 connection = AllScaledHyperConnection
-            if self.variant == 'dynamic_hc_all':
-                from nanochat.dynamic_hc import DynamicAllHyperConnection
-                connection = DynamicAllHyperConnection
             kwargs = dict(use_tf32=config.connection_backend == 'nvidia', fused_grad_acc=config.fused_connection_grad,
                           sinkhorn=config.variant != 'mhc_no_sinkhorn')
             if config.variant == 'mhc_channel_no_sinkhorn':
@@ -217,9 +212,6 @@ class ConnectionModel(nn.Module):
             if config.variant=='scaled_hc_all':
                 from nanochat.scaled_all_connections import ScaledHyperHead
                 head_class=ScaledHyperHead
-            if config.variant=='dynamic_hc_all':
-                from nanochat.dynamic_hc import DynamicHyperHead
-                head_class=DynamicHyperHead
             self.stream_head = head_class(config.width, config.streams, use_tf32=config.connection_backend == 'nvidia')
         if self.stream_head is not None:
             self.stream_head.reset_parameters()
@@ -317,7 +309,7 @@ def optimizer_for(model, batch_tokens=32768):
             lr=.02*batch_scale, momentum=.95, ns_steps=5, beta2=.9, weight_decay=wd))
     ids = [id(p) for g in groups for p in g['params']]
     assert len(ids) == len(set(ids)) and set(ids) == {id(p) for p in model.parameters()}
-    if c.variant in ('mhc_channel_no_sinkhorn', 'gated_hc', 'scaled_hc', 'scaled_hc_all', 'attnres_scale', 'dynamic_hc_all'):
+    if c.variant in ('mhc_channel_no_sinkhorn', 'gated_hc', 'scaled_hc', 'scaled_hc_all', 'attnres_scale'):
         # Like native.setup_optimizer: the unchanged compiled AdamW function
         # specializes once per routing shape/dtype. Local generators introduce
         # two extra tensor ranks; this is a compiler cache budget, not an LR or

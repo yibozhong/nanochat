@@ -1,0 +1,101 @@
+{
+  "complete": true,
+  "cleanup_at": 1794169562.3374696,
+  "user_request": "Stop, revert and clear dynamic gate; focus static gates",
+  "retired_variant": "dynamic_hc_all",
+  "job": "8087234.0",
+  "run_id": "c5ae8360",
+  "job_status": 3,
+  "exit_code": 143,
+  "last_observed_training": {
+    "step": 35230,
+    "tokens": 1154416640,
+    "loss": 3.4990181922912598,
+    "seconds": 0.11000485718250275,
+    "lr_multiplier": 1.0
+  },
+  "formal_10b_completed": false,
+  "automatic_training": false,
+  "automatic_continuation": false,
+  "deleted_workflow_roots": [
+    "/home/yzhong239/dynamic-hc-all-gate-20261108",
+    "/home/yzhong239/dynamic-hc-all-gate-20261108-r2",
+    "/home/yzhong239/dynamic-hc-all-10b-20261108"
+  ],
+  "deleted_tracked_files": 25,
+  "deleted_root_regular_files": 132,
+  "deleted_root_symlinks": 5,
+  "deleted_root_file_bytes": 31258968,
+  "scheduler_spools": {
+    "8087129": {
+      "path": "/var/lib/condor/spool/7129/0/cluster8087129.proc0.subproc0",
+      "exists": false
+    },
+    "8087159": {
+      "path": "/var/lib/condor/spool/7159/0/cluster8087159.proc0.subproc0",
+      "exists": false
+    },
+    "8087234": {
+      "path": "/var/lib/condor/spool/7234/0/cluster8087234.proc0.subproc0",
+      "exists": false
+    }
+  },
+  "checkpoint_policy": "No returned checkpoint archives existed in the retired roots; all three roots removed, all three scheduler spool directories absent, worker training terminated.",
+  "verification": {
+    "production_byte_identical_to": "378e87b33b160fe1012a47c1e8f96442d1fd1f17",
+    "retained_production_files": 40,
+    "retained_static_artifacts": 53,
+    "shared_link_targets": 2,
+    "retained_config_roundtrips": [
+      "baseline",
+      "mhc",
+      "mhc_no_sinkhorn",
+      "mhc_channel_no_sinkhorn",
+      "attnres",
+      "gated_hc",
+      "scaled_hc",
+      "scaled_hc_all",
+      "skip_scale",
+      "attnres_scale",
+      "native_baseline",
+      "native_mhc"
+    ],
+    "retired_dynamic_rejections": 2,
+    "python_ast_files": 168,
+    "bash_files": 30,
+    "dynamic_execution_references_remaining": [],
+    "new_gpu_tests": false,
+    "reason": "Production paths exactly restored to previously validated static version"
+  },
+  "last_matched_comparison": {
+    "observed_at": 1794169063.5009582,
+    "latest_matched": {
+      "step": 32500,
+      "tokens": 1064960000,
+      "dynamic": 3.5430455207824707,
+      "static": 3.5478144884109497,
+      "shared": 3.578804850578308,
+      "dynamic_minus_static": -0.004768967628479004,
+      "dynamic_minus_shared": -0.0357593297958374
+    },
+    "last20_step_range": [
+      27750,
+      32500
+    ],
+    "mean_dynamic_minus_static": -0.0026698410511016846,
+    "mean_dynamic_minus_shared": -0.031473055481910706,
+    "dynamic_lower_than_static_count": 19,
+    "same_gpu_validation_ms": {
+      "mhc_no_sinkhorn": 86.26246391504537,
+      "scaled_hc_all": 98.13984965439886,
+      "dynamic_hc_all": 110.57488247461151
+    },
+    "dynamic_over_static_cost_percent": 12.670727399728898,
+    "limitations": "Single training seed; adjacent dev points are correlated, not independent significance tests. Not final 10B.",
+    "training_changed": false
+  },
+  "retained_active_job": "8033761.0",
+  "remote_wandb_deleted": false,
+  "historical_full_implementation_commit": "44991c5",
+  "audit_directory": "/home/yzhong239/research-cleanup-20261108/dynamic-hc-all"
+}

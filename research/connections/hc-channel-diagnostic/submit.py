@@ -28,7 +28,7 @@ def main(root):
         assert not command(['git', 'status', '--porcelain'])
         for n in ('bundles', 'logs', 'results'): (root/n).mkdir(exist_ok=True)
         retained = {}
-        for folder in ('scaled-hc-all-10b-20261107', 'dynamic-hc-all-10b-20261108'):
+        for folder in ('scaled-hc-all-10b-20261107',):
             for name in ('train.sh', 'bundles/source.tar', 'bundles/source.json', 'bundles/inputs.sha256'):
                 p = Path('/home/yzhong239')/folder/name; st = p.stat()
                 retained[str(p)] = dict(sha256=digest(p), size=st.st_size, inode=st.st_ino, mtime_ns=st.st_mtime_ns)
