@@ -18,7 +18,7 @@ ASSETS = HOME_ROOT / 'nanochat-runtime-assets'
 KEY = 'attnres-scale-10b-20261108'
 STEPS = 305176
 REPORT_DIR = Path('research/connections/attnres-scale')
-GATE_ROOT = HOME_ROOT / 'attnres-scale-gate-20261108'
+GATE_ROOT = HOME_ROOT / 'attnres-scale-gate-20261108-r2'
 
 
 def command(args, cwd=REPO):

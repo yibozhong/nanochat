@@ -1,7 +1,7 @@
 {
   "complete": true,
-  "gate_source": "95f36fed61185bc0f80494e94e902dfadd139748",
-  "execution_files_unchanged": 55,
+  "gate_source": "pending immutable submission",
+  "execution_files_unchanged": null,
   "queue_boundary_cases": 9,
   "formal_start_cases": 3,
   "bad_gpu_result_rejections": 10,

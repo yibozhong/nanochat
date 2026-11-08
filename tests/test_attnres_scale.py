@@ -242,6 +242,28 @@ def test_actual_triton_dispatch():
     record('dispatch',dict(operators=keys))
 
 
+def fixed_forward(prefix, history, nw, pw, scale=None):
+    """Bitwise comparison requires identical launch/reduction geometry.
+
+    Production entrypoints remain independently autotuned and are checked by
+    the separate FP64 forward/all-VJP tests, with their original thresholds.
+    """
+    import triton
+    from nanochat.attnres_triton import _attn_res_fwd_kernel
+    from nanochat.attnres_scale_kernels import _scaled_attn_res_fwd_kernel
+    n,d=prefix.shape;k=history.shape[1]
+    out=torch.empty_like(prefix)
+    stats=torch.empty((3,n,k+1),device=prefix.device,dtype=torch.float32)
+    args=[history,prefix,nw,pw]
+    kernel=_attn_res_fwd_kernel if scale is None else _scaled_attn_res_fwd_kernel
+    if scale is not None:args.append(scale)
+    args += [out,stats[0],stats[1],stats[2],n,1e-5,history.stride(0),history.stride(1),
+             prefix.stride(0),out.stride(0),stats.stride(1)]
+    kernel.fn[(n,)](*args,H=d,NB=k,NB_PAD=max(2,triton.next_power_of_2(k+1)),
+                     C=512,num_warps=4,num_stages=3)
+    return out,stats
+
+
 @pytest.mark.parametrize('kind',['ones','zeros','signed'])
 def test_gate_placement_scores_and_gradients(kind):
     seed_all(12)
@@ -255,7 +277,21 @@ def test_gate_placement_scores_and_gradients(kind):
     scale.requires_grad_();original=(p.clone(),h.clone())
     out,stats=scaled_attn_res_fwd_triton(p,h,nw,pw,scale,1e-5)
     before,oldstats=attn_res_fwd_triton(p,h,nw,pw,1e-5)
-    assert torch.equal(stats,oldstats)  # scaling does not enter key/norm/score
+    from nanochat.attnres_triton import _attn_res_fwd_kernel as old_kernel
+    from nanochat.attnres_scale_kernels import _scaled_attn_res_fwd_kernel as new_kernel
+    fixed,fixedstats=fixed_forward(p,h,nw,pw,scale)
+    fixedbase,base_stats=fixed_forward(p,h,nw,pw)
+    _,ones_stats=fixed_forward(p,h,nw,pw,torch.ones_like(scale))
+    diagnostics=dict(old_auto_config=str(getattr(old_kernel,'best_config',None)),new_auto_config=str(getattr(new_kernel,'best_config',None)),
+        auto_stats_max_abs=[(x-y).abs().max().item() for x,y in zip(stats,oldstats)],
+        auto_stats_relative=[relative(x,y) for x,y in zip(stats,oldstats)],
+        fixed_stats_bitwise_equal=torch.equal(fixedstats,base_stats),
+        changing_only_gate_keeps_scores_bitwise=torch.equal(fixedstats,ones_stats),
+        fixed_output_max_abs=(fixed-fixedbase).abs().max().item())
+    record('placement-'+kind,diagnostics)
+    assert torch.equal(fixedstats,base_stats),diagnostics
+    assert torch.equal(fixedstats,ones_stats),diagnostics
+
     assert torch.equal(p,original[0]) and torch.equal(h,original[1])
     args=[p,h,nw,pw,scale];go=torch.randn_like(out)
     actual=_ScaledAttnRes.apply(*args,1e-5)
@@ -264,7 +300,7 @@ def test_gate_placement_scores_and_gradients(kind):
     expected=oracle(*refs);rg=torch.autograd.grad(expected,refs,go.double())
     assert relative(actual,expected)<.006
     assert max(relative(x,y) for x,y in zip(grads,rg))<.015
-    if kind=='ones':assert torch.equal(out,before)
+    if kind=='ones':assert torch.equal(fixed,fixedbase)
     if kind=='zeros':
         assert torch.count_nonzero(actual)==0
         assert all(torch.count_nonzero(x)==0 for x in grads[:-1])

@@ -12,7 +12,7 @@ ASSETS=Path('/home/yzhong239/nanochat-runtime-assets')
 
 
 def main(root):
-    root=Path(root).resolve();assert root==Path('/home/yzhong239/attnres-scale-gate-20261108');root.mkdir(parents=True,exist_ok=True)
+    root=Path(root).resolve();assert root==Path('/home/yzhong239/attnres-scale-gate-20261108-r2');root.mkdir(parents=True,exist_ok=True)
     with (root/'submit.lock').open('a') as lock:
         fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
         assert not (root/'state.json').exists() and not (root/'STOPPED.json').exists()

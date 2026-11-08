@@ -1,0 +1,32 @@
+[
+  {
+    "job": "8055701.0",
+    "source": "95f36fed61185bc0f80494e94e902dfadd139748",
+    "gpu": "NVIDIA A100-SXM4-80GB",
+    "exit_code": 1,
+    "checks": {
+      "passed": 21,
+      "failed": 3,
+      "total": 24
+    },
+    "failed_cases": [
+      "gate_placement_scores_and_gradients/ones",
+      "gate_placement_scores_and_gradients/zeros",
+      "gate_placement_scores_and_gradients/signed"
+    ],
+    "failure": "torch.equal on original/new independently autotuned FP32 score statistics",
+    "cause": "Numerical magnitude and selected launch geometries not recorded by first harness; under investigation, not confirmed.",
+    "completed": [
+      "FP64 all VJPs including production shape",
+      "2K causal/cache/CCE/recompute",
+      "model vs Torch gradients",
+      "optimizer RNG/next-update restore",
+      "original AttnRes identity and independence"
+    ],
+    "not_executed": [
+      "six full-model60step profiles",
+      "25-to128 NTP restart",
+      "formal10B"
+    ]
+  }
+]

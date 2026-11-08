@@ -51,7 +51,7 @@ def main():
     marker=copy.deepcopy(v);marker.update(preflight=True);marker['restart']['steps']=60
     validate_marker(marker,source,16,[9,0]);rejected(validate_marker,marker,source,16,[12,0])
     rejected(validate_marker,marker,{'commit':'other'},16,[9,0])
-    state_path=Path('/home/yzhong239/attnres-scale-gate-20261108/state.json')
+    state_path=Path('/home/yzhong239/attnres-scale-gate-20261108-r2/state.json')
     gate=json.loads(state_path.read_text()) if state_path.exists() else None
     files=execution_files(gate['source']['commit']) if gate else None
     for p in [*Path(__file__).parent.glob('*.py'),repo/'tests/test_attnres_scale.py',repo/'scripts/connection_attnres_scale_gate.py']:
