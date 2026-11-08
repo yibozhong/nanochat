@@ -116,7 +116,7 @@ def dynamic_hc_bwd(X, Y, P, H, A, B, PA, PB, GO, GX, GY, GP, GH, PART,
     g, u, inv = _gate(x, a, b, C, EPS)
     xg = x*g
     p = tl.load(P+t[:, None]*4+s[None, :], t[:, None] < M, 0)
-    splits: tl.constexpr = tl.cdiv(M, 4)
+    splits: tl.constexpr = (M + 3) // 4
     if WRITE:
         go = tl.load(GO+off, mask, 0).to(tl.float32)
         j = tl.arange(0, 4)

@@ -18,5 +18,8 @@
   },
   "gate_source_pending": true,
   "invalid_reports_rejected": 4,
-  "bash_syntax_passed": true
+  "bash_syntax_passed": true,
+  "fix_verified_as_only_kernel_difference": true,
+  "compile_time_split_cases": 10,
+  "gpu_fix_pending": true
 }
