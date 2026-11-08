@@ -1,0 +1,37 @@
+{
+  "variant": "scaled_hc_all",
+  "implementation": "NVIDIA one-pass",
+  "seed": 42,
+  "initialization": "from_zero_no_validation_weights",
+  "steps": 305176,
+  "training_tokens": 10000007168,
+  "batch_tokens": 32768,
+  "microbatch": 16,
+  "depth": 8,
+  "width": 512,
+  "heads": 4,
+  "sequence_length": 2048,
+  "streams": 4,
+  "activation": "original ReLU squared",
+  "parameters": 59615669,
+  "optimizer": "original MuonAdamW; connector AdamW no weight decay",
+  "schedule": "original305176step schedule and default learning rates",
+  "hardware": "one complete H100/H200 >=22GB; Hopper FA3",
+  "gate_job": "8025768.0",
+  "validated_model_commit": "9f211a4af09c53c107be79c896815c7bc310f455",
+  "checkpoint": {
+    "local_latest_every": 500,
+    "best": "separate",
+    "durable_exit85_seconds": 1800,
+    "resume": "same run model/optimizer/RNG/data/LR"
+  },
+  "wandb": {
+    "project": "nanochat",
+    "entity": "yibozhong657-none",
+    "group": "scaled-hc-all-10b-20261107"
+  },
+  "submission": "exactly one new10B; held0starts audit then release; never automatic resubmit",
+  "scales": "49 independent FP32 [D,4] tables for read/mix/post/head; initialized1",
+  "hopper_preflight": "Within same job: one corrected recomputation check plus25-to60 short NTP/restart; no extra GPU submission; diagnostic weights deleted; successful marker retained across scheduler segments",
+  "retained_formal_training": "8015499.0 unchanged"
+}

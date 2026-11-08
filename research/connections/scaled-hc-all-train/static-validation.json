@@ -1,0 +1,14 @@
+{
+  "complete": true,
+  "workflow_python_ast_files": 3,
+  "launcher_bash": true,
+  "embedded_python": 4,
+  "gate_rejections": 10,
+  "preflight_marker_rejections": 8,
+  "formal_step_parser_cases": 6,
+  "validated_execution_files": 51,
+  "production_byte_identical_to_gpu_source": true,
+  "reused_full_gpu_gate": "8025768.0",
+  "hopper_kernel_equivalence_to": "ecf4535357c24267346b253e72ab4bd14a59b3b4",
+  "pending": "single Hopper recomputation regression and25-to60 restart will run before formal step"
+}
