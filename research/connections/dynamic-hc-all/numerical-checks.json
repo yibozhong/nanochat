@@ -1,0 +1,251 @@
+{
+  "read-32768-512-1.0-random": {
+    "output": 0.0016585015587271357,
+    "gradients": [
+      0.0016588151915730477,
+      1.015363208351072e-07,
+      1.4311670741696636e-07,
+      1.3447987099797793e-07
+    ]
+  },
+  "read-17-128-1.0-saturated": {
+    "output": 0.0016264730580756851,
+    "gradients": [
+      0.0017009843225174093,
+      7.525715642657043e-08,
+      3.1512402235530794e-07,
+      2.915432999803808e-07
+    ]
+  },
+  "read-17-128-0.0001-random": {
+    "output": 0.001700234626539144,
+    "gradients": [
+      0.0016532452049807965,
+      8.441661196518746e-08,
+      8.381039159523276e-08,
+      8.562575669185998e-08
+    ]
+  },
+  "read-131-128-1.0-random": {
+    "output": 0.0016615720963070915,
+    "gradients": [
+      0.0016484409367253326,
+      9.334806669261112e-08,
+      1.0138700194219363e-07,
+      8.949599998407862e-08
+    ]
+  },
+  "write-129-512-1.0-random": {
+    "output": 0.0016610040003204572,
+    "gradients": [
+      0.0016572610757688666,
+      0.0016578305235038758,
+      9.730697259591653e-08,
+      1.0141474609254715e-07,
+      1.0858183986577365e-07,
+      9.716655765683863e-08,
+      1.1011044558802401e-07,
+      9.451554358433907e-08
+    ]
+  },
+  "read-1-5-1.0-random": {
+    "output": 0.0018498369356447087,
+    "gradients": [
+      0.0017189624588058146,
+      7.414632207277275e-08,
+      3.9732297458624216e-08,
+      3.254629571812264e-08
+    ]
+  },
+  "write-131-128-1.0-random": {
+    "output": 0.0016594433523919505,
+    "gradients": [
+      0.001663977802519382,
+      0.0016378391038042426,
+      8.153602753246555e-08,
+      8.94987882607203e-08,
+      1.2742508959422008e-07,
+      1.0872923066998386e-07,
+      1.1270108261660079e-07,
+      9.944903612152137e-08
+    ]
+  },
+  "fullmodel": {
+    "wte.weight": 0.0012177775591033875,
+    "blocks.0.attn.c_q.weight": 0.002339798694710797,
+    "blocks.0.attn.c_k.weight": 0.0027335114896963036,
+    "blocks.0.attn.c_v.weight": 0.0022181917382909583,
+    "blocks.0.attn.c_proj.weight": 0.0014048716807244792,
+    "blocks.0.mlp.c_fc.weight": 0.0011804769812589877,
+    "blocks.0.mlp.c_proj.weight": 0.0006676385200207838,
+    "blocks.0.attn_connection.phi": 0.001136961895443218,
+    "blocks.0.attn_connection.bias": 0.0007796077142503153,
+    "blocks.0.attn_connection.scales": 0.0008712663135338988,
+    "blocks.0.attn_connection.read_a": 0.0026170571997010243,
+    "blocks.0.attn_connection.read_b": 0.002052179046564505,
+    "blocks.0.attn_connection.mix_a": 0.00039520987252304317,
+    "blocks.0.attn_connection.mix_b": 0.00038468673610188796,
+    "blocks.0.attn_connection.post_a": 0.0006556533880523235,
+    "blocks.0.attn_connection.post_b": 0.0005787067092367077,
+    "blocks.0.mlp_connection.phi": 0.0007274485811933118,
+    "blocks.0.mlp_connection.bias": 0.0007521136228486575,
+    "blocks.0.mlp_connection.scales": 0.0004264655454452505,
+    "blocks.0.mlp_connection.read_a": 0.000856552972506681,
+    "blocks.0.mlp_connection.read_b": 0.0007332865464609226,
+    "blocks.0.mlp_connection.mix_a": 0.00024961148353003356,
+    "blocks.0.mlp_connection.mix_b": 0.0002580595028394292,
+    "blocks.0.mlp_connection.post_a": 0.00036695042953541906,
+    "blocks.0.mlp_connection.post_b": 0.00030173483946661575,
+    "blocks.1.attn.c_q.weight": 0.0008313586078517095,
+    "blocks.1.attn.c_k.weight": 0.0010679059633243286,
+    "blocks.1.attn.c_v.weight": 0.0006113366396966789,
+    "blocks.1.attn.c_proj.weight": 0.00024313182025478684,
+    "blocks.1.mlp.c_fc.weight": 0.00011842802052869293,
+    "blocks.1.mlp.c_proj.weight": 5.661426653643904e-05,
+    "blocks.1.attn_connection.phi": 0.00022100008037541263,
+    "blocks.1.attn_connection.bias": 0.00020762835553130653,
+    "blocks.1.attn_connection.scales": 8.179606499783833e-05,
+    "blocks.1.attn_connection.read_a": 0.0007598923572053633,
+    "blocks.1.attn_connection.read_b": 0.0007986435704606047,
+    "blocks.1.attn_connection.mix_a": 2.932365853239708e-05,
+    "blocks.1.attn_connection.mix_b": 4.053533731290236e-05,
+    "blocks.1.attn_connection.post_a": 9.366433028551875e-05,
+    "blocks.1.attn_connection.post_b": 7.363962507483711e-05,
+    "blocks.1.mlp_connection.phi": 0.0001102948219001933,
+    "blocks.1.mlp_connection.bias": 0.00014119657743415584,
+    "blocks.1.mlp_connection.scales": 0.00020989951244569925,
+    "blocks.1.mlp_connection.read_a": 6.589966567886159e-05,
+    "blocks.1.mlp_connection.read_b": 7.208248466905125e-05,
+    "blocks.1.mlp_connection.mix_a": 1.2905911988656127e-05,
+    "blocks.1.mlp_connection.mix_b": 2.050283471953671e-05,
+    "blocks.1.mlp_connection.post_a": 5.6987757599195544e-05,
+    "blocks.1.mlp_connection.post_b": 5.2800885692276975e-05,
+    "lm_head.weight": 4.492037509807362e-06,
+    "stream_head.phi": 0.00011182863405950752,
+    "stream_head.scale": 0.00043492515623282487,
+    "stream_head.bias": 8.345277288093456e-05,
+    "stream_head.gate_a": 1.4780445333910044e-05,
+    "stream_head.gate_b": 1.8630398092555475e-05
+  },
+  "dispatch": [
+    "dynamic_hc_fwd",
+    "void at::native::reduce_kernel<512, 1, at::native::ReduceOp<c10::BFloat16, at::native::func_wrapper_t<c10::BFloat16, at::native::sum_functor<c10::BFloat16, float, c10::BFloat16>::operator()(at::TensorIterator&)::{lambda(float, float)#1}>, unsigned int, c10::BFloat16, 4, 8> >(at::native::ReduceOp<c10::BFloat16, at::native::func_wrapper_t<c10::BFloat16, at::native::sum_functor<c10::BFloat16, float, c10::BFloat16>::operator()(at::TensorIterator&)::{lambda(float, float)#1}>, unsigned int, c10::BFloat16, 4, 8>)",
+    "void at::native::vectorized_elementwise_kernel<8, at::native::FillFunctor<c10::BFloat16>, std::array<char*, 1ul> >(int, at::native::FillFunctor<c10::BFloat16>, std::array<char*, 1ul>)",
+    "void at::native::elementwise_kernel<128, 4, at::native::gpu_kernel_impl_nocast<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#12}::operator()() const::{lambda(c10::BFloat16)#1}>(at::TensorIteratorBase&, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#12}::operator()() const::{lambda(c10::BFloat16)#1} const&)::{lambda(int)#1}>(int, at::native::gpu_kernel_impl_nocast<at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#12}::operator()() const::{lambda(c10::BFloat16)#1}>(at::TensorIteratorBase&, at::native::direct_copy_kernel_cuda(at::TensorIteratorBase&)::{lambda()#3}::operator()() const::{lambda()#12}::operator()() const::{lambda(c10::BFloat16)#1} const&)::{lambda(int)#1})",
+    "dynamic_hc_bwd",
+    "_scale_partial_reduce",
+    "void at::native::vectorized_elementwise_kernel<8, at::native::CUDAFunctor_add<c10::BFloat16>, std::array<char*, 3ul> >(int, at::native::CUDAFunctor_add<c10::BFloat16>, std::array<char*, 3ul>)",
+    "void at::native::vectorized_elementwise_kernel<4, at::native::CUDAFunctor_add<float>, std::array<char*, 3ul> >(int, at::native::CUDAFunctor_add<float>, std::array<char*, 3ul>)",
+    "void at::native::vectorized_elementwise_kernel<4, at::native::CUDAFunctor_add<float>, std::array<char*, 3ul> >(int, at::native::CUDAFunctor_add<float>, std::array<char*, 3ul>)",
+    "void at::native::vectorized_elementwise_kernel<4, at::native::CUDAFunctor_add<float>, std::array<char*, 3ul> >(int, at::native::CUDAFunctor_add<float>, std::array<char*, 3ul>)",
+    "void at::native::vectorized_elementwise_kernel<4, at::native::CUDAFunctor_add<float>, std::array<char*, 3ul> >(int, at::native::CUDAFunctor_add<float>, std::array<char*, 3ul>)",
+    "void at::native::vectorized_elementwise_kernel<4, at::native::CUDAFunctor_add<float>, std::array<char*, 3ul> >(int, at::native::CUDAFunctor_add<float>, std::array<char*, 3ul>)",
+    "void at::native::vectorized_elementwise_kernel<8, at::native::CUDAFunctor_add<c10::BFloat16>, std::array<char*, 3ul> >(int, at::native::CUDAFunctor_add<c10::BFloat16>, std::array<char*, 3ul>)",
+    "void at::native::vectorized_elementwise_kernel<4, at::native::CUDAFunctor_add<float>, std::array<char*, 3ul> >(int, at::native::CUDAFunctor_add<float>, std::array<char*, 3ul>)"
+  ],
+  "read-17-128-1.0-zero": {
+    "output": 0.0017405850910821388,
+    "gradients": [
+      0.0016914310936500107,
+      4.899777993749842e-08,
+      9.673613798815846e-08,
+      6.189858284721711e-08
+    ]
+  },
+  "write-17-128-0.0001-random": {
+    "output": 0.001667125626396241,
+    "gradients": [
+      0.001657938757922391,
+      0.0016161937608357908,
+      8.733054036885097e-08,
+      8.745360882102887e-08,
+      9.922837290645715e-08,
+      9.020298881679698e-08,
+      9.69543608961563e-08,
+      8.116112560667516e-08
+    ]
+  },
+  "read-17-128-0.0-random": {
+    "output": 0.0,
+    "gradients": [
+      0.0016951241901114159,
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  "write-1-5-1.0-random": {
+    "output": 0.0014641065018475058,
+    "gradients": [
+      0.001723828500606084,
+      0.002491221804056333,
+      4.296378679761573e-08,
+      6.798605976959447e-08,
+      1.0413329804566407e-07,
+      5.040788442846451e-08,
+      5.132806615797642e-08,
+      4.258710334383685e-08
+    ]
+  },
+  "write-32768-512-1.0-random": {
+    "output": 0.001658607943134964,
+    "gradients": [
+      0.0016587195105712159,
+      0.001658752923859007,
+      9.840262230310626e-08,
+      1.0114223897203383e-07,
+      1.4885648887299826e-07,
+      1.4147854910033378e-07,
+      1.450384500497188e-07,
+      1.393133960539187e-07
+    ]
+  },
+  "write-17-128-1.0-zero": {
+    "output": 0.0016426364155352588,
+    "gradients": [
+      0.001651785506608028,
+      0.0016697258305048207,
+      4.433005201478084e-08,
+      5.088961025919666e-08,
+      8.54822043563046e-08,
+      7.512086146786677e-08,
+      7.88224382389339e-08,
+      7.22701584629839e-08
+    ]
+  },
+  "read-129-512-1.0-random": {
+    "output": 0.001653951474509966,
+    "gradients": [
+      0.001660407902330617,
+      9.3603005072386e-08,
+      1.0870147443473901e-07,
+      9.28121195585977e-08
+    ]
+  },
+  "write-17-128-0.0-random": {
+    "output": 0.0,
+    "gradients": [
+      0.0016815481890295426,
+      0.0016805669856933035,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  "write-17-128-1.0-saturated": {
+    "output": 0.0016618410356530624,
+    "gradients": [
+      0.0017856195069637741,
+      0.001737912522114497,
+      8.813937801710379e-08,
+      7.862318822650566e-08,
+      4.485124184851411e-07,
+      4.144952381579985e-07,
+      4.802755664333988e-07,
+      5.027367607016394e-07
+    ]
+  }
+}
