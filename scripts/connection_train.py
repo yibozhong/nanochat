@@ -128,6 +128,7 @@ def main():
                          'input_channel_silu_gated_shared_raw' if a.variant=='gated_hc' else
                          'static_input_channel_scaled_shared_raw' if a.variant=='scaled_hc' else
                          'static_read_mix_post_head_channel_scaled_shared_raw' if a.variant=='scaled_hc_all' else
+                         'dynamic_elementwise_sigmoid_read_mix_post_head_shared_raw' if a.variant=='dynamic_hc_all' else
                          'block_attention_residuals_static_value_channel_scale' if a.variant=='attnres_scale' else
                          'block_attention_residuals' if a.variant=='attnres' else
                          'static_per_channel_identity_skip_scale' if a.variant=='skip_scale' else

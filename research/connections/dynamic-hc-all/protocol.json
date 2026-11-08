@@ -1,0 +1,39 @@
+{
+  "variant": "dynamic_hc_all",
+  "formal_training": false,
+  "automatic_training": false,
+  "wandb": false,
+  "formula": "g=2*sigmoid(a*RMS_channel(value)+b); read/mix/head normalize each own source stream, post normalizes branch y; independent a,b per position/channel/stream",
+  "normalization_eps": 1e-05,
+  "initialization": "a=b=0 => g=1; routing/backbone RNG unchanged",
+  "gate_tables": 49,
+  "parameter_tensors": 98,
+  "gate_parameters": 200704,
+  "total_parameters": 59716021,
+  "kernel": "NVIDIA four-stream split/FMA; complete-channel CTA for RMS and its derivative; backward recomputation; deterministic parameter partials; no dense gate GEMM or gate bank",
+  "checks": 29,
+  "profile_order": [
+    "mhc_no_sinkhorn",
+    "scaled_hc_all",
+    "dynamic_hc_all",
+    "dynamic_hc_all",
+    "scaled_hc_all",
+    "mhc_no_sinkhorn"
+  ],
+  "profile_steps": 60,
+  "warmup_steps": 20,
+  "timed_steps": 40,
+  "microbatch_candidates": [
+    16,
+    8,
+    4
+  ],
+  "batch_tokens": 32768,
+  "sequence_length": 2048,
+  "restart": [
+    25,
+    128
+  ],
+  "hardware": "one full H100/H200 or A100; same-card comparisons; 2CPU/16GBRAM/40GBscratch; no credentials; results only",
+  "existing_training_untouched": "8033761.0"
+}

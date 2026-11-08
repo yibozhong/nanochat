@@ -1,0 +1,6 @@
+{
+  "base_commit": "378e87b33b160fe1012a47c1e8f96442d1fd1f17",
+  "source": "NVIDIA TE2.20.2 split/FMA pattern via nanochat/scaled_nvidia_kernels.py",
+  "license": "../scaled-hc-nvidia/LICENSE.NVIDIA",
+  "changes": "new fused complete-row per-stream RMS+2sigmoid affine gate and exact RMS VJP; no changes to original/static kernels"
+}
