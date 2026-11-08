@@ -14,7 +14,11 @@ def resolve_attention_backend(backend):
         return 'fa3'
     if (major, minor) == (8, 0) and 'A100' in torch.cuda.get_device_name():
         return 'fa2'
-    raise RuntimeError('hardware_auto currently supports Hopper and A100 only')
+    if (major, minor) == (12, 0) and 'RTX PRO 6000 Blackwell Server Edition' in torch.cuda.get_device_name():
+        # Vanilla has no TE/mHC kernels. The worker must run this family's
+        # actual attention/CCE/compile/short-training gate before formal use.
+        return 'fa2'
+    raise RuntimeError('hardware_auto supports Hopper, A100, and RTX PRO 6000 Blackwell Server Edition')
 
 
 def configure_attention(backend):
@@ -59,4 +63,6 @@ def match_vanilla_initialization(model, seed):
         reference = ConnectionModel(ConnectionConfig(**options))
     missing, unexpected = model.load_state_dict(reference.state_dict(), strict=False)
     assert not unexpected
-    assert all('_connection.' in name or name.startswith(('stream_head.', 'depth_reads.', 'output_attnres.')) for name in missing)
+    assert all('_connection.' in name or name.startswith(('stream_head.', 'depth_reads.', 'output_attnres.')) or
+               (model.config.variant == 'skip_scale' and name.endswith(('.attn_skip_scale', '.mlp_skip_scale')))
+               for name in missing)

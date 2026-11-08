@@ -7,8 +7,10 @@ if major==9:
     print('fa3')
 elif (major,minor)==(8,0) and 'A100' in torch.cuda.get_device_name():
     print('fa2')
+elif (major,minor)==(12,0) and 'RTX PRO 6000 Blackwell Server Edition' in torch.cuda.get_device_name():
+    print('fa2')
 else:
-    raise RuntimeError('Expected Hopper or A100')
+    raise RuntimeError('Expected Hopper, A100, or RTX PRO 6000 Blackwell Server Edition')
 PY
 )
 export STREAM_MLP_ATTENTION_BACKEND="$TASK_ATTENTION_BACKEND"
@@ -25,5 +27,5 @@ print('Hopper: pinned FA3; NVIDIA mHC uses its TMA projection',flush=True)
 PY
 else
     export NANOCHAT_DISABLE_FA3=1
-    echo 'A100: embedded FA2; NVIDIA mHC selects its non-TMA projection'
+    echo 'Using embedded PyTorch FlashAttention; formal training requires the matching GPU-family preflight'
 fi

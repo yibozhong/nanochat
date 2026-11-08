@@ -1,0 +1,49 @@
+{
+  "variant": "skip_scale",
+  "architecture": "vanilla",
+  "formula": "attention: u=a_attn*x+Attn(RMSNorm(x)); MLP: out=a_mlp*u+MLP(RMSNorm(u))",
+  "streams": 1,
+  "depth": 8,
+  "width": 512,
+  "heads": 4,
+  "sequence_length": 2048,
+  "activation": "original ReLU squared",
+  "scale_shape": [
+    512
+  ],
+  "scale_count": 16,
+  "scale_parameters": 8192,
+  "parameters": 58728448,
+  "scale_initialization": 1,
+  "scale_arithmetic": "FP32 multiply/add then BF16 output; Inductor whole-block fusion",
+  "optimizer": "original MuonAdamW; FP32 scales use AdamW at unembedding LR with zero decay",
+  "seed": 42,
+  "batch_tokens": 32768,
+  "microbatch_candidates": [
+    16,
+    8,
+    4
+  ],
+  "steps": 305176,
+  "training_tokens": 10000007168,
+  "gate_checks": 15,
+  "gate_speed": "ABBA baseline/skip_scale/skip_scale/baseline, 60 steps each;20warm40timed",
+  "gate_restart": "25-to128 genuine exit85",
+  "new_family_preflight": "15checks plus25-to60; separate diagnostic weights deleted",
+  "hardware": "H100/H200 first; after3600 continuous idle seconds allow A100/RTX PRO6000 Blackwell Server Edition",
+  "checkpoint": {
+    "latest_steps": 500,
+    "best": "separate",
+    "exit85_seconds": 1800
+  },
+  "wandb": {
+    "project": "nanochat",
+    "entity": "yibozhong657-none",
+    "group": "skip-scale-10b-20261108"
+  },
+  "formal_runs": 1,
+  "existing_runs_unchanged": [
+    "8015499.0",
+    "8033761.0"
+  ]
+}

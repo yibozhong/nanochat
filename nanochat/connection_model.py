@@ -15,7 +15,7 @@ from nanochat.gpt import Block, GPTConfig, Linear, norm
 from nanochat.nvidia_connections import NvidiaHyperConnection, NvidiaHyperHead, expand_streams, check_nvidia_device
 from nanochat.optim import MuonAdamW
 
-CONNECTION_VARIANTS = ('baseline', 'mhc', 'mhc_no_sinkhorn', 'mhc_channel_no_sinkhorn', 'attnres', 'gated_hc', 'scaled_hc', 'scaled_hc_all')
+CONNECTION_VARIANTS = ('baseline', 'mhc', 'mhc_no_sinkhorn', 'mhc_channel_no_sinkhorn', 'attnres', 'gated_hc', 'scaled_hc', 'scaled_hc_all', 'skip_scale')
 
 
 @dataclass
@@ -39,6 +39,9 @@ class ConnectionConfig:
     attnres_block_size_unit: str = 'sublayers'
 
     def __post_init__(self):
+        if self.variant == 'skip_scale':
+            if self.architecture != 'vanilla' or self.streams != 1 or self.fused_connection_grad:
+                raise ValueError('Skip scale uses vanilla, exactly one residual stream, and ordinary gradients')
         if self.attnres_block_size_unit != 'sublayers':
             raise ValueError('AttnRes block size uses sublayers; load legacy metadata with from_checkpoint')
         if type(self.attnres_block_size) is not int or self.attnres_block_size < 2 or self.attnres_block_size % 2:
@@ -78,7 +81,7 @@ class ConnectionConfig:
             raise ValueError('RoPE requires an even integral head dimension')
         if self.sinkhorn_iterations < 1:
             raise ValueError('Sinkhorn needs at least one iteration')
-        if self.variant not in ('baseline', 'attnres') and (self.streams != 4 or self.width % 128):
+        if self.variant not in ('baseline', 'attnres', 'skip_scale') and (self.streams != 4 or self.width % 128):
             raise ValueError('NVIDIA mHC kernels require four streams and width divisible by 128')
 
     @property
@@ -131,7 +134,10 @@ class ConnectionBlock(Block):
         self.attn.ve_gate = None
         self.variant = config.variant
         self.compiled_attention = self.compiled_mlp = None
-        if self.variant != 'baseline':
+        if self.variant == 'skip_scale':
+            self.attn_skip_scale = nn.Parameter(torch.ones(config.width))
+            self.mlp_skip_scale = nn.Parameter(torch.ones(config.width))
+        elif self.variant != 'baseline':
             connection = NvidiaHyperConnection
             if self.variant == 'mhc_channel_no_sinkhorn':
                 from nanochat.channel_connections import ChannelHyperConnection
@@ -161,6 +167,10 @@ class ConnectionBlock(Block):
     def forward(self, x, cos, sin, kv_cache=None):
         if self.variant == 'baseline':
             return super().forward(x, None, (cos, sin), (-1, 0), kv_cache)
+        if self.variant == 'skip_scale':
+            from nanochat.skip_scale import scaled_skip
+            x = scaled_skip(x, self.attention_branch(x, cos, sin, kv_cache), self.attn_skip_scale)
+            return scaled_skip(x, self.mlp_branch(x), self.mlp_skip_scale)
         h, skip, post = self.attn_connection.read(x)
         y = (self.compiled_attention or self.attention_branch)(h, cos, sin, kv_cache)
         x = self.attn_connection.write(y, skip, post)
@@ -192,10 +202,10 @@ class ConnectionModel(nn.Module):
             nn.init.zeros_(b.attn.c_proj.weight)
             nn.init.uniform_(b.mlp.c_fc.weight, -s*.4, s*.4)
             nn.init.zeros_(b.mlp.c_proj.weight)
-        if config.variant != 'baseline':
+        if config.variant not in ('baseline', 'skip_scale'):
             for b in self.blocks:
                 b.attn_connection.reset_parameters(); b.mlp_connection.reset_parameters()
-        if config.variant == 'baseline':
+        if config.variant in ('baseline', 'skip_scale'):
             self.stream_head = None
         else:
             head_class=NvidiaHyperHead
@@ -217,14 +227,14 @@ class ConnectionModel(nn.Module):
                 block.attn = FlaAttention(block.attn)
 
     def prepare(self, device='cuda', dtype=torch.bfloat16, compile_blocks=False):
-        if self.config.variant != 'baseline':
+        if self.config.variant not in ('baseline', 'skip_scale'):
             check_nvidia_device(device)
             if dtype != torch.bfloat16:
                 raise ValueError('NVIDIA mHC kernels require BF16 activations')
         self.to(device)
         self.wte.to(dtype=dtype)
         self.cos = self.cos.to(dtype); self.sin = self.sin.to(dtype)
-        if compile_blocks and self.config.variant == 'baseline':
+        if compile_blocks and self.config.variant in ('baseline', 'skip_scale'):
             self.compiled_steps = [torch.compile(b.forward, dynamic=False, fullgraph=True) for b in self.blocks]
         elif compile_blocks:
             # NVIDIA TE supplies its own kernels and custom backward.
@@ -239,7 +249,7 @@ class ConnectionModel(nn.Module):
         if start + idx.shape[1] > self.config.sequence_length:
             raise ValueError('Input exceeds configured context length')
         x = norm(self.wte(idx))
-        if self.config.variant != 'baseline':
+        if self.config.variant not in ('baseline', 'skip_scale'):
             x = expand_streams(x, self.config.streams)
         cos, sin = self.cos[:, start:start+idx.shape[1]], self.sin[:, start:start+idx.shape[1]]
         for i, b in enumerate(self.blocks):
@@ -286,7 +296,7 @@ def optimizer_for(model, batch_tokens=32768):
     matrices, routing = [], []
     for b in model.blocks:
         for name, p in b.named_parameters():
-            (routing if '_connection.' in name else matrices).append(p)
+            (routing if '_connection.' in name or name in ('attn_skip_scale', 'mlp_skip_scale') else matrices).append(p)
     if model.stream_head is not None:
         routing.extend(model.stream_head.parameters())
     if c.variant == 'attnres':

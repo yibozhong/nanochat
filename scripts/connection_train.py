@@ -40,7 +40,7 @@ def main():
     p.add_argument('--steps', type=int, required=True)
     p.add_argument('--schedule-steps', type=int, default=30518)
     p.add_argument('--microbatch', type=int, default=16)
-    p.add_argument('--streams', type=int, default=4)
+    p.add_argument('--streams', type=int, default=None)
     p.add_argument('--sinkhorn-iterations', type=int, default=20)
     p.add_argument('--activation-checkpoint', action=argparse.BooleanOptionalAction, default=False)
     p.add_argument('--data-dir', default='data')
@@ -57,6 +57,8 @@ def main():
                    help='Bounded restart validation; 0 uses only the time/signal limit')
     p.add_argument('--seed', type=int, default=42)
     a = p.parse_args()
+    if a.streams is None:
+        a.streams = 1 if a.variant == 'skip_scale' else 4
     assert torch.cuda.is_available() and torch.cuda.device_count()==1
     assert a.sequence_length>0 and 32768%a.sequence_length==0
     rows_per_step=32768//a.sequence_length
@@ -127,6 +129,7 @@ def main():
                          'static_input_channel_scaled_shared_raw' if a.variant=='scaled_hc' else
                          'static_read_mix_post_head_channel_scaled_shared_raw' if a.variant=='scaled_hc_all' else
                          'block_attention_residuals' if a.variant=='attnres' else
+                         'static_per_channel_identity_skip_scale' if a.variant=='skip_scale' else
                          'additive'),
         applied_sinkhorn_iterations=c.sinkhorn_iterations if a.variant=='mhc' else 0,
         optimizer='native MuonAdamW; connector AdamW at native unembedding LR, no decay',

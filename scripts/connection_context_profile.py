@@ -62,7 +62,8 @@ def main():
     actual_attention_backend = configure_attention(a.attention_backend)
     seed_all(42)
     props = torch.cuda.get_device_properties(0)
-    cfg = ConnectionConfig(variant=a.variant, sequence_length=a.sequence_length, compact_routing=a.compact_routing)
+    cfg = ConnectionConfig(variant=a.variant, sequence_length=a.sequence_length, compact_routing=a.compact_routing,
+                           streams=1 if a.variant=='skip_scale' else 4)
     record = dict(complete=False, variant=a.variant, sequence_length=a.sequence_length,
         microbatch=a.microbatch, grad_accum=rows//a.microbatch, batch_tokens=BATCH_TOKENS,
         repetition=a.repetition, probe=a.probe, model=asdict(cfg), logging_backend='local',
