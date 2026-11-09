@@ -12,7 +12,7 @@ ASSETS=Path('/home/yzhong239/nanochat-runtime-assets')
 
 
 def main(root):
-    root=Path(root).resolve();assert root.parent==Path('/home/yzhong239') and root.name in ('play-memory-gate-20261109','play-memory-gate-20261109-r2','play-memory-gate-20261109-r3');root.mkdir(parents=True,exist_ok=True)
+    root=Path(root).resolve();assert root.parent==Path('/home/yzhong239') and root.name in ('play-memory-gate-20261109','play-memory-gate-20261109-r2','play-memory-gate-20261109-r3','play-memory-gate-20261109-r4');root.mkdir(parents=True,exist_ok=True)
     with (root/'submit.lock').open('a') as lock:
         fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
         assert not (root/'state.json').exists() and not (root/'STOPPED.json').exists()

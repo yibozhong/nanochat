@@ -11,7 +11,7 @@ from scripts.connection_skip_scale_gate import run
 
 def main():
     root=Path('results/play');root.mkdir(parents=True,exist_ok=True)
-    run(['-m','pytest','-xv','tests/test_play_memory.py','--junitxml='+str(root/'tests.xml')],root,'tests')
+    run(['-m','pytest','-v','tests/test_play_memory.py','--junitxml='+str(root/'tests.xml')],root,'tests')
     suites=ET.parse(root/'tests.xml').getroot().findall('testsuite')
     counts={k:sum(int(s.get(k,0)) for s in suites) for k in ('tests','failures','errors','skipped')}
     assert counts==dict(tests=23,failures=0,errors=0,skipped=0),counts

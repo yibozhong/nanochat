@@ -53,6 +53,6 @@
   "limitations": [
     "Cached decoding explicitly rejected before any KV mutation",
     "128steps are an engineering/pilot check, not long-run quality evidence",
-    "Gate2:16passed; mixed eager/compiled backbone raw_radius gradient error exceeds threshold. Matching compiled backbones pending, production implementation unchanged."
+    "Gate3: test-only nested autograd unsupported in custom_op. Serial VJP oracle fix pending; production unchanged since a24e7cf."
   ]
 }

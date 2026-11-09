@@ -18,5 +18,14 @@
     "diagnosis": "Suspect BF16 intermediate rounding differences across eager/Inductor backbones near hard thresholds. Next test compiles both backbones around an opaque serial/autograd oracle; original0.03 threshold retained.",
     "profile_completed": false,
     "training_started": false
+  },
+  {
+    "job": "8108008.0",
+    "source": "3e97cd3df572d8565ff8d26a2ff1739f6e4afc04",
+    "passed_checks": 16,
+    "failure": "Test-only serial oracle custom_op cannot invoke autograd inside backend dispatch; PyTorch excludes Autograd dispatch keys, enable_grad is insufficient.",
+    "fix": "Test-only serial reverse recurrence, itself independently checked against FP64 autograd at original thresholds. Production model/kernel unchanged. Run all checks to collect every failure before stopping.",
+    "profile_completed": false,
+    "training_started": false
   }
 ]

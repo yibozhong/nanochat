@@ -29,10 +29,25 @@ def _serial_forward_fake(u,r,w):
 
 @torch.library.custom_op('nanochat_test::serial_play_backward',mutates_args=())
 def _serial_backward(u:torch.Tensor,r:torch.Tensor,w:torch.Tensor,g:torch.Tensor)->tuple[torch.Tensor,torch.Tensor,torch.Tensor]:
-    with torch.enable_grad():
-        args=[v.detach().requires_grad_() for v in (u,r,w)]
-        y=play_reference(args[0].float(),args[1],args[2]).to(u.dtype)
-        return tuple(v.clone() for v in torch.autograd.grad(y,args,g))
+    # custom_op backend dispatch excludes autograd even inside enable_grad.
+    # Use a serial reverse recurrence here, independently checked against
+    # FP64 automatic differentiation below. Production uses a parallel scan.
+    uf=u.float();state=torch.zeros_like(uf[:,0]);states=[]
+    for current in uf.unbind(1):
+        lo,hi=current-r,current+r
+        state=torch.where(state<lo,lo,torch.where(state>hi,hi,state))
+        states.append(state)
+    m=torch.stack(states,1)
+    dz=2*torch.relu(uf+w*m)*g.float()
+    carry=torch.zeros_like(state);dr=torch.zeros_like(r);du=torch.empty_like(uf)
+    for t in range(u.shape[1]-1,-1,-1):
+        previous=states[t-1] if t else torch.zeros_like(state)
+        low,high=previous<uf[:,t]-r,previous>uf[:,t]+r
+        total=dz[:,t]*w+carry
+        du[:,t]=dz[:,t]+torch.where(low|high,total,0)
+        dr=dr+(torch.where(high,total,0)-torch.where(low,total,0)).sum(0)
+        carry=torch.where(low|high,0,total)
+    return du.to(u.dtype),dr,(dz*m).sum((0,1))
 
 
 @_serial_backward.register_fake
@@ -122,6 +137,10 @@ def test_compiled_primitive_keeps_inputs_immutable():
     errors=dict(output=relative(out,expected),gradients=[relative(a,b) for a,b in zip(grads,eg)])
     assert errors['output']<.006 and max(errors['gradients'])<.012,errors
     record('compiled-primitive-immutable',errors)
+    serial=_serial_forward(*args);sg=torch.autograd.grad(serial,args,go)
+    serial_errors=dict(output=relative(serial,expected),gradients=[relative(a,b) for a,b in zip(sg,eg)])
+    assert serial_errors['output']<.006 and max(serial_errors['gradients'])<.012,serial_errors
+    record('serial-reference-vjp',serial_errors)
 
 
 def build(memory='play',compiled=False,nonzero=False):
