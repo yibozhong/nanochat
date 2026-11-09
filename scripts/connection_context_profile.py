@@ -63,7 +63,7 @@ def main():
     seed_all(42)
     props = torch.cuda.get_device_properties(0)
     cfg = ConnectionConfig(variant=a.variant, sequence_length=a.sequence_length, compact_routing=a.compact_routing,
-                           streams=1 if a.variant in ('skip_scale','attnres_scale') else 4)
+                           streams=1 if a.variant in ('skip_scale','attnres_scale','kalman_residual') else 4)
     record = dict(complete=False, variant=a.variant, sequence_length=a.sequence_length,
         microbatch=a.microbatch, grad_accum=rows//a.microbatch, batch_tokens=BATCH_TOKENS,
         repetition=a.repetition, probe=a.probe, model=asdict(cfg), logging_backend='local',

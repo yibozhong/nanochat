@@ -58,7 +58,7 @@ def main():
     p.add_argument('--seed', type=int, default=42)
     a = p.parse_args()
     if a.streams is None:
-        a.streams = 1 if a.variant in ('skip_scale','attnres_scale') else 4
+        a.streams = 1 if a.variant in ('skip_scale','attnres_scale','kalman_residual') else 4
     assert torch.cuda.is_available() and torch.cuda.device_count()==1
     assert a.sequence_length>0 and 32768%a.sequence_length==0
     rows_per_step=32768//a.sequence_length
@@ -130,6 +130,7 @@ def main():
                          'block_attention_residuals_static_value_channel_scale' if a.variant=='attnres_scale' else
                          'block_attention_residuals' if a.variant=='attnres' else
                          'static_per_channel_identity_skip_scale' if a.variant=='skip_scale' else
+                         'learned_diagonal_kalman_depth_variance' if a.variant=='kalman_residual' else
                          'additive'),
         applied_sinkhorn_iterations=c.sinkhorn_iterations if a.variant=='mhc' else 0,
         optimizer='native MuonAdamW; connector AdamW at native unembedding LR, no decay',

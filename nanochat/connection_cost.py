@@ -3,13 +3,24 @@
 
 def model_cost(config, batch=1, activation_bytes=2):
     c=config
-    if c.architecture!='vanilla' or c.variant not in ('baseline','attnres','attnres_scale','skip_scale'):
+    if c.architecture!='vanilla' or c.variant not in ('baseline','attnres','attnres_scale','skip_scale','kalman_residual'):
         return None
     t,d,depth=c.sequence_length,c.width,c.depth
     projections=24*batch*t*depth*d*d
     head=2*batch*t*d*c.vocab_size
     attention=4*batch*d*depth*(t*(t+1)//2)
     forward=projections+head+attention
+    if c.variant=='kalman_residual':
+        sites=2*depth
+        extra=9*sites*batch*t*d+sites*d
+        return dict(estimated_forward_flops=forward+extra,
+            estimated_training_flops=3*(forward+extra),
+            components_forward=dict(backbone_projections=projections,vocab_head=head,
+                attention=attention,additional_kalman_arithmetic=extra),
+            additional_kalman_parameters=3*sites*d,
+            final_variance_state_bytes=batch*t*d*4,
+            accounting='Backbone matrix counts unchanged. Extra ordinary scalar arithmetic approx9 operations per site/token/channel, including division as1; softplus is excluded. Backward approximated2x forward. Excludes norm, optimizer, copies and recomputation; not measured hardware FLOPs.',
+            memory_note='One FP32 depth-variance state; autograd saves additional activations. Measure training peak.')
     if c.variant=='skip_scale':
         # Relative to vanilla's already-present residual adds: one multiply
         # forward; dx multiply plus dscale multiply/reduction in backward.

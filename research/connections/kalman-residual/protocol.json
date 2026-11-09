@@ -1,0 +1,60 @@
+{
+  "variant": "kalman_residual",
+  "architecture": "vanilla",
+  "formula_version": "diagonal_residual_v1",
+  "formulas": [
+    "Q=softplus(raw_q)+1e-4",
+    "R=softplus(bias+slope*RMSNorm(x))+1e-4",
+    "prior=P+Q",
+    "K=prior/(prior+R)",
+    "x_next=BF16(FP32(x)+2*K*FP32(branch))",
+    "P_next=K*R"
+  ],
+  "variance_state": "FP32 per token/channel, carried across all 16 sublayers without detach; reset per forward; no temporal scan",
+  "initialization": {
+    "P0": 0.5,
+    "Q": 0.5,
+    "R": 1,
+    "slope": 0,
+    "K": 0.5,
+    "effective_residual_coefficient": 1
+  },
+  "approximation": "Learned variance proxies with identity dynamics, no calibrated uncertainty claim. Not full BFT: no precision-weighted attention, REML estimation or FFN Jacobian covariance propagation.",
+  "reference": "https://arxiv.org/abs/2605.18832",
+  "implementation": "Original implementation; no reference source code copied",
+  "streams": 1,
+  "depth": 8,
+  "width": 512,
+  "heads": 4,
+  "sequence_length": 2048,
+  "activation": "original ReLU squared",
+  "noise_parameters": 24576,
+  "parameters": 58744832,
+  "arithmetic": "Inductor whole-block fusion; no extra GEMM",
+  "optimizer": "Original MuonAdamW; noise vectors use connector AdamW/unembedding LR/zero decay",
+  "seed": 42,
+  "batch_tokens": 32768,
+  "microbatch_candidates": [
+    16,
+    8,
+    4
+  ],
+  "steps": 305176,
+  "training_tokens": 10000007168,
+  "gate_checks": 20,
+  "gate_speed": "ABBA baseline/kalman/kalman/baseline, 60 updates each;20warm40timed",
+  "gate_restart": "baseline and kalman each genuine 25-to128 exit85 restart, finite gradients each update",
+  "new_family_preflight": "20 checks and kalman25-to60; diagnostic weights deleted",
+  "hardware": "H100/H200 first; after3600 continuous Idle seconds allow A100/RTX PRO6000 Blackwell Server Edition",
+  "checkpoint": {
+    "latest_steps": 500,
+    "best": "separate",
+    "exit85_seconds": 1800
+  },
+  "wandb": {
+    "project": "nanochat",
+    "entity": "yibozhong657-none",
+    "group": "kalman-residual-10b-20261109"
+  },
+  "formal_runs": 1
+}
