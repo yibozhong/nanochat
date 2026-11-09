@@ -1,0 +1,1459 @@
+{
+  "complete": true,
+  "formal_training": false,
+  "source": {
+    "commit": "ec15ab3569c61ff505d746f1472e8cce96ce52a1",
+    "formal_training": false,
+    "purpose": "Vanilla pairwise FFN activation;24checks,ABBA60step,baseline and pairwise25-to128 restart;bounded validation only, no formal training"
+  },
+  "checks": {
+    "tests": 24,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "microbatch": 16,
+  "profiles": {
+    "profile-0-relu2-16": {
+      "complete": true,
+      "variant": "baseline",
+      "sequence_length": 2048,
+      "microbatch": 16,
+      "grad_accum": 1,
+      "batch_tokens": 32768,
+      "repetition": 0,
+      "probe": false,
+      "model": {
+        "variant": "baseline",
+        "depth": 8,
+        "width": 512,
+        "heads": 4,
+        "sequence_length": 2048,
+        "vocab_size": 32768,
+        "streams": 4,
+        "sinkhorn_iterations": 20,
+        "activation_checkpoint": false,
+        "connection_backend": "nvidia",
+        "fused_connection_grad": false,
+        "architecture": "vanilla",
+        "window_pattern": "SSSL",
+        "attention_kernel": "original",
+        "compact_routing": false,
+        "mlp_activation": "relu2",
+        "pairwise_backend": "triton",
+        "attnres_block_size": 2,
+        "attnres_block_size_unit": "sublayers"
+      },
+      "logging_backend": "local",
+      "gpu": "NVIDIA H200",
+      "gpu_uuid": "8ca65bdc-4208-329a-d93f-6b9a4013e7ef",
+      "device_total_bytes": 150120759296,
+      "torch": "2.10.0+cu130",
+      "cuda": "13.0",
+      "attention_backend": "hardware_auto",
+      "actual_attention_backend": "fa3",
+      "minimum_gpu_bytes": 23068672000,
+      "memory_limit_bytes": 20761804800,
+      "nvidia_tf32_override": null,
+      "source": {
+        "commit": "ec15ab3569c61ff505d746f1472e8cce96ce52a1",
+        "formal_training": false,
+        "purpose": "Vanilla pairwise FFN activation;24checks,ABBA60step,baseline and pairwise25-to128 restart;bounded validation only, no formal training"
+      },
+      "seed": 42,
+      "data_note": "Re-segment existing packed tokens for performance, not long-document quality.\n\n    Original 2049-token rows are independent packed examples. Flattening them\n    does not recover original document continuity. All variants use the same\n    deterministic examples at a given context length; no new cache is saved.\n    ",
+      "timing_includes": "CPU data copy/H2D, CCE, backward, finite checks, MuonAdamW",
+      "warmup_steps": 20,
+      "timed_steps": 40,
+      "input_selection": {
+        "data_dir": "/var/lib/condor/execute/slot1/dir_1598719/scratch/data",
+        "start_row": 0,
+        "rows": 16,
+        "sequence_length": 2048,
+        "seed": 42
+      },
+      "parameters": 58720256,
+      "setup_and_warmup_seconds": 20.091048303991556,
+      "first_step_including_compilation_seconds": 18.784728752449155,
+      "losses": [
+        10.397917747497559,
+        10.394294738769531,
+        10.387046813964844,
+        10.377376556396484,
+        10.36134147644043,
+        10.341474533081055,
+        10.309637069702148,
+        10.279705047607422,
+        10.240934371948242,
+        10.168386459350586,
+        10.0949125289917,
+        9.982873916625977,
+        9.846269607543945,
+        9.705514907836914,
+        9.465995788574219,
+        9.239850997924805,
+        8.913887977600098,
+        8.601994514465332,
+        8.246330261230469,
+        7.975138187408447,
+        7.684823036193848,
+        7.567540645599365,
+        7.5283379554748535,
+        7.552611351013184,
+        7.616793632507324,
+        7.591525077819824,
+        7.384828090667725,
+        7.3174214363098145,
+        7.249322891235352,
+        7.161264419555664,
+        7.165977478027344,
+        7.076953887939453,
+        7.020920753479004,
+        6.950525283813477,
+        6.955866813659668,
+        6.866671562194824,
+        6.737956523895264,
+        6.767889976501465,
+        6.686859607696533,
+        6.752920150756836,
+        6.653991222381592,
+        6.655060768127441,
+        6.62075138092041,
+        6.794351577758789,
+        6.527453422546387,
+        6.581934452056885,
+        6.612346172332764,
+        6.497626304626465,
+        6.519453048706055,
+        6.561156272888184,
+        6.538197040557861,
+        6.390305519104004,
+        6.5304670333862305,
+        6.420693397521973,
+        6.3837738037109375,
+        6.517812728881836,
+        6.402240753173828,
+        6.490476608276367,
+        6.468690872192383,
+        6.407410621643066
+      ],
+      "optimizer_updates": 60,
+      "training_tokens": 1966080,
+      "peak_allocated_bytes": 5770922496,
+      "peak_reserved_bytes": 5916065792,
+      "fits_minimum_gpu_budget": true,
+      "step_seconds": [
+        0.06127202697098255,
+        0.060754528269171715,
+        0.060700418427586555,
+        0.060871612280607224,
+        0.060781052336096764,
+        0.060820115730166435,
+        0.06084285117685795,
+        0.06079288758337498,
+        0.06083700433373451,
+        0.06078951992094517,
+        0.060894591733813286,
+        0.06097421236336231,
+        0.060908228158950806,
+        0.06072470545768738,
+        0.06071825139224529,
+        0.0608088243752718,
+        0.06093582138419151,
+        0.06087009981274605,
+        0.06081879511475563,
+        0.06091117672622204,
+        0.06092074513435364,
+        0.06085076555609703,
+        0.06079922430217266,
+        0.06084583140909672,
+        0.06081602722406387,
+        0.06081615015864372,
+        0.06085674837231636,
+        0.06092115491628647,
+        0.06073747202754021,
+        0.060745080932974815,
+        0.060761258006095886,
+        0.060745421797037125,
+        0.06075077876448631,
+        0.060773102566599846,
+        0.06091809272766113,
+        0.06087910011410713,
+        0.06072971597313881,
+        0.060768548399209976,
+        0.060918113216757774,
+        0.06076113134622574
+      ],
+      "mean_seconds": 0.06083352966234088,
+      "median_seconds": 0.060817472636699677,
+      "stdev_seconds": 0.00010030940954894461,
+      "tokens_per_second": 538650.316394268,
+      "estimated_10b_training_hours": 5.156925902287373,
+      "causal_prefix_max_abs": 0.0,
+      "causality_passed": true,
+      "status": "fits"
+    },
+    "profile-1-pairwise-16": {
+      "complete": true,
+      "variant": "baseline",
+      "sequence_length": 2048,
+      "microbatch": 16,
+      "grad_accum": 1,
+      "batch_tokens": 32768,
+      "repetition": 0,
+      "probe": false,
+      "model": {
+        "variant": "baseline",
+        "depth": 8,
+        "width": 512,
+        "heads": 4,
+        "sequence_length": 2048,
+        "vocab_size": 32768,
+        "streams": 1,
+        "sinkhorn_iterations": 20,
+        "activation_checkpoint": false,
+        "connection_backend": "nvidia",
+        "fused_connection_grad": false,
+        "architecture": "vanilla",
+        "window_pattern": "SSSL",
+        "attention_kernel": "original",
+        "compact_routing": false,
+        "mlp_activation": "pairwise",
+        "pairwise_backend": "triton",
+        "attnres_block_size": 2,
+        "attnres_block_size_unit": "sublayers"
+      },
+      "logging_backend": "local",
+      "gpu": "NVIDIA H200",
+      "gpu_uuid": "8ca65bdc-4208-329a-d93f-6b9a4013e7ef",
+      "device_total_bytes": 150120759296,
+      "torch": "2.10.0+cu130",
+      "cuda": "13.0",
+      "attention_backend": "hardware_auto",
+      "actual_attention_backend": "fa3",
+      "minimum_gpu_bytes": 23068672000,
+      "memory_limit_bytes": 20761804800,
+      "nvidia_tf32_override": null,
+      "source": {
+        "commit": "ec15ab3569c61ff505d746f1472e8cce96ce52a1",
+        "formal_training": false,
+        "purpose": "Vanilla pairwise FFN activation;24checks,ABBA60step,baseline and pairwise25-to128 restart;bounded validation only, no formal training"
+      },
+      "seed": 42,
+      "data_note": "Re-segment existing packed tokens for performance, not long-document quality.\n\n    Original 2049-token rows are independent packed examples. Flattening them\n    does not recover original document continuity. All variants use the same\n    deterministic examples at a given context length; no new cache is saved.\n    ",
+      "timing_includes": "CPU data copy/H2D, CCE, backward, finite checks, MuonAdamW",
+      "warmup_steps": 20,
+      "timed_steps": 40,
+      "input_selection": {
+        "data_dir": "/var/lib/condor/execute/slot1/dir_1598719/scratch/data",
+        "start_row": 0,
+        "rows": 16,
+        "sequence_length": 2048,
+        "seed": 42
+      },
+      "parameters": 58728448,
+      "setup_and_warmup_seconds": 7.952879782766104,
+      "first_step_including_compilation_seconds": 6.676293818280101,
+      "losses": [
+        10.397917747497559,
+        10.394294738769531,
+        10.387046813964844,
+        10.377376556396484,
+        10.36134147644043,
+        10.341474533081055,
+        10.309637069702148,
+        10.279705047607422,
+        10.240930557250977,
+        10.168380737304688,
+        10.09487533569336,
+        9.98276138305664,
+        9.846033096313477,
+        9.70510196685791,
+        9.465597152709961,
+        9.239404678344727,
+        8.913585662841797,
+        8.601658821105957,
+        8.246994018554688,
+        7.9761199951171875,
+        7.68532657623291,
+        7.567412376403809,
+        7.527710914611816,
+        7.55213737487793,
+        7.616397857666016,
+        7.591337203979492,
+        7.384979248046875,
+        7.316978454589844,
+        7.248540878295898,
+        7.161122798919678,
+        7.166630744934082,
+        7.0771074295043945,
+        7.020244598388672,
+        6.950159549713135,
+        6.9554643630981445,
+        6.866482257843018,
+        6.737898826599121,
+        6.767777442932129,
+        6.686786651611328,
+        6.752991676330566,
+        6.653875350952148,
+        6.6550679206848145,
+        6.620721817016602,
+        6.794326305389404,
+        6.527382850646973,
+        6.581860542297363,
+        6.6122236251831055,
+        6.497532367706299,
+        6.5194244384765625,
+        6.56121826171875,
+        6.538218975067139,
+        6.3902692794799805,
+        6.530490875244141,
+        6.420688152313232,
+        6.383795738220215,
+        6.51787805557251,
+        6.4021759033203125,
+        6.490433692932129,
+        6.468894958496094,
+        6.4076337814331055
+      ],
+      "optimizer_updates": 60,
+      "training_tokens": 1966080,
+      "peak_allocated_bytes": 5771020800,
+      "peak_reserved_bytes": 5962203136,
+      "fits_minimum_gpu_budget": true,
+      "step_seconds": [
+        0.0615925882011652,
+        0.06117524579167366,
+        0.061249835416674614,
+        0.061198515817523,
+        0.061199428513646126,
+        0.06185127608478069,
+        0.061958055943250656,
+        0.0612122118473053,
+        0.06119074113667011,
+        0.06119789183139801,
+        0.06123371049761772,
+        0.06117326766252518,
+        0.06117146089673042,
+        0.061179282143712044,
+        0.06115509197115898,
+        0.061962513253092766,
+        0.06245761550962925,
+        0.06210505962371826,
+        0.0620806235820055,
+        0.06204136461019516,
+        0.06201377511024475,
+        0.06221333332359791,
+        0.06243003159761429,
+        0.06248597800731659,
+        0.06255355663597584,
+        0.06278662942349911,
+        0.0627299789339304,
+        0.06255851499736309,
+        0.06250903569161892,
+        0.06232444755733013,
+        0.06213398650288582,
+        0.06211253069341183,
+        0.06189751252532005,
+        0.061952486634254456,
+        0.0627043079584837,
+        0.06238079257309437,
+        0.06191161461174488,
+        0.06183918006718159,
+        0.06191254034638405,
+        0.06175823509693146
+      ],
+      "mean_seconds": 0.0618898562155664,
+      "median_seconds": 0.061955271288752556,
+      "stdev_seconds": 0.0005337296788397718,
+      "tokens_per_second": 529456.7155862654,
+      "estimated_10b_training_hours": 5.24647187790047,
+      "causal_prefix_max_abs": 0.0,
+      "causality_passed": true,
+      "status": "fits"
+    },
+    "profile-2-pairwise-16": {
+      "complete": true,
+      "variant": "baseline",
+      "sequence_length": 2048,
+      "microbatch": 16,
+      "grad_accum": 1,
+      "batch_tokens": 32768,
+      "repetition": 0,
+      "probe": false,
+      "model": {
+        "variant": "baseline",
+        "depth": 8,
+        "width": 512,
+        "heads": 4,
+        "sequence_length": 2048,
+        "vocab_size": 32768,
+        "streams": 1,
+        "sinkhorn_iterations": 20,
+        "activation_checkpoint": false,
+        "connection_backend": "nvidia",
+        "fused_connection_grad": false,
+        "architecture": "vanilla",
+        "window_pattern": "SSSL",
+        "attention_kernel": "original",
+        "compact_routing": false,
+        "mlp_activation": "pairwise",
+        "pairwise_backend": "triton",
+        "attnres_block_size": 2,
+        "attnres_block_size_unit": "sublayers"
+      },
+      "logging_backend": "local",
+      "gpu": "NVIDIA H200",
+      "gpu_uuid": "8ca65bdc-4208-329a-d93f-6b9a4013e7ef",
+      "device_total_bytes": 150120759296,
+      "torch": "2.10.0+cu130",
+      "cuda": "13.0",
+      "attention_backend": "hardware_auto",
+      "actual_attention_backend": "fa3",
+      "minimum_gpu_bytes": 23068672000,
+      "memory_limit_bytes": 20761804800,
+      "nvidia_tf32_override": null,
+      "source": {
+        "commit": "ec15ab3569c61ff505d746f1472e8cce96ce52a1",
+        "formal_training": false,
+        "purpose": "Vanilla pairwise FFN activation;24checks,ABBA60step,baseline and pairwise25-to128 restart;bounded validation only, no formal training"
+      },
+      "seed": 42,
+      "data_note": "Re-segment existing packed tokens for performance, not long-document quality.\n\n    Original 2049-token rows are independent packed examples. Flattening them\n    does not recover original document continuity. All variants use the same\n    deterministic examples at a given context length; no new cache is saved.\n    ",
+      "timing_includes": "CPU data copy/H2D, CCE, backward, finite checks, MuonAdamW",
+      "warmup_steps": 20,
+      "timed_steps": 40,
+      "input_selection": {
+        "data_dir": "/var/lib/condor/execute/slot1/dir_1598719/scratch/data",
+        "start_row": 0,
+        "rows": 16,
+        "sequence_length": 2048,
+        "seed": 42
+      },
+      "parameters": 58728448,
+      "setup_and_warmup_seconds": 8.250650756061077,
+      "first_step_including_compilation_seconds": 6.995323272421956,
+      "losses": [
+        10.397917747497559,
+        10.394294738769531,
+        10.387046813964844,
+        10.377376556396484,
+        10.36134147644043,
+        10.341474533081055,
+        10.309637069702148,
+        10.279703140258789,
+        10.240938186645508,
+        10.168392181396484,
+        10.094889640808105,
+        9.982820510864258,
+        9.846115112304688,
+        9.70521068572998,
+        9.465608596801758,
+        9.239367485046387,
+        8.91366195678711,
+        8.601785659790039,
+        8.24722671508789,
+        7.975868225097656,
+        7.685151100158691,
+        7.567490577697754,
+        7.527985572814941,
+        7.55238151550293,
+        7.616729736328125,
+        7.591492652893066,
+        7.385205268859863,
+        7.3169636726379395,
+        7.249054431915283,
+        7.161321640014648,
+        7.166559219360352,
+        7.077200412750244,
+        7.020440101623535,
+        6.9502997398376465,
+        6.955629825592041,
+        6.866543769836426,
+        6.737963676452637,
+        6.767865180969238,
+        6.686922550201416,
+        6.753039360046387,
+        6.6539788246154785,
+        6.655172348022461,
+        6.620781898498535,
+        6.794427871704102,
+        6.52752685546875,
+        6.581913948059082,
+        6.612334251403809,
+        6.497591018676758,
+        6.519479751586914,
+        6.5611772537231445,
+        6.538261413574219,
+        6.39034366607666,
+        6.530559539794922,
+        6.420688152313232,
+        6.383795738220215,
+        6.517870903015137,
+        6.402238845825195,
+        6.490462303161621,
+        6.468722343444824,
+        6.407444953918457
+      ],
+      "optimizer_updates": 60,
+      "training_tokens": 1966080,
+      "peak_allocated_bytes": 5771020800,
+      "peak_reserved_bytes": 5920260096,
+      "fits_minimum_gpu_budget": true,
+      "step_seconds": [
+        0.062124669551849365,
+        0.061532843858003616,
+        0.06144486181437969,
+        0.06143615022301674,
+        0.06143249198794365,
+        0.06139679253101349,
+        0.06141333095729351,
+        0.06143561564385891,
+        0.061378391459584236,
+        0.061350420117378235,
+        0.06141245365142822,
+        0.06141344830393791,
+        0.06134852394461632,
+        0.0614851713180542,
+        0.061544762924313545,
+        0.06146538071334362,
+        0.061525389552116394,
+        0.06142776645720005,
+        0.06145996227860451,
+        0.06142856366932392,
+        0.06141179986298084,
+        0.061462244018912315,
+        0.061432935297489166,
+        0.06142686307430267,
+        0.06136506237089634,
+        0.06140189617872238,
+        0.06142899580299854,
+        0.061424167826771736,
+        0.06136973574757576,
+        0.061448775231838226,
+        0.06151151657104492,
+        0.06146706081926823,
+        0.061382271349430084,
+        0.061396658420562744,
+        0.06138240918517113,
+        0.06138519570231438,
+        0.061448900029063225,
+        0.06138196028769016,
+        0.06142258830368519,
+        0.06142699159681797
+      ],
+      "mean_seconds": 0.0614458754658699,
+      "median_seconds": 0.06142737902700901,
+      "stdev_seconds": 0.00011953436058378985,
+      "tokens_per_second": 533282.335902285,
+      "estimated_10b_training_hours": 5.208835136436753,
+      "causal_prefix_max_abs": 0.0,
+      "causality_passed": true,
+      "status": "fits"
+    },
+    "profile-3-relu2-16": {
+      "complete": true,
+      "variant": "baseline",
+      "sequence_length": 2048,
+      "microbatch": 16,
+      "grad_accum": 1,
+      "batch_tokens": 32768,
+      "repetition": 0,
+      "probe": false,
+      "model": {
+        "variant": "baseline",
+        "depth": 8,
+        "width": 512,
+        "heads": 4,
+        "sequence_length": 2048,
+        "vocab_size": 32768,
+        "streams": 4,
+        "sinkhorn_iterations": 20,
+        "activation_checkpoint": false,
+        "connection_backend": "nvidia",
+        "fused_connection_grad": false,
+        "architecture": "vanilla",
+        "window_pattern": "SSSL",
+        "attention_kernel": "original",
+        "compact_routing": false,
+        "mlp_activation": "relu2",
+        "pairwise_backend": "triton",
+        "attnres_block_size": 2,
+        "attnres_block_size_unit": "sublayers"
+      },
+      "logging_backend": "local",
+      "gpu": "NVIDIA H200",
+      "gpu_uuid": "8ca65bdc-4208-329a-d93f-6b9a4013e7ef",
+      "device_total_bytes": 150120759296,
+      "torch": "2.10.0+cu130",
+      "cuda": "13.0",
+      "attention_backend": "hardware_auto",
+      "actual_attention_backend": "fa3",
+      "minimum_gpu_bytes": 23068672000,
+      "memory_limit_bytes": 20761804800,
+      "nvidia_tf32_override": null,
+      "source": {
+        "commit": "ec15ab3569c61ff505d746f1472e8cce96ce52a1",
+        "formal_training": false,
+        "purpose": "Vanilla pairwise FFN activation;24checks,ABBA60step,baseline and pairwise25-to128 restart;bounded validation only, no formal training"
+      },
+      "seed": 42,
+      "data_note": "Re-segment existing packed tokens for performance, not long-document quality.\n\n    Original 2049-token rows are independent packed examples. Flattening them\n    does not recover original document continuity. All variants use the same\n    deterministic examples at a given context length; no new cache is saved.\n    ",
+      "timing_includes": "CPU data copy/H2D, CCE, backward, finite checks, MuonAdamW",
+      "warmup_steps": 20,
+      "timed_steps": 40,
+      "input_selection": {
+        "data_dir": "/var/lib/condor/execute/slot1/dir_1598719/scratch/data",
+        "start_row": 0,
+        "rows": 16,
+        "sequence_length": 2048,
+        "seed": 42
+      },
+      "parameters": 58720256,
+      "setup_and_warmup_seconds": 4.08911289088428,
+      "first_step_including_compilation_seconds": 2.8349151350557804,
+      "losses": [
+        10.397917747497559,
+        10.394294738769531,
+        10.387046813964844,
+        10.377376556396484,
+        10.361342430114746,
+        10.341474533081055,
+        10.309637069702148,
+        10.279705047607422,
+        10.240926742553711,
+        10.168380737304688,
+        10.094863891601562,
+        9.98275375366211,
+        9.846040725708008,
+        9.705228805541992,
+        9.465618133544922,
+        9.239315032958984,
+        8.9134521484375,
+        8.601530075073242,
+        8.246883392333984,
+        7.975583553314209,
+        7.6850504875183105,
+        7.567506790161133,
+        7.528701305389404,
+        7.553110122680664,
+        7.617530822753906,
+        7.59235143661499,
+        7.386053562164307,
+        7.317781448364258,
+        7.249688625335693,
+        7.161684513092041,
+        7.166388511657715,
+        7.0774078369140625,
+        7.021276473999023,
+        6.950808525085449,
+        6.9560346603393555,
+        6.8669023513793945,
+        6.738216876983643,
+        6.768060684204102,
+        6.6870527267456055,
+        6.753172874450684,
+        6.654227256774902,
+        6.655276298522949,
+        6.620873928070068,
+        6.794620513916016,
+        6.5276594161987305,
+        6.582034587860107,
+        6.612495422363281,
+        6.497674465179443,
+        6.5195817947387695,
+        6.561262130737305,
+        6.538333415985107,
+        6.390450954437256,
+        6.530703544616699,
+        6.4208197593688965,
+        6.383876800537109,
+        6.518105506896973,
+        6.402395725250244,
+        6.490609169006348,
+        6.468797206878662,
+        6.407698631286621
+      ],
+      "optimizer_updates": 60,
+      "training_tokens": 1966080,
+      "peak_allocated_bytes": 5770922496,
+      "peak_reserved_bytes": 5786042368,
+      "fits_minimum_gpu_budget": true,
+      "step_seconds": [
+        0.060750991106033325,
+        0.060496123507618904,
+        0.06047164276242256,
+        0.060519324615597725,
+        0.06044504605233669,
+        0.06042126938700676,
+        0.06044318899512291,
+        0.06051798723638058,
+        0.060466039925813675,
+        0.060480544343590736,
+        0.060503605753183365,
+        0.06134203262627125,
+        0.06109912134706974,
+        0.06057477928698063,
+        0.060474032536149025,
+        0.06049383617937565,
+        0.06050151214003563,
+        0.060516929253935814,
+        0.06045665219426155,
+        0.06052180752158165,
+        0.060513198375701904,
+        0.06048223562538624,
+        0.060489969328045845,
+        0.06051984056830406,
+        0.06048854626715183,
+        0.060443101450800896,
+        0.06046832725405693,
+        0.06046850420534611,
+        0.06042676605284214,
+        0.06044555827975273,
+        0.060554809868335724,
+        0.0604094322770834,
+        0.060395993292331696,
+        0.0604918897151947,
+        0.060460738837718964,
+        0.06064336560666561,
+        0.06050354056060314,
+        0.06098521687090397,
+        0.06058143451809883,
+        0.060469936579465866
+      ],
+      "mean_seconds": 0.06054347180761397,
+      "median_seconds": 0.060490929521620274,
+      "stdev_seconds": 0.00018822162117757712,
+      "tokens_per_second": 541230.9374018932,
+      "estimated_10b_training_hours": 5.132337375655667,
+      "causal_prefix_max_abs": 0.0,
+      "causality_passed": true,
+      "status": "fits"
+    }
+  },
+  "training": {
+    "relu2": {
+      "summary": {
+        "complete": true,
+        "variant": "baseline",
+        "run_id": "pairwise-check-relu2",
+        "steps": 128,
+        "training_tokens": 4194304,
+        "initial_dev_ce": 10.398012638092041,
+        "final_dev_ce": 5.853601336479187,
+        "best_dev_ce": 5.853601336479187,
+        "dev_tokens": 131072,
+        "training_seconds": 10.826352570205927,
+        "elapsed_seconds": 63.73293966241181,
+        "steady_step_seconds": 0.060420427671683735,
+        "gpu": "NVIDIA H200",
+        "peak_allocated_bytes": 5770922496,
+        "peak_reserved_bytes": 5786042368,
+        "source": {
+          "commit": "ec15ab3569c61ff505d746f1472e8cce96ce52a1",
+          "formal_training": false,
+          "purpose": "Vanilla pairwise FFN activation;24checks,ABBA60step,baseline and pairwise25-to128 restart;bounded validation only, no formal training"
+        },
+        "test_evaluated": false,
+        "checkpoint_files": {
+          "latest.pt": {
+            "bytes": 503550181
+          },
+          "best.pt": {
+            "bytes": 201346725
+          }
+        }
+      },
+      "config": {
+        "logging_backend": "local",
+        "model": {
+          "variant": "baseline",
+          "depth": 8,
+          "width": 512,
+          "heads": 4,
+          "sequence_length": 2048,
+          "vocab_size": 32768,
+          "streams": 1,
+          "sinkhorn_iterations": 20,
+          "activation_checkpoint": false,
+          "connection_backend": "nvidia",
+          "fused_connection_grad": false,
+          "architecture": "vanilla",
+          "window_pattern": "SSSL",
+          "attention_kernel": "original",
+          "compact_routing": false,
+          "mlp_activation": "relu2",
+          "pairwise_backend": "triton",
+          "attnres_block_size": 2,
+          "attnres_block_size_unit": "sublayers"
+        },
+        "protocol": {
+          "steps": 128,
+          "schedule_steps": 305176,
+          "batch_tokens": 32768,
+          "microbatch": 16,
+          "grad_accum": 1,
+          "seed": 42,
+          "attention_backend": "hardware_auto",
+          "matched_backbone_init": true,
+          "evaluate_test": false
+        },
+        "data_manifest": {
+          "complete": true,
+          "logging_backend": "local",
+          "sequence_length": 2048,
+          "dtype": "uint16",
+          "layout": "rows of 2049 token ids; x=row[:-1], y=row[1:]",
+          "batch_tokens": 32768,
+          "training_steps": 128,
+          "requested_tokens": 4194304,
+          "training_tokens": 4194304,
+          "files": {
+            "train": {
+              "rows": 2048,
+              "tokens": 4194304,
+              "bytes": 8392704,
+              "sha256": "a5fb6a5c5b38d7c67ead2b12ad393d7c342ff94ba0b4e5d7eaffb1050d93d62d"
+            },
+            "dev": {
+              "rows": 64,
+              "tokens": 131072,
+              "bytes": 262272,
+              "sha256": "bd67b90b4386ba6428992864712f56eb10527678ed8b3664ed5f63c1643458a4",
+              "last_source_state": {
+                "pq_idx": 0,
+                "rg_idx": 1,
+                "epoch": 1
+              }
+            },
+            "test": {
+              "rows": 1024,
+              "tokens": 2097152,
+              "bytes": 4196352,
+              "sha256": "e7d24b6a89155ebc7123afe68bd2c58aeaf159b5087dbdf28e090ce09f293d09",
+              "last_source_state": {
+                "pq_idx": 0,
+                "rg_idx": 4,
+                "epoch": 1
+              }
+            }
+          },
+          "tokenizer": {
+            "dataset": "HuggingFaceFW/fineweb-edu",
+            "config": "sample-10BT",
+            "revision": "87f09149ef4734204d70ed1d046ddc9ca3f2b8f9",
+            "full_dataset_bytes": 28518193415,
+            "full_source_gpt2_tokens": 9972918177,
+            "nanochat_commit": "145da40cdd37b9522aa53d26c0c356e9126458bb",
+            "nanochat_source_sha256": "9a39516fc52effabe6bf9b87fc5fc67f7026a95060861be560d3525257bfb3e6",
+            "files": {
+              "token_bytes.pt": {
+                "bytes": 132649,
+                "sha256": "8e6ed9947610b8b329f0aed7e01bf332359331790e61fc6c0c95dc3cff29bdb4"
+              },
+              "tokenizer.pkl": {
+                "bytes": 412696,
+                "sha256": "8d1a5a03421ca24e7acafd1ef68fe8dbc6326dad903bc65cc726ec0601c577de"
+              }
+            },
+            "train_shards": [
+              "000_00000.parquet"
+            ],
+            "validation_shards": [
+              "013_00000.parquet"
+            ],
+            "tokenizer": "native RustBPE 32768 vocab, first 100M capped characters from training shard",
+            "benchmark": "native base_train d8/D512/2K/SSSL, 300 steps x 32768 model tokens; original source unmodified",
+            "vocab_size": 32768,
+            "max_chars": 100000000,
+            "doc_cap": 10000,
+            "purpose": "Throughput pilot tokenizer; native RustBPE; train shard only",
+            "elapsed_seconds": 5.633999116718769,
+            "run_id": "eqnd6jdz"
+          },
+          "native_commit": "145da40cdd37b9522aa53d26c0c356e9126458bb",
+          "dataset_revision": "87f09149ef4734204d70ed1d046ddc9ca3f2b8f9",
+          "train_shards": "000..012",
+          "heldout_shard": "013",
+          "epoch_note": "Native loader cycles the entire 13-shard training split. Epoch tracks source reads into the document buffer, not exact consumed unique tokens.",
+          "seconds": 9800.379161169752,
+          "validation": "dev first 64 rows, test next 1024 rows; no shared packed rows",
+          "purpose": "Exact 2K training prefix for checks; not a separate training run"
+        },
+        "source": {
+          "commit": "ec15ab3569c61ff505d746f1472e8cce96ce52a1",
+          "formal_training": false,
+          "purpose": "Vanilla pairwise FFN activation;24checks,ABBA60step,baseline and pairwise25-to128 restart;bounded validation only, no formal training"
+        },
+        "checkpoint_transport": {
+          "upload_interval_seconds": 3600.0,
+          "local_save_every_steps": 500,
+          "method": "exit85 plus scheduler transfer; local save alone is not durable"
+        },
+        "gpu": "NVIDIA H200",
+        "torch": "2.10.0+cu130",
+        "cuda": "13.0",
+        "gpu_capability": [
+          9,
+          0
+        ],
+        "actual_attention_backend": "fa3",
+        "explicit_portability_gate": false,
+        "parameters": 58720256,
+        "residual_mixing": "additive",
+        "applied_sinkhorn_iterations": 0,
+        "optimizer": "native MuonAdamW; connector AdamW at native unembedding LR, no decay",
+        "optimizer_groups": [
+          {
+            "kind": "adamw",
+            "lr": 0.0024494897427831783,
+            "betas": [
+              0.8,
+              0.96
+            ],
+            "eps": 1e-10,
+            "weight_decay": 0.01,
+            "initial_lr": 0.0024494897427831783
+          },
+          {
+            "kind": "adamw",
+            "lr": 0.09185586535436918,
+            "betas": [
+              0.8,
+              0.995
+            ],
+            "eps": 1e-10,
+            "weight_decay": 0.001,
+            "initial_lr": 0.09185586535436918
+          },
+          {
+            "kind": "muon",
+            "lr": 0.005,
+            "momentum": 0.95,
+            "ns_steps": 5,
+            "beta2": 0.9,
+            "weight_decay": 0.18375000000000002,
+            "initial_lr": 0.005
+          },
+          {
+            "kind": "muon",
+            "lr": 0.005,
+            "momentum": 0.95,
+            "ns_steps": 5,
+            "beta2": 0.9,
+            "weight_decay": 0.18375000000000002,
+            "initial_lr": 0.005
+          },
+          {
+            "kind": "muon",
+            "lr": 0.005,
+            "momentum": 0.95,
+            "ns_steps": 5,
+            "beta2": 0.9,
+            "weight_decay": 0.18375000000000002,
+            "initial_lr": 0.005
+          }
+        ],
+        "loss": "full-token full-vocabulary CCE; no gradient filtering",
+        "references": "research/connections/references.json",
+        "compute_estimate": {
+          "estimated_forward_flops": 3298803318784,
+          "estimated_training_flops": 9896409956352,
+          "components_forward": {
+            "backbone_projections": 1649267441664,
+            "vocab_head": 1099511627776,
+            "attention": 550024249344
+          },
+          "accounting": "FMA=2 FLOPs; allowed attention pairs, not masked dense-kernel execution. Backward approximated as2x consumed forward matrix FLOPs. Excludes softmax/norm/activation/optimizer/recomputation and is not measured hardware FLOPs.",
+          "memory_note": "Actual training peak VRAM must be measured separately."
+        }
+      }
+    },
+    "pairwise": {
+      "summary": {
+        "complete": true,
+        "variant": "baseline",
+        "run_id": "pairwise-check-pairwise",
+        "steps": 128,
+        "training_tokens": 4194304,
+        "initial_dev_ce": 10.398012638092041,
+        "final_dev_ce": 5.853582859039307,
+        "best_dev_ce": 5.853582859039307,
+        "dev_tokens": 131072,
+        "training_seconds": 11.462589940056205,
+        "elapsed_seconds": 38.061867425218225,
+        "steady_step_seconds": 0.06140915574806352,
+        "gpu": "NVIDIA H200",
+        "peak_allocated_bytes": 5771020800,
+        "peak_reserved_bytes": 5886705664,
+        "source": {
+          "commit": "ec15ab3569c61ff505d746f1472e8cce96ce52a1",
+          "formal_training": false,
+          "purpose": "Vanilla pairwise FFN activation;24checks,ABBA60step,baseline and pairwise25-to128 restart;bounded validation only, no formal training"
+        },
+        "test_evaluated": false,
+        "checkpoint_files": {
+          "latest.pt": {
+            "bytes": 503654149
+          },
+          "best.pt": {
+            "bytes": 201381429
+          }
+        }
+      },
+      "config": {
+        "logging_backend": "local",
+        "model": {
+          "variant": "baseline",
+          "depth": 8,
+          "width": 512,
+          "heads": 4,
+          "sequence_length": 2048,
+          "vocab_size": 32768,
+          "streams": 1,
+          "sinkhorn_iterations": 20,
+          "activation_checkpoint": false,
+          "connection_backend": "nvidia",
+          "fused_connection_grad": false,
+          "architecture": "vanilla",
+          "window_pattern": "SSSL",
+          "attention_kernel": "original",
+          "compact_routing": false,
+          "mlp_activation": "pairwise",
+          "pairwise_backend": "triton",
+          "attnres_block_size": 2,
+          "attnres_block_size_unit": "sublayers"
+        },
+        "protocol": {
+          "steps": 128,
+          "schedule_steps": 305176,
+          "batch_tokens": 32768,
+          "microbatch": 16,
+          "grad_accum": 1,
+          "seed": 42,
+          "attention_backend": "hardware_auto",
+          "matched_backbone_init": true,
+          "evaluate_test": false
+        },
+        "data_manifest": {
+          "complete": true,
+          "logging_backend": "local",
+          "sequence_length": 2048,
+          "dtype": "uint16",
+          "layout": "rows of 2049 token ids; x=row[:-1], y=row[1:]",
+          "batch_tokens": 32768,
+          "training_steps": 128,
+          "requested_tokens": 4194304,
+          "training_tokens": 4194304,
+          "files": {
+            "train": {
+              "rows": 2048,
+              "tokens": 4194304,
+              "bytes": 8392704,
+              "sha256": "a5fb6a5c5b38d7c67ead2b12ad393d7c342ff94ba0b4e5d7eaffb1050d93d62d"
+            },
+            "dev": {
+              "rows": 64,
+              "tokens": 131072,
+              "bytes": 262272,
+              "sha256": "bd67b90b4386ba6428992864712f56eb10527678ed8b3664ed5f63c1643458a4",
+              "last_source_state": {
+                "pq_idx": 0,
+                "rg_idx": 1,
+                "epoch": 1
+              }
+            },
+            "test": {
+              "rows": 1024,
+              "tokens": 2097152,
+              "bytes": 4196352,
+              "sha256": "e7d24b6a89155ebc7123afe68bd2c58aeaf159b5087dbdf28e090ce09f293d09",
+              "last_source_state": {
+                "pq_idx": 0,
+                "rg_idx": 4,
+                "epoch": 1
+              }
+            }
+          },
+          "tokenizer": {
+            "dataset": "HuggingFaceFW/fineweb-edu",
+            "config": "sample-10BT",
+            "revision": "87f09149ef4734204d70ed1d046ddc9ca3f2b8f9",
+            "full_dataset_bytes": 28518193415,
+            "full_source_gpt2_tokens": 9972918177,
+            "nanochat_commit": "145da40cdd37b9522aa53d26c0c356e9126458bb",
+            "nanochat_source_sha256": "9a39516fc52effabe6bf9b87fc5fc67f7026a95060861be560d3525257bfb3e6",
+            "files": {
+              "token_bytes.pt": {
+                "bytes": 132649,
+                "sha256": "8e6ed9947610b8b329f0aed7e01bf332359331790e61fc6c0c95dc3cff29bdb4"
+              },
+              "tokenizer.pkl": {
+                "bytes": 412696,
+                "sha256": "8d1a5a03421ca24e7acafd1ef68fe8dbc6326dad903bc65cc726ec0601c577de"
+              }
+            },
+            "train_shards": [
+              "000_00000.parquet"
+            ],
+            "validation_shards": [
+              "013_00000.parquet"
+            ],
+            "tokenizer": "native RustBPE 32768 vocab, first 100M capped characters from training shard",
+            "benchmark": "native base_train d8/D512/2K/SSSL, 300 steps x 32768 model tokens; original source unmodified",
+            "vocab_size": 32768,
+            "max_chars": 100000000,
+            "doc_cap": 10000,
+            "purpose": "Throughput pilot tokenizer; native RustBPE; train shard only",
+            "elapsed_seconds": 5.633999116718769,
+            "run_id": "eqnd6jdz"
+          },
+          "native_commit": "145da40cdd37b9522aa53d26c0c356e9126458bb",
+          "dataset_revision": "87f09149ef4734204d70ed1d046ddc9ca3f2b8f9",
+          "train_shards": "000..012",
+          "heldout_shard": "013",
+          "epoch_note": "Native loader cycles the entire 13-shard training split. Epoch tracks source reads into the document buffer, not exact consumed unique tokens.",
+          "seconds": 9800.379161169752,
+          "validation": "dev first 64 rows, test next 1024 rows; no shared packed rows",
+          "purpose": "Exact 2K training prefix for checks; not a separate training run"
+        },
+        "source": {
+          "commit": "ec15ab3569c61ff505d746f1472e8cce96ce52a1",
+          "formal_training": false,
+          "purpose": "Vanilla pairwise FFN activation;24checks,ABBA60step,baseline and pairwise25-to128 restart;bounded validation only, no formal training"
+        },
+        "checkpoint_transport": {
+          "upload_interval_seconds": 3600.0,
+          "local_save_every_steps": 500,
+          "method": "exit85 plus scheduler transfer; local save alone is not durable"
+        },
+        "gpu": "NVIDIA H200",
+        "torch": "2.10.0+cu130",
+        "cuda": "13.0",
+        "gpu_capability": [
+          9,
+          0
+        ],
+        "actual_attention_backend": "fa3",
+        "explicit_portability_gate": false,
+        "parameters": 58728448,
+        "residual_mixing": "additive",
+        "applied_sinkhorn_iterations": 0,
+        "optimizer": "native MuonAdamW; connector AdamW at native unembedding LR, no decay",
+        "optimizer_groups": [
+          {
+            "kind": "adamw",
+            "lr": 0.0024494897427831783,
+            "betas": [
+              0.8,
+              0.96
+            ],
+            "eps": 1e-10,
+            "weight_decay": 0.01,
+            "initial_lr": 0.0024494897427831783
+          },
+          {
+            "kind": "adamw",
+            "lr": 0.09185586535436918,
+            "betas": [
+              0.8,
+              0.995
+            ],
+            "eps": 1e-10,
+            "weight_decay": 0.001,
+            "initial_lr": 0.09185586535436918
+          },
+          {
+            "kind": "adamw",
+            "lr": 0.0024494897427831783,
+            "betas": [
+              0.8,
+              0.96
+            ],
+            "eps": 1e-10,
+            "weight_decay": 0.0,
+            "initial_lr": 0.0024494897427831783
+          },
+          {
+            "kind": "muon",
+            "lr": 0.005,
+            "momentum": 0.95,
+            "ns_steps": 5,
+            "beta2": 0.9,
+            "weight_decay": 0.18375000000000002,
+            "initial_lr": 0.005
+          },
+          {
+            "kind": "muon",
+            "lr": 0.005,
+            "momentum": 0.95,
+            "ns_steps": 5,
+            "beta2": 0.9,
+            "weight_decay": 0.18375000000000002,
+            "initial_lr": 0.005
+          },
+          {
+            "kind": "muon",
+            "lr": 0.005,
+            "momentum": 0.95,
+            "ns_steps": 5,
+            "beta2": 0.9,
+            "weight_decay": 0.18375000000000002,
+            "initial_lr": 0.005
+          }
+        ],
+        "loss": "full-token full-vocabulary CCE; no gradient filtering",
+        "references": "research/connections/references.json",
+        "compute_estimate": {
+          "estimated_forward_flops": 3303635181568,
+          "estimated_training_flops": 9910905544704,
+          "components_forward": {
+            "backbone_projections": 1649267441664,
+            "vocab_head": 1099511627776,
+            "attention": 550024249344,
+            "additional_pairwise_arithmetic": 4831862784
+          },
+          "additional_pairwise_parameters": 8192,
+          "accounting": "Same two FFN GEMMs. Approx18 extra scalar ops per token/pair, division counts1; abs/rsqrt/selects excluded. Parameter bound approx3 ops per pair. Backward approximated2x; not hardware FLOPs.",
+          "memory_note": "Fused activation saves input and tiny weights; recomputes rotations in backward. Deterministic parameter partial workspace is transient."
+        }
+      }
+    }
+  },
+  "trained_rotation_statistics": {
+    "blocks.0.mlp.rotation": {
+      "min": -0.06664518266916275,
+      "max": 0.13057827949523926,
+      "mean_abs": 0.02938924729824066,
+      "std": 0.02752026356756687
+    },
+    "blocks.1.mlp.rotation": {
+      "min": -0.06874354183673859,
+      "max": 0.11113759130239487,
+      "mean_abs": 0.03028266504406929,
+      "std": 0.02828720211982727
+    },
+    "blocks.2.mlp.rotation": {
+      "min": -0.074525848031044,
+      "max": 0.11869393289089203,
+      "mean_abs": 0.033156540244817734,
+      "std": 0.0305362269282341
+    },
+    "blocks.3.mlp.rotation": {
+      "min": -0.07112549245357513,
+      "max": 0.10715910792350769,
+      "mean_abs": 0.03373804688453674,
+      "std": 0.029892995953559875
+    },
+    "blocks.4.mlp.rotation": {
+      "min": -0.07233094424009323,
+      "max": 0.12118908762931824,
+      "mean_abs": 0.032218169420957565,
+      "std": 0.02888336218893528
+    },
+    "blocks.5.mlp.rotation": {
+      "min": -0.07603773474693298,
+      "max": 0.10740039497613907,
+      "mean_abs": 0.03486881032586098,
+      "std": 0.030836062505841255
+    },
+    "blocks.6.mlp.rotation": {
+      "min": -0.08462293446063995,
+      "max": 0.10958214104175568,
+      "mean_abs": 0.03295467421412468,
+      "std": 0.03167709708213806
+    },
+    "blocks.7.mlp.rotation": {
+      "min": -0.09502426534891129,
+      "max": 0.10202402621507645,
+      "mean_abs": 0.033572595566511154,
+      "std": 0.03265943005681038
+    }
+  },
+  "gpu": "NVIDIA H200",
+  "capability": [
+    9,
+    0
+  ],
+  "activation_micro": {
+    "gpu": "NVIDIA H200",
+    "shape": [
+      32768,
+      2048
+    ],
+    "forward_backward_ms": {
+      "relu2": 0.191627197265625,
+      "torch": 0.7313645172119141,
+      "triton": 0.3294131088256836
+    },
+    "single_call_trace": {
+      "relu2": [
+        {
+          "name": "triton_poi_fused_pow_relu_0",
+          "calls": 1,
+          "self_device_us": 60.99200000000019
+        },
+        {
+          "name": "triton_poi_fused_pow_relu_0",
+          "calls": 1,
+          "self_device_us": 60.99200000000019
+        },
+        {
+          "name": "## Call CompiledFxGraph fin4ubj4knwf3ib4ks4luhrvuausgu7p5efsc7y2lja2zpyzpyuo ##",
+          "calls": 1,
+          "self_device_us": 60.99200000000019
+        },
+        {
+          "name": "triton_poi_fused_mul_pow_relu_threshold_backward_0",
+          "calls": 1,
+          "self_device_us": 93.91999999999916
+        },
+        {
+          "name": "triton_poi_fused_mul_pow_relu_threshold_backward_0",
+          "calls": 1,
+          "self_device_us": 93.91999999999916
+        },
+        {
+          "name": "## Call CompiledFxGraph f6auklcttotqt4cfncqtbwx756pdkayu4jj6tgr24ie7q4cd7irg ##",
+          "calls": 1,
+          "self_device_us": 93.91999999999916
+        }
+      ],
+      "torch": [
+        {
+          "name": "triton_poi_fused__to_copy_0",
+          "calls": 1,
+          "self_device_us": 94.20799999999997
+        },
+        {
+          "name": "## Call CompiledFxGraph fuldadxtyi723efjtgsvyqqr4ya34xhuhupggysfkia7gizmhzkp ##",
+          "calls": 1,
+          "self_device_us": 257.376
+        },
+        {
+          "name": "triton_poi_fused__to_copy_0",
+          "calls": 1,
+          "self_device_us": 94.20799999999997
+        },
+        {
+          "name": "triton_poi_fused__to_copy_abs_add_div_mul_pow_reciprocal_relu_rsqrt_rsub_stack_sub_unbind_view_1",
+          "calls": 1,
+          "self_device_us": 162.17600000000004
+        },
+        {
+          "name": "triton_poi_fused__to_copy_abs_add_div_mul_pow_reciprocal_relu_rsqrt_rsub_stack_sub_unbind_view_1",
+          "calls": 1,
+          "self_device_us": 162.17600000000004
+        },
+        {
+          "name": "triton_poi_fused__to_copy_abs_add_div_mul_neg_pow_reciprocal_relu_rsqrt_rsub_select_sgn_sub_threshold_backward_view_0",
+          "calls": 1,
+          "self_device_us": 184.76800000000003
+        },
+        {
+          "name": "## Call CompiledFxGraph fo5ozsrp6ptdrthtpqhuetwzob6v3xvqtqoftjxndglodk6j45tx ##",
+          "calls": 1,
+          "self_device_us": 473.72900000000004
+        },
+        {
+          "name": "triton_poi_fused__to_copy_abs_add_div_mul_neg_pow_reciprocal_relu_rsqrt_rsub_select_sgn_sub_threshold_backward_view_0",
+          "calls": 1,
+          "self_device_us": 184.76800000000003
+        },
+        {
+          "name": "triton_red_fused_abs_add_div_mul_sub_sum_1",
+          "calls": 1,
+          "self_device_us": 104.25499999999988
+        },
+        {
+          "name": "triton_red_fused_abs_add_div_mul_pow_rsqrt_sub_sum_view_2",
+          "calls": 1,
+          "self_device_us": 1.8250000000000455
+        },
+        {
+          "name": "triton_poi_fused__to_copy_abs_add_div_mul_neg_pow_rsqrt_stack_view_3",
+          "calls": 1,
+          "self_device_us": 178.52800000000002
+        },
+        {
+          "name": "triton_red_fused_abs_add_div_mul_sub_sum_1",
+          "calls": 1,
+          "self_device_us": 104.25499999999988
+        },
+        {
+          "name": "triton_red_fused_abs_add_div_mul_pow_rsqrt_sub_sum_view_2",
+          "calls": 1,
+          "self_device_us": 1.8250000000000455
+        },
+        {
+          "name": "triton_poi_fused__to_copy_abs_add_div_mul_neg_pow_rsqrt_stack_view_3",
+          "calls": 1,
+          "self_device_us": 178.52800000000002
+        }
+      ],
+      "triton": [
+        {
+          "name": "_pair_fwd_0",
+          "calls": 1,
+          "self_device_us": 65.08799999999997
+        },
+        {
+          "name": "_pair_fwd",
+          "calls": 1,
+          "self_device_us": 65.08799999999997
+        },
+        {
+          "name": "## Call CompiledFxGraph fp4jwbsjaytzd36xeds5oyeba2xv3rmjss3bmylbig7fbam2pyi7 ##",
+          "calls": 1,
+          "self_device_us": 65.08799999999997
+        },
+        {
+          "name": "_pair_bwd_0",
+          "calls": 1,
+          "self_device_us": 113.91999999999962
+        },
+        {
+          "name": "## Call CompiledFxGraph finj3emuhsxrcktx35wohtfftb3ovwywksoyaeu7zophiyyf4bsq ##",
+          "calls": 1,
+          "self_device_us": 122.49599999999964
+        },
+        {
+          "name": "_pair_bwd",
+          "calls": 1,
+          "self_device_us": 113.91999999999962
+        },
+        {
+          "name": "_scale_partial_reduce_1",
+          "calls": 1,
+          "self_device_us": 5.120000000000346
+        },
+        {
+          "name": "_scale_partial_reduce_2",
+          "calls": 1,
+          "self_device_us": 1.2480000000000473
+        },
+        {
+          "name": "_scale_partial_reduce",
+          "calls": 2,
+          "self_device_us": 6.368000000000393
+        }
+      ]
+    },
+    "triton_configs": {
+      "forward": "None",
+      "backward": "None"
+    },
+    "measurement": "CUDA events around100 repeated forward+VJP calls after20warmups; no optimizer; complete-step ABBA reported separately"
+  },
+  "mean_step_seconds": {
+    "relu2": 0.060688500734977426,
+    "pairwise": 0.06166786584071815
+  },
+  "overhead_percent": 1.6137572915461362,
+  "speed_target_percent": 5.0,
+  "speed_target_met": true,
+  "pilot_dev_difference": -1.8477439880371094e-05,
+  "limitations": "Single-seed128-step engineering pilot does not establish quality or10B stability. No formal run authorized.",
+  "job": "8191214.0",
+  "archive_bytes": 307200
+}

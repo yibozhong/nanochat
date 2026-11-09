@@ -1,0 +1,45 @@
+{
+  "complete": true,
+  "job": "8191214.0",
+  "gpu": "NVIDIA H200",
+  "gpu_source": "ec15ab3569c61ff505d746f1472e8cce96ce52a1",
+  "checks": {
+    "tests": 24,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "microbatch": 16,
+  "batch_tokens": 32768,
+  "sequence_length": 2048,
+  "measurement": "Same physical H200, ABBA with60updates per case;20warmup and40timed steps, including forward/backward/CCE/optimizer/data transfer.",
+  "step_ms": {
+    "relu2": 60.688500734977424,
+    "pairwise": 61.66786584071815
+  },
+  "overhead_percent": 1.6137572915461362,
+  "speed_target_met": true,
+  "activation_forward_backward_ms": {
+    "relu2": 0.191627197265625,
+    "torch": 0.7313645172119141,
+    "triton": 0.3294131088256836
+  },
+  "peak_allocated_GiB": {
+    "relu2": 5.3745903968811035,
+    "pairwise": 5.3746819496154785
+  },
+  "extra_parameters": 8192,
+  "total_parameters": 58728448,
+  "restart": "Baseline and pairwise each completed25-to128 real exit85 restart; all128training losses finite and all8new parameter vectors learned.",
+  "final_dev_ce": {
+    "relu2": 5.853601336479187,
+    "pairwise": 5.853582859039307
+  },
+  "pilot_dev_difference": -1.8477439880371094e-05,
+  "optimization": "Packed contiguous pair memory access, enabled FP32 FMA, tuned tile size/warps. Formula, parameterization, activation precision and error thresholds unchanged. Combined changes tested; individual speed contributions not isolated.",
+  "limitations": "Single-seed128-step engineering pilot does not establish quality or10B stability. No formal run authorized.",
+  "profiling_note": "Micro traces include duplicate wrapper/device records; do not sum all records. Compiled autotuner did not expose best_config to the Python wrapper; no claim about selected tile.",
+  "formal_training": false,
+  "automatic_training": false,
+  "hash_checks": false
+}
