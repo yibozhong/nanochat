@@ -26,33 +26,39 @@ def pairwise_torch(x, weight):
     return torch.stack((c*p-s*r,s*p+c*r),-1).flatten(-2).to(x.dtype)
 
 
+@tr.autotune(configs=[tr.Config({'BP':bp},num_warps=nw)
+                     for bp,nw in ((64,4),(128,4),(128,8),(256,8))],key=['M','P'])
 @tr.jit
 def _pair_fwd(X,W,Y,M:tl.constexpr,P:tl.constexpr,BM:tl.constexpr,BP:tl.constexpr):
     rows=tl.program_id(0)*BM+tl.arange(0,BM)
     cols=tl.program_id(1)*BP+tl.arange(0,BP)
-    mask=(rows[:,None]<M)&(cols[None,:]<P)
-    offsets=rows[:,None]*(2*P)+2*cols[None,:]
-    u=tl.load(X+offsets,mask,0).to(tl.float32)
-    v=tl.load(X+offsets+1,mask,0).to(tl.float32)
+    channels=tl.program_id(1)*(2*BP)+tl.arange(0,2*BP)
+    mask=(rows[:,None]<M)&(channels[None,:]<2*P)
+    offsets=rows[:,None]*(2*P)+channels[None,:]
+    packed=tl.load(X+offsets,mask,0).to(tl.float32)
+    u,v=tl.split(packed.reshape(BM,BP,2))
     w=tl.load(W+cols,cols<P,0)
     strength=w*tl.rsqrt(1+w*w)
     t=strength[None,:]*(u-v)/(1+tl.abs(u)+tl.abs(v))
     tt=t*t;q=1/(1+tt);c=(1-tt)*q;s=2*t*q
     pu=tl.maximum(u,0);pv=tl.maximum(v,0);a=pu*pu;b=pv*pv
-    tl.store(Y+offsets,c*a-s*b,mask)
-    tl.store(Y+offsets+1,s*a+c*b,mask)
+    output=tl.join(c*a-s*b,s*a+c*b).reshape(BM,2*BP)
+    tl.store(Y+offsets,output,mask)
 
 
+@tr.autotune(configs=[tr.Config({'BP':bp},num_warps=nw)
+                     for bp,nw in ((32,4),(64,4),(64,8),(128,4),(128,8),(256,8))],key=['M','P'])
 @tr.jit
 def _pair_bwd(X,W,G,DX,DW,M:tl.constexpr,P:tl.constexpr,BM:tl.constexpr,BP:tl.constexpr):
     rows=tl.program_id(0)*BM+tl.arange(0,BM)
     cols=tl.program_id(1)*BP+tl.arange(0,BP)
-    mask=(rows[:,None]<M)&(cols[None,:]<P)
-    offsets=rows[:,None]*(2*P)+2*cols[None,:]
-    u=tl.load(X+offsets,mask,0).to(tl.float32)
-    v=tl.load(X+offsets+1,mask,0).to(tl.float32)
-    g1=tl.load(G+offsets,mask,0).to(tl.float32)
-    g2=tl.load(G+offsets+1,mask,0).to(tl.float32)
+    channels=tl.program_id(1)*(2*BP)+tl.arange(0,2*BP)
+    mask=(rows[:,None]<M)&(channels[None,:]<2*P)
+    offsets=rows[:,None]*(2*P)+channels[None,:]
+    packed=tl.load(X+offsets,mask,0).to(tl.float32)
+    u,v=tl.split(packed.reshape(BM,BP,2))
+    packed_g=tl.load(G+offsets,mask,0).to(tl.float32)
+    g1,g2=tl.split(packed_g.reshape(BM,BP,2))
     w=tl.load(W+cols,cols<P,0)
     inv_w=tl.rsqrt(1+w*w);strength=w*inv_w
     absu=tl.abs(u);absv=tl.abs(v);inv=1/(1+absu+absv)
@@ -67,8 +73,7 @@ def _pair_bwd(X,W,G,DX,DW,M:tl.constexpr,P:tl.constexpr,BM:tl.constexpr,BP:tl.co
     shared=dt*strength[None,:]*inv*inv
     du=2*pu*(c*g1+s*g2)+shared*(1+absv+v*signu)
     dv=2*pv*(-s*g1+c*g2)-shared*(1+absu+u*signv)
-    tl.store(DX+offsets,du,mask)
-    tl.store(DX+offsets+1,dv,mask)
+    tl.store(DX+offsets,tl.join(du,dv).reshape(BM,2*BP),mask)
     dw=tl.sum(dt*ratio,axis=0)*(inv_w*inv_w*inv_w)
     tl.store(DW+tl.program_id(0)*P+cols,dw,cols<P)
 
@@ -83,7 +88,7 @@ class _Pairwise(torch.autograd.Function):
         if not x.is_contiguous() or not weight.is_contiguous() or weight.device!=x.device or weight.shape!=(x.shape[-1]//2,):
             raise ValueError('Invalid pairwise shape/layout/device')
         p=x.shape[-1]//2;m=x.numel()//(2*p);out=torch.empty_like(x)
-        _pair_fwd[(tr.cdiv(m,16),tr.cdiv(p,64))](x,weight,out,m,p,16,64,num_warps=4,enable_fp_fusion=False)
+        _pair_fwd[lambda meta:(tr.cdiv(m,16),tr.cdiv(p,meta['BP']))](x,weight,out,m,p,16)
         ctx.save_for_backward(x,weight)
         return out
 
@@ -92,7 +97,7 @@ class _Pairwise(torch.autograd.Function):
     def backward(ctx,go):
         x,w=ctx.saved_tensors;go=go.contiguous();p=x.shape[-1]//2;m=x.numel()//(2*p)
         dx=torch.empty_like(x);parts=torch.empty((1,tr.cdiv(m,16),p,1),device=x.device,dtype=torch.float32)
-        _pair_bwd[(tr.cdiv(m,16),tr.cdiv(p,64))](x,w,go,dx,parts,m,p,16,64,num_warps=4,enable_fp_fusion=False)
+        _pair_bwd[lambda meta:(tr.cdiv(m,16),tr.cdiv(p,meta['BP']))](x,w,go,dx,parts,m,p,16)
         dw=reduce_scale_partials(parts).reshape(p)
         return dx,dw
 

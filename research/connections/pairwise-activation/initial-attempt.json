@@ -1,0 +1,35 @@
+{
+  "job": "8188915.0",
+  "source": {
+    "commit": "4658ccee8fb556cfa63c38daa3e30770688b22d3",
+    "formal_training": false,
+    "purpose": "Vanilla pairwise FFN activation;24checks,ABBA60step,baseline and pairwise25-to128 restart;bounded validation only, no formal training"
+  },
+  "checks": {
+    "tests": 24,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "gpu": "NVIDIA H200",
+  "microbatch": 16,
+  "mean_step_seconds": {
+    "relu2": 0.0604200387839228,
+    "pairwise": 0.06852575663942843
+  },
+  "overhead_percent": 13.415611804708893,
+  "speed_target_percent": 5.0,
+  "speed_target_met": false,
+  "pilot_dev_difference": 0.0006068944931030273,
+  "limitations": "Single-seed128-step engineering pilot does not establish quality or10B stability. No formal run authorized.",
+  "activation_micro_ms": {
+    "relu2": 0.19476608276367188,
+    "torch": 0.7309088134765624,
+    "triton": 1.1021260833740234
+  },
+  "final_dev_ce": {
+    "relu2": 5.853169322013855,
+    "pairwise": 5.853776216506958
+  },
+  "recovery": "Both baseline and pairwise completed25-to128 exit85 restore; all128losses finite and all8rotationvectors learned."
+}
