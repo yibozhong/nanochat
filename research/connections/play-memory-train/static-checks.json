@@ -1,0 +1,31 @@
+{
+  "complete": true,
+  "gpu_tests_run_here": false,
+  "gate_job": "8108012.0",
+  "validated_execution_files": 102,
+  "rejected_cases": [
+    "report_complete",
+    "report_formal_training",
+    "report_checks",
+    "report_microbatch",
+    "report_source",
+    "train_steps",
+    "train_final_dev_ce",
+    "train_training_tokens",
+    "train_peak_reserved_bytes",
+    "wrong_streams",
+    "missing_params",
+    "not_learning",
+    "marker_capability",
+    "marker_source",
+    "marker_radii",
+    "marker_formal_training",
+    "bad_backbone",
+    "incomplete_restart"
+  ],
+  "scheduling_boundaries": 10,
+  "formal_step_parser_cases": 4,
+  "condor_dryruns": 2,
+  "python_ast": true,
+  "bash_syntax": true
+}
