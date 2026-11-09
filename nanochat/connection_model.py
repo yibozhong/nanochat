@@ -37,8 +37,17 @@ class ConnectionConfig:
     compact_routing: bool = False
     attnres_block_size: int = 2  # Moonshot paper's S: Attention and MLP each count once
     attnres_block_size_unit: str = 'sublayers'
+    mlp_memory: str = 'none'
+    play_radius_init: float = .25
 
     def __post_init__(self):
+        if self.mlp_memory not in ('none', 'play'):
+            raise ValueError('Unknown MLP memory')
+        if not math.isfinite(self.play_radius_init) or not 0 < self.play_radius_init <= 10:
+            raise ValueError('Play radius initialization must be finite and in (0,10]')
+        if self.mlp_memory == 'play' and (self.variant != 'baseline' or self.architecture != 'vanilla'
+                                         or self.streams != 1 or self.sequence_length > 8192):
+            raise ValueError('Play memory requires vanilla baseline, one stream, context <=8192')
         if self.variant in ('skip_scale','attnres_scale'):
             if self.architecture != 'vanilla' or self.streams != 1 or self.fused_connection_grad:
                 raise ValueError('Skip scale uses vanilla, exactly one residual stream, and ordinary gradients')
@@ -135,6 +144,9 @@ class ConnectionBlock(Block):
         super().__init__(native, index)
         self.attn.ve_gate = None
         self.variant = config.variant
+        if config.mlp_memory == 'play':
+            from nanochat.play_memory import PlayMLP
+            self.mlp = PlayMLP(self.mlp, config.play_radius_init)
         self.compiled_attention = self.compiled_mlp = None
         if self.variant == 'skip_scale':
             self.attn_skip_scale = nn.Parameter(torch.ones(config.width))
@@ -244,6 +256,8 @@ class ConnectionModel(nn.Module):
         return self
 
     def hidden(self, idx, kv_cache=None):
+        if self.config.mlp_memory == 'play' and kv_cache is not None:
+            raise ValueError('Play memory cached decoding needs an explicit per-layer state cache; not implemented')
         start = 0 if kv_cache is None else kv_cache.get_pos()
         if start + idx.shape[1] > self.config.sequence_length:
             raise ValueError('Input exceeds configured context length')
@@ -295,7 +309,7 @@ def optimizer_for(model, batch_tokens=32768):
     matrices, routing = [], []
     for b in model.blocks:
         for name, p in b.named_parameters():
-            (routing if '_connection.' in name or name in ('attn_skip_scale', 'mlp_skip_scale') else matrices).append(p)
+            (routing if '_connection.' in name or name.startswith('mlp.play.') or name in ('attn_skip_scale', 'mlp_skip_scale') else matrices).append(p)
     if model.stream_head is not None:
         routing.extend(model.stream_head.parameters())
     if c.variant in ('attnres','attnres_scale'):

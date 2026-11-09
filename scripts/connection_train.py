@@ -26,6 +26,8 @@ from nanochat.connection_experiment import configure_attention, match_vanilla_in
 def main():
     p = argparse.ArgumentParser()
     p.add_argument('--variant', choices=CONNECTION_VARIANTS, required=True)
+    p.add_argument('--mlp-memory', choices=('none','play'), default='none')
+    p.add_argument('--play-radius-init', type=float, default=.25)
     p.add_argument('--sequence-length', type=int, default=2048)
     p.add_argument('--attention-kernel', choices=('original','fla_triton'), default='original')
     p.add_argument('--architecture', choices=('vanilla', 'native'), default='vanilla')
@@ -58,7 +60,7 @@ def main():
     p.add_argument('--seed', type=int, default=42)
     a = p.parse_args()
     if a.streams is None:
-        a.streams = 1 if a.variant in ('skip_scale','attnres_scale') else 4
+        a.streams = 1 if a.variant in ('skip_scale','attnres_scale') or a.mlp_memory == 'play' else 4
     assert torch.cuda.is_available() and torch.cuda.device_count()==1
     assert a.sequence_length>0 and 32768%a.sequence_length==0
     rows_per_step=32768//a.sequence_length
@@ -71,6 +73,7 @@ def main():
     actual_attention_backend = configure_attention(a.attention_backend)
     seed_all(a.seed)
     c=ConnectionConfig(variant=a.variant,streams=a.streams,sinkhorn_iterations=a.sinkhorn_iterations,
+                       mlp_memory=a.mlp_memory,play_radius_init=a.play_radius_init,
                        sequence_length=a.sequence_length, compact_routing=a.compact_routing,
                        attnres_block_size=a.attnres_block_size,
                        attention_kernel=a.attention_kernel,
