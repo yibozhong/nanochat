@@ -1,0 +1,81 @@
+{
+  "complete": true,
+  "user_request": "Stop, rollback and clean Kalman residual; research other previous candidates",
+  "job": "8134122.0",
+  "run_id": "924d31cc",
+  "job_status": 3,
+  "exit_code": 143,
+  "last_observed_training": {
+    "step": 261990,
+    "tokens": 8584888320,
+    "loss": 3.4086484909057617,
+    "seconds": 0.07228133804164827,
+    "lr_multiplier": 0.25683012038474723
+  },
+  "formal_10b_completed": false,
+  "automatic_training": false,
+  "automatic_continuation": false,
+  "restored_base": "a032dff67687906b67f94db1e6ef1a980657eb7c",
+  "history_commit": "db708030388baa916232446f7ba340919e20fa83",
+  "deleted_workflow_roots": [
+    "/home/yzhong239/kalman-residual-gate-20261109",
+    "/home/yzhong239/kalman-residual-gate-20261109-r2",
+    "/home/yzhong239/kalman-residual-10b-20261109"
+  ],
+  "experiment_summary": {
+    "gpu_checks": {
+      "tests": 21,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "a100_mean_step_seconds": {
+      "baseline": 0.1182017611572519,
+      "kalman_residual": 0.14426097034011037
+    },
+    "overhead_percent": 22.046379789714067,
+    "matched_dev": {
+      "step": 259750,
+      "tokens": 8511488000,
+      "kalman": 3.224074423313141,
+      "vanilla": 3.257212996482849,
+      "delta": -0.03313857316970825
+    },
+    "recent100_delta_mean": -0.030102667212486268,
+    "limitations": "Single seed, old vanilla cuDNN vs Kalman FA3. Small persistent loss gain; speed overhead22.05%. This is not a completed10B result."
+  },
+  "remote_wandb_deleted": false,
+  "audit_directory": "/home/yzhong239/research-cleanup-20261109/kalman-residual",
+  "scheduler_spools": {
+    "8128627": {
+      "path": "/var/lib/condor/spool/8627/0/cluster8128627.proc0.subproc0",
+      "exists": false
+    },
+    "8131016": {
+      "path": "/var/lib/condor/spool/1016/0/cluster8131016.proc0.subproc0",
+      "exists": false
+    },
+    "8134122": {
+      "path": "/var/lib/condor/spool/4122/0/cluster8134122.proc0.subproc0",
+      "exists": false
+    }
+  },
+  "deleted_tracked_files": 17,
+  "deleted_root_regular_files": 129,
+  "deleted_root_symlinks": 5,
+  "deleted_root_file_bytes": 38838021,
+  "checkpoint_policy": "All retired workflow roots removed; worker terminated; all three scheduler spools absent. No Kalman checkpoint retained.",
+  "verification": {
+    "retained_source_hashes_unchanged": 477,
+    "protected_external_files_unchanged": 1977,
+    "restored_files_byte_identical": 4,
+    "model_byte_identical_except_inert_metadata_compatibility": true,
+    "retained_config_roundtrips": 12,
+    "inert_metadata_compatible": 12,
+    "legacy_unit_roundtrips": 12,
+    "retired_config_rejections": 60,
+    "python_ast_files": 168,
+    "bash_files": 33,
+    "new_gpu_tests": false
+  }
+}

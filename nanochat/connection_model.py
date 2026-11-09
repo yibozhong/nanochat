@@ -15,7 +15,7 @@ from nanochat.gpt import Block, GPTConfig, Linear, norm
 from nanochat.nvidia_connections import NvidiaHyperConnection, NvidiaHyperHead, expand_streams, check_nvidia_device
 from nanochat.optim import MuonAdamW
 
-CONNECTION_VARIANTS = ('baseline', 'mhc', 'mhc_no_sinkhorn', 'mhc_channel_no_sinkhorn', 'attnres', 'scaled_hc', 'scaled_hc_all', 'skip_scale', 'attnres_scale', 'kalman_residual')
+CONNECTION_VARIANTS = ('baseline', 'mhc', 'mhc_no_sinkhorn', 'mhc_channel_no_sinkhorn', 'attnres', 'scaled_hc', 'scaled_hc_all', 'skip_scale', 'attnres_scale')
 
 
 @dataclass
@@ -37,13 +37,8 @@ class ConnectionConfig:
     compact_routing: bool = False
     attnres_block_size: int = 2  # Moonshot paper's S: Attention and MLP each count once
     attnres_block_size_unit: str = 'sublayers'
-    kalman_formula: str = 'diagonal_residual_v1'
 
     def __post_init__(self):
-        if self.kalman_formula != 'diagonal_residual_v1':
-            raise ValueError('Unknown Kalman residual formula')
-        if self.variant == 'kalman_residual' and (self.architecture != 'vanilla' or self.streams != 1 or self.fused_connection_grad or self.attention_kernel != 'original'):
-            raise ValueError('Kalman residual requires vanilla, one stream, original attention and ordinary gradients')
         if self.variant in ('skip_scale','attnres_scale'):
             if self.architecture != 'vanilla' or self.streams != 1 or self.fused_connection_grad:
                 raise ValueError('Skip scale uses vanilla, exactly one residual stream, and ordinary gradients')
@@ -84,7 +79,7 @@ class ConnectionConfig:
             raise ValueError('RoPE requires an even integral head dimension')
         if self.sinkhorn_iterations < 1:
             raise ValueError('Sinkhorn needs at least one iteration')
-        if self.variant not in ('baseline', 'attnres', 'attnres_scale', 'skip_scale', 'kalman_residual') and (self.streams != 4 or self.width % 128):
+        if self.variant not in ('baseline', 'attnres', 'attnres_scale', 'skip_scale') and (self.streams != 4 or self.width % 128):
             raise ValueError('NVIDIA mHC kernels require four streams and width divisible by 128')
 
     @property
@@ -96,6 +91,7 @@ class ConnectionConfig:
     def from_checkpoint(cls, config):
         """Read pre-cleanup NVIDIA/vanilla metadata; reject retired model weights."""
         config = dict(config)
+        config.pop('kalman_formula', None)  # retired route; other variants stored this inert default
         if config.pop('mlp_memory', 'none') != 'none':
             raise ValueError('Checkpoint belongs to the retired play-memory experiment')
         config.pop('play_radius_init', None)
@@ -189,8 +185,8 @@ class ConnectionBlock(Block):
 class ConnectionModel(nn.Module):
     def __init__(self, config):
         super().__init__()
-        if config.variant in ('attnres','attnres_scale','kalman_residual'):
-            raise ValueError('Use build_connection_model for AttnRes or Kalman residual')
+        if config.variant in ('attnres','attnres_scale'):
+            raise ValueError('Use build_connection_model for AttnRes')
         if config.architecture != 'vanilla':
             raise ValueError('Use build_connection_model for native nanochat')
         self.config = config
@@ -303,7 +299,7 @@ def optimizer_for(model, batch_tokens=32768):
     matrices, routing = [], []
     for b in model.blocks:
         for name, p in b.named_parameters():
-            (routing if '_connection.' in name or '_noise.' in name or name in ('attn_skip_scale', 'mlp_skip_scale') else matrices).append(p)
+            (routing if '_connection.' in name or name in ('attn_skip_scale', 'mlp_skip_scale') else matrices).append(p)
     if model.stream_head is not None:
         routing.extend(model.stream_head.parameters())
     if c.variant in ('attnres','attnres_scale'):
@@ -331,9 +327,6 @@ def optimizer_for(model, batch_tokens=32768):
 
 
 def build_connection_model(config):
-    if config.variant == 'kalman_residual':
-        from nanochat.kalman_residual import KalmanResidualModel
-        return KalmanResidualModel(config)
     if config.variant == 'attnres_scale':
         from nanochat.scaled_attention_residuals import ScaledAttnResModel
         return ScaledAttnResModel(config)
