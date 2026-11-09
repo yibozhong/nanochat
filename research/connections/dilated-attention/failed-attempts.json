@@ -11,5 +11,25 @@
     "benchmarks_executed": false,
     "short_training_executed": false,
     "formal_training": false
+  },
+  {
+    "job": "8242596.0",
+    "status": "failed_after_checks",
+    "gpu": "NVIDIA H100 80GB HBM3",
+    "tests": {
+      "passed": 29,
+      "failed": 0
+    },
+    "cause": "After 60 finite updates at all 8 strides, switching grad_mode for the causal profile check exceeded the default 8-entry block.forward Dynamo recompile limit.",
+    "correction": "Budget four graph entries per distinct stride/full-attention signature (train/eval and full/remainder batches); keep fullgraph and all numerical thresholds. Add actual 8-layer train/eval full/remainder regression.",
+    "partial_profile_ms": {
+      "full": 63.5825227946043,
+      "sink_swa": 64.99691777862608,
+      "progressive_dilated": 67.52999532036483
+    },
+    "profile_complete": false,
+    "short_training_executed": false,
+    "formal_training": false,
+    "production_kernel_changed": false
   }
 ]

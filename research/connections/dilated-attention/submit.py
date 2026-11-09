@@ -11,7 +11,7 @@ ASSETS=Path('/home/yzhong239/nanochat-runtime-assets')
 
 
 def main(root):
-    root=Path(root).resolve();assert root==Path('/home/yzhong239/dilated-attention-gate-20261109-r2');root.mkdir(parents=True,exist_ok=True)
+    root=Path(root).resolve();assert root==Path('/home/yzhong239/dilated-attention-gate-20261109-r3');root.mkdir(parents=True,exist_ok=True)
     with (root/'submit.lock').open('a') as lock:
         fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
         assert not (root/'state.json').exists() and not (root/'STOPPED.json').exists()
@@ -21,7 +21,7 @@ def main(root):
         assert not subprocess.check_output(['git','status','--porcelain'],cwd=REPO,text=True).strip()
         for name in ('bundles','logs','results'):(root/name).mkdir(exist_ok=True)
         commit=subprocess.check_output(['git','rev-parse','HEAD'],cwd=REPO,text=True).strip()
-        source=dict(commit=commit,formal_training=False,purpose='Vanilla progressive sink/local/dilated attention;29checks,ABCCBA60step,three patterns25-to128 restart;bounded validation only, no formal training')
+        source=dict(commit=commit,formal_training=False,purpose='Vanilla progressive sink/local/dilated attention;30checks,ABCCBA60step,three patterns25-to128 restart;bounded validation only, no formal training')
         (root/'bundles/source.json').write_text(json.dumps(source,indent=2)+'\n')
         subprocess.run(['git','archive','--format=tar','--prefix=nanochat-src/','-o',str(root/'bundles/source.tar'),'HEAD'],cwd=REPO,check=True)
         for name in ('gate-data.tar','transformer_engine_torch-2.20.2-cp311-cp311-linux_x86_64.whl'):

@@ -44,7 +44,7 @@ def main():
     run(['-m','pytest','-v','tests/test_dilated_attention.py','--junitxml='+str(root/'tests.xml')],root,'tests')
     suites=ET.parse(root/'tests.xml').getroot().findall('testsuite')
     counts={k:sum(int(s.get(k,0)) for s in suites) for k in ('tests','failures','errors','skipped')}
-    assert counts==dict(tests=29,failures=0,errors=0,skipped=0),counts
+    assert counts==dict(tests=30,failures=0,errors=0,skipped=0),counts
     run(['-m','scripts.connection_dilated_micro'],root,'micro')
     patterns=('full','sink_swa','progressive_dilated')
     for micro in (16,8,4):

@@ -6,7 +6,7 @@ import statistics
 
 def validate(v,source):
     assert v['complete'] and not v['formal_training'] and v['source']==source
-    assert v['checks']==dict(tests=29,failures=0,errors=0,skipped=0)
+    assert v['checks']==dict(tests=30,failures=0,errors=0,skipped=0)
     assert v['capability']==[9,0] and v['microbatch'] in (16,8,4)
     profiles=list(v['profiles'].values());patterns=('full','sink_swa','progressive_dilated')
     assert len(profiles)==6 and len({p['gpu_uuid'] for p in profiles})==1

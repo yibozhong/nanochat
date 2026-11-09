@@ -178,6 +178,22 @@ def test_optimizer_rng_restore():
     equal_tree(m.state_dict(),restored.state_dict());equal_tree(opt.state_dict(),other.state_dict())
 
 
+def test_eight_layer_train_eval_compile_budget():
+    configure_attention('hardware_auto');seed_all(42)
+    model=ConnectionModel(ConnectionConfig(streams=1,depth=8,width=128,heads=2,
+        vocab_size=128,sequence_length=2048,attention_pattern='progressive_dilated')).prepare(compile_blocks=True)
+    for batch in (2,1):
+        x=torch.randint(0,128,(batch,129),device='cuda');y=(x+1)%128
+        model.train();model.zero_grad(set_to_none=True)
+        loss=model(x,y);loss.backward()
+        assert torch.isfinite(loss) and all(torch.isfinite(p.grad).all() for p in model.parameters())
+        model.eval()
+        with torch.no_grad():
+            evaluated=model(x,y)
+        torch.testing.assert_close(loss,evaluated,atol=.003,rtol=.001)
+    record('eight-layer-compile',dict(train_eval=True,full_and_remainder_batches=True))
+
+
 @pytest.mark.parametrize('options',[dict(architecture='native'),dict(streams=4),dict(attention_kernel='fla_triton'),
     dict(sparse_budget=133),dict(depth=1),dict(sparse_backend='bad'),dict(sparse_sinks=0),dict(variant='mhc')])
 def test_bad_config(options):

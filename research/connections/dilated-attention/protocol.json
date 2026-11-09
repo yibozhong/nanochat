@@ -31,7 +31,7 @@
   "parameters": 58720256,
   "extra_parameters": 0,
   "precision": "BF16 inputs/outputs and dot operands; FP32 accumulators and log2 normalizers",
-  "gpu_checks": 29,
+  "gpu_checks": 30,
   "profile": "Full, sink_swa, progressive_dilated, reverse; each60updates20warm40timed; same GPU and common micro16/8/4, 32Ktokens/step",
   "training": "Each of three patterns25-to128 real exit85 restore; seed42/default optimizer/LR horizon305176; no W&B/no returned diagnostic checkpoints",
   "formal_training": false,

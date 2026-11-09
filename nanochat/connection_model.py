@@ -260,6 +260,13 @@ class ConnectionModel(nn.Module):
         self.to(device)
         self.wte.to(dtype=dtype)
         self.cos = self.cos.to(dtype); self.sin = self.sin.to(dtype)
+        if compile_blocks and self.config.attention_pattern != 'full':
+            # Each static stride specializes the shared block.forward code.
+            # Allow train/eval graphs at a full and a remainder batch size.
+            # This only budgets compiler entries; execution stays fullgraph.
+            from torch._dynamo import config as compiler_config
+            signatures = {getattr(b.attn, 'stride', None) for b in self.blocks}
+            compiler_config.recompile_limit = max(compiler_config.recompile_limit, 4*len(signatures))
         if compile_blocks and self.config.variant in ('baseline', 'skip_scale'):
             self.compiled_steps = [torch.compile(b.forward, dynamic=False, fullgraph=True) for b in self.blocks]
         elif compile_blocks:
