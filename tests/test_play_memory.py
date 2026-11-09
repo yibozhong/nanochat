@@ -17,6 +17,40 @@ from test_connection_training_resume import equal_tree
 from test_skip_scale import test_actual_attention_forward_backward_backend
 
 
+@torch.library.custom_op('nanochat_test::serial_play_forward',mutates_args=())
+def _serial_forward(u:torch.Tensor,r:torch.Tensor,w:torch.Tensor)->torch.Tensor:
+    return play_reference(u.float(),r,w).to(u.dtype)
+
+
+@_serial_forward.register_fake
+def _serial_forward_fake(u,r,w):
+    return torch.empty_like(u)
+
+
+@torch.library.custom_op('nanochat_test::serial_play_backward',mutates_args=())
+def _serial_backward(u:torch.Tensor,r:torch.Tensor,w:torch.Tensor,g:torch.Tensor)->tuple[torch.Tensor,torch.Tensor,torch.Tensor]:
+    with torch.enable_grad():
+        args=[v.detach().requires_grad_() for v in (u,r,w)]
+        y=play_reference(args[0].float(),args[1],args[2]).to(u.dtype)
+        return tuple(v.clone() for v in torch.autograd.grad(y,args,g))
+
+
+@_serial_backward.register_fake
+def _serial_backward_fake(u,r,w,g):
+    return torch.empty_like(u),torch.empty_like(r),torch.empty_like(w)
+
+
+def _serial_context(ctx,inputs,output):
+    ctx.save_for_backward(*inputs)
+
+
+def _serial_vjp(ctx,g):
+    return _serial_backward(*ctx.saved_tensors,g)
+
+
+_serial_forward.register_autograd(_serial_vjp,setup_context=_serial_context)
+
+
 def relative(a,b):
     return ((a.double()-b.double()).norm()/b.double().norm().clamp_min(1e-12)).item()
 
@@ -155,13 +189,17 @@ def test_compiled_model_against_serial_memory():
     equal_tree(reference.state_dict(),compiled.state_dict())
     for b in reference.blocks:
         module=b.mlp.play
-        module.forward=lambda u,module=module:play_reference(u.float(),torch.nn.functional.softplus(module.raw_radius),module.memory_weight).to(u.dtype)
+        module.forward=lambda u,module=module:_serial_forward(u,torch.nn.functional.softplus(module.raw_radius),module.memory_weight)
+    # Compile both unchanged backbones. An eager BF16 RMSNorm baseline and
+    # Inductor's norm can round differently, moving inputs across the play
+    # thresholds. The serial oracle stays opaque and uses independent autograd.
+    reference.compiled_steps=[torch.compile(b.forward,fullgraph=True,dynamic=False) for b in reference.blocks]
     x=torch.randint(0,128,(2,129),device='cuda');y=(x+1)%128
     a=reference(x,y);a.backward();b=compiled(x,y);b.backward()
     torch.testing.assert_close(a,b,atol=2e-4,rtol=2e-4)
     errors={n:relative(p.grad,dict(reference.named_parameters())[n].grad) for n,p in compiled.named_parameters()}
-    assert max(errors.values())<.03,errors
     record('serial-model',errors)
+    assert max(errors.values())<.03,errors
 
 
 def test_optimizer_rng_restore(tmp_path):

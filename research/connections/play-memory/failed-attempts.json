@@ -9,5 +9,14 @@
     "diagnosis": "TTIR dependency analysis propagates write offset dependencies through all multi-result helper inputs. Recompute only output address locally; kernel formula/precision/thresholds unchanged.",
     "profile_completed": false,
     "training_started": false
+  },
+  {
+    "job": "8107857.0",
+    "source": "a24e7cfa297605d54640faaa611eb0a16bb1bcf3",
+    "passed_checks": 16,
+    "failure": "Mixed eager/compiled backbone comparison: max relative parameter gradient0.038783755936422644 exceeds0.03; raw_radius in both layers. Complete compiled model CCE/causality/recompute and compiled primitive input immutability passed.",
+    "diagnosis": "Suspect BF16 intermediate rounding differences across eager/Inductor backbones near hard thresholds. Next test compiles both backbones around an opaque serial/autograd oracle; original0.03 threshold retained.",
+    "profile_completed": false,
+    "training_started": false
   }
 ]

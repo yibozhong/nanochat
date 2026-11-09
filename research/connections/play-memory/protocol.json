@@ -53,6 +53,6 @@
   "limitations": [
     "Cached decoding explicitly rejected before any KV mutation",
     "128steps are an engineering/pilot check, not long-run quality evidence",
-    "First gate:14checks passed, AOT compiler mutation analysis failed before training. Address-only fix awaiting new GPU validation."
+    "Gate2:16passed; mixed eager/compiled backbone raw_radius gradient error exceeds threshold. Matching compiled backbones pending, production implementation unchanged."
   ]
 }
