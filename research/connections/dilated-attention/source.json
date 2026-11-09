@@ -1,0 +1,7 @@
+{
+  "repository": "https://github.com/fla-org/flash-linear-attention",
+  "reference_commit": "cf9f520fcfef873534132e65e61e12d36b77ab62",
+  "reference_file": "fla/ops/attn/parallel.py",
+  "retained_reference": "nanochat/fla_attention_kernels.py",
+  "adaptation": "New sparse traversal and residue-grouped query/key tiling; FLA online softmax and separate dQ/dKV strategy; real sink tokens, not denominator-only sink_bias; BF16 dot operands/FP32 accumulators, no atomics. Original MIT attribution retained."
+}
