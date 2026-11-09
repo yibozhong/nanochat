@@ -1,6 +1,5 @@
 """Collect bounded GPU results only. No publication, resubmission or training."""
 import fcntl
-import hashlib
 import json
 import os
 from pathlib import Path
@@ -39,7 +38,7 @@ def main(root):
                                 dest.write_bytes(tf.extractfile(m).read())
                     assert rows[0]['ExitCode']==0,rows[0]
                     v=json.loads((root/'collected/results/pairwise/validation.json').read_text());validate(v,s['source'])
-                    v.update(job=s['job'],archive_sha256=hashlib.sha256(archive.read_bytes()).hexdigest())
+                    v.update(job=s['job'],archive_bytes=archive.stat().st_size)
                     (root/'validation.json').write_text(json.dumps(v,indent=2)+'\n')
                     s.update(status='complete',speed_target_met=v['speed_target_met'],overhead_percent=v['overhead_percent'])
                 elif rows and rows[0]['JobStatus'] in (3,5):s['status']='needs_attention'

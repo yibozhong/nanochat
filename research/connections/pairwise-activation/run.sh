@@ -4,7 +4,6 @@ TASK_ROOT="$PWD"
 mkdir -p results cache
 trap 'tar -cf "$TASK_ROOT/results.tar" -C "$TASK_ROOT" results' EXIT
 cp "$0" results/launcher.sh
-sha256sum -c inputs.sha256
 tar -xf source.tar
 tar -xf gate-data.tar
 tar -xzf mhc-official-runtime-7546767.tar.gz
@@ -24,7 +23,7 @@ export NANOCHAT_BASE_DIR="$PWD/cache"
 export OMP_NUM_THREADS=2 TORCHINDUCTOR_COMPILE_THREADS=2
 export CC=/usr/bin/gcc CXX=/usr/bin/g++ CUBLAS_WORKSPACE_CONFIG=:4096:8
 export TRITON_CACHE_DIR="$PWD/triton-cache" TORCHINDUCTOR_CACHE_DIR="$PWD/inductor-cache"
-cp source.json inputs.sha256 results/
+cp source.json results/
 cp runtime/uv.lock results/runtime-uv.lock
 uv pip freeze --python "$PWD/runtime/.venv/bin/python" > results/environment.txt
 SYSTEM_CUDA_DRIVER=$(/opt/project/.venv/bin/python - <<'PY'

@@ -39,5 +39,6 @@
   "speed_target_percent": 5.0,
   "training": "baseline and pairwise each25-to128 real exit85 restore;305176 LR horizon;no W&B/no returned checkpoints",
   "formal_training": false,
-  "automatic_training": false
+  "automatic_training": false,
+  "integrity_checks": "Per user instruction, no file content hashing. Geometry, sizes, configuration, numerical and lifecycle checks retained."
 }

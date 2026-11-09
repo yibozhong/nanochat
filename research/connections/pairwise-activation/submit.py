@@ -1,6 +1,5 @@
 """Submit one bounded GPU implementation check; no formal training."""
 import fcntl
-import hashlib
 import json
 from pathlib import Path
 import shutil
@@ -27,12 +26,9 @@ def main(root):
         subprocess.run(['git','archive','--format=tar','--prefix=nanochat-src/','-o',str(root/'bundles/source.tar'),'HEAD'],cwd=REPO,check=True)
         for name in ('gate-data.tar','transformer_engine_torch-2.20.2-cp311-cp311-linux_x86_64.whl'):
             (root/'bundles'/name).symlink_to(ASSETS/'bundles'/name)
-        hashes=json.loads((ASSETS/'state.json').read_text())['source']['hashes'].copy()
-        for name in ('source.tar','source.json'):
-            hashes[name]=hashlib.sha256((root/'bundles'/name).read_bytes()).hexdigest()
-        (root/'bundles/inputs.sha256').write_text(''.join(v+'  '+k+'\n' for k,v in hashes.items()))
         shutil.copy2(REPO/'research/connections/pairwise-activation/run.sh',root/'run.sh')
         template=(ASSETS/'gate.sub').read_text().replace('executable = validate.sh','executable = run.sh')
+        template=template.replace('bundles/inputs.sha256,','')
         template=template.replace('stream-$(Cluster)','gate-$(Cluster)').replace('logs/stream.','logs/gate.')
         template=template.replace('nanochat-depth-diagnostic','nanochat-pairwise-activation-gate').replace('DepthDiagnosticKey','PairwiseActivationGateKey').replace('depth-diagnostic-20261103',root.name)
         template=template.replace('(Capability == 9.0)', '(Capability == 9.0 && regexp("H100|H200",DeviceName))')
@@ -43,7 +39,7 @@ def main(root):
         (root/'submission-intent.json').write_text(json.dumps(source,indent=2)+'\n')
         result=subprocess.check_output(['condor_submit','-terse','gate.sub'],cwd=root,text=True).strip()
         job=result.split()[0]
-        state=dict(status='submitted',job=job,source=source,hashes=hashes,formal_training=False,automatic_training=False)
+        state=dict(status='submitted',job=job,source=source,formal_training=False,automatic_training=False)
         (root/'state.json').write_text(json.dumps(state,indent=2)+'\n')
         ad=json.loads(subprocess.check_output(['condor_q',job,'-json'],text=True))[0]
         assert ad['JobStatus']==5 and ad.get('NumJobStarts',0)==0

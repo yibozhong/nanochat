@@ -1,5 +1,6 @@
 """Validate bounded evidence. Speed target failure is a result, not a math pass."""
 import math
+import json
 
 
 def validate(v,source):
@@ -8,7 +9,10 @@ def validate(v,source):
     assert v['capability']==[9,0] and v['microbatch'] in (16,8,4)
     profiles=list(v['profiles'].values())
     assert len(profiles)==4 and sorted(p['model']['mlp_activation'] for p in profiles)==['pairwise','pairwise','relu2','relu2']
-    assert len({p['gpu_uuid'] for p in profiles})==len({p['input_sha256'] for p in profiles})==1
+    assert len({p['gpu_uuid'] for p in profiles})==1
+    if all('input_selection' in p for p in profiles):
+        assert len({json.dumps(p['input_selection'],sort_keys=True) for p in profiles})==1
+    # The already-running old snapshot has no input_selection; do not compare its hashes.
     for p in profiles:
         assert p['complete'] and p['status']=='fits' and p['source']==source and p['causality_passed']
         assert p['variant']=='baseline' and p['model']['architecture']=='vanilla'

@@ -61,7 +61,7 @@ def main():
         assert all(v['status'] in ('fits','oom','over_budget') for v in profiles.values())
     else:raise RuntimeError('No common microbatch fits22GB')
     assert len({v['gpu_uuid'] for v in profiles.values()})==1
-    assert len({v['input_sha256'] for v in profiles.values()})==1
+    assert len({json.dumps(v['input_selection'],sort_keys=True) for v in profiles.values()})==1
     training={activation:restart(root,activation,micro) for activation in ('relu2','pairwise')}
     # Exclusive-process GPUs: load diagnostic state only after all children exit.
     import torch

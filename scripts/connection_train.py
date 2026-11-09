@@ -5,7 +5,6 @@ Steps are required deliberately; implementation checks do not launch a 1B run.
 """
 import argparse
 from dataclasses import asdict
-import hashlib
 import json
 import math
 import os
@@ -83,11 +82,10 @@ def main():
     data=PackedData(a.data_dir)
     assert data.manifest['sequence_length']==c.sequence_length
     assert a.steps*rows_per_step<=len(data.arrays['train'])
+    # User preference: check geometry/file sizes without scanning file contents.
     for split, info in data.manifest['files'].items():
-        digest=hashlib.sha256()
-        with Path(a.data_dir,split+'.bin').open('rb') as f:
-            for chunk in iter(lambda:f.read(8*1024*1024),b''):digest.update(chunk)
-        assert digest.hexdigest()==info['sha256'],split
+        expected=info['rows']*(c.sequence_length+1)*2
+        assert Path(a.data_dir,split+'.bin').stat().st_size==expected,split
     if Path('source.json').exists():
         source=json.loads(Path('source.json').read_text())
     else:
@@ -223,10 +221,7 @@ def main():
                 best_dev_step=selected['step'],test_tokens=test_tokens)
         checkpoint_files={}
         for name in ('latest.pt','best.pt'):
-            path=ckpt/name;digest=hashlib.sha256()
-            with path.open('rb') as handle:
-                while chunk:=handle.read(8*1024*1024):digest.update(chunk)
-            checkpoint_files[name]=dict(bytes=path.stat().st_size,sha256=digest.hexdigest())
+            checkpoint_files[name]=dict(bytes=(ckpt/name).stat().st_size)
         result=dict(complete=True,variant=a.variant,run_id=run_id,steps=step,training_tokens=step*32768,
             initial_dev_ce=initial_dev,final_dev_ce=dev,best_dev_ce=best,dev_tokens=dev_tokens,
             training_seconds=training_seconds,elapsed_seconds=prior_elapsed+time.perf_counter()-begin,

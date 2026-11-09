@@ -2,7 +2,6 @@
 import argparse
 from dataclasses import asdict
 import gc
-import hashlib
 import json
 import math
 import os
@@ -88,7 +87,7 @@ def main():
         assert x.shape == y.shape == (a.microbatch, a.sequence_length)
         assert torch.equal(x[:, 1:], y[:, :-1])
         assert 0 <= x.min() and x.max() < cfg.vocab_size
-        record['input_sha256'] = hashlib.sha256(x.numpy().tobytes()+y.numpy().tobytes()).hexdigest()
+        record['input_selection'] = dict(data_dir=str(Path(a.data_dir).resolve()), start_row=0, rows=a.microbatch, sequence_length=a.sequence_length, seed=42)
         record['parameters'] = sum(p.numel() for p in model.parameters())
         del x, y
         torch.cuda.reset_peak_memory_stats()
