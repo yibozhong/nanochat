@@ -27,11 +27,6 @@ def main():
     p.add_argument('--variant', choices=CONNECTION_VARIANTS, required=True)
     p.add_argument('--sequence-length', type=int, default=2048)
     p.add_argument('--attention-kernel', choices=('original','fla_triton'), default='original')
-    p.add_argument('--attention-pattern',choices=('full','sink_swa','progressive_dilated'),default='full')
-    p.add_argument('--sparse-budget',type=int,default=256)
-    p.add_argument('--sparse-core',type=int,default=128)
-    p.add_argument('--sparse-sinks',type=int,default=4)
-    p.add_argument('--sparse-backend',choices=('triton','torch'),default='triton')
     p.add_argument('--architecture', choices=('vanilla', 'native'), default='vanilla')
     p.add_argument('--window-pattern', default='SSSL', help='Native backbone only; vanilla always uses full attention')
     p.add_argument('--formal-training', action='store_true', help='Explicitly enable W&B for a formal training run')
@@ -62,7 +57,7 @@ def main():
     p.add_argument('--seed', type=int, default=42)
     a = p.parse_args()
     if a.streams is None:
-        a.streams = 1 if a.variant in ('skip_scale','attnres_scale') or a.attention_pattern!='full' else 4
+        a.streams = 1 if a.variant in ('skip_scale','attnres_scale') else 4
     assert torch.cuda.is_available() and torch.cuda.device_count()==1
     assert a.sequence_length>0 and 32768%a.sequence_length==0
     rows_per_step=32768//a.sequence_length
@@ -78,8 +73,6 @@ def main():
                        sequence_length=a.sequence_length, compact_routing=a.compact_routing,
                        attnres_block_size=a.attnres_block_size,
                        attention_kernel=a.attention_kernel,
-                       attention_pattern=a.attention_pattern,sparse_budget=a.sparse_budget,
-                       sparse_core=a.sparse_core,sparse_sinks=a.sparse_sinks,sparse_backend=a.sparse_backend,
                        architecture=a.architecture, window_pattern=a.window_pattern,
                        activation_checkpoint=a.activation_checkpoint,
                        connection_backend=a.connection_backend, fused_connection_grad=a.fused_connection_grad)

@@ -35,24 +35,10 @@ class ConnectionConfig:
     window_pattern: str = 'SSSL'  # native only; vanilla is always full attention
     attention_kernel: str = 'original'
     compact_routing: bool = False
-    attention_pattern: str = 'full'
-    sparse_budget: int = 256
-    sparse_core: int = 128
-    sparse_sinks: int = 4
-    sparse_backend: str = 'triton'
     attnres_block_size: int = 2  # Moonshot paper's S: Attention and MLP each count once
     attnres_block_size_unit: str = 'sublayers'
 
     def __post_init__(self):
-        if self.attention_pattern not in ('full','sink_swa','progressive_dilated') or self.sparse_backend not in ('triton','torch'):
-            raise ValueError('Unknown sparse attention pattern/backend')
-        if self.attention_pattern!='full':
-            from nanochat.dilated_pattern import dilation_schedule
-            dilation_schedule(self.sequence_length,self.depth,self.sparse_budget,self.sparse_core,self.sparse_sinks)
-            if self.architecture!='vanilla' or self.variant!='baseline' or self.streams!=1 or self.fused_connection_grad or self.attention_kernel!='original':
-                raise ValueError('Sparse attention currently requires vanilla baseline, one stream and original attention kernel')
-            if self.width%self.heads or self.width//self.heads not in (32,64,128):
-                raise ValueError('Sparse attention supports head dimensions32/64/128')
         if self.variant in ('skip_scale','attnres_scale'):
             if self.architecture != 'vanilla' or self.streams != 1 or self.fused_connection_grad:
                 raise ValueError('Skip scale uses vanilla, exactly one residual stream, and ordinary gradients')
@@ -105,6 +91,10 @@ class ConnectionConfig:
     def from_checkpoint(cls, config):
         """Read pre-cleanup NVIDIA/vanilla metadata; reject retired model weights."""
         config = dict(config)
+        if config.pop('attention_pattern', 'full') != 'full':
+            raise ValueError('Checkpoint belongs to the retired dilated-attention experiment')
+        for name in ('sparse_budget', 'sparse_core', 'sparse_sinks', 'sparse_backend'):
+            config.pop(name, None)  # inert defaults stored by retained full-attention models
         config.pop('kalman_formula', None)  # retired route; other variants stored this inert default
         if config.pop('mlp_memory', 'none') != 'none':
             raise ValueError('Checkpoint belongs to the retired play-memory experiment')
@@ -238,15 +228,6 @@ class ConnectionModel(nn.Module):
         self.register_buffer('cos', freq.cos()[None, :, None, :], persistent=False)
         self.register_buffer('sin', freq.sin()[None, :, None, :], persistent=False)
         self.compiled_steps = None
-        if config.attention_pattern!='full':
-            from nanochat.dilated_attention import DilatedAttention
-            from nanochat.dilated_pattern import dilation_schedule
-            strides=dilation_schedule(config.sequence_length,config.depth,config.sparse_budget,
-                config.sparse_core,config.sparse_sinks,config.attention_pattern=='progressive_dilated')
-            for block,stride in zip(self.blocks,strides):
-                if stride is not None:
-                    block.attn=DilatedAttention(block.attn,stride,config.sparse_core,
-                        config.sparse_budget-config.sparse_core-config.sparse_sinks,config.sparse_sinks,config.sparse_backend)
         if config.attention_kernel == 'fla_triton':
             from nanochat.fla_attention import FlaAttention
             for block in self.blocks:
@@ -260,13 +241,6 @@ class ConnectionModel(nn.Module):
         self.to(device)
         self.wte.to(dtype=dtype)
         self.cos = self.cos.to(dtype); self.sin = self.sin.to(dtype)
-        if compile_blocks and self.config.attention_pattern != 'full':
-            # Each static stride specializes the shared block.forward code.
-            # Allow train/eval graphs at a full and a remainder batch size.
-            # This only budgets compiler entries; execution stays fullgraph.
-            from torch._dynamo import config as compiler_config
-            signatures = {getattr(b.attn, 'stride', None) for b in self.blocks}
-            compiler_config.recompile_limit = max(compiler_config.recompile_limit, 4*len(signatures))
         if compile_blocks and self.config.variant in ('baseline', 'skip_scale'):
             self.compiled_steps = [torch.compile(b.forward, dynamic=False, fullgraph=True) for b in self.blocks]
         elif compile_blocks:

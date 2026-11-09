@@ -9,17 +9,6 @@ def model_cost(config, batch=1, activation_bytes=2):
     projections=24*batch*t*depth*d*d
     head=2*batch*t*d*c.vocab_size
     attention=4*batch*d*depth*(t*(t+1)//2)
-    if c.attention_pattern!='full':
-        from nanochat.dilated_pattern import dilation_schedule
-        strides=dilation_schedule(t,depth,c.sparse_budget,c.sparse_core,c.sparse_sinks,c.attention_pattern=='progressive_dilated')
-        core,sinks,remote=c.sparse_core,c.sparse_sinks,c.sparse_budget-c.sparse_core-c.sparse_sinks
-        pairs=0
-        for stride in strides:
-            if stride is None:pairs+=t*(t+1)//2
-            else:
-                pairs+=sum(min(sinks,i+1)+max(0,min(core,i-sinks+1))+
-                           max(0,min(remote,(i-core-sinks)//stride+1)) for i in range(t))
-        attention=4*batch*d*pairs
     forward=projections+head+attention
     if c.variant=='skip_scale':
         # Relative to vanilla's already-present residual adds: one multiply

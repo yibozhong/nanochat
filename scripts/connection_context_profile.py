@@ -44,10 +44,6 @@ class TimingData:
 def main():
     p = argparse.ArgumentParser()
     p.add_argument('--variant', choices=CONNECTION_VARIANTS, required=True)
-    p.add_argument('--attention-pattern',choices=('full','sink_swa','progressive_dilated'),default='full')
-    p.add_argument('--sparse-budget',type=int,default=256)
-    p.add_argument('--sparse-core',type=int,default=128)
-    p.add_argument('--sparse-sinks',type=int,default=4)
     p.add_argument('--attention-backend', choices=('sdpa_cudnn','fa3','fa2','hardware_auto'), default='sdpa_cudnn')
     p.add_argument('--sequence-length', type=int, choices=(2048, 4096, 8192, 16384), required=True)
     p.add_argument('--microbatch', type=int, required=True)
@@ -66,9 +62,7 @@ def main():
     seed_all(42)
     props = torch.cuda.get_device_properties(0)
     cfg = ConnectionConfig(variant=a.variant, sequence_length=a.sequence_length, compact_routing=a.compact_routing,
-                           attention_pattern=a.attention_pattern,sparse_budget=a.sparse_budget,
-                           sparse_core=a.sparse_core,sparse_sinks=a.sparse_sinks,
-                           streams=1 if a.variant in ('skip_scale','attnres_scale') or a.attention_pattern!='full' else 4)
+                           streams=1 if a.variant in ('skip_scale','attnres_scale') else 4)
     record = dict(complete=False, variant=a.variant, sequence_length=a.sequence_length,
         microbatch=a.microbatch, grad_accum=rows//a.microbatch, batch_tokens=BATCH_TOKENS,
         repetition=a.repetition, probe=a.probe, model=asdict(cfg), logging_backend='local',

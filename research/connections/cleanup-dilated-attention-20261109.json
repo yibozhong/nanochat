@@ -1,0 +1,80 @@
+{
+  "retired": true,
+  "reason": "User requested stop, rollback and cleanup; no resubmission or continuation authorized.",
+  "date": "2026-11-09",
+  "prior_history_commit": "280449ac1cc2fe1a0445d90d8f79b4498dad8855",
+  "restored_base": "4d86210",
+  "stopped_job": "8246149.0",
+  "history": {
+    "ExitCode": 143,
+    "JobStatus": 3,
+    "LastRemoteHost": "slot2_8@gpu5000.chtc.wisc.edu",
+    "NumJobStarts": 1
+  },
+  "last_logged_step": {
+    "step": 31500,
+    "tokens": 1032192000,
+    "loss": 3.737657308578491,
+    "seconds": 0.0645108469761908,
+    "lr_multiplier": 1.0
+  },
+  "formal_10b_complete": false,
+  "run_id": "ba4e6842",
+  "wandb_history_deleted": false,
+  "removed_tracked_files": 25,
+  "removed_workflow_roots": [
+    "/home/yzhong239/dilated-attention-10b-20261109",
+    "/home/yzhong239/dilated-attention-gate-20261109",
+    "/home/yzhong239/dilated-attention-gate-20261109-r2",
+    "/home/yzhong239/dilated-attention-gate-20261109-r3"
+  ],
+  "removed_files": 187,
+  "removed_symlinks": 7,
+  "removed_bytes": 49531751,
+  "shared_link_targets_unchanged": true,
+  "no_local_checkpoint_retained": true,
+  "scheduler_spool_directories_absent": true,
+  "bounded_results": {
+    "checks": {
+      "tests": 30,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "step_ms": {
+      "full": 63.45929519739002,
+      "sink_swa": 65.21489566657692,
+      "progressive_dilated": 67.60476576164365
+    },
+    "short_training": {
+      "steps": 128,
+      "tokens_per_pattern": 4194304,
+      "restored_from_step": 25,
+      "final_dev_ce": {
+        "full": 5.853868722915649,
+        "sink_swa": 5.7275437116622925,
+        "progressive_dilated": 5.722841143608093
+      },
+      "progressive_minus_full": -0.13102757930755615,
+      "progressive_minus_sink_swa": -0.004702568054199219
+    },
+    "limitations": [
+      "Single seed and 128 updates only; no final quality or long-run stability claim.",
+      "At 2K the current sparse implementation is slower than optimized full FA3 despite fewer logical attention edges.",
+      "Baseline full uses FA3, sink_swa and progressive use the same custom Triton implementation.",
+      "Sparse KV-cache path uses the dense reference fallback; training timings do not measure decoding.",
+      "Logical attention FLOPs exclude masked tile work."
+    ]
+  },
+  "validation": {
+    "python_ast_files": 160,
+    "retained_config_roundtrips": 14,
+    "inert_metadata_compatibility": 14,
+    "legacy_unit_conversion": 14,
+    "retired_patterns_rejected": 28,
+    "retained_tensor_definitions_ast_equal_to_base": 4,
+    "no_hash_workflows_preserved": true,
+    "new_gpu_tests": false
+  },
+  "file_hash_checks": false
+}
