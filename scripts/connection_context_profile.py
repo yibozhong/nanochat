@@ -44,8 +44,6 @@ class TimingData:
 def main():
     p = argparse.ArgumentParser()
     p.add_argument('--variant', choices=CONNECTION_VARIANTS, required=True)
-    p.add_argument('--mlp-activation', choices=('relu2','pairwise'), default='relu2')
-    p.add_argument('--pairwise-backend', choices=('triton','torch'), default='triton')
     p.add_argument('--attention-backend', choices=('sdpa_cudnn','fa3','fa2','hardware_auto'), default='sdpa_cudnn')
     p.add_argument('--sequence-length', type=int, choices=(2048, 4096, 8192, 16384), required=True)
     p.add_argument('--microbatch', type=int, required=True)
@@ -63,8 +61,8 @@ def main():
     actual_attention_backend = configure_attention(a.attention_backend)
     seed_all(42)
     props = torch.cuda.get_device_properties(0)
-    cfg = ConnectionConfig(variant=a.variant, mlp_activation=a.mlp_activation, pairwise_backend=a.pairwise_backend, sequence_length=a.sequence_length, compact_routing=a.compact_routing,
-                           streams=1 if a.variant in ('skip_scale','attnres_scale') or a.mlp_activation=='pairwise' else 4)
+    cfg = ConnectionConfig(variant=a.variant, sequence_length=a.sequence_length, compact_routing=a.compact_routing,
+                           streams=1 if a.variant in ('skip_scale','attnres_scale') else 4)
     record = dict(complete=False, variant=a.variant, sequence_length=a.sequence_length,
         microbatch=a.microbatch, grad_accum=rows//a.microbatch, batch_tokens=BATCH_TOKENS,
         repetition=a.repetition, probe=a.probe, model=asdict(cfg), logging_backend='local',

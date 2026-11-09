@@ -35,16 +35,10 @@ class ConnectionConfig:
     window_pattern: str = 'SSSL'  # native only; vanilla is always full attention
     attention_kernel: str = 'original'
     compact_routing: bool = False
-    mlp_activation: str = 'relu2'
-    pairwise_backend: str = 'triton'
     attnres_block_size: int = 2  # Moonshot paper's S: Attention and MLP each count once
     attnres_block_size_unit: str = 'sublayers'
 
     def __post_init__(self):
-        if self.mlp_activation not in ('relu2','pairwise') or self.pairwise_backend not in ('triton','torch'):
-            raise ValueError('Unknown MLP activation/backend')
-        if self.mlp_activation=='pairwise' and (self.architecture!='vanilla' or self.variant!='baseline' or self.streams!=1 or self.fused_connection_grad or self.attention_kernel!='original'):
-            raise ValueError('Pairwise activation requires vanilla baseline, one stream and original attention')
         if self.variant in ('skip_scale','attnres_scale'):
             if self.architecture != 'vanilla' or self.streams != 1 or self.fused_connection_grad:
                 raise ValueError('Skip scale uses vanilla, exactly one residual stream, and ordinary gradients')
@@ -230,10 +224,6 @@ class ConnectionModel(nn.Module):
         self.register_buffer('cos', freq.cos()[None, :, None, :], persistent=False)
         self.register_buffer('sin', freq.sin()[None, :, None, :], persistent=False)
         self.compiled_steps = None
-        if config.mlp_activation == 'pairwise':
-            from nanochat.pairwise_activation import PairwiseMLP
-            for block in self.blocks:
-                block.mlp = PairwiseMLP(block.mlp, config.pairwise_backend)
         if config.attention_kernel == 'fla_triton':
             from nanochat.fla_attention import FlaAttention
             for block in self.blocks:
@@ -309,7 +299,7 @@ def optimizer_for(model, batch_tokens=32768):
     matrices, routing = [], []
     for b in model.blocks:
         for name, p in b.named_parameters():
-            (routing if '_connection.' in name or name in ('attn_skip_scale', 'mlp_skip_scale', 'mlp.rotation') else matrices).append(p)
+            (routing if '_connection.' in name or name in ('attn_skip_scale', 'mlp_skip_scale') else matrices).append(p)
     if model.stream_head is not None:
         routing.extend(model.stream_head.parameters())
     if c.variant in ('attnres','attnres_scale'):

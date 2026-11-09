@@ -1,0 +1,63 @@
+{
+  "complete": true,
+  "user_request": "Rollback and delete pairwise activation experiment",
+  "formal_training_started": false,
+  "automatic_training": false,
+  "automatic_continuation": false,
+  "history_commit": "302d4d6",
+  "restored_base": "6a14013",
+  "file_hash_checks": false,
+  "deleted_roots": [
+    {
+      "path": "/home/yzhong239/pairwise-activation-gate-20261109",
+      "files": 72,
+      "links": 2,
+      "bytes": 11959035
+    },
+    {
+      "path": "/home/yzhong239/pairwise-activation-gate-20261109-r2",
+      "files": 70,
+      "links": 2,
+      "bytes": 11993069
+    }
+  ],
+  "scheduler_spools": {
+    "8188915": {
+      "path": "/var/lib/condor/spool/8915/0/cluster8188915.proc0.subproc0",
+      "exists": false
+    },
+    "8191214": {
+      "path": "/var/lib/condor/spool/1214/0/cluster8191214.proc0.subproc0",
+      "exists": false
+    }
+  },
+  "deleted_tracked_files": 12,
+  "checkpoint_policy": "No formal training or retained diagnostic checkpoints; both worker jobs completed and both spool directories absent.",
+  "verification": {
+    "changed_python_ast": 5,
+    "retained_config_roundtrips": 12,
+    "retired_config_rejections": 2,
+    "active_code_references": 0,
+    "new_gpu_tests": false,
+    "reason_no_gpu": "Restored pre-experiment model and cost code; retained only previously validated no-hash workflow changes."
+  },
+  "experiment_summary": {
+    "checks": {
+      "tests": 24,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "gpu": "NVIDIA H200",
+    "step_ms": {
+      "relu2": 60.688500734977424,
+      "pairwise": 61.66786584071815
+    },
+    "overhead_percent": 1.6137572915461362,
+    "final_dev_ce": {
+      "relu2": 5.853601336479187,
+      "pairwise": 5.853582859039307
+    },
+    "limitations": "Single-seed128-step engineering pilot does not establish quality or10B stability. No formal run authorized."
+  }
+}

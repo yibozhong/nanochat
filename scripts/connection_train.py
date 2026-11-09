@@ -25,8 +25,6 @@ from nanochat.connection_experiment import configure_attention, match_vanilla_in
 def main():
     p = argparse.ArgumentParser()
     p.add_argument('--variant', choices=CONNECTION_VARIANTS, required=True)
-    p.add_argument('--mlp-activation', choices=('relu2','pairwise'), default='relu2')
-    p.add_argument('--pairwise-backend', choices=('triton','torch'), default='triton')
     p.add_argument('--sequence-length', type=int, default=2048)
     p.add_argument('--attention-kernel', choices=('original','fla_triton'), default='original')
     p.add_argument('--architecture', choices=('vanilla', 'native'), default='vanilla')
@@ -59,7 +57,7 @@ def main():
     p.add_argument('--seed', type=int, default=42)
     a = p.parse_args()
     if a.streams is None:
-        a.streams = 1 if a.variant in ('skip_scale','attnres_scale') or a.mlp_activation=='pairwise' else 4
+        a.streams = 1 if a.variant in ('skip_scale','attnres_scale') else 4
     assert torch.cuda.is_available() and torch.cuda.device_count()==1
     assert a.sequence_length>0 and 32768%a.sequence_length==0
     rows_per_step=32768//a.sequence_length
@@ -74,7 +72,6 @@ def main():
     c=ConnectionConfig(variant=a.variant,streams=a.streams,sinkhorn_iterations=a.sinkhorn_iterations,
                        sequence_length=a.sequence_length, compact_routing=a.compact_routing,
                        attnres_block_size=a.attnres_block_size,
-                       mlp_activation=a.mlp_activation, pairwise_backend=a.pairwise_backend,
                        attention_kernel=a.attention_kernel,
                        architecture=a.architecture, window_pattern=a.window_pattern,
                        activation_checkpoint=a.activation_checkpoint,
