@@ -43,7 +43,7 @@ def main(root):
                     data=json.loads(report.read_text())
                     assert data['source']==state['source']
                     assert data['complete'] and data['formal_training'] is False
-                    assert data['checks']==dict(tests=22,failures=0,errors=0,skipped=0)
+                    assert data['checks']==dict(tests=23,failures=0,errors=0,skipped=0)
                     assert all(v['steps']==128 for v in data['training'].values())
                     (root/'validation.json').write_text(json.dumps(data,indent=2)+'\n')
             ok=history[0].get('ExitCode')==0 and (root/'validation.json').exists()

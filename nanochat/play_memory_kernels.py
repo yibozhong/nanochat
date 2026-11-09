@@ -130,7 +130,12 @@ def _backward(U, R, W, M, G, SA, SB, DU, PR, PW, T: tl.constexpr,
     high = previous > u+r[None, :]
     du = dz+tl.where(low | high,dm,0)
     dr = tl.where(low,-dm,tl.where(high,dm,0))
-    tl.store(DU+offsets,du,valid)
+    # Keep write addresses outside the multi-result helper. PyTorch 2.10's
+    # TTIR mutation analysis merges dependencies of tt.call results, so using
+    # its returned offsets falsely marks U/R/W/M/G as mutated inputs.
+    write_t = k*BT+BT-1-tl.arange(0,BT)
+    write_offsets = (b*T+write_t[:,None])*H+c[None,:]
+    tl.store(DU+write_offsets,du,valid)
     tl.store(PR+p*H+c,tl.sum(tl.where(valid,dr,0),0),c < H)
     tl.store(PW+p*H+c,tl.sum(tl.where(valid,dz*m,0),0),c < H)
 

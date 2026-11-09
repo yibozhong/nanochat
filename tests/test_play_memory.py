@@ -74,6 +74,22 @@ def test_full_shape_channel_oracle():
     record('production-shape',errors)
 
 
+def test_compiled_primitive_keeps_inputs_immutable():
+    seed_all(17)
+    u=torch.randn(2,129,33,device='cuda',dtype=torch.bfloat16,requires_grad=True)
+    r=torch.full((33,),.25,device='cuda',requires_grad=True)
+    w=torch.full((33,),.2,device='cuda',requires_grad=True)
+    args=[u,r,w];saved=[v.detach().clone() for v in args];go=torch.randn_like(u)
+    compiled=torch.compile(play_relu2,fullgraph=True,dynamic=False)
+    out=compiled(*args);grads=torch.autograd.grad(out,args,go)
+    oracle=[v.double().requires_grad_() for v in saved]
+    expected=play_reference(*oracle);eg=torch.autograd.grad(expected,oracle,go.double())
+    assert all(torch.equal(v,s) for v,s in zip(args,saved))
+    errors=dict(output=relative(out,expected),gradients=[relative(a,b) for a,b in zip(grads,eg)])
+    assert errors['output']<.006 and max(errors['gradients'])<.012,errors
+    record('compiled-primitive-immutable',errors)
+
+
 def build(memory='play',compiled=False,nonzero=False):
     configure_attention('hardware_auto');seed_all(42)
     model=ConnectionModel(ConnectionConfig(mlp_memory=memory,streams=1,depth=2,width=128,

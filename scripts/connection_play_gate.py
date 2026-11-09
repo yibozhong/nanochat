@@ -14,7 +14,7 @@ def main():
     run(['-m','pytest','-xv','tests/test_play_memory.py','--junitxml='+str(root/'tests.xml')],root,'tests')
     suites=ET.parse(root/'tests.xml').getroot().findall('testsuite')
     counts={k:sum(int(s.get(k,0)) for s in suites) for k in ('tests','failures','errors','skipped')}
-    assert counts==dict(tests=22,failures=0,errors=0,skipped=0),counts
+    assert counts==dict(tests=23,failures=0,errors=0,skipped=0),counts
     for micro in (16,8,4):
         profiles={}
         for index,memory in enumerate(('none','play','play','none')):

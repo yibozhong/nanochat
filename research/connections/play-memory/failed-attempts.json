@@ -1,0 +1,13 @@
+[
+  {
+    "job": "8107765.0",
+    "source": "5fef0241c383fa0dd5f72f3264a67a1ea5766ed2",
+    "exit_code": 1,
+    "passed_checks": 14,
+    "failed_check": "fullmodel_causality_cce_recompute_and_cache_rejection",
+    "failure": "AOT functionalization sees a parameter mutation and attempts copy_ into a grad leaf; training graph did not run",
+    "diagnosis": "TTIR dependency analysis propagates write offset dependencies through all multi-result helper inputs. Recompute only output address locally; kernel formula/precision/thresholds unchanged.",
+    "profile_completed": false,
+    "training_started": false
+  }
+]
