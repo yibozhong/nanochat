@@ -1,0 +1,111 @@
+{
+  "complete": true,
+  "user_request": "Stop, rollback and clean Play-memory FFN",
+  "job": "8115915.0",
+  "run_id": "9348fa99",
+  "job_status": 3,
+  "exit_code": 143,
+  "last_observed_training": {
+    "step": 11020,
+    "tokens": 361103360,
+    "loss": 3.7070834636688232,
+    "seconds": 0.07359422696754336,
+    "lr_multiplier": 1.0
+  },
+  "formal_10b_completed": false,
+  "automatic_training": false,
+  "automatic_continuation": false,
+  "restored_base": "52eea32676ddbe36f53c043f011d6b5e54a9e57b",
+  "deleted_workflow_roots": [
+    "/home/yzhong239/play-memory-10b-20261109",
+    "/home/yzhong239/play-memory-gate-20261109",
+    "/home/yzhong239/play-memory-gate-20261109-r2",
+    "/home/yzhong239/play-memory-gate-20261109-r3",
+    "/home/yzhong239/play-memory-gate-20261109-r4"
+  ],
+  "deleted_tracked_files": 35,
+  "deleted_root_regular_files": 224,
+  "deleted_root_symlinks": 9,
+  "deleted_root_file_bytes": 58422309,
+  "scheduler_spools": {
+    "8107765": {
+      "path": "/var/lib/condor/spool/7765/0/cluster8107765.proc0.subproc0",
+      "exists": false
+    },
+    "8107857": {
+      "path": "/var/lib/condor/spool/7857/0/cluster8107857.proc0.subproc0",
+      "exists": false
+    },
+    "8108008": {
+      "path": "/var/lib/condor/spool/8008/0/cluster8108008.proc0.subproc0",
+      "exists": false
+    },
+    "8108012": {
+      "path": "/var/lib/condor/spool/8012/0/cluster8108012.proc0.subproc0",
+      "exists": false
+    },
+    "8115915": {
+      "path": "/var/lib/condor/spool/5915/0/cluster8115915.proc0.subproc0",
+      "exists": false
+    }
+  },
+  "checkpoint_policy": "No AP checkpoint archives were present; worker training terminated and scheduler spools are absent. No checkpoint retained for this retired experiment.",
+  "verification": {
+    "retained_source_hashes_unchanged": 478,
+    "restored_training_scripts_byte_identical": 2,
+    "model_byte_identical_except_retired_metadata": true,
+    "retained_config_roundtrips": 12,
+    "disabled_metadata_compatible": 12,
+    "legacy_unit_roundtrips": 12,
+    "retired_config_rejections": 12,
+    "python_ast_files": 168,
+    "bash_files": 33,
+    "new_gpu_tests": false
+  },
+  "experiment_summary": {
+    "a100_gate": {
+      "checks": {
+        "tests": 23,
+        "failures": 0,
+        "errors": 0,
+        "skipped": 0
+      },
+      "mean_step_seconds": {
+        "none": 0.11822234350256622,
+        "play": 0.13935989094898105
+      },
+      "microbatch": 16,
+      "training": {
+        "none": {
+          "steps": 128,
+          "training_tokens": 4194304,
+          "initial_dev_ce": 10.398012638092041,
+          "final_dev_ce": 5.853811621665955,
+          "gpu": "NVIDIA A100-SXM4-80GB"
+        },
+        "play": {
+          "steps": 128,
+          "training_tokens": 4194304,
+          "initial_dev_ce": 10.398012638092041,
+          "final_dev_ce": 5.851249575614929,
+          "gpu": "NVIDIA A100-SXM4-80GB"
+        }
+      }
+    },
+    "h200_checks": 23,
+    "h200_25_to_60_restart": true,
+    "matched_dev_at_2048e5_tokens": {
+      "step": 6250,
+      "tokens": 204800000.0,
+      "play": 3.749964714050293,
+      "vanilla": 3.7506394386291504,
+      "delta": -0.0006747245788574219
+    },
+    "recent10_mean_delta": -0.0008151710033416748,
+    "limitations": "Single seed, early comparison; historical vanilla cuDNN vs current FA3. No material quality advantage observed, not proof that all recurrent FFN memory fails."
+  },
+  "protected_external_files_unchanged": 1462,
+  "remote_wandb_deleted": false,
+  "history_commit": "d25faad0408177367da512620dc42a17c5696c2e",
+  "audit_directory": "/home/yzhong239/research-cleanup-20261109/play-memory"
+}
