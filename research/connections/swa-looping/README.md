@@ -44,3 +44,15 @@ Real NTP25-to128-step checkpoint restart passed; all steps had finite loss and
 gradients. Initial/final dev CE10.398013/5.718440. This is an engineering stability
 check, not a matched long-run quality comparison. No formal10B was submitted.
 Diagnostic weights were deleted in the worker and none were returned.
+
+## Formal10B authorization
+
+After the successful gate, the user requested one formal10B run. See
+`training-protocol.json`. It starts from seed42, keeps the validated model,
+window512, three total S passes, micro16/global32768, and the original optimizer.
+The target is305176steps (10,000,007,168tokens) on the existing FineWeb-Edu cache.
+W&B group: `swa-looping-10b-20261108`. latest/best checkpoints are retained for
+this new run; exit85 every1800seconds uploads durable state for same-run resume.
+The frozen implementation requires H100/H200 with FA3 native sliding windows.
+The passed21checks and25-to128 restart are reused after verifying execution hashes;
+no diagnostic checkpoint is used and no new formal baseline is launched.

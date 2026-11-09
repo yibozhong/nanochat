@@ -7,10 +7,12 @@ S layer and one MLP afterward; L layers keep independent parameters and run
 once. The confirmed window is512tokens left plus self. See
 [SWA looping](swa-looping/README.md). This is a new bounded implementation,
 correctness, speed, and128-step restart check; it does not revive the retired
-128/128/full shared local/global experiment or authorize a formal10B run.
+128/128/full shared local/global experiment. After the successful gate, the user
+authorized one formal10B of the new configuration; see
+[training protocol](swa-looping/training-protocol.json).
 GPU validation passed:21checks, six profiles and25-to128-step restart. On H200,
 three-pass SSSL is72.50ms/step versus59.76ms single-pass SSSL and60.67ms full
-vanilla. No formal10B was submitted. Static gate retirement below remains in effect.
+vanilla. Static gate retirement below remains in effect.
 
 ## Static gate research closed (2026-11-08)
 

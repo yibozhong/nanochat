@@ -1,0 +1,28 @@
+{
+  "authorized": true,
+  "authorization": "User requested one10B run after the successful GPU gate.",
+  "runs": 1,
+  "gate_job": "8088582.0",
+  "validated_model_commit": "0e566612e103827a4c825048a3fbb956c97fb08f",
+  "initialization": "seed42_from_zero_no_validation_weights",
+  "model": {
+    "architecture": "vanilla", "variant": "baseline", "depth": 8,
+    "width": 512, "heads": 4, "context": 2048, "streams": 1,
+    "window_pattern": "SSSL", "swa_looping": true,
+    "swa_loops": 3, "swa_window": 512, "parameters": 58720256
+  },
+  "steps": 305176,
+  "batch_tokens": 32768,
+  "training_tokens": 10000007168,
+  "microbatch": 16,
+  "grad_accum": 1,
+  "optimizer": "Unchanged native MuonAdamW/LR, original ReLU-squared MLP, no gradient clipping",
+  "dataset": "Existing FineWeb-Edu2K packed10B cache, original dev/test and tokenizer",
+  "attention_backend": "fa3",
+  "hardware": "Full H100/H200. Existing A100/PRO6000 fallback is unsupported for the frozen native-window implementation; do not schedule it there.",
+  "checkpoint": "latest every500steps overwritten, dev-best separate,1800-second exit85 durable transfer and resume of the same run",
+  "logging": "W&B nanochat, group swa-looping-10b-20261108",
+  "startup_monitor": "60seconds until the first finite formal step, then exit; no automatic failed-job resubmission",
+  "extra_formal_baseline": false,
+  "validation_reused": "21checks, six60-step profiles and25-to128-step real training restart on H200; production execution files must match exactly"
+}
