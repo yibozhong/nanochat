@@ -1,0 +1,23 @@
+{
+  "loss": 4.852268695831299,
+  "recompute_errors": {
+    "wte.weight": 0.0,
+    "blocks.0.attn.c_q.weight": 0.0,
+    "blocks.0.attn.c_k.weight": 0.0,
+    "blocks.0.attn.c_v.weight": 0.0,
+    "blocks.0.attn.c_proj.weight": 0.0,
+    "blocks.0.mlp.c_fc.weight": 0.0,
+    "blocks.0.mlp.c_proj.weight": 0.0,
+    "blocks.0.mlp.play.raw_radius": 0.0,
+    "blocks.0.mlp.play.memory_weight": 0.0,
+    "blocks.1.attn.c_q.weight": 0.0,
+    "blocks.1.attn.c_k.weight": 0.0,
+    "blocks.1.attn.c_v.weight": 0.0,
+    "blocks.1.attn.c_proj.weight": 0.0,
+    "blocks.1.mlp.c_fc.weight": 0.0,
+    "blocks.1.mlp.c_proj.weight": 0.0,
+    "blocks.1.mlp.play.raw_radius": 0.0,
+    "blocks.1.mlp.play.memory_weight": 0.0,
+    "lm_head.weight": 2.654334017785696e-09
+  }
+}
