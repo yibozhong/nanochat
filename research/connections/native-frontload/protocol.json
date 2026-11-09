@@ -1,0 +1,97 @@
+{
+  "task": "native LLSSSSSS10B",
+  "architecture": "native",
+  "variant": "baseline",
+  "streams": 1,
+  "depth": 8,
+  "width": 512,
+  "heads": 4,
+  "sequence_length": 2048,
+  "vocab_size": 32768,
+  "window_pattern": "LLSSSSSS",
+  "window_final_full": false,
+  "window_sizes": [
+    [
+      2048,
+      0
+    ],
+    [
+      2048,
+      0
+    ],
+    [
+      512,
+      0
+    ],
+    [
+      512,
+      0
+    ],
+    [
+      512,
+      0
+    ],
+    [
+      512,
+      0
+    ],
+    [
+      512,
+      0
+    ],
+    [
+      512,
+      0
+    ]
+  ],
+  "original_windows": [
+    [
+      512,
+      0
+    ],
+    [
+      512,
+      0
+    ],
+    [
+      512,
+      0
+    ],
+    [
+      2048,
+      0
+    ],
+    [
+      512,
+      0
+    ],
+    [
+      512,
+      0
+    ],
+    [
+      512,
+      0
+    ],
+    [
+      2048,
+      0
+    ]
+  ],
+  "native_features": "Original VE, smear, x0, residual scalars, backout, ReLU-squared; no HC/AttnRes",
+  "parameters": 125829354,
+  "seed": 42,
+  "microbatch": 16,
+  "batch_tokens": 32768,
+  "steps": 305176,
+  "tokens": 10000007168,
+  "optimizer": "Original native MuonAdamW and LR for batch32768",
+  "training_data": "Original FineWeb-Edu packed2K cache",
+  "gate": "10 targeted GPU checks; same-card SSSL/new60updates profiles; new25-to60 real restart; all finite and below22GB90%budget",
+  "formal": "One run; fresh seed42 after gate; validation weights discarded; no extra formal baseline",
+  "schedule": "H100/H200 only: FA3 supports native SWA; current forced FA2 masked training path unsupported",
+  "checkpoint": "latest every500steps; best independent; durable exit85 every1800seconds; same run resume",
+  "monitor": "60seconds readonly; first finite formal step after matching start marker then stop",
+  "failure": "needs_attention; no automatic resubmission or threshold relaxation",
+  "file_hash_checks": false
+}
