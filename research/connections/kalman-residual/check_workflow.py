@@ -16,7 +16,7 @@ def main():
     root=Path(__file__).resolve().parents[3]
     text=(root/'research/connections/skip-scale/validation.json').read_text()
     v=json.loads(text.replace('skip_scale','kalman_residual').replace('58728448','58744832'))
-    v['checks']['tests']=20
+    v['checks']['tests']=21
     v['trained_noise_statistics']={f'blocks.{i//2}.{("attn" if i%2==0 else "mlp")}_noise.{name}':
         dict(min=-.1,max=.1,mean_abs_change=.01,channel_std=.01)
         for i in range(16) for name in ('raw_q','bias','slope')}

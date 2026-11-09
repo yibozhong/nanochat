@@ -31,9 +31,16 @@ def kalman_update(x, variance, branch, condition, raw_q, bias, slope):
     dtype = torch.float64 if x.dtype == torch.float64 else torch.float32
     prior = variance.to(dtype) + F.softplus(raw_q.to(dtype)) + VARIANCE_FLOOR
     observation = F.softplus(bias.to(dtype) + slope.to(dtype)*condition.to(dtype)) + VARIANCE_FLOOR
-    gain = prior / (prior + observation)
+    denominator = prior + observation
+    # Choose the small ratio: differentiating 1-R/S when P dominates avoids
+    # cancellation in dK/dP = 1/S-P/S**2. Both branches are exactly P/S.
+    smaller_prior = prior <= observation
+    gain = torch.where(smaller_prior, prior/denominator, 1.-observation/denominator)
     output = (x.to(dtype) + INNOVATION_SCALE*gain*branch.to(dtype)).to(x.dtype)
-    return output, gain*observation
+    # The analogous harmonic posterior avoids cancellation in dPnext/dR
+    # when observation noise dominates. Algebraically both equal P*R/S.
+    posterior = torch.where(smaller_prior, prior*(1.-gain), gain*observation)
+    return output, posterior
 
 
 class DiagonalNoise(nn.Module):

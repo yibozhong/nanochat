@@ -1,0 +1,11 @@
+[
+  {
+    "job": "8128627.0",
+    "source": "6f4cfe6baa535533aca04d8a98906a8e9fa378a2",
+    "checks_passed": 19,
+    "checks_failed": 1,
+    "reason": "19/20 checks; saturated-gain raw_q VJP relative error0.0347008949 above0.012; no training/profile executed",
+    "diagnosis": "Direct prior/(prior+R) autograd subtracts near-equal terms in dK/dprior at K near1; use equivalent piecewise ratio and posterior formulas",
+    "threshold_unchanged": 0.012
+  }
+]

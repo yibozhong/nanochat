@@ -5,7 +5,7 @@ import math
 def validate(v,source):
     assert v['complete'] and not v['formal_training'] and not v['preflight']
     assert v['source']==source
-    assert v['checks']==dict(tests=20,failures=0,errors=0,skipped=0)
+    assert v['checks']==dict(tests=21,failures=0,errors=0,skipped=0)
     assert v['capability'] in ([8,0],[9,0],[12,0])
     assert v['microbatch'] in (16,8,4)
     r=v['restart']

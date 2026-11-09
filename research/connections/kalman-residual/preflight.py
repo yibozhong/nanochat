@@ -12,7 +12,7 @@ import sys
 def validate_marker(v,source,microbatch,capability):
     assert v['complete'] and not v['formal_training'] and v['preflight']
     assert v['source']==source and v['microbatch']==microbatch and v['capability']==capability
-    assert v['checks']==dict(tests=20,failures=0,errors=0,skipped=0)
+    assert v['checks']==dict(tests=21,failures=0,errors=0,skipped=0)
     r=v['restart']
     assert r['complete'] and r['steps']==60 and r['source']==source and r['variant']=='kalman_residual'
     assert math.isfinite(r['final_dev_ce']) and r['final_dev_ce']<r['initial_dev_ce']

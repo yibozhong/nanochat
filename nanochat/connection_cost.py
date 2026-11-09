@@ -12,14 +12,14 @@ def model_cost(config, batch=1, activation_bytes=2):
     forward=projections+head+attention
     if c.variant=='kalman_residual':
         sites=2*depth
-        extra=9*sites*batch*t*d+sites*d
+        extra=13*sites*batch*t*d+sites*d
         return dict(estimated_forward_flops=forward+extra,
             estimated_training_flops=3*(forward+extra),
             components_forward=dict(backbone_projections=projections,vocab_head=head,
                 attention=attention,additional_kalman_arithmetic=extra),
             additional_kalman_parameters=3*sites*d,
             final_variance_state_bytes=batch*t*d*4,
-            accounting='Backbone matrix counts unchanged. Extra ordinary scalar arithmetic approx9 operations per site/token/channel, including division as1; softplus is excluded. Backward approximated2x forward. Excludes norm, optimizer, copies and recomputation; not measured hardware FLOPs.',
+            accounting='Backbone matrix counts unchanged. Extra ordinary scalar arithmetic approx13 operations per site/token/channel, including division as1; softplus/comparisons/selects are excluded. Backward approximated2x forward. Excludes norm, optimizer, copies and recomputation; not measured hardware FLOPs.',
             memory_note='One FP32 depth-variance state; autograd saves additional activations. Measure training peak.')
     if c.variant=='skip_scale':
         # Relative to vanilla's already-present residual adds: one multiply

@@ -41,10 +41,10 @@
   ],
   "steps": 305176,
   "training_tokens": 10000007168,
-  "gate_checks": 20,
+  "gate_checks": 21,
   "gate_speed": "ABBA baseline/kalman/kalman/baseline, 60 updates each;20warm40timed",
   "gate_restart": "baseline and kalman each genuine 25-to128 exit85 restart, finite gradients each update",
-  "new_family_preflight": "20 checks and kalman25-to60; diagnostic weights deleted",
+  "new_family_preflight": "21 checks and kalman25-to60; diagnostic weights deleted",
   "hardware": "H100/H200 first; after3600 continuous Idle seconds allow A100/RTX PRO6000 Blackwell Server Edition",
   "checkpoint": {
     "latest_steps": 500,
@@ -56,5 +56,6 @@
     "entity": "yibozhong657-none",
     "group": "kalman-residual-10b-20261109"
   },
-  "formal_runs": 1
+  "formal_runs": 1,
+  "numerics": "Algebraically equivalent piecewise gain and harmonic posterior use the smaller ratio to avoid saturated-gain VJP cancellation; mathematical formula unchanged"
 }

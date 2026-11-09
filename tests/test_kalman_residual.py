@@ -60,7 +60,7 @@ def oracle(x,p,y,c,q,b,s):
 
 
 @pytest.mark.parametrize('rows,width,mode',[(13,7,'random'),(17,128,'zero'),
-    (19,128,'tiny'),(129,512,'extreme'),(131,128,'initial'),(32768,512,'random')])
+    (19,128,'tiny'),(129,512,'extreme'),(131,128,'initial'),(133,128,'extreme_large'),(32768,512,'random')])
 def test_compiled_primitive_all_vjps(rows,width,mode):
     torch.manual_seed(8110)
     x=torch.randn(1,rows,width,device='cuda',dtype=torch.bfloat16)
@@ -72,7 +72,9 @@ def test_compiled_primitive_all_vjps(rows,width,mode):
     else:p.fill_(.5)
     if mode=='zero':x.zero_();y.zero_();c.zero_()
     elif mode=='tiny':x.mul_(1e-5);y.mul_(1e-5);p.fill_(1e-8)
-    elif mode=='extreme':q[::2]=80;q[1::2]=-80;b[::2]=-80;b[1::2]=80;s.fill_(2)
+    elif mode in ('extreme','extreme_large'):
+        magnitude=80 if mode=='extreme' else 10000
+        q[::2]=magnitude;q[1::2]=-magnitude;b[::2]=-magnitude;b[1::2]=magnitude;s.fill_(2)
     args=[v.requires_grad_() for v in (x,p,y,c,q,b,s)]
     copies=[a.detach().clone() for a in args]
     reference=[v.detach().double().requires_grad_() for v in args]

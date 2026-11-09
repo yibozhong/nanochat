@@ -25,7 +25,7 @@ def checks(root):
     run(['-m','pytest','-v','tests/test_kalman_residual.py','--junitxml='+str(root/'tests.xml')],root,'tests')
     suites=ET.parse(root/'tests.xml').getroot().findall('testsuite')
     counts={k:sum(int(s.get(k,0)) for s in suites) for k in ('tests','failures','errors','skipped')}
-    assert counts==dict(tests=20,failures=0,errors=0,skipped=0),counts
+    assert counts==dict(tests=21,failures=0,errors=0,skipped=0),counts
     return counts
 
 

@@ -18,7 +18,7 @@ ASSETS = HOME_ROOT / 'nanochat-runtime-assets'
 KEY = 'kalman-residual-10b-20261109'
 STEPS = 305176
 REPORT_DIR = Path('research/connections/kalman-residual')
-GATE_ROOT = HOME_ROOT / 'kalman-residual-gate-20261109'
+GATE_ROOT = HOME_ROOT / 'kalman-residual-gate-20261109-r2'
 
 
 def command(args, cwd=REPO):
@@ -119,7 +119,7 @@ def main(root):
             data_uri=data['data_uri'], wandb_group=KEY, checkpoint_upload_seconds=1800,
             launcher_sha256=hashlib.sha256((root/'train.sh').read_bytes()).hexdigest(),
             passed_families=[gate['capability']], microbatch=microbatch,
-            family_preflight='20checks and25-to60 NTP restart for a new family; diagnostic weights deleted',
+            family_preflight='21checks and25-to60 NTP restart for a new family; diagnostic weights deleted',
             scheduling='H100/H200 first; expand to A100/PRO6000 after3600 continuous Idle seconds',
             profile_reference={}, validation_step_seconds=gate['mean_step_seconds'],
             preflight_sha256=hashlib.sha256((REPO/'research/connections/kalman-residual/preflight.py').read_bytes()).hexdigest())

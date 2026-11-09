@@ -63,7 +63,7 @@ def collect(root,state,ad):
 def update_memory(state,training):
     path=Path('/home/yzhong239/AGENTS.md')
     heading='## 新授权：Vanilla Kalman residual，验证后单一10B（2026-11-09）\n'
-    note=f'\nGPU gate{state["job"]}已exit0，20检查/同卡ABBA60步/25→128恢复通过，main{state["pushed_commit"]}已push核验。唯一正式{training["job"]}/W&B{training["run_id"]}已held审计后release；调度与首步观察PID{state["training_monitor_pid"]}每60秒，连续Idle3600秒后才放开A100/PRO6000，运行不迁移。提交不等于正式开跑；新GPU family先20检查+25→60再正式初始化/恢复。\n'
+    note=f'\nGPU gate{state["job"]}已exit0，21检查/同卡ABBA60步/25→128恢复通过，main{state["pushed_commit"]}已push核验。唯一正式{training["job"]}/W&B{training["run_id"]}已held审计后release；调度与首步观察PID{state["training_monitor_pid"]}每60秒，连续Idle3600秒后才放开A100/PRO6000，运行不迁移。提交不等于正式开跑；新GPU family先21检查+25→60再正式初始化/恢复。\n'
     with path.open('r+') as f:
         fcntl.flock(f,fcntl.LOCK_EX);text=f.read();assert heading in text
         f.seek(0);f.write(text.replace(heading,heading+note,1));f.truncate()
