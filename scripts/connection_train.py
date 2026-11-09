@@ -29,10 +29,7 @@ def main():
     p.add_argument('--sequence-length', type=int, default=2048)
     p.add_argument('--attention-kernel', choices=('original','fla_triton'), default='original')
     p.add_argument('--architecture', choices=('vanilla', 'native'), default='vanilla')
-    p.add_argument('--window-pattern', default='SSSL', help='Native or vanilla with --swa-looping; last layer is full')
-    p.add_argument('--swa-looping', action='store_true')
-    p.add_argument('--swa-loops', type=int, default=3, help='Total attention passes per S layer; MLP executes once')
-    p.add_argument('--swa-window', type=int, default=512, help='Left context, excluding the current token')
+    p.add_argument('--window-pattern', default='SSSL', help='Native backbone only; vanilla always uses full attention')
     p.add_argument('--formal-training', action='store_true', help='Explicitly enable W&B for a formal training run')
     p.add_argument('--wandb-group', default='mhc-official-kernels-20261030')
     p.add_argument('--connection-backend', choices=('nvidia','nvidia_precise'), default='nvidia')
@@ -61,7 +58,7 @@ def main():
     p.add_argument('--seed', type=int, default=42)
     a = p.parse_args()
     if a.streams is None:
-        a.streams = 1 if a.swa_looping or a.variant in ('skip_scale','attnres_scale') else 4
+        a.streams = 1 if a.variant in ('skip_scale','attnres_scale') else 4
     assert torch.cuda.is_available() and torch.cuda.device_count()==1
     assert a.sequence_length>0 and 32768%a.sequence_length==0
     rows_per_step=32768//a.sequence_length
@@ -78,7 +75,6 @@ def main():
                        attnres_block_size=a.attnres_block_size,
                        attention_kernel=a.attention_kernel,
                        architecture=a.architecture, window_pattern=a.window_pattern,
-                       swa_looping=a.swa_looping, swa_loops=a.swa_loops, swa_window=a.swa_window,
                        activation_checkpoint=a.activation_checkpoint,
                        connection_backend=a.connection_backend, fused_connection_grad=a.fused_connection_grad)
     data=PackedData(a.data_dir)

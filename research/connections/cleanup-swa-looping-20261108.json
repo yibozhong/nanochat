@@ -1,0 +1,76 @@
+{
+  "complete": true,
+  "user_request": "Stop, rollback and clean SWA looping",
+  "job": "8089416.0",
+  "run_id": "f19c8b1d",
+  "job_status": 3,
+  "exit_code": 143,
+  "last_observed_training": {
+    "step": 28180,
+    "tokens": 923402240,
+    "loss": 3.529315710067749,
+    "seconds": 0.07642851397395134,
+    "lr_multiplier": 1.0
+  },
+  "formal_10b_completed": false,
+  "automatic_training": false,
+  "automatic_continuation": false,
+  "restored_base": "17171d173a0598bda00817d8459334a9b661df70",
+  "deleted_workflow_roots": [
+    "/home/yzhong239/swa-looping-gate-20261108",
+    "/home/yzhong239/swa-looping-10b-20261108"
+  ],
+  "deleted_tracked_files": 17,
+  "deleted_root_regular_files": 77,
+  "deleted_root_symlinks": 3,
+  "deleted_root_file_bytes": 23800300,
+  "scheduler_spools": {
+    "8088582": {
+      "path": "/var/lib/condor/spool/8582/0/cluster8088582.proc0.subproc0",
+      "exists": false
+    },
+    "8089416": {
+      "path": "/var/lib/condor/spool/9416/0/cluster8089416.proc0.subproc0",
+      "exists": false
+    }
+  },
+  "checkpoint_policy": "No checkpoint archives were present in the AP workflow roots; training terminated and scheduler checkpoint spools are absent. No checkpoint retained for this retired run.",
+  "verification": {
+    "retained_execution_files_byte_identical": 76,
+    "configuration_only_exception": "Reject active SWA-looping checkpoint metadata; discard inert disabled fields",
+    "retained_config_roundtrips": 12,
+    "retired_config_rejections": 12,
+    "python_ast_files": 168,
+    "bash_files": 33,
+    "protected_files_stat_unchanged": 430,
+    "new_gpu_tests": false,
+    "reason": "Restored existing tensor computation byte-for-byte; no new model math"
+  },
+  "experiment_summary": {
+    "gpu_checks": {
+      "tests": 21,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "same_gpu_ms": {
+      "full": 60.672456584870815,
+      "sssl": 59.76215493865311,
+      "sssl_loop3": 72.49579301569611
+    },
+    "short_restart_passed": true,
+    "matched_quality": {
+      "run_id": "6a07f085",
+      "matched_step": 18500,
+      "matched_tokens": 606208000,
+      "loop_dev_ce": 3.67423552274704,
+      "baseline_dev_ce": 3.669227361679077,
+      "recent20_mean_delta": 0.006999263167381286,
+      "note": "Early single-seed comparison, FA3 vs historical cuDNN backend; no formal one-pass SSSL quality control. W&B finished at segment boundary is not10B completion; complete=false/checkpoint_step18629."
+    },
+    "limitations": "Single seed, early matched dev comparison, differing attention backends; not a completed10B or proof that all looping methods fail."
+  },
+  "remote_wandb_deleted": false,
+  "history_commit": "8de59c8e7b1329a9804382512ecaafe1556dcce7",
+  "audit_directory": "/home/yzhong239/research-cleanup-20261108/swa-looping"
+}
