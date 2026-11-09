@@ -10,6 +10,15 @@ def model_cost(config, batch=1, activation_bytes=2):
     head=2*batch*t*d*c.vocab_size
     attention=4*batch*d*depth*(t*(t+1)//2)
     forward=projections+head+attention
+    if c.mlp_activation=='pairwise':
+        pairs=2*d
+        extra=18*batch*t*depth*pairs+3*depth*pairs
+        return dict(estimated_forward_flops=forward+extra,estimated_training_flops=3*(forward+extra),
+            components_forward=dict(backbone_projections=projections,vocab_head=head,
+                attention=attention,additional_pairwise_arithmetic=extra),
+            additional_pairwise_parameters=depth*pairs,
+            accounting='Same two FFN GEMMs. Approx18 extra scalar ops per token/pair, division counts1; abs/rsqrt/selects excluded. Parameter bound approx3 ops per pair. Backward approximated2x; not hardware FLOPs.',
+            memory_note='Fused activation saves input and tiny weights; recomputes rotations in backward. Deterministic parameter partial workspace is transient.')
     if c.variant=='skip_scale':
         # Relative to vanilla's already-present residual adds: one multiply
         # forward; dx multiply plus dscale multiply/reduction in backward.
