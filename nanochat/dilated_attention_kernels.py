@@ -53,8 +53,8 @@ def sparse_query(Q,K,V,O,LSE,GO,DELTA,DQ,T:tl.constexpr,H:tl.constexpr,D:tl.cons
     scale:tl.constexpr=D**-.5
     # All three phases share the same softmax state. Each key appears once.
     sink=tl.arange(0,16)
-    valid=(sink[None,:]<S)&(sink[None,:]<=rows[:,None])
-    m,l,acc=_query_tile(q,go,K,V,rows,sink,valid,base,H,D,T,scale,lse,delta,m,l,acc,BWD)
+    sink_valid=(sink[None,:]<S)&(sink[None,:]<=rows[:,None])
+    m,l,acc=_query_tile(q,go,K,V,rows,sink,sink_valid,base,H,D,T,scale,lse,delta,m,l,acc,BWD)
     last=tl.minimum(T-1,first+(BM-1)*STRIDE)
     for start in range(tl.maximum(S,first-C+1),last+1,BN):
         cols=start+tl.arange(0,BN)

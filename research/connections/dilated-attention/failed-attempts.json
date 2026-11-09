@@ -1,0 +1,15 @@
+[
+  {
+    "job": "8242376.0",
+    "status": "failed",
+    "tests": {
+      "passed": 12,
+      "failed": 17
+    },
+    "cause": "Triton compilation: sink valid[BM,16] reassigned as loop-carried valid[BM,64]. Inductor mutation analysis falls back conservatively; primitive graph fails and model results invalid.",
+    "correction": "Use a distinct sink_valid name; no mask formula or numeric tolerance changes.",
+    "benchmarks_executed": false,
+    "short_training_executed": false,
+    "formal_training": false
+  }
+]
