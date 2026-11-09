@@ -1,0 +1,45 @@
+{
+  "model_variant": "baseline",
+  "attention_pattern": "progressive_dilated",
+  "sparse_budget": 256,
+  "sparse_core": 128,
+  "sparse_sinks": 4,
+  "sparse_backend": "triton",
+  "stride_schedule": [
+    1,
+    3,
+    5,
+    7,
+    9,
+    11,
+    14,
+    null
+  ],
+  "architecture": "vanilla",
+  "streams": 1,
+  "depth": 8,
+  "width": 512,
+  "heads": 4,
+  "sequence_length": 2048,
+  "parameters": 58720256,
+  "seed": 42,
+  "microbatch": 16,
+  "batch_tokens": 32768,
+  "steps": 305176,
+  "training_tokens": 10000007168,
+  "initialization": "Fresh seed42; never reuse diagnostic weights",
+  "optimizer": "Existing default MuonAdamW and LR schedule",
+  "gate_job": "8245772.0",
+  "passed_families": [
+    [
+      9,
+      0
+    ]
+  ],
+  "scheduling": "H100/H200 initially; after3600 continuous Idle seconds also A100/PRO6000 Server; no running-job migration",
+  "family_preflight": "New family:30 GPU checks and25-to60 real NTP restore; diagnostics deleted before formal training",
+  "checkpoint": "latest every500 steps and at segment exit; independent best; exit85 every1800seconds",
+  "logging": "W&B nanochat/dilated-attention-10b-20261109",
+  "formal_runs": 1,
+  "file_hash_checks": false
+}
