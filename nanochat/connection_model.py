@@ -1,4 +1,4 @@
-"""Full-attention vanilla and NVIDIA mHC on nanochat attention and MLP.
+"""Vanilla and NVIDIA mHC on nanochat attention and MLP.
 
 This research model keeps native GPT and its SSSL/extras path unchanged.
 The residual option matches the audited 58.72M full-attention vanilla baseline.
@@ -32,13 +32,24 @@ class ConnectionConfig:
     connection_backend: str = 'nvidia'
     fused_connection_grad: bool = False
     architecture: str = 'vanilla'
-    window_pattern: str = 'SSSL'  # native only; vanilla is always full attention
+    window_pattern: str = 'SSSL'  # native or explicitly enabled vanilla SWA looping
+    swa_looping: bool = False
+    swa_loops: int = 3  # total SWA evaluations per S layer, including the first
+    swa_window: int = 512  # left context; the current token is also visible
     attention_kernel: str = 'original'
     compact_routing: bool = False
     attnres_block_size: int = 2  # Moonshot paper's S: Attention and MLP each count once
     attnres_block_size_unit: str = 'sublayers'
 
     def __post_init__(self):
+        if type(self.swa_looping) is not bool:
+            raise ValueError('swa_looping must be boolean')
+        if any(type(v) is not int or v < 1 for v in (self.swa_loops, self.swa_window)):
+            raise ValueError('SWA total passes and left window must be positive integers')
+        if self.swa_looping and (self.architecture != 'vanilla' or self.variant != 'baseline' or
+                                self.streams != 1 or self.attention_kernel != 'original' or
+                                self.fused_connection_grad):
+            raise ValueError('SWA looping uses vanilla baseline, one stream, and original attention')
         if self.variant in ('skip_scale','attnres_scale'):
             if self.architecture != 'vanilla' or self.streams != 1 or self.fused_connection_grad:
                 raise ValueError('Skip scale uses vanilla, exactly one residual stream, and ordinary gradients')
@@ -81,6 +92,20 @@ class ConnectionConfig:
             raise ValueError('Sinkhorn needs at least one iteration')
         if self.variant not in ('baseline', 'attnres', 'attnres_scale', 'skip_scale') and (self.streams != 4 or self.width % 128):
             raise ValueError('NVIDIA mHC kernels require four streams and width divisible by 128')
+
+    @property
+    def attention_schedule(self):
+        """(left window, attention passes) per layer; last layer is always full.
+
+        The optional vanilla path shares Q/K/V/O only within each S layer.
+        Every L layer has its own parameters and executes once. MLP runs once
+        per layer in either case. Disabled metadata leaves the baseline intact.
+        """
+        return tuple(
+            (self.swa_window, self.swa_loops)
+            if self.swa_looping and i != self.depth - 1 and self.window_pattern[i % len(self.window_pattern)] == 'S'
+            else (-1, 1)
+            for i in range(self.depth))
 
     @property
     def attnres_block_layers(self):
@@ -131,6 +156,8 @@ class ConnectionBlock(Block):
         super().__init__(native, index)
         self.attn.ve_gate = None
         self.variant = config.variant
+        self.swa_looping = config.swa_looping
+        self.swa_left, self.swa_passes = config.attention_schedule[index]
         self.compiled_attention = self.compiled_mlp = None
         if self.variant == 'skip_scale':
             self.attn_skip_scale = nn.Parameter(torch.ones(config.width))
@@ -161,6 +188,12 @@ class ConnectionBlock(Block):
 
     def forward(self, x, cos, sin, kv_cache=None):
         if self.variant == 'baseline':
+            if self.swa_looping:
+                if kv_cache is not None:
+                    raise ValueError('SWA looping needs separate per-pass KV caches; cached decoding is not implemented')
+                for _ in range(self.swa_passes):
+                    x = x + self.attn(norm(x), None, (cos, sin), (self.swa_left, 0), None)
+                return x + self.mlp(norm(x))
             return super().forward(x, None, (cos, sin), (-1, 0), kv_cache)
         if self.variant == 'skip_scale':
             from nanochat.skip_scale import scaled_skip
@@ -222,6 +255,10 @@ class ConnectionModel(nn.Module):
                 block.attn = FlaAttention(block.attn)
 
     def prepare(self, device='cuda', dtype=torch.bfloat16, compile_blocks=False):
+        if self.config.swa_looping:
+            from nanochat import flash_attention
+            if not flash_attention.USE_FA3:
+                raise ValueError('SWA looping currently requires the native windowed FA3 backend')
         if self.config.variant not in ('baseline', 'skip_scale'):
             check_nvidia_device(device)
             if dtype != torch.bfloat16:
@@ -240,6 +277,8 @@ class ConnectionModel(nn.Module):
         return self
 
     def hidden(self, idx, kv_cache=None):
+        if self.config.swa_looping and kv_cache is not None:
+            raise ValueError('SWA looping needs separate per-pass KV caches; cached decoding is not implemented')
         start = 0 if kv_cache is None else kv_cache.get_pos()
         if start + idx.shape[1] > self.config.sequence_length:
             raise ValueError('Input exceeds configured context length')

@@ -1,5 +1,15 @@
 # Official mHC kernels in nanochat
 
+## New bounded SWA-only looping experiment (2026-11-08)
+
+The user authorized vanilla SSSL with three total attention passes inside each
+S layer and one MLP afterward; L layers keep independent parameters and run
+once. The confirmed window is512tokens left plus self. See
+[SWA looping](swa-looping/README.md). This is a new bounded implementation,
+correctness, speed, and128-step restart check; it does not revive the retired
+128/128/full shared local/global experiment or authorize a formal10B run.
+GPU validation is pending. Static gate retirement below remains in effect.
+
 ## Static gate research closed (2026-11-08)
 
 The gate exploration is closed at the user's request and retained as a small

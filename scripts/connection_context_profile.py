@@ -51,6 +51,10 @@ def main():
     p.add_argument('--repetition', type=int, default=0)
     p.add_argument('--probe', action='store_true')
     p.add_argument('--compact-routing', action=argparse.BooleanOptionalAction, default=False)
+    p.add_argument('--swa-looping', action='store_true')
+    p.add_argument('--swa-loops', type=int, default=3)
+    p.add_argument('--swa-window', type=int, default=512)
+    p.add_argument('--window-pattern', default='SSSL')
     p.add_argument('--data-dir', default='../data')
     p.add_argument('--output', required=True)
     a = p.parse_args()
@@ -63,7 +67,9 @@ def main():
     seed_all(42)
     props = torch.cuda.get_device_properties(0)
     cfg = ConnectionConfig(variant=a.variant, sequence_length=a.sequence_length, compact_routing=a.compact_routing,
-                           streams=1 if a.variant in ('skip_scale','attnres_scale') else 4)
+                           streams=1 if a.swa_looping or a.variant in ('skip_scale','attnres_scale') else 4,
+                           swa_looping=a.swa_looping,swa_loops=a.swa_loops,swa_window=a.swa_window,
+                           window_pattern=a.window_pattern)
     record = dict(complete=False, variant=a.variant, sequence_length=a.sequence_length,
         microbatch=a.microbatch, grad_accum=rows//a.microbatch, batch_tokens=BATCH_TOKENS,
         repetition=a.repetition, probe=a.probe, model=asdict(cfg), logging_backend='local',

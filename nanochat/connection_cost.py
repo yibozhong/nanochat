@@ -1,4 +1,4 @@
-"""Analytic matrix FLOPs for the retained full-attention vanilla model."""
+"""Analytic matrix FLOPs for vanilla and its optional residual/attention paths."""
 
 
 def model_cost(config, batch=1, activation_bytes=2):
@@ -9,6 +9,21 @@ def model_cost(config, batch=1, activation_bytes=2):
     projections=24*batch*t*depth*d*d
     head=2*batch*t*d*c.vocab_size
     attention=4*batch*d*depth*(t*(t+1)//2)
+    if c.swa_looping:
+        extra_passes=sum(passes-1 for _,passes in c.attention_schedule)
+        loop_projections=8*batch*t*d*d*extra_passes
+        attention=0
+        for left,passes in c.attention_schedule:
+            w=t if left<0 else min(t,left+1)
+            pairs=t*w-w*(w-1)//2
+            attention+=4*batch*d*pairs*passes
+        forward=projections+loop_projections+head+attention
+        return dict(estimated_forward_flops=forward,estimated_training_flops=3*forward,
+            components_forward=dict(backbone_projections=projections,loop_projections=loop_projections,
+                vocab_head=head,attention=attention),
+            attention_schedule=list(c.attention_schedule),
+            attention_evaluations=sum(p for _,p in c.attention_schedule),mlp_evaluations=depth,
+            accounting='FMA=2; exact allowed causal/window pairs and all repeated QKVO projections. MLP once per layer. Backward approximately2x forward; excludes norm/softmax/activation/optimizer/recomputation and is not measured hardware FLOPs.')
     forward=projections+head+attention
     if c.variant=='skip_scale':
         # Relative to vanilla's already-present residual adds: one multiply
