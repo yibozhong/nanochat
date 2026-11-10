@@ -33,7 +33,6 @@ class ConnectionConfig:
     fused_connection_grad: bool = False
     architecture: str = 'vanilla'
     window_pattern: str = 'SSSL'  # native only; vanilla is always full attention
-    window_final_full: bool = True
     attention_kernel: str = 'original'
     compact_routing: bool = False
     attnres_block_size: int = 2  # Moonshot paper's S: Attention and MLP each count once
@@ -64,10 +63,6 @@ class ConnectionConfig:
             raise ValueError(f'Unknown backbone architecture: {self.architecture}')
         if not self.window_pattern or any(c not in 'SL' for c in self.window_pattern):
             raise ValueError('window_pattern must contain S and/or L')
-        if type(self.window_final_full) is not bool:
-            raise ValueError('window_final_full must be a bool')
-        if not self.window_final_full and self.architecture != 'native':
-            raise ValueError('window_final_full applies only to the native backbone')
         if self.connection_backend not in ('nvidia', 'nvidia_precise'):
             raise ValueError('Only the full NVIDIA mHC implementation is supported')
         if self.variant not in CONNECTION_VARIANTS:
@@ -96,6 +91,8 @@ class ConnectionConfig:
     def from_checkpoint(cls, config):
         """Read pre-cleanup NVIDIA/vanilla metadata; reject retired model weights."""
         config = dict(config)
+        if config.pop('window_final_full', True) is not True:
+            raise ValueError('Checkpoint belongs to the retired native frontloaded-attention experiment')
         if config.pop('attention_pattern', 'full') != 'full':
             raise ValueError('Checkpoint belongs to the retired dilated-attention experiment')
         for name in ('sparse_budget', 'sparse_core', 'sparse_sinks', 'sparse_backend'):

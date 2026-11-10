@@ -33,11 +33,10 @@ class GPTConfig:
     n_head: int = 6 # number of query heads
     n_kv_head: int = 6 # number of key/value heads (GQA)
     n_embd: int = 768
-    # Sliding window attention pattern string, tiled across layers.
+    # Sliding window attention pattern string, tiled across layers. Final layer always L.
     # Characters: L=long (full context), S=short (quarter context)
     # Examples: "L"=all full context, "SL"=alternating, "SSL"=two short then one long
     window_pattern: str = "SSSL"
-    window_final_full: bool = True  # preserve the original final-layer override by default
     # Optional NVIDIA residual connections; baseline retains the original GPT.
     connection_variant: str = "baseline"
     connection_backend: str = "nvidia"
@@ -359,14 +358,14 @@ class GPT(nn.Module):
         - left: how many tokens before current position to attend to (-1 = unlimited)
         - right: how many tokens after current position to attend to (0 for causal)
 
-        Pattern is tiled across layers; window_final_full optionally forces the last layer to L.
+        Pattern string is tiled across layers. Final layer always gets L (full context).
         Characters: L=long (full context), S=short (quarter context)
         """
         pattern = config.window_pattern.upper()
-        assert pattern and all(c in "SL" for c in pattern), f"Invalid window_pattern: {pattern}. Use only S and L."
+        assert all(c in "SL" for c in pattern), f"Invalid window_pattern: {pattern}. Use only S and L."
         # Map characters to window sizes
         long_window = config.sequence_len
-        short_window = -(-long_window // 4 // 128) * 128  # round to FA3 tile size (2048 -> 512)
+        short_window = -(-long_window // 4 // 128) * 128  # ceil to FA3 tile size (2048 -> 768)
         char_to_window = {
             "L": (long_window, 0),
             "S": (short_window, 0),
@@ -376,8 +375,8 @@ class GPT(nn.Module):
         for layer_idx in range(config.n_layer):
             char = pattern[layer_idx % len(pattern)]
             window_sizes.append(char_to_window[char])
-        if config.window_final_full:
-            window_sizes[-1] = (long_window, 0)
+        # Final layer always gets full context
+        window_sizes[-1] = (long_window, 0)
         return window_sizes
 
     def get_device(self):

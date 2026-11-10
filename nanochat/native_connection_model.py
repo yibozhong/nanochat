@@ -23,7 +23,6 @@ class NativeConnectionModel(nn.Module):
         native = GPTConfig(sequence_len=config.sequence_length, vocab_size=config.vocab_size,
             n_layer=config.depth, n_head=config.heads, n_kv_head=config.heads,
             n_embd=config.width, window_pattern=config.window_pattern,
-            window_final_full=config.window_final_full,
             connection_variant=config.variant, connection_backend=config.connection_backend,
             fused_connection_grad=config.fused_connection_grad,
             activation_checkpoint=config.activation_checkpoint)

@@ -1,0 +1,53 @@
+{
+  "complete": true,
+  "date": "2026-11-09",
+  "scope": "Retire native LLSSSSSS and clean redundant nanochat artifacts in home only; staging untouched",
+  "stopped_job": "8277244.0",
+  "job_status": 3,
+  "exit_code": 143,
+  "run_id": "710de8ef",
+  "last_observed_formal_step": {
+    "step": 17960,
+    "tokens": 588513280,
+    "loss": 3.521897315979004,
+    "seconds": 0.0671803243458271,
+    "lr_multiplier": 1.0
+  },
+  "full_10b_completed": false,
+  "wandb_history_preserved": true,
+  "code_base": "4e3edb6",
+  "full_history_commit": "c7a0b6b",
+  "retired_configuration": "Native LLSSSSSS with final-layer override disabled",
+  "checkpoint_compatibility": "Reject window_final_full=False; accept/drop old true metadata for retained models",
+  "root_deleted": "/home/yzhong239/native-frontload-10b-20261109",
+  "deleted_implementation_files": 9,
+  "retained_variants": "vanilla/native/NVIDIA HC/static scales/AttnRes and original full FLA",
+  "cleanup": {
+    "scope": "home only; staging untouched",
+    "retired_workflow_files": 37,
+    "retired_workflow_bytes": 23142573,
+    "retired_workflow_allocated": 23216128,
+    "source_archives_deleted": 69,
+    "source_archives_bytes": 393605120,
+    "source_archives_allocated": 393682944,
+    "no_other_training_weights_found": true,
+    "tokenizer_tensors_preserved": true,
+    "results_and_metrics_preserved": true
+  },
+  "validation": {
+    "retained_source_files_restored": [
+      "nanochat/gpt.py",
+      "nanochat/native_connection_model.py",
+      "scripts/connection_train.py"
+    ],
+    "retained_config_cases": 12,
+    "old_true_metadata_compatible": 12,
+    "retired_false_metadata_rejected": 12,
+    "python_ast_files": 168,
+    "gpu_tests": "not rerun; retained tensor computation restored unchanged",
+    "file_hash_checks": false
+  },
+  "staging_modified": false,
+  "new_training_jobs": 0,
+  "authorization_history": "/home/yzhong239/RESEARCH_HISTORY.md"
+}
