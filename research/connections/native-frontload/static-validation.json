@@ -7,6 +7,7 @@
   "unchanged_tensor_methods": true,
   "first_step_parser_cases": 4,
   "bad_preflight_markers_rejected": 8,
-  "gpu_validation": "pending",
-  "file_hash_checks": false
+  "gpu_validation": "10/10 passed on H200 in8262819.0; profiles and25-to60 pending after launcher rename",
+  "file_hash_checks": false,
+  "benchmark_stdlib_profile_import": "passed on AP without importing Torch"
 }

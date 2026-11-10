@@ -70,7 +70,7 @@ def main():
     profiles={}
     for pattern in ('SSSL','LLSSSSSS'):
         out=root/(pattern+'-profile.json')
-        run(['research/connections/native-frontload/profile.py','--window-pattern',pattern,
+        run(['research/connections/native-frontload/benchmark_native.py','--window-pattern',pattern,
              '--sequence-length','2048','--microbatch',str(a.microbatch),
              '--attention-backend','hardware_auto','--data-dir','../data','--output',str(out)])
         profiles[pattern]=json.loads(out.read_text())
