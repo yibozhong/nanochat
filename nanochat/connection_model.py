@@ -34,11 +34,30 @@ class ConnectionConfig:
     architecture: str = 'vanilla'
     window_pattern: str = 'SSSL'  # native only; vanilla is always full attention
     attention_kernel: str = 'original'
+    attention_mode: str = 'full'
+    hca_block_size: int = 16
+    hca_budget_chunks: int = 16
+    hca_window: int = 256  # includes the current token
+    hca_temperature: float = 1.0
+    hca_noise: bool = True
     compact_routing: bool = False
     attnres_block_size: int = 2  # Moonshot paper's S: Attention and MLP each count once
     attnres_block_size_unit: str = 'sublayers'
 
     def __post_init__(self):
+        if self.attention_mode not in ('full', 'fixed_hca', 'dynamic_hca'):
+            raise ValueError('Unknown attention_mode')
+        if self.attention_mode != 'full':
+            if self.architecture != 'vanilla' or self.variant != 'baseline' or self.streams != 1 or self.attention_kernel != 'original':
+                raise ValueError('HCA reference supports vanilla baseline, one stream, original projections')
+            if any(type(v) is not int or v < 1 for v in (self.hca_block_size, self.hca_budget_chunks, self.hca_window)):
+                raise ValueError('HCA block size, budget and window must be positive integers')
+            if self.hca_budget_chunks < 2 or self.hca_block_size < 2:
+                raise ValueError('HCA needs block size and budget >= 2')
+            if self.hca_window < self.hca_block_size * self.hca_budget_chunks:
+                raise ValueError('SWA must cover the longest unfinished budget frame')
+            if not math.isfinite(self.hca_temperature) or self.hca_temperature <= 0 or type(self.hca_noise) is not bool:
+                raise ValueError('Invalid HCA temperature/noise')
         if self.variant in ('skip_scale','attnres_scale'):
             if self.architecture != 'vanilla' or self.streams != 1 or self.fused_connection_grad:
                 raise ValueError('Skip scale uses vanilla, exactly one residual stream, and ordinary gradients')
@@ -234,8 +253,17 @@ class ConnectionModel(nn.Module):
             from nanochat.fla_attention import FlaAttention
             for block in self.blocks:
                 block.attn = FlaAttention(block.attn)
+        if config.attention_mode != 'full':
+            from nanochat.hca import HCAAttention
+            # Complete native backbone initialization first; additions must not
+            # perturb backbone weights or the caller's RNG stream.
+            with torch.random.fork_rng(devices=[]):
+                for block in self.blocks:
+                    block.attn = HCAAttention(block.attn, config)
 
     def prepare(self, device='cuda', dtype=torch.bfloat16, compile_blocks=False):
+        if compile_blocks and self.config.attention_mode != 'full':
+            raise ValueError('HCA reference uses eager execution; pass compile_blocks=False')
         if self.config.variant not in ('baseline', 'skip_scale'):
             check_nvidia_device(device)
             if dtype != torch.bfloat16:
@@ -253,7 +281,22 @@ class ConnectionModel(nn.Module):
                 b.compiled_mlp = torch.compile(b.mlp_branch, dynamic=False, fullgraph=True)
         return self
 
+    def make_kv_cache(self, batch_size=1):
+        if self.config.attention_mode != 'full':
+            from nanochat.hca import HCAKVCache
+            return HCAKVCache(self.config, batch_size)
+        from nanochat.engine import KVCache
+        c = self.config
+        return KVCache(batch_size, c.heads, c.sequence_length, c.width // c.heads,
+                       c.depth, self.wte.weight.device, self.wte.weight.dtype)
+
     def hidden(self, idx, kv_cache=None):
+        if self.config.attention_mode != 'full' and kv_cache is not None:
+            from nanochat.hca import HCAKVCache
+            if not isinstance(kv_cache, HCAKVCache) or kv_cache.config != self.config:
+                raise ValueError('Use model.make_kv_cache() for HCA')
+            if self.training or torch.is_grad_enabled():
+                raise ValueError('HCA cache requires eval() and no_grad()')
         start = 0 if kv_cache is None else kv_cache.get_pos()
         if start + idx.shape[1] > self.config.sequence_length:
             raise ValueError('Input exceeds configured context length')
@@ -305,7 +348,8 @@ def optimizer_for(model, batch_tokens=32768):
     matrices, routing = [], []
     for b in model.blocks:
         for name, p in b.named_parameters():
-            (routing if '_connection.' in name or name in ('attn_skip_scale', 'mlp_skip_scale') else matrices).append(p)
+            (routing if '_connection.' in name or name in ('attn_skip_scale', 'mlp_skip_scale') or
+             name.startswith(('attn.pool_score.', 'attn.boundary.')) else matrices).append(p)
     if model.stream_head is not None:
         routing.extend(model.stream_head.parameters())
     if c.variant in ('attnres','attnres_scale'):

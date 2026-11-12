@@ -27,6 +27,12 @@ def main():
     p.add_argument('--variant', choices=CONNECTION_VARIANTS, required=True)
     p.add_argument('--sequence-length', type=int, default=2048)
     p.add_argument('--attention-kernel', choices=('original','fla_triton'), default='original')
+    p.add_argument('--attention-mode', choices=('full','fixed_hca','dynamic_hca'), default='full')
+    p.add_argument('--hca-block-size', type=int, default=16)
+    p.add_argument('--hca-budget-chunks', type=int, default=16)
+    p.add_argument('--hca-window', type=int, default=256)
+    p.add_argument('--hca-temperature', type=float, default=1.0)
+    p.add_argument('--hca-noise', action=argparse.BooleanOptionalAction, default=True)
     p.add_argument('--architecture', choices=('vanilla', 'native'), default='vanilla')
     p.add_argument('--window-pattern', default='SSSL', help='Native backbone only; vanilla always uses full attention')
     p.add_argument('--formal-training', action='store_true', help='Explicitly enable W&B for a formal training run')
@@ -57,7 +63,7 @@ def main():
     p.add_argument('--seed', type=int, default=42)
     a = p.parse_args()
     if a.streams is None:
-        a.streams = 1 if a.variant in ('skip_scale','attnres_scale') else 4
+        a.streams = 1 if a.variant in ('skip_scale','attnres_scale') or a.attention_mode != 'full' else 4
     assert torch.cuda.is_available() and torch.cuda.device_count()==1
     assert a.sequence_length>0 and 32768%a.sequence_length==0
     rows_per_step=32768//a.sequence_length
@@ -67,12 +73,16 @@ def main():
     ckpt=Path(a.checkpoint_dir) if a.checkpoint_dir else out/'checkpoints'
     ckpt.mkdir(parents=True,exist_ok=True)
     torch.set_num_threads(2);torch.backends.cuda.matmul.allow_tf32=False
-    actual_attention_backend = configure_attention(a.attention_backend)
+    actual_attention_backend = (configure_attention(a.attention_backend) if a.attention_mode == 'full'
+                                else 'pytorch_hca_reference')
     seed_all(a.seed)
     c=ConnectionConfig(variant=a.variant,streams=a.streams,sinkhorn_iterations=a.sinkhorn_iterations,
                        sequence_length=a.sequence_length, compact_routing=a.compact_routing,
                        attnres_block_size=a.attnres_block_size,
                        attention_kernel=a.attention_kernel,
+                       attention_mode=a.attention_mode, hca_block_size=a.hca_block_size,
+                       hca_budget_chunks=a.hca_budget_chunks, hca_window=a.hca_window,
+                       hca_temperature=a.hca_temperature, hca_noise=a.hca_noise,
                        architecture=a.architecture, window_pattern=a.window_pattern,
                        activation_checkpoint=a.activation_checkpoint,
                        connection_backend=a.connection_backend, fused_connection_grad=a.fused_connection_grad)
@@ -87,7 +97,7 @@ def main():
         source=json.loads(Path('source.json').read_text())
     else:
         source=dict(commit=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip())
-    model=build_connection_model(c).prepare(compile_blocks=True)
+    model=build_connection_model(c).prepare(compile_blocks=c.attention_mode == 'full')
     if a.matched_backbone_init:
         match_vanilla_initialization(model,a.seed)
     opt,wd=optimizer_for(model)
