@@ -50,11 +50,11 @@ def main():
         before = time.perf_counter()
         with torch.no_grad():
             logits = m(x)
+            routing = ({k: v.item() for k, v in m.last_hca_metrics.items()} if mode != 'full' else None)
             torch.cuda.synchronize()
             dense_seconds = time.perf_counter() - before
             cache = m.make_kv_cache()
-            # A split inside an incomplete B=16 chunk, then close the frame,
-            # then decode several tokens and finish the same 2K sequence.
+            # Arbitrary splits, including incomplete fixed and dynamic chunks.
             pieces = []; start = 0
             torch.cuda.synchronize(); before = time.perf_counter()
             for n in (1003, 21, 1, 1, 1, 1021):
@@ -64,6 +64,8 @@ def main():
             torch.testing.assert_close(cached, logits, rtol=.01, atol=.01)
             ce = torch.nn.functional.cross_entropy(logits.flatten(0, 1), y.flatten()).item()
         row = dict(untrained_dev_quality=False, diagnostic_train_ce=ce,
+                   target_history_ratio=c.hca_block_size,
+                   dense_routing=routing,
                    full_forward_seconds=dense_seconds, split_cached_seconds=cache_seconds,
                    max_logit_difference=(cached-logits).abs().max().item(),
                    peak_allocated_bytes=torch.cuda.max_memory_allocated(),
@@ -75,14 +77,19 @@ def main():
                                + cache.cache_seqlens.untyped_storage().nbytes(), tokens=cache.get_pos())
         else:
             row['cache'] = cache.statistics()
-            assert all(v == [128] for v in row['cache']['completed_chunks'])
             assert row['cache']['storage_bytes'] == row['cache']['tensor_bytes'], 'Hidden backing storage retained'
-            assert row['cache']['storage_bytes'] < full_bytes
-            row['chunk_lengths'] = [[end-start for start,end in zip([-1]+layer[0].ends[:-1], layer[0].ends)]
+            row['chunk_lengths'] = [[end-start for start,end in zip([-1]+layer[0].ends, layer[0].ends+[2047])]
                                     for layer in cache.layers]
+            if mode == 'fixed_hca':
+                assert all(v == [128] for v in row['cache']['compressed_entries'])
+                assert row['cache']['storage_bytes'] < full_bytes
             if mode == 'dynamic_hca':
                 assert any(len(set(lengths)) > 1 for lengths in row['chunk_lengths']), 'Content router not exercised'
-            row['compressed_history_ratio'] = 16
+            entries = sum(sum(layer) for layer in row['cache']['compressed_entries'])
+            assert entries == round(routing['hard_keep_rate']*c.depth*2048), 'Dense/cached routing counts differ'
+            row['actual_history_ratio'] = c.depth*2048 / entries
+            row['matches_fixed_budget_within_5_percent'] = abs(row['actual_history_ratio']/16 - 1) <= .05
+            row['rate_note'] = 'Untrained dynamic router has no guarantee of achieving target R; no matched-budget quality claim.'
         row['effective_cache_ratio'] = full_bytes / row['cache']['storage_bytes']
         report['comparisons'][mode] = row
         (out/'validation.json').write_text(json.dumps(report, indent=2, allow_nan=False)+'\n')

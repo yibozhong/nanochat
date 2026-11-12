@@ -27,7 +27,7 @@ def main(root):
             (root/name).mkdir(exist_ok=True)
         commit = subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=REPO, text=True).strip()
         source = dict(commit=commit, formal_training=False,
-                      purpose='Fixed and Dynamic HCA correctness/cache accounting; exact average B16; no formal run',
+                      purpose='Fixed HCA and free Dynamic HCA with global DMC-style compression loss; target R16, no hard quota, no formal run',
                       budget=dict(validation_timeout_seconds=2400, max_job_seconds=3600),
                       references='research/connections/hca/README.md')
         (root/'bundles/source.json').write_text(json.dumps(source, indent=2)+'\n')

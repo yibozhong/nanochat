@@ -72,17 +72,23 @@ def train_step(model,opt,data,step,microbatch=16,batch_tokens=32768):
     assert rows % microbatch == 0
     opt.zero_grad(set_to_none=True)
     total=torch.zeros((),device='cuda')
+    hca_metrics = {}
     for start in range(0,rows,microbatch):
         x,y=data.batch('train',step*rows+start,microbatch)
         loss=model(x,y)
         (loss/(rows//microbatch)).backward()
         total += loss.detach()/(rows//microbatch)
+        if getattr(model.config, 'attention_mode', 'full') != 'full':
+            for key, value in model.last_hca_metrics.items():
+                hca_metrics[key] = hca_metrics.get(key, 0.) + value / (rows//microbatch)
     # Preserve nanochat's lack of clipping, but stop before a nonfinite update.
     grads=[p.grad for p in model.parameters() if p.grad is not None]
     finite=torch.stack([torch.isfinite(g).all() for g in grads]).all()
     if not bool(finite) or not torch.isfinite(total):
         raise FloatingPointError('Nonfinite loss/gradient before optimizer update')
     opt.step()
+    if hca_metrics:
+        model.last_train_metrics = {key: value.item() for key, value in hca_metrics.items()}
     return total.item()
 
 

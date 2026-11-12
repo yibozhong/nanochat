@@ -29,7 +29,7 @@ def main():
     p.add_argument('--attention-kernel', choices=('original','fla_triton'), default='original')
     p.add_argument('--attention-mode', choices=('full','fixed_hca','dynamic_hca'), default='full')
     p.add_argument('--hca-block-size', type=int, default=16)
-    p.add_argument('--hca-budget-chunks', type=int, default=16)
+    p.add_argument('--hca-ratio-loss-weight', type=float, default=1.0)
     p.add_argument('--hca-window', type=int, default=256)
     p.add_argument('--hca-temperature', type=float, default=1.0)
     p.add_argument('--hca-noise', action=argparse.BooleanOptionalAction, default=True)
@@ -81,7 +81,7 @@ def main():
                        attnres_block_size=a.attnres_block_size,
                        attention_kernel=a.attention_kernel,
                        attention_mode=a.attention_mode, hca_block_size=a.hca_block_size,
-                       hca_budget_chunks=a.hca_budget_chunks, hca_window=a.hca_window,
+                       hca_ratio_loss_weight=a.hca_ratio_loss_weight, hca_window=a.hca_window,
                        hca_temperature=a.hca_temperature, hca_noise=a.hca_noise,
                        architecture=a.architecture, window_pattern=a.window_pattern,
                        activation_checkpoint=a.activation_checkpoint,
@@ -142,7 +142,8 @@ def main():
         applied_sinkhorn_iterations=c.sinkhorn_iterations if a.variant=='mhc' else 0,
         optimizer='native MuonAdamW; connector AdamW at native unembedding LR, no decay',
         optimizer_groups=initial_groups,
-        loss='full-token full-vocabulary CCE; no gradient filtering',
+        loss=('full-token CCE + weighted global one-sided HCA compression loss; eval CE only'
+              if c.attention_mode == 'dynamic_hca' else 'full-token full-vocabulary CCE; no gradient filtering'),
         references='research/connections/references.json')
     from nanochat.connection_cost import model_cost
     cost=model_cost(c,batch=rows_per_step)
@@ -156,7 +157,7 @@ def main():
                 name=f'{a.architecture}-{a.variant}'+f'-{c.sequence_length}ctx-{a.steps}steps',id=run_id,resume='allow',config=config)
     run=training_run(formal_training=a.formal_training, local_dir=out/"diagnostics", **kwargs)
     run.define_metric('tokens')
-    for metric in ('train/*','dev/*','perf/*'):
+    for metric in ('train/*','dev/*','perf/*','hca/*'):
         run.define_metric(metric,step_metric='tokens')
     json_write(out/'config.json',config)
     stop=False;begin=time.perf_counter()
@@ -191,12 +192,19 @@ def main():
                 torch.cuda.synchronize();duration=time.perf_counter()-start
                 durations.append(duration);training_seconds+=duration;step+=1
                 row=dict(step=step,tokens=step*32768,loss=loss,seconds=duration,lr_multiplier=lr)
+                if c.attention_mode != 'full':
+                    row['hca'] = model.last_train_metrics
                 log.write(json.dumps(row)+'\n')
                 if step<=5 or step%10==0:
                     print(json.dumps(row),flush=True)
                     perf={'train/ce':loss,'perf/step_seconds':duration,'perf/tokens_per_second':32768/duration,
                           'perf/peak_allocated_bytes':torch.cuda.max_memory_allocated(),
                           'perf/peak_reserved_bytes':torch.cuda.max_memory_reserved()}
+                    if c.attention_mode != 'full':
+                        perf['train/ce'] = model.last_train_metrics['ce']
+                        perf['train/objective'] = loss
+                        perf.update({'hca/'+key: value for key, value in model.last_train_metrics.items()
+                                     if key not in ('ce','objective')})
                     if cost:
                         perf.update({'perf/estimated_training_flops_per_step':cost['estimated_training_flops'],
                             'perf/estimated_forward_flops_per_step':cost['estimated_forward_flops']})

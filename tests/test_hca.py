@@ -9,7 +9,7 @@ from torch.nn import functional as F
 
 from nanochat.connection_model import ConnectionConfig, build_connection_model, optimizer_for
 from nanochat.gpt import apply_rotary_emb, norm
-from nanochat.hca import HCAKVCache, boundary_step, pool_step
+from nanochat.hca import HCAKVCache, boundary_step, pool_step, compression_loss
 
 
 DEVICE = 'cuda'
@@ -18,7 +18,7 @@ DEVICE = 'cuda'
 def config(mode='dynamic_hca', **kwargs):
     opts = dict(variant='baseline', streams=1, depth=2, width=32, heads=2,
                 sequence_length=80, vocab_size=64, attention_mode=mode,
-                hca_block_size=4, hca_budget_chunks=4, hca_window=16, hca_noise=False)
+                hca_block_size=4, hca_window=16, hca_noise=False)
     opts.update(kwargs)
     return ConnectionConfig(**opts)
 
@@ -38,56 +38,38 @@ def model(c=None, dtype=torch.float32):
     return m
 
 
-def independent_ends(content, c):
+def independent_starts(content, c):
     result = torch.zeros_like(content)
     for row in range(content.shape[0]):
-        age = used = 0
         for t, value in enumerate(content[row].detach().cpu().tolist()):
-            offset = t % (c.hca_block_size * c.hca_budget_chunks)
-            if c.attention_mode == 'fixed_hca':
-                end = (t + 1) % c.hca_block_size == 0
-            else:
-                remaining = c.hca_budget_chunks - used
-                tokens_left = c.hca_block_size * c.hca_budget_chunks - offset
-                end = remaining == tokens_left or tokens_left == 1
-                if not end and remaining > 1:
-                    end = value + (age + 1 - c.hca_block_size) / max(c.hca_block_size / 4, 1) >= 0
-            result[row, t] = float(end)
-            used += int(end)
-            age = 0 if end else age + 1
-            if offset == c.hca_block_size * c.hca_budget_chunks - 1:
-                used = 0
+            start = t % c.hca_block_size == 0 if c.attention_mode == 'fixed_hca' else t == 0 or value >= 0
+            result[row, t] = float(start)
     return result
 
 
 def oracle(attn, args, cos_sin):
-    """Independent hard partition + direct softmax pooling + explicit attention."""
+    """Direct per-query prefix partition/pooling, including the unfinished chunk."""
     q, raw_k, local_k, v, score, content = args
-    ends = independent_ends(content, attn.config)
+    starts = independent_starts(content, attn.config)
     rows = []
     for b in range(q.shape[0]):
-        chunks = []
-        start = 0
-        for end in ends[b].nonzero().flatten().tolist():
-            weights = (10 * torch.tanh(score[b, start:end+1] / 10)).softmax(0)
-            pk = (weights * raw_k[b, start:end+1]).sum(0)
-            pv = (weights * v[b, start:end+1]).sum(0)
-            cs = tuple(z[:, end:end+1] for z in cos_sin)
-            pk = (norm(apply_rotary_emb(pk[None, None], *cs)) * 1.2)[0, 0]
-            chunks.append((end, pk, pv))
-            start = end + 1
         outputs = []
         for t in range(q.shape[1]):
             keys = list(local_k[b, max(0, t-attn.config.hca_window+1):t+1].unbind(0))
             vals = list(v[b, max(0, t-attn.config.hca_window+1):t+1].unbind(0))
-            for end, pk, pv in chunks:
-                if end < t:
-                    keys.append(pk); vals.append(pv)
+            cuts = starts[b, :t+1].nonzero().flatten().tolist() + [t+1]
+            for start, stop in zip(cuts, cuts[1:]):
+                w = (10 * torch.tanh(score[b, start:stop]/10)).softmax(0)
+                pk = (w * raw_k[b, start:stop]).sum(0)
+                pv = (w * v[b, start:stop]).sum(0)
+                cs = tuple(z[:, stop-1:stop] for z in cos_sin)
+                pk = (norm(apply_rotary_emb(pk[None, None], *cs)) * 1.2)[0, 0]
+                keys.append(pk); vals.append(pv)
             keys, vals = torch.stack(keys), torch.stack(vals)
             scores = torch.einsum('hd,shd->hs', q[b, t], keys) / q.shape[-1] ** .5
             outputs.append(torch.einsum('hs,shd->hd', scores.softmax(-1), vals))
         rows.append(torch.stack(outputs))
-    return torch.stack(rows), ends
+    return torch.stack(rows), starts
 
 
 @pytest.mark.parametrize('mode', ['fixed_hca', 'dynamic_hca'])
@@ -97,7 +79,7 @@ def test_fp64_oracle_all_continuous_vjps(mode):
     x = torch.randn(2, 37, 32, device=DEVICE, dtype=torch.float64)
     cs = (m.cos[:, :37], m.sin[:, :37])
     args = tuple(z.detach().requires_grad_() for z in a.project(x, cs))
-    actual, ends = a.dense(*args, cs)
+    actual, ends, _ = a.dense(*args, cs)
     expected, ref_ends = oracle(a, args, cs)
     torch.testing.assert_close(ends, ref_ends, rtol=0, atol=0)
     torch.testing.assert_close(actual, expected, rtol=1e-10, atol=1e-10)
@@ -148,28 +130,71 @@ def test_prefix_causality_and_future_gradients(mode):
     assert torch.count_nonzero(g[:, :19]) > 0
 
 
-def test_exact_budget_even_adversarial_router():
-    c = config(hca_block_size=16, hca_budget_chunks=16, hca_window=256, sequence_length=2048)
-    for constant in (-1000., 0., 1000.):
-        content = torch.full((3, 2048), constant, device=DEVICE)
-        content[2] = torch.randn(2048, device=DEVICE) * 30
-        age = torch.zeros(3, dtype=torch.long, device=DEVICE); used = age.clone()
-        ends = []
-        for t in range(2048):
-            gate = boundary_step(content[:, t], age, used, t, c)
-            hard = gate.bool(); ends.append(gate)
-            age = torch.where(hard, 0, age+1); used += hard.long()
-            if (t+1) % 256 == 0:
-                assert (used == 16).all(); used.zero_()
-        ends = torch.stack(ends, 1)
-        torch.testing.assert_close(ends, independent_ends(content, c))
-        assert (ends.sum(1) == 128).all()
+def test_free_boundaries_without_quota_or_maximum_length():
+    c = config(hca_block_size=16, hca_window=16, sequence_length=2048)
+    for constant, expected in ((-1000., 1), (1000., 2048)):
+        content = torch.full((2, 2048), constant, device=DEVICE)
+        starts = torch.stack([boundary_step(content[:, t], t, c)[0] for t in range(2048)], 1)
+        torch.testing.assert_close(starts, independent_starts(content, c))
+        assert (starts.sum(1) == expected).all()
+    # Changing the target R must not change inference routing for fixed weights.
+    content = torch.randn(2, 70, device=DEVICE)
+    for t in range(70):
+        a = boundary_step(content[:, t], t, c)[0]
+        b = boundary_step(content[:, t], t, replace(c, hca_block_size=64))[0]
+        torch.testing.assert_close(a, b, rtol=0, atol=0)
+
+
+def test_global_one_sided_compression_loss_and_gradient():
+    # One layer exceeds the budget; another compensates. ReLU is GLOBAL.
+    soft = torch.tensor([.1, .01], device=DEVICE, requires_grad=True)
+    loss = compression_loss(soft.sum(), 2, 16)
+    assert loss.item() == 0
+    loss.backward(); assert torch.count_nonzero(soft.grad) == 0
+    high = torch.tensor([.8, .6], device=DEVICE, requires_grad=True)
+    loss = compression_loss(high.sum(), 2, 16)
+    torch.testing.assert_close(loss, high.new_tensor(.7 - 1/16))
+    loss.backward(); torch.testing.assert_close(high.grad, torch.full_like(high, .5))
+    m = model(config(hca_block_size=16)).train()
+    x = torch.randint(0, 64, (2, 64), device=DEVICE)
+    parts = m(x, (x+1) % 64, dense=True, return_loss_components=True)
+    torch.testing.assert_close(parts['total'], parts['ce'] + parts['compression_loss'])
+    params = [b.attn.boundary.bias for b in m.blocks]
+    grads = torch.autograd.grad(parts['compression_loss'], params)
+    assert all(g.item() > 0 for g in grads), 'Gradient descent must reduce new-entry logits'
+    m.eval()
+    evaluation = m(x, (x+1) % 64, dense=True, return_loss_components=True)
+    torch.testing.assert_close(evaluation['total'], evaluation['ce'], rtol=0, atol=0)
+
+
+def test_open_chunk_longer_than_window_and_no_call_end_flush():
+    m = model().eval()
+    with torch.no_grad():
+        for b in m.blocks:
+            b.attn.boundary.weight.zero_(); b.attn.boundary.bias.fill_(-1000.)
+        x = torch.randint(0, 64, (1, 65), device=DEVICE)
+        expected = m(x)
+        cache = m.make_kv_cache()
+        first = m(x[:, :33], kv_cache=cache)
+        assert cache.statistics()['compressed_entries'] == [[1], [1]]
+        assert cache.statistics()['completed_chunks'] == [[0], [0]]
+        second = m(x[:, 33:], kv_cache=cache)
+        torch.testing.assert_close(torch.cat((first, second), 1), expected, rtol=2e-6, atol=2e-6)
+        assert cache.statistics()['open_chunk_tokens'] == [[65], [65]]
+        assert all(s.local_k.shape[0] == 16 for layer in cache.layers for s in layer)
+        # Past information beyond SWA participates in the prefix summary.
+        a = m.blocks[0].attn
+        features = torch.randn(1, 65, 32, device=DEVICE)
+        args = a.project(features, (m.cos[:, :65], m.sin[:, :65]))
+        reference, _ = oracle(a, args, (m.cos[:, :65], m.sin[:, :65]))
+        actual, _, _ = a.dense(*args, (m.cos[:, :65], m.sin[:, :65]))
+        torch.testing.assert_close(actual, reference, rtol=2e-6, atol=2e-6)
 
 
 def test_language_model_loss_trains_router_and_pool():
     m = model().train()
     x = torch.randint(0, 64, (2, 64), device=DEVICE)
-    loss = m(x, (x+1) % 64, dense=True)
+    loss = m(x, (x+1) % 64, dense=True, return_loss_components=True)['ce']
     loss.backward()
     for b in m.blocks:
         for p in (b.attn.boundary.weight, b.attn.pool_score.weight):
@@ -230,7 +255,7 @@ def test_cache_roundtrip_broadcast_reset_and_bad_api():
     with pytest.raises(ValueError):
         m.prepare(DEVICE, compile_blocks=True)
     with pytest.raises(ValueError):
-        replace(config(), hca_window=1)
+        replace(config(), hca_window=0)
 
 
 def test_train_eval_hard_forward_checkpoint_and_rng_restore():

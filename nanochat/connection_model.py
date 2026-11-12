@@ -36,7 +36,7 @@ class ConnectionConfig:
     attention_kernel: str = 'original'
     attention_mode: str = 'full'
     hca_block_size: int = 16
-    hca_budget_chunks: int = 16
+    hca_ratio_loss_weight: float = 1.0
     hca_window: int = 256  # includes the current token
     hca_temperature: float = 1.0
     hca_noise: bool = True
@@ -50,12 +50,10 @@ class ConnectionConfig:
         if self.attention_mode != 'full':
             if self.architecture != 'vanilla' or self.variant != 'baseline' or self.streams != 1 or self.attention_kernel != 'original':
                 raise ValueError('HCA reference supports vanilla baseline, one stream, original projections')
-            if any(type(v) is not int or v < 1 for v in (self.hca_block_size, self.hca_budget_chunks, self.hca_window)):
-                raise ValueError('HCA block size, budget and window must be positive integers')
-            if self.hca_budget_chunks < 2 or self.hca_block_size < 2:
-                raise ValueError('HCA needs block size and budget >= 2')
-            if self.hca_window < self.hca_block_size * self.hca_budget_chunks:
-                raise ValueError('SWA must cover the longest unfinished budget frame')
+            if any(type(v) is not int or v < 1 for v in (self.hca_block_size, self.hca_window)):
+                raise ValueError('HCA block size and window must be positive integers')
+            if not math.isfinite(self.hca_ratio_loss_weight) or self.hca_ratio_loss_weight < 0:
+                raise ValueError('HCA ratio loss weight must be finite and nonnegative')
             if not math.isfinite(self.hca_temperature) or self.hca_temperature <= 0 or type(self.hca_noise) is not bool:
                 raise ValueError('Invalid HCA temperature/noise')
         if self.variant in ('skip_scale','attnres_scale'):
@@ -110,6 +108,10 @@ class ConnectionConfig:
     def from_checkpoint(cls, config):
         """Read pre-cleanup NVIDIA/vanilla metadata; reject retired model weights."""
         config = dict(config)
+        if 'hca_budget_chunks' in config:
+            if config.get('attention_mode', 'full') != 'full':
+                raise ValueError('Checkpoint uses the stopped hard-quota HCA semantics')
+            config.pop('hca_budget_chunks')  # inert default in full-attention metadata
         if config.pop('window_final_full', True) is not True:
             raise ValueError('Checkpoint belongs to the retired native frontloaded-attention experiment')
         if config.pop('attention_pattern', 'full') != 'full':
@@ -191,6 +193,12 @@ class ConnectionBlock(Block):
 
     def mlp_branch(self, h):
         return self.mlp(norm(h))
+
+    def hca_forward(self, x, cos, sin):
+        """Explicit auxiliary output survives activation checkpoint recomputation."""
+        attention, stats = self.attn.forward_with_stats(norm(x), (cos, sin))
+        x = x + attention
+        return x + self.mlp(norm(x)), stats
 
     def forward(self, x, cos, sin, kv_cache=None):
         if self.variant == 'baseline':
@@ -290,7 +298,7 @@ class ConnectionModel(nn.Module):
         return KVCache(batch_size, c.heads, c.sequence_length, c.width // c.heads,
                        c.depth, self.wte.weight.device, self.wte.weight.dtype)
 
-    def hidden(self, idx, kv_cache=None):
+    def hidden(self, idx, kv_cache=None, return_hca_stats=False):
         if self.config.attention_mode != 'full' and kv_cache is not None:
             from nanochat.hca import HCAKVCache
             if not isinstance(kv_cache, HCAKVCache) or kv_cache.config != self.config:
@@ -304,7 +312,15 @@ class ConnectionModel(nn.Module):
         if self.config.variant not in ('baseline', 'skip_scale'):
             x = expand_streams(x, self.config.streams)
         cos, sin = self.cos[:, start:start+idx.shape[1]], self.sin[:, start:start+idx.shape[1]]
+        routing = []
         for i, b in enumerate(self.blocks):
+            if self.config.attention_mode != 'full' and kv_cache is None:
+                if self.config.activation_checkpoint and self.training and torch.is_grad_enabled():
+                    x, stats = checkpoint(b.hca_forward, x, cos, sin, use_reentrant=False)
+                else:
+                    x, stats = b.hca_forward(x, cos, sin)
+                routing.append(stats)
+                continue
             fn = self.compiled_steps[i] if self.compiled_steps is not None else b.forward
             if self.config.activation_checkpoint and self.training and torch.is_grad_enabled():
                 if kv_cache is not None:
@@ -314,20 +330,47 @@ class ConnectionModel(nn.Module):
                 x = fn(x, cos, sin, kv_cache)
         if self.stream_head is not None:
             x = self.stream_head(x)
+        if return_hca_stats:
+            return norm(x), torch.stack(routing).sum(0) if routing else None
         return norm(x)
 
-    def forward(self, idx, targets=None, dense=False, kv_cache=None):
-        h = self.hidden(idx, kv_cache)
+    def forward(self, idx, targets=None, dense=False, kv_cache=None, return_loss_components=False):
+        hca = self.config.attention_mode != 'full'
+        if hca and kv_cache is not None and targets is not None:
+            raise ValueError('Mutable HCA cache is for inference logits only')
+        stats = None
+        if hca:
+            h, stats = self.hidden(idx, kv_cache, return_hca_stats=True)
+        else:
+            h = self.hidden(idx, kv_cache)
+        ratio_loss = h.new_zeros((), dtype=torch.float32) if hca else None
+        if stats is not None:
+            from nanochat.hca import compression_loss
+            if self.config.attention_mode == 'dynamic_hca':
+                ratio_loss = compression_loss(stats[0], stats[2], self.config.hca_block_size)
+            # Only detached scalars are retained on the model, never a graph.
+            self.last_hca_metrics = dict(soft_keep_rate=(stats[0]/stats[2]).detach(),
+                                         hard_keep_rate=(stats[1]/stats[2]).detach(),
+                                         compression_loss=ratio_loss.detach())
         w = self.lm_head.weight.to(h.dtype)
         if targets is None or dense:
             logits = 15 * torch.tanh(F.linear(h, w).float() / 15)
             if targets is None:
                 return logits
-            return F.cross_entropy(logits.flatten(0, 1), targets.flatten())
-        from cut_cross_entropy import linear_cross_entropy
-        return linear_cross_entropy(h, w, targets, softcap=15., shift=0,
-            reduction='mean', filter_eps=None, filter_e_grad=False, filter_c_grad=False,
-            accum_e_fp32=True, accum_c_fp32=True)
+            ce = F.cross_entropy(logits.flatten(0, 1), targets.flatten())
+        else:
+            from cut_cross_entropy import linear_cross_entropy
+            ce = linear_cross_entropy(h, w, targets, softcap=15., shift=0,
+                reduction='mean', filter_eps=None, filter_e_grad=False, filter_c_grad=False,
+                accum_e_fp32=True, accum_c_fp32=True)
+        if not hca:
+            return ce
+        total = ce + self.config.hca_ratio_loss_weight * ratio_loss if self.training else ce
+        self.last_hca_metrics.update(ce=ce.detach(), objective=total.detach())
+        if return_loss_components:
+            return dict(ce=ce, compression_loss=ratio_loss, total=total,
+                        soft_keep_rate=stats[0]/stats[2], hard_keep_rate=stats[1]/stats[2])
+        return total
 
 
 def optimizer_for(model, batch_tokens=32768):

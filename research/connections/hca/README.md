@@ -1,168 +1,181 @@
-# Fixed / Dynamic HCA reference
+# Fixed HCA / free Dynamic HCA
 
-Status: implementation and validation harness; GPU results are recorded separately
-in `validation.json` when available. No formal pretraining or quality claim.
+Status: reference implementation; GPU validation results are recorded separately.
+No formal pretraining or matched-budget quality result. The initial hard-quota
+version was stopped; its checkpoints are explicitly rejected for HCA loading.
 
-This adds `attention_mode = full | fixed_hca | dynamic_hca` to the existing vanilla
-`ConnectionModel`. `full` is the unchanged default. The first port requires
-`variant=baseline, architecture=vanilla, streams=1, attention_kernel=original`.
-Native GPT, existing residual variants and their checkpoints retain their paths.
+`ConnectionConfig.attention_mode = full | fixed_hca | dynamic_hca` selects the
+attention. `full` retains the original default. HCA currently requires vanilla,
+baseline residuals, one stream and the original Q/K/V projection layout.
 
-## Research sources and deliberate adaptations
+## Sources and scope
 
 - [DeepSeek-V4 §2.3.2–3](https://arxiv.org/html/2606.19348v1#S2.SS3.SSS2),
   [official Compressor/Attention implementation](https://huggingface.co/deepseek-ai/DeepSeek-V4-Pro/blob/main/inference/model.py):
-  per-channel softmax pooling, recent uncompressed SWA, completed compressed KV.
-- [DMC, ICML 2024 §3 / Appendix G](https://arxiv.org/html/2403.09636v2):
-  learned discrete merge decisions, Gumbel-Sigmoid relaxation, unrolled partial
-  accumulations and differentiable attention masking. No official standalone
-  DMC implementation was identified during this review; its equations are the
-  reference, not an unattributed third-party implementation.
+  per-channel softmax pooling, local raw KV plus compressed history.
+- [DMC, ICML 2024 §3.2, equations 9–12 and Appendix G](https://arxiv.org/html/2403.09636v2#S3.SS2):
+  Gumbel-Sigmoid, partial accumulations, masking intermediate states, global
+  one-sided compression loss. No official standalone DMC implementation was
+  identified in this review; its equations are the reference.
 - [H-Net §2.2–2.4](https://arxiv.org/html/2507.07955v1),
   [official routing implementation](https://github.com/goombalab/hnet/blob/main/hnet/modules/dc.py):
-  content-dependent routing with separate forward/step state, ratio control.
-  H-Net's hierarchical byte model and cosine router are not ported wholesale.
+  content-adaptive routing and separate prefill/step state handling.
 
-These are independently written nanochat adaptations. In particular we keep
-nanochat's separate K/V and head count, full RoPE, QK RMSNorm and 1.2 scaling,
-MLP, residuals, vocabulary and data. We do not adopt DeepSeek's shared K=V MQA,
-partial RoPE, inverse output RoPE, grouped output projection or learned sink.
-Both variants use identical pooling, local context and attention normalization;
-only Dynamic adds one scalar content router per layer, shared across its heads.
-Backbone weights and RNG match the same-seed baseline exactly at construction.
+This is an independent nanochat adaptation. We retain separate K/V, the original
+head count, full RoPE/QK RMSNorm/1.2 scaling, MLP, residuals and data. We do not
+port DeepSeek's shared K=V MQA, partial/inverse RoPE, grouped output projection
+or learned sink, or H-Net's hierarchical byte model. Same-seed backbone weights
+and RNG are preserved when adding pooling/router modules.
 
-## Equal-budget causal chunking
+## Free boundaries and the DMC-style objective
 
-Defaults: B=16, K=16 summaries per budget frame, frame=B*K=256 tokens,
-local SWA W=256 tokens **including the current token**. Fixed closes every B
-tokens. Dynamic decides to close **after** observing the current token:
+Fixed uses B=16 by default, starting a new chunk at t % B == 0. Dynamic predicts
+one scalar per token per layer from the current causal normalized hidden state;
+the layer shares its boundaries across heads:
 
-    logit_t = Linear(normalized_hidden_t) + (current_chunk_length - B)/(B/4)
-    soft_t = sigmoid((logit_t + logistic_noise_t)/temperature)
-    end_t = hard(soft_t >= 0.5) + soft_t - stop_gradient(soft_t)
+    logit_t = Linear(hidden_t)
+    soft_start_t = sigmoid((logit_t + logistic_noise_t)/temperature)
+    hard_start_t = (soft_start_t >= 0.5)
+    start_t = hard_start_t + soft_start_t - stop_gradient(soft_start_t)
 
-The age denominator is at least 1. Router weights/bias start at zero; without
-noise this starts at fixed boundaries. Temperature defaults to 1. Training
-uses logistic noise (difference of two Gumbels); evaluation/cache uses no noise.
-`hca_noise=False` makes the hard training/evaluation computation identical.
-The estimator is biased: hard decisions are not mathematically differentiable.
-It supplies task gradients through both accumulator reset and summary visibility,
-not just an auxiliary budget objective.
+Only the first token is forced to start a chunk. There is no age prior, maximum
+chunk length, per-frame quota, fixed number of summaries, or end-of-call flush.
+Positive or negative router logits can generate one entry per token or a single
+chunk spanning the whole sequence. Changing target R does not directly change
+inference boundaries. Routing weights start at zero and bias at +2, starting
+mostly uncompressed. No initial or untrained 16x compression is claimed.
 
-A causal quota controller reserves the final frame position for the last chunk,
-allows at most K-1 earlier closures, and forces a closure when the remaining
-token positions equal the remaining quota. It reads no future hidden states,
-does no sequence-wide top-k, and never flushes at a forward-call boundary.
-Every complete 256-token frame has exactly 16 nonempty chunks, regardless of
-router parameters/noise. Thus both models have exactly 128 completed summaries
-per layer at 2K. Short prefixes / partial frames can have different counts;
-reports must use actual counts there, not label all prefixes as exactly 16x.
+During training logistic noise is the difference of two Gumbels. Evaluation and
+cached decoding use noiseless decisions. Temperature defaults to 1 and is
+configurable; `hca_noise=False` gives identical hard forward semantics in train
+and eval. Straight-through gradients are a biased estimator, not exact
+derivatives of the hard threshold. They reach the LM objective through pooling
+reset and summary visibility. The compression objective uses the **continuous**
+relaxation, separately from the hard-forward estimator:
 
-This budget-frame restriction is an intentional controlled comparison, **not**
-original DMC or unconstrained variable-rate HCA. A ratio penalty alone would not
-guarantee the user's equal-average-budget requirement. The tradeoff is forced
-frame boundaries and zero router gradient at quota-forced decisions. Report
-chunk-length distributions as well as quality in any later trained comparison.
+    global_soft_keep_rate = sum(soft_start) / number_of_token_layer_decisions
+    L_CR = max(0, global_soft_keep_rate - 1/R)
+    L_total = L_CE + hca_ratio_loss_weight * L_CR
 
-## Pooling and unfinished chunks
+Here soft_start = 1-alpha in DMC notation, R=`hca_block_size` (default 16), and
+the loss coefficient defaults to 1. All samples, tokens and layers in a forward
+microbatch are aggregated **before** the ReLU. Because every layer has the same
+number of heads and shares its routing across those heads, head weighting
+cancels. Layers can compensate each other. With gradient accumulation this is
+a per-forward-microbatch global loss, not one ReLU over all accumulated batches.
+The compulsory first KV entry is counted, including in short sequences.
 
-A shared K/V weight is learned independently for each channel:
+Too many retained KV entries incur a penalty; greater compression incurs no
+penalty from L_CR, with the LM objective providing the information-preservation
+tradeoff. This is not an equality constraint and does not guarantee actual R.
+Log continuous keep rate, hard keep rate, and actual inference cache entries
+separately. A later quality comparison must match measured average cache budgets
+on held-out data, freeze its settings, and report any mismatch. A target R=16
+label alone is not evidence of a fair comparison. No long training is authorized
+or launched by this implementation task.
+
+## Pooling, causality and arbitrarily long unfinished chunks
+
+The following is per-channel softmax pooling with common weights for separate
+K and V, accumulating in FP32 (FP64 for the oracle):
 
     score_t = 10 * tanh(Linear(hidden_t)/10)
     a_t = exp(score_t)
-    mass_t = (1-end_(t-1))*mass_(t-1) + a_t
-    sumK_t = (1-end_(t-1))*sumK_(t-1) + a_t*K_t
-    sumV_t = (1-end_(t-1))*sumV_(t-1) + a_t*V_t
-    pooledK_t = sumK_t/mass_t; pooledV_t = sumV_t/mass_t
+    mass_t = (1-start_t)*mass_(t-1) + a_t
+    sumK_t = (1-start_t)*sumK_(t-1) + a_t*K_t
+    sumV_t = (1-start_t)*sumV_(t-1) + a_t*V_t
+    prefixK_t = sumK_t/mass_t; prefixV_t = sumV_t/mass_t
 
-This is exactly per-channel softmax pooling over the hard current chunk.
-The smooth bounded scores prevent overflow in the STE reset derivative; there
-is no block-position bias table. Accumulators and router/pooling projections
-are FP32 (FP64 in the numerical oracle). Completed summaries are stored at the
-activation dtype. Pool unrotated K/V, then RoPE the summary K at its **closing
-token position** and apply nanochat's QK normalization/scaling. This position
-choice differs from DeepSeek's fixed-block start position; both variants here
-use the closing position. Values are not rotated.
+Smoothly bounded pooling logits prevent overflow in the STE reset derivative.
+We pool unrotated K/V; the prefix K then receives RoPE at the last included token
+and nanochat QK normalization/scaling. Values are not rotated. There is no
+learned block-position bias table in this port.
 
-A query at t attends to raw KV from max(0,t-W+1)..t and every summary closed
-strictly before t, with **one joint softmax**. Local tokens may overlap summaries,
-as in the HCA two-pool design. The new summary becomes visible at t+1.
-The unclosed chunk remains only in the accumulation state plus the local raw
-window; it is not a visible summary, and no future tokens enter a past query.
-Requiring W >= frame ensures even the longest possible unclosed chunk remains
-fully covered by local attention. A call ending mid-chunk preserves its state
-for the next call; it does not publish a synthetic EOS summary.
+A query attends with **one softmax** to:
 
-## Training and cache implementation
+1. Recent W=256 raw KV, including the current token.
+2. Completed chunks from its observed prefix.
+3. The current unfinished chunk's prefix summary, including only observed tokens.
 
-Training unrolls one candidate prefix summary per token and applies hard gates
-to its softmax numerator. Zero gates remove candidates exactly, while allowing
-finite surrogate gradients at zero (no `log(0)` autograd). Future candidates
-are also excluded from numerical softmax stabilization. This reference uses
-dense attention and a Python recurrence: it is **not** a training memory/speed
-optimization. Fullgraph block compilation is explicitly rejected for now.
-Activation checkpointing preserves noise RNG and is tested.
+The third entry is a DMC-style adaptation applied equally to Fixed and Dynamic.
+It differs from DeepSeek HCA's completed-only history. Without it, an arbitrarily
+long dynamic chunk would hide its older tokens after they leave SWA. This design
+needs only a constant-size accumulation state, not an unbounded raw tail.
+Local raw KV may overlap summarized information in both modes.
 
-Inference uses a distinct `HCAKVCache` storing only W raw KV, actual completed
-summaries, three FP32 accumulator tensors, and small per-layer/per-example
-counters. It supports arbitrary prefill splits, single-token decode,
-state serialization, reset and batch=1 prefix broadcast. Input rows have equal
-sequence lengths; padding masks, document-reset masks and speculative rollback
-are not part of this initial API. Existing packed sequence semantics are kept.
-Cache use requires `eval()` plus `no_grad()`; the mutable cache is not a training
-TBPTT API. Baseline's `make_kv_cache()` returns the existing ordinary KVCache.
+When token t starts a new chunk, the previous prefix ending at t-1 becomes an
+immutable summary and a fresh prefix begins with t. Otherwise it updates the
+current prefix. A training candidate j is visible to query t>j only if j+1
+starts a chunk; the query's own candidate is always visible. Thus no earlier
+query sees a future version of a prefix or a future routing decision. Future
+candidates are excluded from numerical softmax stabilization as well.
+Ending a prefill call or sequence does not add a synthetic closure.
 
-At T=2048, B=16, W=256, there are 384 stored KV pairs per head (256 raw + 128
-summary) plus three FP32 accumulators. At BF16 this is about **5.29x actual tensor
-cache reduction**, even though the history compression ratio is 16x. Dynamic
-and Fixed have the same tensor cache budget at complete frame endpoints; Dynamic
-is meant to improve *quality at that budget*, not to save additional bytes there.
-Accounting includes live backing-storage sizes, not only logical tensor shapes.
-Python object overhead, allocator fragmentation and model parameters are separate.
+## API, training and actual cache storage
 
-## Usage
+Training stores all intermediate prefix candidates and uses dense masked
+attention plus a Python recurrence. This is a correctness reference, not a
+training memory or speed optimization. Fullgraph compilation is rejected for
+HCA. Checkpoint recomputation returns auxiliary statistics explicitly, preserving
+Gumbel RNG; it does not rely on mutable module attributes for loss gradients.
+
+Inference uses `HCAKVCache`: W raw KV, only the actual completed summaries, one
+current prefix KV pair, three accumulation tensors and small counters. It
+supports split prefill, token decode, serialization, reset and prefix broadcast.
+Equal-length batch rows are supported; padding masks, speculative rollback and
+document-reset masks are outside this initial API. Existing packed-data sequence
+semantics remain. Use `eval()` and `no_grad()`; cached calls produce logits only.
+
+`cache.statistics()` reports completed chunks, all compressed entries (including
+the open prefix), tail lengths, logical bytes and actual backing-storage bytes.
+At 2K, Fixed B=16 gives 128 entries, including the unfinished final chunk; with
+W=256 and FP32 accumulators, BF16 tensor cache reduction is about 5.29x rather
+than 16x. Dynamic entries and byte savings are **measured**, never assumed equal
+to Fixed. An untrained near-uncompressed router may even use more cache than
+the baseline. Python metadata/model/allocator overhead are separate metrics.
 
 ```python
+import torch
 from nanochat.connection_model import ConnectionConfig, build_connection_model
 
 cfg = ConnectionConfig(variant='baseline', streams=1,
-                       attention_mode='dynamic_hca', hca_block_size=16)
+                       attention_mode='dynamic_hca', hca_block_size=16,
+                       hca_ratio_loss_weight=1.0)
 model = build_connection_model(cfg).prepare(compile_blocks=False)
-loss = model(tokens, targets)   # existing CCE; router/pool get task gradients
-loss.backward()
+parts = model(tokens, targets, return_loss_components=True)
+parts['total'].backward()  # CE + global compression loss in train mode
+print(model.last_hca_metrics)  # detached CE, objective, soft/hard rates, L_CR
 model.eval()
-cache = model.make_kv_cache(batch_size=1)
 with torch.no_grad():
+    ce = model(tokens, targets)  # evaluation returns pure CE
+    cache = model.make_kv_cache(batch_size=1)
     model(prompt[:, :101], kv_cache=cache)
     logits = model(prompt[:, 101:], kv_cache=cache)
 print(cache.statistics())
 ```
 
-The existing `scripts.connection_train` accepts `--attention-mode`,
-`--hca-block-size`, `--hca-budget-chunks`, `--hca-window`, `--hca-temperature`,
-`--hca-noise` / `--no-hca-noise`. It chooses eager blocks for HCA. Pool/router
-parameters use the existing connector AdamW group; backbone MuonAdamW remains
-unchanged. Configs/checkpoints carry all HCA fields; legacy configs default to
-full attention. This interface does not authorize a new training run.
+`scripts.connection_train` accepts `--attention-mode`, `--hca-block-size`,
+`--hca-ratio-loss-weight`, `--hca-window`, `--hca-temperature`, `--hca-noise` /
+`--no-hca-noise`. Pool/router use the existing connector AdamW group; backbone
+MuonAdamW is unchanged. Training logs separate CE/objective/compression/rates;
+dev/test and checkpoint selection use CE only. Config saves target and weight.
 
-## Validation scope
+## Bounded validation
 
-Run only on HTCondor workers:
+Only run on HTCondor workers:
 
 ```sh
 python -m pytest -v tests/test_hca.py
 python -m scripts.connection_hca_gate
 ```
 
-Checks cover independent FP64 forward/all continuous-input VJPs, boundary quota
-under extreme logits, finite pool gradients, nonzero LM gradients to routing,
-future perturbation and exact zero future gradients, BF16/FP32 dense vs split
-prefill/single decode, unfinished tails, cache serialization/broadcast/reset,
-baseline weights/RNG, activation recomputation/Gumbel RNG, real MuonAdamW
-next-step restoration and CCE gradients. Discrete STE derivatives are not
-misrepresented as finite-difference derivatives of a hard threshold.
-
-The bounded gate also compares full/fixed/dynamic on the existing FineWeb 2K
-cache at D512/H4/two layers, measuring actual cache bytes and recording same-GPU
-reference runtime. These timings describe the unoptimized reference only.
-Diagnostic CE from untrained weights is not a trained quality comparison.
+Checks cover FP64 independent prefix-pooling oracle/all continuous VJPs,
+single-sided global penalty/value/gradient direction, free boundary counts and
+target-independent inference decisions, nonzero **CE-only** router/pool gradients,
+prefix causality/zero future gradients, FP32/BF16 prefill/decode equivalence,
+unclosed chunks longer than SWA, serialization/broadcast/reset, backbone RNG,
+Gumbel activation checkpoint recomputation, true MuonAdamW next-step restore
+and CCE gradients. The hard STE is not finite-difference-tested as an exact
+derivative. A same-GPU FineWeb 2K/D512/H4/two-layer comparison reports actual
+bytes, actual ratios and unoptimized runtime, and labels untrained diagnostic CE
+as unsuitable for quality conclusions. It does not assert target R was achieved.

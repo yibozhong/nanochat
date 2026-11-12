@@ -1,7 +1,7 @@
 """Correctness-first HCA reference: hard causal chunking, differentiable training.
 
 Fixed and dynamic modes share pooling, RoPE, SWA and inference cache semantics.
-Dynamic uses an EXACT causal budget per frame, not a soft ratio-loss promise.
+Dynamic uses a global one-sided compression loss, with no boundary quota.
 This is a nanochat adaptation, not a reproduction of DeepSeek/DMC/H-Net.
 See research/connections/hca/README.md for equations and estimator limitations.
 """
@@ -20,32 +20,36 @@ def work_dtype(x):
     return torch.float64 if x.dtype == torch.float64 else torch.float32
 
 
-def boundary_step(content, age, used, position, config, noise=None):
-    """End *after* this token. All decisions use only the observed prefix.
+def boundary_step(content, position, config, noise=None):
+    """Start a chunk BEFORE the current token; 1-alpha in DMC's notation.
 
-    Reserve the final frame token for the last boundary. At most K-1 earlier
-    boundaries, and force them if the remaining positions equal the quota.
-    No ranking across future tokens, sequence-wide threshold, or end flush.
+    Returns a hard-forward STE gate and its continuous relaxation. Only the
+    first token must start a chunk. Dynamic has no age rule, length cap, quota,
+    lookahead or end-of-call flush. The current hidden state is causal.
     """
-    b, quota = config.hca_block_size, config.hca_budget_chunks
-    frame = b * quota
     if config.attention_mode == 'fixed_hca':
-        return torch.full_like(content, float((position + 1) % b == 0))
-    # Age prior initializes noiseless routing to the fixed B-token partition.
-    logits = content + (age.to(content.dtype) + 1 - b) / max(b / 4, 1)
-    soft = torch.sigmoid((logits if noise is None else logits + noise) / config.hca_temperature)
+        hard = torch.full_like(content, float(position % config.hca_block_size == 0))
+        return hard, hard
+    if position == 0:
+        first = torch.ones_like(content)
+        return first, first
+    soft = torch.sigmoid((content if noise is None else content + noise) / config.hca_temperature)
     hard = (soft >= .5).to(soft.dtype)
     gate = hard + (soft - soft.detach())  # hard forward, biased STE backward
-    offset = position % frame
-    remaining = quota - used
-    slots = frame - offset
-    forced_end = (remaining == slots) | (offset == frame - 1)
-    allowed = remaining > 1  # reserve one nonempty final chunk
-    return torch.where(forced_end, torch.ones_like(gate),
-                       torch.where(allowed, gate, torch.zeros_like(gate)))
+    return gate, soft
 
 
-def pool_step(k, v, score, previous, previous_end):
+def compression_loss(soft_count, count, ratio):
+    """DMC eq.11: ReLU(mean(1-alpha) - 1/R), globally before ReLU.
+
+    Count includes the compulsory first entry. Same number of KV heads in
+    every layer makes our shared-per-layer routing average identical to a
+    head-weighted average. This is a soft target, not a rate guarantee.
+    """
+    return F.relu(soft_count / count - 1. / ratio)
+
+
+def pool_step(k, v, score, previous, start):
     """Per-channel softmax accumulation, shared weights for separate K and V.
 
     The learned logits are bounded smoothly to [-10,10]. This avoids overflow
@@ -55,7 +59,7 @@ def pool_step(k, v, score, previous, previous_end):
     dtype = work_dtype(k)
     weight = torch.exp(10 * torch.tanh(score.to(dtype) / 10))
     mass, sk, sv = previous
-    keep = (1 - previous_end).unsqueeze(-1).unsqueeze(-1)
+    keep = (1 - start).unsqueeze(-1).unsqueeze(-1)
     mass = keep * mass + weight
     sk = keep * sk + weight * k.to(dtype)
     sv = keep * sv + weight * v.to(dtype)
@@ -85,13 +89,13 @@ def weighted_attention(q, k, v, weights, eligible=None):
 class LayerCache:
     position: int = 0
     age: int = 0
-    used: int = 0
-    previous_end: float = 1.
     pool: tuple = field(default_factory=tuple)
     local_k: torch.Tensor | None = None
     local_v: torch.Tensor | None = None
     summary_k: torch.Tensor | None = None
     summary_v: torch.Tensor | None = None
+    open_k: torch.Tensor | None = None
+    open_v: torch.Tensor | None = None
     ends: list = field(default_factory=list)
 
 
@@ -146,18 +150,20 @@ class HCAKVCache:
 
     def statistics(self):
         storage = {}
-        counts, tails = [], []
+        counts, tails, entries = [], [], []
         tensor_bytes = 0
         for layer in self.layers:
             counts.append([len(s.ends) for s in layer])
             tails.append([s.age for s in layer])
+            entries.append([len(s.ends) + int(s.position > 0) for s in layer])
             for s in layer:
-                for t in (*s.pool, s.local_k, s.local_v, s.summary_k, s.summary_v):
+                for t in (*s.pool, s.local_k, s.local_v, s.summary_k, s.summary_v, s.open_k, s.open_v):
                     if t is not None:
                         tensor_bytes += t.numel() * t.element_size()
                         st = t.untyped_storage()
                         storage[(str(t.device), st.data_ptr())] = st.nbytes()
         return dict(tokens=self.position, completed_chunks=counts, open_chunk_tokens=tails,
+                    compressed_entries=entries,
                     tensor_bytes=tensor_bytes, storage_bytes=sum(storage.values()),
                     local_window=self.config.hca_window,
                     note='Tensor storage only; excludes Python metadata, model and allocator overhead')
@@ -178,7 +184,9 @@ class HCAAttention(nn.Module):
         self.boundary = nn.Linear(config.width, 1) if config.attention_mode == 'dynamic_hca' else None
         if self.boundary is not None:
             nn.init.zeros_(self.boundary.weight)
-            nn.init.zeros_(self.boundary.bias)
+            # Start mostly uncompressed, as in DMC's retrofitting strategy.
+            # R=16 is an objective, never an initialization/achieved-rate claim.
+            nn.init.constant_(self.boundary.bias, 2.)
 
     def project(self, x, cos_sin):
         shape = (*x.shape[:2], self.n_head, self.head_dim)
@@ -195,31 +203,29 @@ class HCAAttention(nn.Module):
     def dense(self, q, raw_k, local_k, v, score, content, cos_sin, noise=None):
         batch, length, heads, dim = q.shape
         dtype = work_dtype(q)
-        age = torch.zeros(batch, dtype=torch.long, device=q.device)
-        used = torch.zeros_like(age)
-        end = torch.ones(batch, dtype=dtype, device=q.device)
         pool = tuple(torch.zeros((batch, heads, dim), dtype=dtype, device=q.device) for _ in range(3))
-        keys, values, ends = [], [], []
+        keys, values, starts, soft_starts = [], [], [], []
         for t in range(length):
-            pool, pk, pv = pool_step(raw_k[:, t], v[:, t], score[:, t], pool, end)
-            end = boundary_step(content[:, t], age, used, t, self.config, None if noise is None else noise[:, t])
-            hard = end.detach().bool()
-            age = torch.where(hard, 0, age + 1)
-            used = used + hard.long()
-            if (t + 1) % (self.config.hca_block_size * self.config.hca_budget_chunks) == 0:
-                used = torch.zeros_like(used)
-            keys.append(pk); values.append(pv); ends.append(end)
+            start, soft = boundary_step(content[:, t], t, self.config, None if noise is None else noise[:, t])
+            pool, pk, pv = pool_step(raw_k[:, t], v[:, t], score[:, t], pool, start)
+            keys.append(pk); values.append(pv); starts.append(start); soft_starts.append(soft)
         pk = torch.stack(keys, 1).to(q.dtype)
         pv = torch.stack(values, 1).to(v.dtype)
         pk = norm(apply_rotary_emb(pk, *cos_sin)) * 1.2
-        ends = torch.stack(ends, 1)
+        starts = torch.stack(starts, 1)
+        soft_starts = torch.stack(soft_starts, 1)
         pos = torch.arange(length, device=q.device)
         local = (pos[:, None] >= pos) & (pos[:, None] - pos < self.config.hca_window)
-        completed = (pos[:, None] > pos).to(dtype)[None] * ends[:, None, :]
-        weights = torch.cat((local[None].expand(batch, -1, -1).to(dtype), completed), -1)
-        eligible = torch.cat((local, pos[:, None] > pos), -1)[None].expand(batch, -1, -1)
+        # Candidate j becomes immutable/visible at j+1 iff j+1 starts a chunk.
+        # Each query also sees its current unfinished prefix (the diagonal).
+        # Never expose a later version of this prefix to an earlier query.
+        closed = torch.cat((starts[:, 1:], starts.new_zeros(batch, 1)), 1)
+        memory = (pos[:, None] > pos).to(dtype)[None] * closed[:, None, :]
+        memory = memory + torch.eye(length, dtype=dtype, device=q.device)[None]
+        weights = torch.cat((local[None].expand(batch, -1, -1).to(dtype), memory), -1)
+        eligible = torch.cat((local, pos[:, None] >= pos), -1)[None].expand(batch, -1, -1)
         y = weighted_attention(q, torch.cat((local_k, pk), 1), torch.cat((v, pv), 1), weights, eligible)
-        return y, ends
+        return y, starts, soft_starts
 
     def cached(self, q, raw_k, local_k, v, score, content, cos_sin, cache):
         if torch.is_grad_enabled() or self.training:
@@ -235,10 +241,18 @@ class HCAAttention(nn.Module):
                 raise ValueError('Layer cache position mismatch')
             outputs = []
             for t in range(length):
+                start, _ = boundary_step(content[b:b+1, t], state.position, self.config)
+                begins = bool(start.item())
+                if begins and state.open_k is not None:
+                    state.summary_k = state.open_k.clone() if state.summary_k is None else torch.cat((state.summary_k, state.open_k))
+                    state.summary_v = state.open_v.clone() if state.summary_v is None else torch.cat((state.summary_v, state.open_v))
+                    state.ends.append(state.position - 1)
                 if not state.pool:
                     state.pool = tuple(torch.zeros((1, heads, dim), dtype=dtype, device=q.device) for _ in range(3))
-                previous_end = q.new_tensor([state.previous_end], dtype=dtype)
-                state.pool, pk, pv = pool_step(raw_k[b:b+1, t], v[b:b+1, t], score[b:b+1, t], state.pool, previous_end)
+                state.pool, pk, pv = pool_step(raw_k[b:b+1, t], v[b:b+1, t], score[b:b+1, t], state.pool, start)
+                cos, sin = (r[:, t:t+1] for r in cos_sin)
+                state.open_k = (norm(apply_rotary_emb(pk[:, None].to(q.dtype), cos, sin)) * 1.2)[0].clone()
+                state.open_v = pv.to(v.dtype).clone()
                 lk, lv = local_k[b, t:t+1], v[b, t:t+1]
                 state.local_k = (lk.clone() if state.local_k is None else torch.cat((state.local_k, lk))[-self.config.hca_window:].clone())
                 state.local_v = (lv.clone() if state.local_v is None else torch.cat((state.local_v, lv))[-self.config.hca_window:].clone())
@@ -246,42 +260,35 @@ class HCAAttention(nn.Module):
                 if state.summary_k is not None:
                     keys = torch.cat((keys, state.summary_k))
                     vals = torch.cat((vals, state.summary_v))
+                keys = torch.cat((keys, state.open_k))
+                vals = torch.cat((vals, state.open_v))
                 weights = q.new_ones((1, 1, keys.shape[0]), dtype=dtype)
                 outputs.append(weighted_attention(q[b:b+1, t:t+1], keys[None], vals[None], weights))
-                age = torch.tensor([state.age], device=q.device)
-                used = torch.tensor([state.used], device=q.device)
-                end = boundary_step(content[b:b+1, t], age, used, state.position, self.config)
-                closed = bool(end.item())
-                if closed:
-                    cos, sin = (r[:, t:t+1] for r in cos_sin)
-                    sk = (norm(apply_rotary_emb(pk[:, None].to(q.dtype), cos, sin)) * 1.2)[0]
-                    sv = pv.to(v.dtype)
-                    state.summary_k = sk.clone() if state.summary_k is None else torch.cat((state.summary_k, sk))
-                    state.summary_v = sv.clone() if state.summary_v is None else torch.cat((state.summary_v, sv))
-                    state.ends.append(state.position)
-                state.previous_end = float(closed)
-                state.age = 0 if closed else state.age + 1
-                state.used += int(closed)
+                state.age = 1 if begins else state.age + 1
                 state.position += 1
-                if state.position % (self.config.hca_block_size * self.config.hca_budget_chunks) == 0:
-                    state.used = 0
             results.append(torch.cat(outputs, 1))
         if self.layer_idx == cache.n_layers - 1:
             cache.advance(length)
         return torch.cat(results)
+
+    def forward_with_stats(self, x, cos_sin):
+        if x.shape[1] == 0:
+            raise ValueError('Empty HCA input')
+        args = self.project(x, cos_sin)
+        noise = None
+        if self.training and self.boundary is not None and self.config.hca_noise:
+            u = torch.rand_like(args[-1]).clamp(1e-6, 1 - 1e-6)
+            noise = u.log() - torch.log1p(-u)  # difference of two Gumbels
+        y, starts, soft = self.dense(*args, cos_sin, noise)
+        stats = torch.stack((soft.sum(), starts.detach().sum(), soft.new_tensor(soft.numel())))
+        return self.c_proj(y.reshape(*x.shape[:2], self.n_embd)), stats
 
     def forward(self, x, ve, cos_sin, window_size, kv_cache):
         if ve is not None:
             raise ValueError('Initial HCA port supports vanilla without value embeddings')
         if x.shape[1] == 0:
             raise ValueError('Empty HCA input')
-        args = self.project(x, cos_sin)
         if kv_cache is None:
-            noise = None
-            if self.training and self.boundary is not None and self.config.hca_noise:
-                u = torch.rand_like(args[-1]).clamp(1e-6, 1 - 1e-6)
-                noise = u.log() - torch.log1p(-u)  # difference of two Gumbels
-            y, _ = self.dense(*args, cos_sin, noise)
-        else:
-            y = self.cached(*args, cos_sin, kv_cache)
+            return self.forward_with_stats(x, cos_sin)[0]
+        y = self.cached(*self.project(x, cos_sin), cos_sin, kv_cache)
         return self.c_proj(y.reshape(*x.shape[:2], self.n_embd))
