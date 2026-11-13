@@ -8,6 +8,7 @@ import unittest
 from unittest.mock import patch
 
 import controller
+import bridge
 from policy import MODES, STEPS, TOKENS, CORE_SOURCE, TEST_COUNTS, validate_shared, first_formal_step
 from submit import submission_text
 
@@ -40,6 +41,65 @@ def report():
 
 
 class ControlTests(unittest.TestCase):
+    def bridge_fixture(self, root, *, exit_code=85, best=True):
+        results = root/'results/debug-123.0.tar'; results.parent.mkdir(exist_ok=True)
+        checkpoints = root/'results/debug-123.0-checkpoints.tar'
+        source = dict(commit='frozen', attention_mode='fixed_hca', run_id='fixed-id')
+        state = dict(job='123.0', run_id='fixed-id', source=source, microbatch=4,
+                     bridge=dict(debug_root=str(root), resume_job='456.0', request='request-formal.sh'))
+        progress = dict(run_id='fixed-id', source=source, step=100, tokens=100*32768,
+                        best_dev_ce=3., training_seconds=10.)
+        config = dict(source=source, logging_backend='wandb',
+                      model=dict(attention_mode='fixed_hca', hca_backend='triton'),
+                      protocol=dict(microbatch=4, seed=42, steps=STEPS, schedule_steps=STEPS))
+        entries = {'results/debug-requests/request-formal.sh.exit': str(exit_code).encode(),
+                   'results/train/progress.json': json.dumps(progress).encode(),
+                   'results/train/config.json': json.dumps(config).encode(),
+                   'results/source.json': json.dumps(source).encode(),
+                   'results/hca-startup/passed.json': json.dumps(report()).encode()}
+        with tarfile.open(results, 'w') as tf:
+            for name, raw in entries.items():
+                member = tarfile.TarInfo(name); member.size = len(raw)
+                tf.addfile(member, io.BytesIO(raw))
+        with tarfile.open(checkpoints, 'w') as tf:
+            for name in (('latest.pt', 'best.pt') if best else ('latest.pt',)):
+                member = tarfile.TarInfo('checkpoints/'+name); member.size = 4
+                tf.addfile(member, io.BytesIO(b'test'))
+        return results, checkpoints, state
+
+    def test_bridge_rejects_failure_or_missing_checkpoint_before_release(self):
+        for kwargs in (dict(exit_code=1), dict(best=False)):
+            with self.subTest(kwargs=kwargs), tempfile.TemporaryDirectory() as tmp:
+                root = Path(tmp); _, _, state = self.bridge_fixture(root, **kwargs)
+                with patch.object(bridge.subprocess, 'run') as command:
+                    with self.assertRaises((AssertionError, KeyError)):
+                        bridge.handoff(root, state, dict(JobStatus=4, ExitCode=0))
+                    command.assert_not_called()
+
+    def test_bridge_verifies_archives_and_preserves_container_input(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp); results, checkpoints, state = self.bridge_fixture(root)
+            evidence = bridge.validate_archives(results, checkpoints, state)
+            self.assertEqual(evidence['progress']['step'], 100)
+            (root/'bundles').mkdir(); (root/'logs').mkdir()
+            (root/'bundles/source.json').write_text(json.dumps(state['source']))
+            held = dict(JobStatus=5, HoldReason='User requested interactive debug; repair',
+                        HCARunId='fixed-id', HCATrainMode='fixed_hca', RequestGPUs=1, RequestCpus=2,
+                        RequestMemory=32768, RequestDisk=80*1024**2, SuccessCheckpointExitCode=85,
+                        TransferCheckpoint='results.tar,checkpoints.tar', RequireGPUs='H100|H200 78000',
+                        EncryptInputFiles='/home/user/.netrc',
+                        TransferInput='bundles/source.tar,file:///staging/nanochat-uv-v4.sif')
+            updated = dict(held, Cmd=str(root/'bridge-resume.sh'),
+                           TransferInput=held['TransferInput']+',bundles/bridge-results.tar,bundles/bridge-checkpoints.tar,train.sh')
+            with patch.object(bridge.subprocess, 'check_output', side_effect=[json.dumps([held]), json.dumps([updated])]), \
+                 patch.object(bridge.subprocess, 'run') as command:
+                bridge.handoff(root, state, dict(JobStatus=4, ExitCode=0))
+                self.assertEqual(command.call_args.args[0], ['condor_release', '456.0'])
+            self.assertEqual(state['job'], '456.0'); self.assertNotIn('bridge', state)
+            self.assertEqual(state['durable_step'], 100)
+            self.assertTrue((root/'bundles/bridge-checkpoints.tar').is_symlink())
+            self.assertIn('[ ! -f checkpoints.tar ] && [ ! -f results.tar ]', (root/'bridge-resume.sh').read_text())
+
     def test_both_full_shape_reports_required(self):
         self.assertEqual(validate_shared(report(), 'frozen'), 4)
         for key, value in [('complete', False), ('formal_training', True), ('commit', 'other'),

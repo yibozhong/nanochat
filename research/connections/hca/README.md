@@ -1,8 +1,9 @@
 # Fixed HCA / free Dynamic HCA
 
-Status: reference plus opt-in Triton implementation; GPU validation results are
-recorded separately. A new kernel is not approved for training until startup passes.
-No formal pretraining or matched-budget quality result. The initial hard-quota
+Status: reference plus opt-in Triton implementation. Source `3ed3470` passed the
+full H100 startup gate and Fixed formal pretraining has started; see the
+[training record](../hca-train/README.md). No completed 10B or matched-budget
+quality result. The initial hard-quota
 version was stopped; its checkpoints are explicitly rejected for HCA loading.
 
 ### Official-source audit, 2026-11-13
@@ -32,8 +33,8 @@ At microbatch8/four heads one such FP32 score tensor alone is 1 GiB per layer,
 before softmax intermediates and backward. These are implementation differences,
 not evidence that HCA intrinsically needs a 54-day 10B run. The actual official
 release reviewed is inference code; its custom kernel is not an available
-training/backward implementation. Training remains blocked pending the execution
-path repair and its validation. The completed diagnosis is summarized below.
+training/backward implementation. Training was blocked at that point pending
+the execution repair and validation, now completed as recorded above.
 
 ### NVIDIA source review and execution repair, 2026-11-13
 
@@ -134,7 +135,7 @@ reduction orders. The startup contract now requires exact state/RNG/data and
 controlled full-update replay, supported by the prior CCE-isolation evidence.
 No CCE tape is used in formal training. See the paired-run README for gates.
 
-Interactive H200 debug fixed a Triton loop-carried shape/type reuse in query
+Interactive H100 debug fixed a Triton loop-carried shape/type reuse in query
 backward and the forced-first-boundary graph for T=1. Probability/value and
 score-adjoint/input products now retain FP32 operands using TF32x3, avoiding
 extra BF16 rounding that distorted a cancelling router-bias gradient. All 24

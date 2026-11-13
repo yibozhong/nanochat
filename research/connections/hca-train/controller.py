@@ -11,12 +11,15 @@ import traceback
 
 from policy import MODES, STEPS, TOKENS, validate_shared
 from submit import ROOT, enqueue, write, stopped
+from bridge import refresh_log, handoff
 
 
 def consume(root, state, plan):
     path = root/f'logs/train.{state["job"]}.out'
     if not path.exists():
         return
+    if path.stat().st_size < state.get('stdout_offset', 0):
+        state.update(stdout_offset=0, inside_formal_log=False)
     with path.open('rb') as f:
         f.seek(state.get('stdout_offset', 0))
         while True:
@@ -101,7 +104,6 @@ def tick():
         if stopped(root):
             state.update(status='needs_attention', failure='Stopped marker; no new actions')
             write(path, state); continue
-        consume(root, state, plan)
         ads = json.loads(subprocess.check_output(['condor_q', state['job'], '-json', '-attributes',
             'ClusterId,ProcId,JobStatus,HoldReason,RemoteHost,JobCurrentStartDate,QDate,NumJobStarts'], text=True) or '[]')
         if not ads:
@@ -109,6 +111,12 @@ def tick():
                 '-attributes', 'ClusterId,ProcId,JobStatus,ExitCode,ExitBySignal,HoldReason'], text=True) or '[]')
         assert len(ads) == 1, 'Missing/ambiguous scheduler state; inspect instead of resubmitting'
         ad = ads[0]; state['scheduler'] = ad
+        if 'bridge' in state and ad['JobStatus'] == 2:
+            refresh_log(root, state)
+        starts = ad.get('NumJobStarts')
+        if starts is not None and starts != state.get('observed_starts'):
+            state.update(observed_starts=starts, stdout_offset=0, inside_formal_log=False)
+        consume(root, state, plan)
         if state['status'] == 'needs_attention':
             pass
         elif ad['JobStatus'] in (3, 5, 6):
@@ -117,7 +125,10 @@ def tick():
                 state.update(status='needs_attention', failure=ad.get('HoldReason', 'Removed job'))
         elif ad['JobStatus'] == 4:
             assert ad.get('ExitCode') == 0 and not ad.get('ExitBySignal', False), ad
-            collect(root, state)
+            if 'bridge' in state:
+                handoff(root, state, ad)
+            else:
+                collect(root, state)
         elif ad['JobStatus'] == 2:
             state['status'] = 'formal_training' if state['formal_started'] else ('formal_initialization' if state.get('startup_passed') else 'startup_validation')
         elif ad['JobStatus'] == 1:

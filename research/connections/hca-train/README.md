@@ -83,3 +83,29 @@ submission intents, per-run locks, queue checks and frozen IDs prevent duplicate
 submissions. A `STOPPED`/`STOPPED.json` marker stops new controller actions; the
 operator must also cancel the two corresponding Condor jobs when stopping this
 research direction.
+
+## Verified Triton launch, 2026-11-12
+
+The user requested interactive debug instead of repeatedly submitting failing
+batch jobs. After repairing the interactive session lifetime, allocation
+8526447.0 stayed active through all kernel fixes and validation. The actual GPU
+was an H100 80GB (UUID d9edf92c-50c2-1c6a-fcb3-fdfeff4a708a).
+Frozen training source `3ed347020ec65e8a4c59dc91419ed965aa4e7199` passed all 24
+Triton tests, 18 reference tests, 2K cache comparison, and both full 8-layer
+production/recovery checks at the common microbatch 16. The same-card warmed
+updates were 0.08109 s baseline, 0.11359 s Fixed, and 0.16834 s Dynamic: 1.40x
+and 2.08x baseline time. Train-only 10B estimates are 9.63 and 14.27 hours,
+excluding evaluations, checkpoint transfer, initialization, and scheduling.
+This validates engineering behavior, not 10B stability or compression quality.
+Untrained Dynamic is not yet at the target ratio of 16.
+
+Fixed starts a fresh formal process in that same interactive allocation, retaining
+run ID `f6dd86fc`. After its first 1800-second segment, the debug parent archives
+outputs and exits normally. `bridge.py` verifies exit85 from the trainer, source,
+run ID, progress, recipe, validation evidence, and both checkpoint members before
+releasing the existing held Fixed job 8492173.0. Initial bridge archives have
+distinct filenames so subsequent scheduler checkpoints take precedence. The
+container URI remains in TransferInput. Any failed/missing transfer blocks the
+handoff. Dynamic retains run ID `6e68ed48` and uses the same frozen source.
+The AP controller has separate operational commits; these do not change the
+model source saved in the two formal checkpoints.
