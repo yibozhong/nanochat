@@ -1,5 +1,6 @@
 """Production 2K trained-router cache audit; diagnostic weights only, no W&B."""
 import argparse
+from dataclasses import replace
 import json
 import os
 from pathlib import Path
@@ -11,6 +12,10 @@ from nanochat.packed_training import PackedData
 p = argparse.ArgumentParser()
 p.add_argument('--checkpoint', default='../diagnostic-state/latest.pt')
 p.add_argument('--label', default='confidence-trained-cache')
+p.add_argument('--row', type=int, default=0)
+p.add_argument('--splits', default='137,1,511,7,1000,392')
+p.add_argument('--fixed-block-size', type=int, choices=(4,16),
+               help='Audit Fixed with transplanted diagnostic weights; no quality claim')
 a = p.parse_args()
 assert os.environ['WANDB_MODE'] == 'disabled'
 torch.set_num_threads(2)
@@ -19,15 +24,20 @@ configure_attention('fa2')
 state = torch.load(a.checkpoint, map_location='cpu', weights_only=False)
 assert state['formal_training'] is False
 c = ConnectionConfig(**state['config'])
+if a.fixed_block_size:
+    c = replace(c, attention_mode='fixed_hca', hca_block_size=a.fixed_block_size,
+                hca_dynamic_gradient='dmc')
+    state['model'] = {k:v for k,v in state['model'].items() if '.boundary.' not in k}
 model = build_connection_model(c).prepare(compile_blocks=False).eval()
 model.load_state_dict(state['model'])
 report = dict(complete=False, formal_training=False, step=state['step'],
               checkpoint_source=state['source'],
               source=json.loads(Path('source.json').read_text()),
-              gpu_uuid=str(torch.cuda.get_device_properties(0).uuid))
+              gpu_uuid=str(torch.cuda.get_device_properties(0).uuid), args=vars(a),
+              transplanted_weights=bool(a.fixed_block_size))
 del state
 data = PackedData('../data')
-ids, _ = data.batch('dev', 0, 1)
+ids, _ = data.batch('dev', a.row, 1)
 out = Path('results/optimization') / (a.label + '.json')
 def write():
     out.write_text(json.dumps(report, indent=2, allow_nan=False) + '\n')
@@ -49,7 +59,8 @@ with torch.no_grad():
     report['causal_prefix_exact'] = torch.equal(changed[:, :1000], expected[:, :1000])
     cache = model.make_kv_cache(1)
     parts = []; start = 0
-    splits = (137, 1, 511, 7, 1000, 392)
+    splits = tuple(map(int, a.splits.split(',')))
+    assert all(n > 0 for n in splits)
     assert sum(splits) == ids.shape[1]
     for n in splits[:-1]:
         parts.append(model.hidden(ids[:, start:start+n], kv_cache=cache)); start += n

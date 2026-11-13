@@ -17,14 +17,20 @@ def validate_probe(v, mode, micro, commit, block_size=16):
     assert v['commit'] == commit and v['steps'] == 3 and v['replayed_step'] == 2
     # Same-input CCE backward nondeterminism was isolated in 9499a07 and
     # controlled full-update replay passed in 01ddae1. Require exact checkpoint
-    # load, RNG/data, actual forward loss, and full backward/update with fixed
-    # CCE gradients; actual uncontrolled differences remain in the report.
+    # load, RNG/data, and full backward/update with fixed CCE gradients. New
+    # probes additionally compare actual CCE inputs exactly: its forward also
+    # has unordered logaddexp reductions. Old frozen reports only recorded loss.
     assert v['restore_contract'] == 'exact_state_rng_data_and_fixed_cce_gradient_replay'
     for key in ('loaded_model_equal', 'loaded_optimizer_equal', 'loaded_rng_equal',
-                'loaded_data_row_equal', 'actual_cce_replay_loss_equal',
+                'loaded_data_row_equal',
                 'controlled_backward_loss_equal', 'controlled_backward_model_equal',
                 'controlled_backward_optimizer_equal', 'controlled_backward_rng_equal'):
         assert v[key] is True, key
+    if 'actual_cce_inputs_equal' in v:
+        assert v['actual_cce_inputs_equal'] is True
+        assert math.isfinite(v['actual_cce_loss_abs_difference']) and v['actual_cce_loss_abs_difference'] >= 0
+    else:
+        assert v['actual_cce_replay_loss_equal'] is True
     assert v['cce_replay_microbatches'] == 16//micro
     assert v['all_gradients_finite'] is True
     assert v['peak_reserved_bytes'] <= CAPACITY_BYTES
@@ -35,6 +41,9 @@ def validate_probe(v, mode, micro, commit, block_size=16):
     assert c['hca_block_size'] == block_size and c['hca_window'] == 256 and c['hca_ratio_loss_weight'] == 1
     assert c['hca_temperature'] == 1 and c['hca_noise'] is True and not c['activation_checkpoint']
     assert c['hca_backend'] == 'triton'
+    # This frozen authorization is for the original estimator. The separate
+    # confidence diagnostics do not authorize replacing its formal run.
+    assert c.get('hca_dynamic_gradient', 'dmc') == 'dmc'
     assert len(v['losses']) == 3 and all(math.isfinite(x) for x in v['losses'])
     assert math.isfinite(v['steady_step_seconds']) and v['steady_step_seconds'] > 0
     assert v['pool_gradient_nonzero'] is True

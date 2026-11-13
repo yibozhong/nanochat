@@ -10,7 +10,7 @@ from unittest.mock import patch
 import controller
 import bridge
 import b4
-from policy import MODES, STEPS, TOKENS, CORE_SOURCE, TEST_COUNTS, validate_shared, first_formal_step
+from policy import MODES, STEPS, TOKENS, CORE_SOURCE, TEST_COUNTS, validate_shared, validate_probe, first_formal_step
 from submit import submission_text
 
 
@@ -42,6 +42,22 @@ def report():
 
 
 class ControlTests(unittest.TestCase):
+    def test_exact_cce_inputs_required_when_forward_reduction_differs(self):
+        probe = report()['modes']['fixed_hca']
+        probe.update(actual_cce_inputs_equal=True, actual_cce_replay_loss_equal=False,
+                     actual_cce_loss_abs_difference=9.5367431640625e-7)
+        validate_probe(probe, 'fixed_hca', 4, 'frozen')
+        probe['actual_cce_inputs_equal'] = False
+        probe['actual_cce_replay_loss_equal'] = True
+        with self.assertRaises(AssertionError):
+            validate_probe(probe, 'fixed_hca', 4, 'frozen')
+
+    def test_new_estimator_cannot_reuse_frozen_formal_authorization(self):
+        probe = report()['modes']['dynamic_hca']
+        probe['config']['hca_dynamic_gradient'] = 'confidence'
+        with self.assertRaises(AssertionError):
+            validate_probe(probe, 'dynamic_hca', 4, 'frozen')
+
     def test_b4_requires_its_own_ratio_recipe_and_evidence(self):
         original=report();probe=original['modes']['fixed_hca']
         probe['microbatch']=16;probe['cce_replay_microbatches']=1
