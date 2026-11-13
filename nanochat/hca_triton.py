@@ -19,7 +19,7 @@ import triton.language as tl
 from triton.language.extra.cuda import libdevice
 from torch.autograd.function import once_differentiable
 
-# Measured Hopper defaults; legacy DMC and FP32 retain the precise geometry.
+# Measured Hopper defaults; legacy DMC and FP32 attention keep precise products.
 FIXED_FWD_TILE = (64, 64, 4)
 FIXED_BWD_TILE = (64, 64, 4)
 FIXED_SMALL_TILE = (128, 64, 8)
@@ -31,7 +31,7 @@ FIXED_BWD_STAGES = 1
 FIXED_POOL_CHANNELS = 32
 FIXED_SMALL_POOL_CHANNELS = 128
 FIXED_POOL_WARPS = 4
-DYNAMIC_POOL_CHANNELS = 32
+DYNAMIC_POOL_CHANNELS = 16
 DYNAMIC_POOL_WARPS = 4
 
 

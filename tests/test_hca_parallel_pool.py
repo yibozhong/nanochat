@@ -3,6 +3,7 @@ import pytest
 import torch
 import importlib.util
 from pathlib import Path
+from nanochat import hca_triton
 from nanochat.hca_triton import prefix_pool
 
 _path=Path(__file__).resolve().parents[1]/'research/connections/hca-opt/parallel_pool.py'
@@ -15,7 +16,10 @@ hard_prefix_pool=_candidate.hard_prefix_pool
 @pytest.mark.parametrize('dtype',[torch.float32,torch.bfloat16])
 @pytest.mark.parametrize('kind',['single','every','mixed'])
 @pytest.mark.parametrize('length',[1,63,64,65,137,2048])
-def test_parallel_hard_pool(dtype,kind,length):
+def test_parallel_hard_pool(dtype,kind,length,monkeypatch):
+    # This rejected candidate deliberately preserves the original 32-channel
+    # scan layout. The adopted runtime uses the faster 16-channel serial tile.
+    monkeypatch.setattr(hca_triton,'DYNAMIC_POOL_CHANNELS',32)
     torch.manual_seed(888)
     b,h,d=2,2,32
     xs=[torch.randn(b,length,h,d,device='cuda',dtype=dt,requires_grad=True)
