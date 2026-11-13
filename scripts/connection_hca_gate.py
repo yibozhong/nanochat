@@ -1,5 +1,7 @@
 """Bounded HCA checks/cache accounting; no formal run or W&B, no checkpoints out."""
 import json
+import argparse
+from contextlib import nullcontext
 from pathlib import Path
 import subprocess
 import sys
@@ -8,13 +10,26 @@ import xml.etree.ElementTree as ET
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--reuse-core-tests', help='Passed core-tests evidence from identical model/test code on this GPU family')
+    a = parser.parse_args()
     out = Path('results/hca'); out.mkdir(parents=True, exist_ok=True)
-    proc = subprocess.run([sys.executable, '-m', 'pytest', '-v', 'tests/test_hca.py',
-                           '--junitxml=' + str(out/'tests.xml')])
-    suites = ET.parse(out/'tests.xml').getroot().findall('testsuite')
-    counts = {k: sum(int(s.get(k, 0)) for s in suites) for k in ('tests','failures','errors','skipped')}
+    if a.reuse_core_tests:
+        evidence = json.loads(Path(a.reuse_core_tests).read_text())
+        import torch
+        assert evidence['capability'] == list(torch.cuda.get_device_capability())
+        counts = evidence['tests']
+        assert counts == dict(tests=18, failures=0, errors=0, skipped=0)
+        assert evidence['model_code_unchanged'] and evidence['test_code_unchanged']
+        status = 0
+    else:
+        proc = subprocess.run([sys.executable, '-m', 'pytest', '-v', 'tests/test_hca.py',
+                               '--junitxml=' + str(out/'tests.xml')])
+        suites = ET.parse(out/'tests.xml').getroot().findall('testsuite')
+        counts = {k: sum(int(s.get(k, 0)) for s in suites) for k in ('tests','failures','errors','skipped')}
+        status = proc.returncode
     (out/'test-counts.json').write_text(json.dumps(counts, indent=2)+'\n')
-    if proc.returncode or counts['failures'] or counts['errors'] or counts['skipped']:
+    if status or counts['failures'] or counts['errors'] or counts['skipped']:
         raise RuntimeError(f'HCA validation failed: {counts}')
 
     import torch
@@ -57,14 +72,21 @@ def main():
             # Arbitrary splits, including incomplete fixed and dynamic chunks.
             pieces = []; start = 0
             torch.cuda.synchronize(); before = time.perf_counter()
-            for n in (1003, 21, 1, 1, 1, 1021):
-                pieces.append(m(x[:, start:start+n], kv_cache=cache)); start += n
+            # Built-in FA2 rejects the explicit boolean mask for partial
+            # baseline prefill. Use the existing exact math backend here;
+            # this does not change HCA or the baseline's full-forward backend.
+            from torch.nn.attention import sdpa_kernel, SDPBackend
+            context = sdpa_kernel(SDPBackend.MATH) if mode == 'full' else nullcontext()
+            with context:
+                for n in (1003, 21, 1, 1, 1, 1021):
+                    pieces.append(m(x[:, start:start+n], kv_cache=cache)); start += n
             torch.cuda.synchronize(); cache_seconds = time.perf_counter() - before
             cached = torch.cat(pieces, 1)
             torch.testing.assert_close(cached, logits, rtol=.01, atol=.01)
             ce = torch.nn.functional.cross_entropy(logits.flatten(0, 1), y.flatten()).item()
         row = dict(untrained_dev_quality=False, diagnostic_train_ce=ce,
                    target_history_ratio=c.hca_block_size,
+                   cached_backend='sdpa_math' if mode == 'full' else 'hca_pytorch_reference',
                    dense_routing=routing,
                    full_forward_seconds=dense_seconds, split_cached_seconds=cache_seconds,
                    max_logit_difference=(cached-logits).abs().max().item(),
