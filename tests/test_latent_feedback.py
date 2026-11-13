@@ -70,11 +70,17 @@ def test_causal_prefix(passes):
 
 def test_no_grad_pass_and_explicit_reference_gradient():
     m=make();ref=copy.deepcopy(m);x,y=inputs();seen=[]
-    hook=m.blocks[-1].register_forward_hook(lambda _,args,out: seen.append((torch.is_grad_enabled(),out.requires_grad)))
-    with patch.object(m,'readout',wraps=m.readout) as readout:
+    # ConnectionModel calls block.forward directly (also the compile target),
+    # so Module forward hooks do not run. Observe the actual backbone call.
+    backbone=m.backbone
+    def observed_backbone(*args,**kwargs):
+        out=backbone(*args,**kwargs)
+        seen.append((torch.is_grad_enabled(),out.requires_grad))
+        return out
+    with patch.object(m,'backbone',side_effect=observed_backbone), patch.object(m,'readout',wraps=m.readout) as readout:
         loss=m(x,y,dense=True,passes=2)
         assert readout.call_count==1
-    loss.backward();hook.remove()
+    loss.backward()
     assert seen==[(False,False),(True,True)]
     e=norm(ref.wte(x))
     with torch.no_grad():top=ref.backbone(e)
