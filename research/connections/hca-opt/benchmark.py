@@ -17,6 +17,7 @@ p.add_argument('--steps', type=int, default=20)
 p.add_argument('--projection', choices=['native','tf32x3','bf16x3'])
 p.add_argument('--rotary',choices=['native','fused'])
 p.add_argument('--resume', help='Diagnostic checkpoint; never written back')
+p.add_argument('--pool', choices=['serial','parallel'], default='serial')
 a = p.parse_args()
 assert os.environ['WANDB_MODE'] == 'disabled'
 if a.kernel_file:
@@ -52,6 +53,13 @@ if state is not None:
     assert state['formal_training'] is False
     c = ConnectionConfig(**state['config'])
     assert c.attention_mode == a.mode and c.hca_block_size == a.block_size
+if a.pool == 'parallel':
+    assert c.attention_mode == 'dynamic_hca' and c.hca_dynamic_gradient == 'confidence'
+    from nanochat import hca_triton as ht
+    from nanochat.hca_parallel_pool import hard_prefix_pool
+    original_pool = ht.prefix_pool
+    ht.prefix_pool = lambda k,v,s,g,ratio=0: (hard_prefix_pool(k,v,s,g) if ratio == 0
+                                             else original_pool(k,v,s,g,ratio))
 model = build_connection_model(c).prepare(compile_blocks=False)
 opt, wd = optimizer_for(model)
 start_step = 0
