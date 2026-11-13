@@ -29,6 +29,12 @@ def main():
     assert torch.cuda.get_device_capability() == (9, 0)
     assert any(name in torch.cuda.get_device_name() for name in ('H100', 'H200'))
     assert torch.cuda.get_device_properties(0).total_memory >= 78000*1024**2
+    if source.get('replay_debug_only', False):
+        assert a.mode == 'fixed_hca'
+        probe(a.mode, 8)
+        # One reviewed diagnostic attempt at the failed production shape.
+        # Even a coincidentally exact replay cannot unlock formal training.
+        raise RuntimeError('Targeted replay diagnosis finished; inspect evidence before resuming the paired training plan')
     marker = Path('results/hca-startup/passed.json')
     if marker.exists():
         ready = json.loads(marker.read_text())

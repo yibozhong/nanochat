@@ -36,6 +36,28 @@ def same(a, b):
     return a == b
 
 
+def differences(a, b, prefix=''):
+    """Small numeric evidence, never tensor dumps or content hashes."""
+    import torch
+    rows = []
+    if isinstance(a, torch.Tensor):
+        b = b.detach().cpu()
+        if a.dtype != b.dtype or not torch.equal(a, b):
+            delta = a.double()-b.double()
+            rows.append(dict(name=prefix, dtype=str(a.dtype), restored_dtype=str(b.dtype),
+                unequal=int((a != b).sum()), elements=a.numel(), max_abs=delta.abs().max().item(),
+                relative_l2=(delta.norm()/a.double().norm().clamp_min(1e-30)).item()))
+    elif isinstance(a, dict):
+        for key in a:
+            rows.extend(differences(a[key], b[key], prefix+'/'+str(key)))
+    elif isinstance(a, (tuple, list)):
+        for i, (x, y) in enumerate(zip(a, b)):
+            rows.extend(differences(x, y, prefix+'/'+str(i)))
+    elif a != b:
+        rows.append(dict(name=prefix, scalar_mismatch=True, expected=a, actual=b))
+    return rows
+
+
 def main():
     p = argparse.ArgumentParser()
     p.add_argument('--mode', choices=('fixed_hca', 'dynamic_hca'), required=True)
@@ -93,21 +115,55 @@ def main():
         model = build_connection_model(c).prepare(compile_blocks=False)
         opt, wd = optimizer_for(model)
         model.load_state_dict(state['model']); opt.load_state_dict(state['optimizer'])
+        result['loaded_model_equal'] = same(state['model'], model.state_dict())
+        result['loaded_optimizer_equal'] = same(state['optimizer'], opt.state_dict())
+        if not (result['loaded_model_equal'] and result['loaded_optimizer_equal']):
+            result.update(status='failed_load', model_differences=differences(state['model'], model.state_dict()),
+                          optimizer_differences=differences(state['optimizer'], opt.state_dict()))
+            json_write(out, result)
+        assert result['loaded_model_equal'] and result['loaded_optimizer_equal'], 'Checkpoint load changed stored values'
         restore_rng(state['rng']); del state
         schedule(opt, 2, STEPS, wd)
-        replay_loss = train_step(model, opt, data, 2, microbatch=a.microbatch)
+        # Capture one actual CCE input only for diagnosing a failed exact
+        # replay; the production loss and gradients are unchanged.
+        import cut_cross_entropy
+        cce = cut_cross_entropy.linear_cross_entropy
+        captured = {}
+        def capture_cce(h, w, targets, **kwargs):
+            captured.clear()
+            captured.update(h=h.detach().clone(), w=w.detach().clone(), targets=targets.detach().clone(), kwargs=kwargs)
+            return cce(h, w, targets, **kwargs)
+        cut_cross_entropy.linear_cross_entropy = capture_cce
+        try:
+            replay_loss = train_step(model, opt, data, 2, microbatch=a.microbatch)
+        finally:
+            cut_cross_entropy.linear_cross_entropy = cce
         assert replay_loss == losses[2], (replay_loss, losses[2])
         model_equal, opt_equal = same(expected_model, model.state_dict()), same(expected_opt, opt.state_dict())
-        result.update(complete=True, status='passed', parameters=parameters,
+        result.update(complete=model_equal and opt_equal, status='passed' if model_equal and opt_equal else 'failed_replay', parameters=parameters,
             steps=3, replayed_step=2, replay_model_equal=model_equal, replay_optimizer_equal=opt_equal,
             all_gradients_finite=True, losses=losses, metrics=metrics,
             pool_gradient_nonzero=pool_nonzero, router_gradient_nonzero=router_nonzero,
             steady_step_seconds=sum(times[1:])/2, step_seconds=times,
             peak_allocated_bytes=torch.cuda.max_memory_allocated(), peak_reserved_bytes=torch.cuda.max_memory_reserved(),
             estimated_train_only_hours=STEPS*sum(times[1:])/2/3600)
-        validate_probe(result, a.mode, a.microbatch, source['commit'])
+        if not (model_equal and opt_equal):
+            result['model_differences'] = differences(expected_model, model.state_dict())
+            result['optimizer_differences'] = differences(expected_opt, opt.state_dict())
+            # Same inputs, same implementation, no optimizer or RNG involved.
+            # This localizes CCE reduction nondeterminism without relaxing any
+            # startup threshold or permitting training after a failed replay.
+            repeated = []
+            for _ in range(2):
+                h = captured['h'].detach().clone().requires_grad_()
+                w = captured['w'].detach().clone().requires_grad_()
+                loss = cce(h, w, captured['targets'], **captured['kwargs'])
+                grads = torch.autograd.grad(loss, (h, w))
+                repeated.append(dict(loss=loss.item(), h=cpu_state(grads[0]), w=cpu_state(grads[1])))
+            result['same_input_cce_differences'] = differences(repeated[0], repeated[1])
         json_write(out, result)
         print(json.dumps(result, allow_nan=False), flush=True)
+        validate_probe(result, a.mode, a.microbatch, source['commit'])
     except torch.cuda.OutOfMemoryError:
         result.update(status='oom', complete=False)
         json_write(out, result)
