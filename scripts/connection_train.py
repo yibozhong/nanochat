@@ -18,7 +18,7 @@ import torch
 from nanochat.experiment_logging import training_run
 
 from nanochat.connection_model import ConnectionConfig, build_connection_model, optimizer_for, schedule, CONNECTION_VARIANTS
-from nanochat.packed_training import PackedData, seed_all, evaluate, train_step, snapshot, atomic_save, restore_rng, json_write
+from nanochat.packed_training import PackedData, seed_all, evaluate, train_step, snapshot, atomic_save, restore_rng, json_write, NonfiniteTrainingError
 from nanochat.connection_experiment import configure_attention, match_vanilla_initialization
 
 
@@ -249,7 +249,10 @@ def main():
             test_evaluated=a.evaluate_test,checkpoint_files=checkpoint_files,**test_result)
         json_write(out/'summary.json',result);run.summary.update(result);run.finish()
         print(json.dumps(result),flush=True);return 0
-    except BaseException:
+    except BaseException as error:
+        if isinstance(error, NonfiniteTrainingError):
+            json_write(out/'failure.json', dict(run_id=run_id, source=source,
+                last_completed_step=step, **error.report))
         run.finish(exit_code=1);raise
 
 

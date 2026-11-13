@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 import controller
 import bridge
+import b4
 from policy import MODES, STEPS, TOKENS, CORE_SOURCE, TEST_COUNTS, validate_shared, first_formal_step
 from submit import submission_text
 
@@ -41,6 +42,18 @@ def report():
 
 
 class ControlTests(unittest.TestCase):
+    def test_b4_requires_its_own_ratio_recipe_and_evidence(self):
+        original=report();probe=original['modes']['fixed_hca']
+        probe['microbatch']=16;probe['cce_replay_microbatches']=1
+        probe['config']['hca_block_size']=4
+        ready=dict(complete=True,formal_training=False,commit='frozen',attention_mode='fixed_hca',
+            block_size=4,microbatch=16,hca_backend='triton',tests=dict(tests=3,failures=0,errors=0,skipped=0),
+            probe=probe,speed=dict(complete=True,formal_training=False,source=dict(commit='frozen'),microbatch=16,
+                modes=dict(full={},fixed_hca=dict(config=dict(hca_block_size=4),relative_to_baseline=2.))))
+        self.assertEqual(b4.validate(ready,'frozen'),16)
+        probe['config']['hca_block_size']=16
+        with self.assertRaises(AssertionError):b4.validate(ready,'frozen')
+
     def bridge_fixture(self, root, *, exit_code=85, best=True):
         results = root/'results/debug-123.0.tar'; results.parent.mkdir(exist_ok=True)
         checkpoints = root/'results/debug-123.0-checkpoints.tar'

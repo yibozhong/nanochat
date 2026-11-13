@@ -17,7 +17,7 @@ def read_member(archive, name):
     return archive.extractfile(member).read()
 
 
-def validate_archives(results, checkpoints, state):
+def validate_archives(results, checkpoints, state, validator=validate_shared):
     """Inspect metadata only; never deserialize tensor checkpoints on the AP."""
     with tarfile.open(results) as tf:
         assert int(read_member(tf, 'results/debug-requests/' + state['bridge']['request'] + '.exit')) == 85
@@ -30,10 +30,12 @@ def validate_archives(results, checkpoints, state):
     assert math.isfinite(progress['best_dev_ce']) and progress['training_seconds'] > 0
     assert config['source'] == state['source'] and config['logging_backend'] == 'wandb'
     assert config['model']['attention_mode'] == 'fixed_hca' and config['model']['hca_backend'] == 'triton'
+    if 'hca' in state['source']:
+        assert config['model']['hca_block_size'] == state['source']['hca']['target_ratio']
     assert config['protocol']['microbatch'] == state['microbatch'] and config['protocol']['seed'] == 42
     assert config['protocol']['steps'] == config['protocol']['schedule_steps'] == STEPS
     assert ready['run_id'] == state['run_id'] and ready['attention_mode'] == 'fixed_hca'
-    assert validate_shared(ready, state['source']['commit']) == state['microbatch']
+    assert validator(ready, state['source']['commit']) == state['microbatch']
     with tarfile.open(checkpoints) as tf:
         sizes = {}
         for name in ('latest.pt', 'best.pt'):
@@ -53,18 +55,18 @@ def refresh_log(root, state):
     temp.replace(target)
 
 
-def handoff(root, state, ad):
+def handoff(root, state, ad, validator=validate_shared, hold_prefix='User requested interactive debug;'):
     """Release exactly the existing run, only after successful durable transfer."""
     assert ad['JobStatus'] == 4 and ad.get('ExitCode') == 0 and not ad.get('ExitBySignal', False)
     bridge = state['bridge']; debug = Path(bridge['debug_root'])
     results = debug / f'results/debug-{state["job"]}.tar'
     checkpoints = debug / f'results/debug-{state["job"]}-checkpoints.tar'
-    evidence = validate_archives(results, checkpoints, state)
+    evidence = validate_archives(results, checkpoints, state, validator)
     target = bridge['resume_job']
     ads = json.loads(subprocess.check_output(['condor_q', target, '-json'], text=True))
     assert len(ads) == 1
     held = ads[0]
-    assert held['JobStatus'] == 5 and held['HoldReason'].startswith('User requested interactive debug;')
+    assert held['JobStatus'] == 5 and held['HoldReason'].startswith(hold_prefix)
     assert held['HCARunId'] == state['run_id'] and held['HCATrainMode'] == 'fixed_hca'
     assert held['RequestGPUs'] == 1 and held['RequestCpus'] == 2
     assert held['RequestMemory'] == 32768 and held['RequestDisk'] == 80 * 1024**2

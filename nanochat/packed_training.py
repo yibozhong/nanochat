@@ -9,6 +9,13 @@ import numpy as np
 import torch
 
 
+class NonfiniteTrainingError(FloatingPointError):
+    """A rejected update, with small JSON-safe evidence for diagnosis."""
+    def __init__(self, report):
+        self.report = report
+        super().__init__('Nonfinite loss/gradient before optimizer update: ' + json.dumps(report, allow_nan=False))
+
+
 def seed_all(seed=42):
     random.seed(seed)
     np.random.seed(seed)
@@ -85,7 +92,14 @@ def train_step(model,opt,data,step,microbatch=16,batch_tokens=32768):
     grads=[p.grad for p in model.parameters() if p.grad is not None]
     finite=torch.stack([torch.isfinite(g).all() for g in grads]).all()
     if not bool(finite) or not torch.isfinite(total):
-        raise FloatingPointError('Nonfinite loss/gradient before optimizer update')
+        # Inspect names only on failure; successful updates retain the same
+        # numerical path. Never serialize nonfinite numbers into the report.
+        bad = [name for name, p in model.named_parameters()
+               if p.grad is not None and not bool(torch.isfinite(p.grad).all())]
+        loss_finite = bool(torch.isfinite(total))
+        raise NonfiniteTrainingError(dict(failed_update=step+1, next_data_row=step*rows,
+            loss_finite=loss_finite, loss=total.item() if loss_finite else None,
+            nonfinite_gradient_parameters=bad, optimizer_updated=False))
     opt.step()
     if hca_metrics:
         model.last_train_metrics = {key: value.item() for key, value in hca_metrics.items()}

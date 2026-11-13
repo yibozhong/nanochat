@@ -11,7 +11,7 @@ CAPACITY_BYTES = int(.9 * 78000 * 1024**2)
 TEST_COUNTS = dict(tests=18, failures=0, errors=0, skipped=0)
 
 
-def validate_probe(v, mode, micro, commit):
+def validate_probe(v, mode, micro, commit, block_size=16):
     assert v['complete'] is True and v['formal_training'] is False
     assert v['status'] == 'passed' and v['mode'] == mode and v['microbatch'] == micro
     assert v['commit'] == commit and v['steps'] == 3 and v['replayed_step'] == 2
@@ -32,7 +32,7 @@ def validate_probe(v, mode, micro, commit):
     c = v['config']
     assert c['attention_mode'] == mode and c['variant'] == 'baseline' and c['architecture'] == 'vanilla'
     assert (c['depth'], c['width'], c['heads'], c['sequence_length'], c['vocab_size'], c['streams']) == (8, 512, 4, 2048, 32768, 1)
-    assert c['hca_block_size'] == 16 and c['hca_window'] == 256 and c['hca_ratio_loss_weight'] == 1
+    assert c['hca_block_size'] == block_size and c['hca_window'] == 256 and c['hca_ratio_loss_weight'] == 1
     assert c['hca_temperature'] == 1 and c['hca_noise'] is True and not c['activation_checkpoint']
     assert c['hca_backend'] == 'triton'
     assert len(v['losses']) == 3 and all(math.isfinite(x) for x in v['losses'])
