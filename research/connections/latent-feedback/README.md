@@ -37,3 +37,13 @@ are resident, so the reported peak memory is combined.
 References: LoRM `lorm/model/feedback.py`, `lorm/train/algo.py`,
 `works/latent_feedback/configs/feedback.yaml`. Its mechanism reuses deep
 features forward; gradients do not cross the preliminary pass.
+
+The separately authorized 10B run uses `submit_train.py` and `train.sh`:
+305,176 updates, batch 32,768, microbatch 16, seed 42, 15% P1 / 85% P2,
+P4 evaluation plus P1 dev logging. It starts from fresh weights, uses online
+W&B, and preserves its run ID/model/optimizer/RNG/data position across
+1800-second exit85 checkpoint transfers. Archive failures never return85.
+H100/H200 reuse the completed validation. After one continuous idle hour,
+the scheduler may include A100 (existing FA2/CCE backend), requiring the
+feedback checks in that allocation before independently initializing training.
+Failures hold the job; the watcher collects results without resubmitting.
