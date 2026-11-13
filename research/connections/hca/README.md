@@ -1,6 +1,88 @@
 # Fixed HCA / free Dynamic HCA
 
-Status: reference plus opt-in Triton implementation. Source `3ed3470` passed the
+Status: reference plus opt-in Triton implementation. The optimization branch
+adds the validated Fixed execution improvements and an experimental confidence
+gradient for Dynamic. Existing formal runs retain their frozen source; the
+diagnostic weights and kernels have not silently replaced them.
+
+### Current optimization evidence (2026-11-13, H100)
+
+All measurements below use one allocation, H100 UUID
+`fff6db8e-df5b-6a7f-c506-eb78b2f0c043`, 8 layers, width 512, 4 heads, context
+2048, microbatch 16 and 32768 tokens/update. No diagnostic W&B run was created.
+
+| Implementation | Warm median update | 2000-step median | Dev CE at 2000 |
+|---|---:|---:|---:|
+| Original full baseline | 80.60 ms | 80.12 ms | 3.9492 |
+| Original Fixed B16 | 114.24 ms | — | — |
+| Optimized Fixed B16 | 79.34 ms | 78.93 ms | 3.9929 |
+| Original Fixed B4 | 124.59 ms | — | — |
+| Optimized Fixed B4 | 81.85 ms | 81.19 ms | 3.9712 |
+
+Source `81ec37a` passed 79 GPU numerical/gradient/causality/cache checks.
+`65f978e` passed both Fixed production-model recovery checks and the bounded
+2000-update diagnostics (65,536,000 training tokens each, seed 42, existing dev
+split 131072 tokens). These short tests do not establish final quality or 10B
+stability. The slightly better B16 wall time is not evidence of a general
+speed advantage over baseline. Training peak allocated memory is 7.376 GiB for
+Fixed versus 5.599 GiB for baseline; inference KV compression is a separate
+measurement.
+
+The measured improvements preserve the original local-window plus completed
+and causal open-prefix semantics:
+
+- BF16 attention products with FP32 accumulation for Fixed; independent FP32
+  and FP64 mathematical checks keep their original accuracy gates.
+- Chunk-local pool recomputation instead of three saved FP32 prefix states.
+- Measured attention tile sizes, less shared-memory pressure, and deterministic
+  split-query summary gradients without atomics.
+- FP32 score projection from BF16 high/residual products, validated against an
+  independent FP64 pre-cast oracle; master weights and outputs stay FP32.
+- Fused RoPE/RMSNorm/scale, retaining BF16 rounding points and the locked Torch
+  runtime's FP32 accumulation epsilon. Four input magnitudes are tested.
+
+The original unmodified CCE implementation has unordered floating-point
+reductions in both forward and backward. Recovery checks require exact model,
+optimizer, RNG, data position and CCE inputs. Replaying captured CCE loss and
+gradients yields an exact complete next update; normal CCE can differ by an
+FP32 ULP in loss and produce different updates. Formal training never uses the
+diagnostic tape. This is not a claim of bitwise reproducible ordinary training.
+
+### Experimental Dynamic confidence estimator
+
+The default remains `hca_dynamic_gradient='dmc'` for compatibility. The new
+`confidence` setting keeps content-dependent hard boundaries and per-channel
+chunk pooling, but detaches boundary reset/visibility decisions. A confidence
+STE on the attention output supplies the task gradient to the router. It uses
+H-Net's hard/soft rate-balancing idea, not H-Net's complete architecture or EMA
+dechunker. There is no fixed summary quota, maximum chunk length, or end-of-call
+flush. Local KV and the unfinished chunk survive inference-call boundaries.
+
+For target R, let F be detached actual keep rate and G mean soft probability.
+The auxiliary is R/(R-1) * ((R-1)*F*G + (1-F)*(1-G)). Its probability gradient
+changes sign at F=1/R; this is a soft constraint, not a guaranteed compression
+ratio. The confidence diagnostic disables boundary noise, keeping training and
+inference hard decisions consistent.
+
+The first weight-0.03 diagnostic completed 2000 finite updates, with dev CE
+3.9979. However, final dev hard keep was 0.10256 (9.75x summary compression),
+so it has **not** met the requested matched 16x comparison. Its warmed update
+is about 88.95 ms at that achieved rate. Rate strength, trained-cache boundaries
+and remaining kernel costs are still under investigation. It is not approved
+as a stable replacement for the held original Dynamic formal run.
+
+Diagnostic entry points are `research/connections/hca-opt/{benchmark,stability,
+trained_cache,rate_gradients}.py`. They assert `WANDB_MODE=disabled`, use the
+existing packed cache, and run on a GPU worker. Only the optional single scratch
+`diagnostic-state/latest.pt` is saved; it is excluded from formal checkpoints.
+
+The source reviews and timings below are historical records of earlier code.
+In particular, references to Python token loops or unoptimized FP32 products
+describe those earlier versions, not the optimized Fixed execution above.
+
+### Earlier startup status
+
+Source `3ed3470` passed the
 full H100 startup gate. Fixed B16 and separately authorized B4 formal pretraining
 are running. Dynamic stopped on a nonfinite update and remains held; see the
 [training record](../hca-train/README.md). No completed 10B or matched-budget

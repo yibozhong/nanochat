@@ -1,7 +1,8 @@
 """Correctness-first HCA reference: hard causal chunking, differentiable training.
 
 Fixed and dynamic modes share pooling, RoPE, SWA and inference cache semantics.
-Dynamic uses a global one-sided compression loss, with no boundary quota.
+Dynamic supports the legacy DMC reset STE or an output-confidence surrogate.
+Each uses a global soft rate objective, with no boundary quota.
 This is a nanochat adaptation, not a reproduction of DeepSeek/DMC/H-Net.
 See research/connections/hca/README.md for equations and estimator limitations.
 """
@@ -97,8 +98,8 @@ def confidence_output(output, starts, soft):
 def pool_step(k, v, score, previous, start):
     """Per-channel softmax accumulation, shared weights for separate K and V.
 
-    The learned logits are bounded smoothly to [-10,10]. This avoids overflow
-    in the STE reset derivative even when the forward reset is exactly zero.
+    The learned logits are bounded smoothly to [-10,10], keeping weights finite.
+    This does not prevent the legacy STE reset derivative from amplifying them.
     Accumulation stays FP32 (FP64 for numerical oracles).
     """
     dtype = work_dtype(k)
@@ -320,6 +321,16 @@ class HCAAttention(nn.Module):
                 lk, lv = local_k[b, t:t+1], v[b, t:t+1]
                 state.local_k = (lk.clone() if state.local_k is None else torch.cat((state.local_k, lk))[-self.config.hca_window:].clone())
                 state.local_v = (lv.clone() if state.local_v is None else torch.cat((state.local_v, lv))[-self.config.hca_window:].clone())
+                if (self.config.hca_backend == 'triton' and q.dtype == torch.bfloat16
+                        and (self.boundary is None or self.config.hca_dynamic_gradient == 'confidence')):
+                    from nanochat.hca_triton import cached_attention
+                    outputs.append(cached_attention(q[b:b+1, t:t+1], state.local_k, state.local_v,
+                        state.summary_k, state.summary_v, state.open_k, state.open_v,
+                        state.position, self.config.hca_window,
+                        self.config.hca_block_size if self.boundary is None else 0))
+                    state.age = 1 if begins else state.age + 1
+                    state.position += 1
+                    continue
                 keys, vals = state.local_k, state.local_v
                 if state.summary_k is not None:
                     keys = torch.cat((keys, state.summary_k))

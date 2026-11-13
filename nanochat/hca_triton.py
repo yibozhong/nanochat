@@ -3,13 +3,13 @@
 Independent Triton implementation of the reference in hca.py. The execution
 design follows NVIDIA's fused Compressor (chunk ownership, recomputation in
 backward), not its MLA layout or ratio restrictions. Fixed and Dynamic keep
-the reference's visible open prefix. Dynamic backward retains zero-gate STE
-derivatives; forward compaction alone would not preserve that estimator.
+the reference's visible open prefix. Legacy DMC backward retains zero-gate STE
+derivatives; the confidence estimator explicitly uses detached hard routing.
 
 No T x T intermediates, no atomic gradient updates, no Python token loop.
-Dynamic probabilities and score adjoints remain FP32 in dot products because
+Legacy DMC probabilities and score adjoints remain FP32 in dot products because
 BF16 rounding can dominate a small, cancelling router-bias gradient. Fixed
-BF16 attention uses BF16 matrix products with FP32 accumulators, following the
+and confidence BF16 attention use BF16 matrix products with FP32 accumulators, following the
 official DeepSeek attention precision scheme; FP32 oracle inputs stay precise.
 GPU validation is mandatory before selecting this backend for a formal run.
 """
@@ -19,7 +19,7 @@ import triton.language as tl
 from triton.language.extra.cuda import libdevice
 from torch.autograd.function import once_differentiable
 
-# Diagnostic tuning defaults; Dynamic and FP32 retain the validated geometry.
+# Measured Hopper defaults; legacy DMC and FP32 retain the precise geometry.
 FIXED_FWD_TILE = (64, 64, 4)
 FIXED_BWD_TILE = (64, 64, 4)
 FIXED_SMALL_TILE = (128, 64, 8)
@@ -561,3 +561,71 @@ def attention(q, k, v, pk, pv, starts, window, ratio=0, compact=False):
     if compact and starts.requires_grad:
         raise ValueError('Compact backward requires detached hard routing')
     return _Attention.apply(q, k, v, pk, pv, starts, window, ratio, compact)
+
+
+@tr.jit
+def _cached_fast(Q, K, V, SK, SV, PK, PV, O, POSITION, LOCAL, SUMMARIES,
+                 H: tl.constexpr, D: tl.constexpr, W: tl.constexpr, R: tl.constexpr,
+                 TRAIN_BM: tl.constexpr, BN: tl.constexpr, BD: tl.constexpr):
+    # Use the training path's online-softmax order and BF16 probability products.
+    # Padding the single query permits the same Tensor Core dot operations.
+    h = tl.program_id(0)
+    rows, cols, d = tl.arange(0, 16), tl.arange(0, BN), tl.arange(0, BD)
+    off = h*D + d[None, :] + tl.zeros((16, 1), tl.int32)
+    valid = d[None, :] < D
+    q = tl.load(Q+off, valid, 0)
+    pk = tl.load(PK+off, valid, 0).to(tl.float32)
+    acc = tl.load(PV+off, valid, 0).to(tl.float32)
+    scale: tl.constexpr = D**-.5
+    m = tl.sum(q.to(tl.float32)*pk, 1)*scale
+    l = tl.full((16,), 1, tl.float32)
+    first = (POSITION//TRAIN_BM)*TRAIN_BM-W+1
+    if R > 0:
+        first = first//BN*BN
+    local_start = POSITION-LOCAL+1
+    for base in range(tl.maximum(0, first), POSITION+1, BN):
+        j = base+cols
+        ix = j-local_start
+        offsets = (ix[:, None]*H+h)*D+d[None, :]
+        mask = (ix[:, None] >= 0) & (ix[:, None] < LOCAL) & (d[None, :] < D)
+        k = tl.load(K+offsets, mask, 0)
+        v = tl.load(V+offsets, mask, 0)
+        z = tl.dot(q, tl.trans(k), input_precision='ieee')*scale
+        z = tl.where((ix[None, :] >= 0) & (ix[None, :] < LOCAL), z, -float('inf'))
+        new_m = tl.maximum(m, tl.max(z, 1))
+        p = tl.exp(z-new_m[:, None])
+        alpha = tl.exp(m-new_m)
+        acc = acc*alpha[:, None]+tl.dot(p.to(tl.bfloat16), v)
+        l = l*alpha+tl.sum(p, 1)
+        m = new_m
+    for base in range(0, SUMMARIES, BN):
+        j = base+cols
+        offsets = (j[:, None]*H+h)*D+d[None, :]
+        mask = (j[:, None] < SUMMARIES) & (d[None, :] < D)
+        k = tl.load(SK+offsets, mask, 0)
+        v = tl.load(SV+offsets, mask, 0)
+        z = tl.dot(q, tl.trans(k), input_precision='ieee')*scale
+        z = tl.where(j[None, :] < SUMMARIES, z, -float('inf'))
+        new_m = tl.maximum(m, tl.max(z, 1))
+        p = tl.exp(z-new_m[:, None])
+        alpha = tl.exp(m-new_m)
+        acc = acc*alpha[:, None]+tl.dot(p.to(tl.bfloat16), v)
+        l = l*alpha+tl.sum(p, 1)
+        m = new_m
+    tl.store(O+off, acc/l[:, None], (rows[:, None] == 0) & valid)
+
+
+def cached_attention(q, local_k, local_v, summary_k, summary_v, open_k, open_v,
+                     position, window, ratio):
+    """One causal query over compressed storage, matching fast training arithmetic."""
+    assert not torch.is_grad_enabled() and q.dtype == torch.bfloat16
+    h, d = q.shape[-2:]
+    bm, bn, _ = FIXED_SMALL_TILE if 0 < ratio <= 4 else FIXED_FWD_TILE
+    n = 0 if summary_k is None else summary_k.shape[0]
+    out = torch.empty((1, 1, h, d), device=q.device, dtype=q.dtype)
+    _cached_fast[(h,)](q, local_k, local_v,
+                      open_k if summary_k is None else summary_k,
+                      open_v if summary_v is None else summary_v, open_k, open_v, out,
+                      position, local_k.shape[0], n, h, d, window, ratio, bm, bn,
+                      tr.next_power_of_2(d), num_warps=4)
+    return out
