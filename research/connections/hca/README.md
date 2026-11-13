@@ -4,6 +4,35 @@ Status: reference implementation; GPU validation results are recorded separately
 No formal pretraining or matched-budget quality result. The initial hard-quota
 version was stopped; its checkpoints are explicitly rejected for HCA loading.
 
+### Official-source audit, 2026-11-13
+
+The current reference must not be treated as a faithful or efficient DeepSeek
+HCA execution path. Direct review of DeepSeek's official `inference/model.py`
+(`Compressor.forward`, `get_compress_topk_idxs`, `Attention.forward`) and
+`inference/kernel.py` (`sparse_attn_kernel`) establishes these differences:
+
+- Official prefill reshapes complete chunks and applies channel-wise softmax
+  and weighted sum in parallel, producing `floor(T/R)` summaries. Our training
+  code constructs T prefix snapshots in a Python token loop, even for Fixed.
+- Official attention gathers only the causal local window and completed
+  summaries and uses online softmax. Our training code materializes FP32 scores
+  over T raw candidates plus T prefix candidates, including masked entries.
+- Official incomplete chunks remain in compressor state; the completed summary
+  is visible at its last included token. Our current prefix summary is visible
+  before a chunk is complete. This is a declared local adaptation, not official
+  HCA semantics, and is unnecessary for Fixed B16 with SWA256.
+- Official compression includes learned within-chunk position bias and places
+  compressed RoPE at chunk start. Our port omits that bias and uses prefix end.
+  Separate K/V and nanochat QK normalization are additional declared adaptations.
+
+For the requested T2048/R16/W256, the official selection pattern needs at most
+384 selected entries per query; our dense training scores have 4096 columns.
+At microbatch8/four heads one such FP32 score tensor alone is 1 GiB per layer,
+before softmax intermediates and backward. These are implementation differences,
+not evidence that HCA intrinsically needs a 54-day 10B run. The actual official
+release reviewed is inference code; its custom kernel is not an available
+training/backward implementation. Training remains blocked pending diagnosis.
+
 `ConnectionConfig.attention_mode = full | fixed_hca | dynamic_hca` selects the
 attention. `full` retains the original default. HCA currently requires vanilla,
 baseline residuals, one stream and the original Q/K/V projection layout.

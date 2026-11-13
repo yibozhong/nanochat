@@ -75,6 +75,12 @@ fi
 cd nanochat-src
 ln -sfn ../results results
 cp ../source.json source.json
+# Explicit investigation payloads never reach formal training or change its
+# acceptance policy. Exit42 preserves the original job on hold for review.
+if python -c 'import json,sys;sys.exit(0 if json.load(open("source.json")).get("diagnostic_suite") == "hca_root_cause_v1" else 1)'; then
+    timeout --signal=TERM --kill-after=30 3600 python research/connections/hca-train/diagnose.py
+    exit 42
+fi
 # Successful startup persists across exit85. No diagnostic model/RNG/data
 # state enters the separate formal training process or checkpoints directory.
 if timeout --signal=TERM --kill-after=30 3600 python research/connections/hca-train/preflight.py --mode "$TASK_MODE"; then
