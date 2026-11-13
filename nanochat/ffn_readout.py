@@ -64,29 +64,23 @@ LM-specific adaptation of GradMax, NOT the original paper's algorithm:
     n = min(max_tokens, idx.numel())
     if n < r:
         raise ValueError('Insufficient calibration tokens')
-    # Ordinary model forward captures the exact feature/dtype boundaries.
-    captured = {}
-    block_hook = model.blocks[-1].register_forward_pre_hook(
-        lambda module, args: captured.update(residual_input=args[0].detach()))
-    hook = model.blocks[-1].mlp.c_proj.register_forward_pre_hook(
-        lambda module, args: captured.update(features=args[0].detach()))
-    compiled = model.compiled_steps
-    model.compiled_steps = None
-    try:
-        h = model.hidden(idx)
-    finally:
-        hook.remove()
-        block_hook.remove()
-        model.compiled_steps = compiled
+    # Explicit eager calibration preserves the production operation/dtype
+    # boundaries. ConnectionModel invokes block.forward directly, so module
+    # hooks on blocks do not run. No persistent hooks or compiled-graph edits.
+    from nanochat.gpt import norm
+    x = norm(model.wte(idx))
+    cos, sin = model.cos[:, :idx.shape[1]], model.sin[:, :idx.shape[1]]
+    for block in model.blocks[:-1]:
+        x = block.forward(x, cos, sin)
+    block = model.blocks[-1]
+    x = x + block.attention_branch(x, cos, sin)
+    expanded = F.relu(block.mlp.c_fc(norm(x))).square()
+    projected = block.mlp.c_proj(expanded)
+    main = x + projected[..., :d]
+    h = readout(x, projected, model.config.ffn_readout_backend)
     # Deterministic evenly spaced positions; no change to training data/RNG.
     pos = torch.linspace(0, idx.numel()-1, n, device=idx.device).long()
-    features = captured['features'].reshape(-1, 4*d)[pos].float()
-    # Recompute only the final attention to recover the unnormalized residual.
-    block = model.blocks[-1]
-    x = captured['residual_input']
-    cos, sin = model.cos[:, :idx.shape[1]], model.sin[:, :idx.shape[1]]
-    x = x + block.attention_branch(x, cos, sin)
-    main = x + block.mlp.c_proj(captured['features'])[..., :d]
+    features = expanded.reshape(-1, 4*d)[pos].float()
     inv = torch.rsqrt(main.reshape(-1, d)[pos].float().square().mean(-1, keepdim=True) + 2**-23)
     features *= inv
     dtype = h.dtype
