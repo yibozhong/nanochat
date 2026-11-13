@@ -27,7 +27,7 @@ def _forward(X, P, Y, Inv, M: tl.constexpr, D: tl.constexpr, R: tl.constexpr,
 
 @tr.jit
 def _backward(X, P, G, Inv, DX, DP, M: tl.constexpr, D: tl.constexpr, R: tl.constexpr,
-              BM: tl.constexpr, BD: tl.constexpr, BR: tl.constexpr):
+              BM: tl.constexpr, BD: tl.constexpr, BR: tl.constexpr, WRITE_DX: tl.constexpr = True):
     rows = tl.program_id(0)*BM + tl.arange(0, BM)
     cols = tl.arange(0, BD)
     extra = tl.arange(0, BR)
@@ -43,20 +43,22 @@ def _backward(X, P, G, Inv, DX, DP, M: tl.constexpr, D: tl.constexpr, R: tl.cons
     dot = tl.sum(gh*main, 1)+tl.sum(gb*b, 1)
     correction = dot*(inv*inv*inv/D)
     dx = gh*inv[:, None]-main*correction[:, None]
-    tl.store(DX+rows[:, None]*D+cols[None, :], dx, mask)
+    if WRITE_DX:
+        tl.store(DX+rows[:, None]*D+cols[None, :], dx, mask)
     tl.store(DP+rows[:, None]*(D+R)+cols[None, :], dx, mask)
     tl.store(DP+rows[:, None]*(D+R)+D+extra[None, :], gb*inv[:, None], bmask)
 
 
 class _Readout(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, x, p):
+    def forward(ctx, x, p, alias_grad):
         d, r = x.shape[-1], p.shape[-1]-x.shape[-1]
         m = x.numel()//d
         y = torch.empty_like(p)
         inv = torch.empty(m, dtype=torch.float32, device=x.device)
         _forward[(tr.cdiv(m, 4),)](x,p,y,inv,m,d,r,4,tr.next_power_of_2(d),tr.next_power_of_2(r),num_warps=4,enable_fp_fusion=False)
         ctx.save_for_backward(x,p,inv)
+        ctx.alias_grad = alias_grad
         return y
 
     @staticmethod
@@ -64,16 +66,17 @@ class _Readout(torch.autograd.Function):
         x,p,inv = ctx.saved_tensors
         d, r = x.shape[-1], p.shape[-1]-x.shape[-1]
         m = x.numel()//d
-        dx, dp = torch.empty_like(x), torch.empty_like(p)
-        _backward[(tr.cdiv(m, 4),)](x,p,g.contiguous(),inv,dx,dp,m,d,r,4,tr.next_power_of_2(d),tr.next_power_of_2(r),num_warps=4,enable_fp_fusion=False)
-        return dx, dp
+        dp = torch.empty_like(p)
+        dx = dp[..., :d] if ctx.alias_grad else torch.empty_like(x)
+        _backward[(tr.cdiv(m, 4),)](x,p,g.contiguous(),inv,dx,dp,m,d,r,4,tr.next_power_of_2(d),tr.next_power_of_2(r),WRITE_DX=not ctx.alias_grad,num_warps=4,enable_fp_fusion=False)
+        return dx, dp, None
 
 
-def fused_readout(residual, projected):
+def fused_readout(residual, projected, alias_grad=True):
     if not residual.is_cuda or residual.dtype not in (torch.bfloat16,torch.float32):
         raise ValueError('Triton readout requires CUDA BF16/FP32')
     if projected.dtype != residual.dtype or projected.device != residual.device:
         raise ValueError('Readout operands must share dtype and device')
     if projected.shape[:-1] != residual.shape[:-1] or projected.shape[-1] <= residual.shape[-1]:
         raise ValueError('Expected packed main and branch projection')
-    return _Readout.apply(residual.contiguous(), projected.contiguous())
+    return _Readout.apply(residual.contiguous(), projected.contiguous(), alias_grad)

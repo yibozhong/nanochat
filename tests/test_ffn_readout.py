@@ -66,6 +66,16 @@ def test_baseline_initialization_rng_and_new_gradient_path():
     assert branch.blocks[-1].mlp.c_proj.weight.grad[128:].norm()>0
 
 
+def test_shared_gradient_storage_matches_separate_outputs():
+    x=torch.randn(128,512,device='cuda',dtype=torch.bfloat16,requires_grad=True)
+    p=torch.randn(128,576,device='cuda',dtype=torch.bfloat16,requires_grad=True)
+    g=torch.randn_like(p)
+    shared=torch.autograd.grad(fused_readout(x,p,True),(x,p),g)
+    separate=torch.autograd.grad(fused_readout(x,p,False),(x,p),g)
+    for a,b in zip(shared,separate):assert torch.equal(a,b)
+    assert shared[0].untyped_storage().data_ptr()==shared[1].untyped_storage().data_ptr()
+
+
 @pytest.mark.parametrize('compiled,checkpoint',[(False,False),(True,False),(True,True)])
 def test_model_reference_gradients_and_cce(compiled,checkpoint):
     configure_attention('fa2');torch.backends.cuda.matmul.allow_tf32=False

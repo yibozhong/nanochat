@@ -85,6 +85,7 @@ def run_tiles(args):
     pair(reference)
     return dict(formal_training=False,gpu=torch.cuda.get_device_name(),shape=[m,d,r],tiles=rows,
         triton_pair_ms=triton.testing.do_bench(lambda:pair(fused_readout)),
+        triton_separate_gradient_pair_ms=triton.testing.do_bench(lambda:pair(lambda x,p:fused_readout(x,p,False))),
         compiled_reference_pair_ms=triton.testing.do_bench(lambda:pair(reference)))
 
 
