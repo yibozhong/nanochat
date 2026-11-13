@@ -17,6 +17,7 @@ from torch.nn import functional as F
 from nanochat.gpt import Linear, apply_rotary_emb, norm
 
 USE_FUSED_ROTARY = True
+USE_FUSED_ROUTING = True
 
 
 def work_dtype(x):
@@ -78,6 +79,9 @@ class _Confidence(torch.autograd.Function):
     @staticmethod
     def backward(ctx, grad):
         output, = ctx.saved_tensors
+        if USE_FUSED_ROUTING and output.is_cuda and output.dtype == torch.bfloat16:
+            from nanochat.hca_routing import confidence_gradient
+            return grad, confidence_gradient(grad, output)
         dtype = work_dtype(output)
         score_grad = (grad.to(dtype)*output.to(dtype)).sum((-1, -2))
         return grad, score_grad
@@ -266,8 +270,14 @@ class HCAAttention(nn.Module):
             score = score_linear(x, self.pool_score.weight).view(shape)
         else:
             score = F.linear(x.to(dtype), self.pool_score.weight.to(dtype)).view(shape)
-        content = (F.linear(x.to(dtype), self.boundary.weight.to(dtype), self.boundary.bias.to(dtype)).squeeze(-1)
-                   if self.boundary is not None else x.new_zeros(x.shape[:2], dtype=dtype))
+        if self.boundary is None:
+            content = x.new_zeros(x.shape[:2], dtype=dtype)
+        elif (USE_FUSED_ROUTING and self.config.hca_backend == 'triton' and x.is_cuda
+              and x.dtype == torch.bfloat16 and self.config.hca_dynamic_gradient == 'confidence'):
+            from nanochat.hca_routing import router_linear
+            content = router_linear(x, self.boundary.weight, self.boundary.bias)
+        else:
+            content = F.linear(x.to(dtype), self.boundary.weight.to(dtype), self.boundary.bias.to(dtype)).squeeze(-1)
         return q, raw_k, local_k, v, score, content
 
     def dense(self, q, raw_k, local_k, v, score, content, cos_sin, noise=None):

@@ -18,6 +18,7 @@ p.add_argument('--projection', choices=['native','tf32x3','bf16x3'])
 p.add_argument('--rotary',choices=['native','fused'])
 p.add_argument('--resume', help='Diagnostic checkpoint; never written back')
 p.add_argument('--pool', choices=['serial','parallel'], default='serial')
+p.add_argument('--routing', choices=['native','fused'])
 a = p.parse_args()
 assert os.environ['WANDB_MODE'] == 'disabled'
 if a.kernel_file:
@@ -34,6 +35,9 @@ from nanochat.packed_training import PackedData, seed_all, train_step
 if a.rotary:
     import nanochat.hca as hca
     hca.USE_FUSED_ROTARY = a.rotary == 'fused'
+if a.routing:
+    import nanochat.hca as hca
+    hca.USE_FUSED_ROUTING = a.routing == 'fused'
 
 if a.projection:
     import nanochat.hca_projection as projection
