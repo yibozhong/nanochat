@@ -1,0 +1,285 @@
+{
+  "complete": true,
+  "formal_training": false,
+  "implementation_commit": "2218c2d",
+  "production_test_commit": "5572735",
+  "allocation": "8540864.0",
+  "gpu": "NVIDIA H100 80GB HBM3",
+  "gpu_uuid": "f8d23f80-7656-1494-e6f1-22a66463300e",
+  "runtime": {
+    "torch": "2.10.0+cu130",
+    "triton": "3.6.0",
+    "attention": "fa2",
+    "lock": "research/connections/runtime/uv.lock"
+  },
+  "workload": {
+    "variant": "baseline",
+    "depth": 8,
+    "width": 512,
+    "heads": 4,
+    "sequence_length": 2048,
+    "vocab_size": 32768,
+    "streams": 1,
+    "sinkhorn_iterations": 20,
+    "activation_checkpoint": false,
+    "connection_backend": "nvidia",
+    "fused_connection_grad": false,
+    "architecture": "vanilla",
+    "window_pattern": "SSSL",
+    "attention_kernel": "original",
+    "ffn_readout_width": 64,
+    "ffn_readout_backend": "triton",
+    "ffn_readout_init": "gradmax",
+    "compact_routing": false,
+    "attnres_block_size": 2,
+    "attnres_block_size_unit": "sublayers"
+  },
+  "parameters": 60948480,
+  "additional_parameters": 2228224,
+  "data": {
+    "dataset": "HuggingFaceFW/fineweb-edu",
+    "config": "sample-10BT",
+    "revision": "87f09149ef4734204d70ed1d046ddc9ca3f2b8f9",
+    "sequence_length": 2048,
+    "cache": "osdf:///chtc/staging/y/yzhong239/nanochat-2k-10b-data-7685535.tar",
+    "tokenizer": "native RustBPE 32768 vocab, first 100M capped characters from training shard"
+  },
+  "tests": {
+    "gpu_passed": 34,
+    "failed": 0,
+    "coverage": [
+      "FP32/BF16 forward and VJP",
+      "small-amplitude and irregular dimensions",
+      "compiled and checkpointed model gradients",
+      "production D512/R64/V32768 all-parameter gradients",
+      "baseline weights and RNG",
+      "independent gradient path",
+      "GradMax initialization",
+      "causal and split-prefill cache",
+      "model/optimizer/RNG/next-step recovery",
+      "aliased gradient equivalence"
+    ]
+  },
+  "cli_resume": {
+    "passed": true,
+    "first_segment_exit": 85,
+    "resumed_step": 3,
+    "training_tokens": 98304,
+    "initialization_skipped_on_resume": true,
+    "formal_training": false,
+    "wandb_created": false,
+    "model_optimizer_rng_present": true,
+    "data_position": "step 3 * 16 packed rows"
+  },
+  "initialization": {
+    "method": "projected_GradMax_inspired",
+    "tokens": 256,
+    "rank": 64,
+    "top_singular_value": 0.5019291639328003,
+    "last_singular_value": 0.030089855194091797,
+    "relative_overlap": 1.6775592257545213e-06,
+    "new_down_rows_zero": true,
+    "seconds": 0.7313102651387453
+  },
+  "paired_throughput": {
+    "formal_training": false,
+    "source": {
+      "commit": "2218c2d",
+      "formal_training": false
+    },
+    "gpu": "NVIDIA H100 80GB HBM3",
+    "warmup_updates": 10,
+    "measured_updates": 100,
+    "attention_backend": "fa2",
+    "shared_autotune": true,
+    "alternating_order": [
+      [
+        "baseline",
+        "reference",
+        "triton"
+      ],
+      [
+        "triton",
+        "reference",
+        "baseline"
+      ],
+      [
+        "reference",
+        "baseline",
+        "triton"
+      ]
+    ],
+    "models": {
+      "baseline": {
+        "median_ms": 66.84888061136007,
+        "p10_ms": 66.74039177596569,
+        "p90_ms": 67.46933609247208,
+        "last_loss": 6.052859306335449,
+        "all_updates_finite": true
+      },
+      "reference": {
+        "median_ms": 70.44379319995642,
+        "p10_ms": 70.33267617225647,
+        "p90_ms": 71.35670632123947,
+        "last_loss": 6.049614906311035,
+        "all_updates_finite": true
+      },
+      "triton": {
+        "median_ms": 70.39016392081976,
+        "p10_ms": 70.3018568456173,
+        "p90_ms": 71.20846025645733,
+        "last_loss": 6.0493388175964355,
+        "all_updates_finite": true
+      }
+    },
+    "paired_triton_minus_reference_ms": -0.06828363984823227,
+    "cce_backward_configs": {},
+    "cce_lse_forward_configs": {}
+  },
+  "overhead_percent": 5.29744593637651,
+  "memory": {
+    "baseline_peak_allocated_gib": 5.374598026275635,
+    "branch_peak_allocated_gib": 5.430523872375488
+  },
+  "kernel_tuning": {
+    "formal_training": false,
+    "gpu": "NVIDIA H100 80GB HBM3",
+    "shape": [
+      32768,
+      512,
+      64
+    ],
+    "tiles": [
+      {
+        "bm": 1,
+        "warps": 4,
+        "forward_ms": 0.04730714395433873,
+        "backward_ms": 0.0662267028461301,
+        "relative_errors": [
+          8.856311978888698e-06,
+          0.0028220159001648426,
+          0.002660077763721347
+        ]
+      },
+      {
+        "bm": 1,
+        "warps": 8,
+        "forward_ms": 0.06048129294148255,
+        "backward_ms": 0.07001717589441886,
+        "relative_errors": [
+          4.691594767791685e-06,
+          0.002822014968842268,
+          0.002660074271261692
+        ]
+      },
+      {
+        "bm": 2,
+        "warps": 4,
+        "forward_ms": 0.043968728191293445,
+        "backward_ms": 0.06590464323670249,
+        "relative_errors": [
+          4.586395334627014e-06,
+          0.0028220214881002903,
+          0.0026600807905197144
+        ]
+      },
+      {
+        "bm": 2,
+        "warps": 8,
+        "forward_ms": 0.04949116596268947,
+        "backward_ms": 0.06622507012439519,
+        "relative_errors": [
+          8.856311978888698e-06,
+          0.0028220159001648426,
+          0.002660077763721347
+        ]
+      },
+      {
+        "bm": 4,
+        "warps": 4,
+        "forward_ms": 0.04376646118938543,
+        "backward_ms": 0.06587293794504682,
+        "relative_errors": [
+          4.586395334627014e-06,
+          0.0028220214881002903,
+          0.0026600807905197144
+        ]
+      },
+      {
+        "bm": 4,
+        "warps": 8,
+        "forward_ms": 0.04408952631485599,
+        "backward_ms": 0.06578829466624367,
+        "relative_errors": [
+          4.586395334627014e-06,
+          0.0028220214881002903,
+          0.0026600807905197144
+        ]
+      },
+      {
+        "bm": 8,
+        "warps": 4,
+        "forward_ms": 0.043736215284936104,
+        "backward_ms": 0.06681479855969145,
+        "relative_errors": [
+          4.586395334627014e-06,
+          0.0028220212552696466,
+          0.0026600805576890707
+        ]
+      },
+      {
+        "bm": 8,
+        "warps": 8,
+        "forward_ms": 0.043797387465645994,
+        "backward_ms": 0.06670416872470807,
+        "relative_errors": [
+          4.586395334627014e-06,
+          0.0028220214881002903,
+          0.0026600807905197144
+        ]
+      },
+      {
+        "bm": 16,
+        "warps": 4,
+        "forward_ms": 0.044868122415655125,
+        "backward_ms": 0.06867088308509818,
+        "relative_errors": [
+          4.586395334627014e-06,
+          0.0028220214881002903,
+          0.002660081023350358
+        ]
+      },
+      {
+        "bm": 16,
+        "warps": 8,
+        "forward_ms": 0.043620111984757674,
+        "backward_ms": 0.06741734993565514,
+        "relative_errors": [
+          4.586395334627014e-06,
+          0.0028220212552696466,
+          0.0026600805576890707
+        ]
+      }
+    ],
+    "triton_pair_ms": 0.10752450808553406,
+    "triton_separate_gradient_pair_ms": 0.13758430875924102,
+    "compiled_reference_pair_ms": 0.308308570867493
+  },
+  "finite_training": {
+    "warmup_updates": 10,
+    "measured_updates": 100,
+    "all_updates_finite": true,
+    "gradients": {
+      "branch_down": 0.056784555315971375,
+      "branch_head": 0.010284600779414177,
+      "last_ffn_up": 0.019015343859791756
+    }
+  },
+  "notes": [
+    "All timings are same H100; interleaved model comparison uses one process and alternating order.",
+    "No formal run or W&B created; diagnostic weights were not retained.",
+    "The isolated operator gain is small in the complete step; existing CCE dominates runtime.",
+    "The new backward returns the main slice of packed gradient, avoiding its duplicate kernel store.",
+    "Early GradMax hook bug and benchmark report introspection error were fixed in this debug workflow."
+  ]
+}

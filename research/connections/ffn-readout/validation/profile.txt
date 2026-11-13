@@ -1,0 +1,46 @@
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  
+                                                   Name    Self CPU %      Self CPU   CPU total %     CPU total  CPU time avg     Self CUDA   Self CUDA %    CUDA total  CUDA time avg    # of Calls  
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  
+                     LinearCrossEntropyFunctionBackward         0.33%     247.600us         0.49%     362.287us     362.287us      31.857ms        47.66%      31.975ms      31.975ms             1  
+                                   _cce_backward_kernel         0.00%       0.000us         0.00%       0.000us       0.000us      31.857ms        47.66%      31.857ms      31.857ms             1  
+## Call CompiledFxGraph f6mowqt3ye2a47qlavfe7szjo5uo...         0.00%       0.000us         0.00%       0.000us       0.000us      13.285ms        19.87%      13.285ms       1.898ms             7  
+                             LinearCrossEntropyFunction         0.18%     131.326us         0.27%     203.683us     203.683us       9.660ms        14.45%       9.670ms       9.670ms             1  
+                                _cce_lse_forward_kernel         0.00%       0.000us         0.00%       0.000us       0.000us       9.660ms        14.45%       9.660ms       9.660ms             1  
+                                               aten::mm         8.54%       6.372ms         9.82%       7.322ms      46.049us       8.003ms        11.97%       8.003ms      50.334us           159  
+## Call CompiledFxGraph fy3emtqdmdazlet7oakj6m6tro5q...         0.00%       0.000us         0.00%       0.000us       0.000us       6.506ms         9.73%       6.506ms     929.420us             7  
+                        aten::_flash_attention_backward         0.15%     111.723us         0.48%     360.063us      45.008us       6.051ms         9.05%       6.051ms     756.347us             8  
+                          Optimizer.step#MuonAdamW.step         0.00%       0.000us         0.00%       0.000us       0.000us       5.569ms         8.33%       5.569ms       5.569ms             1  
+void pytorch_flash::flash_bwd_dq_dk_dv_loop_seqk_par...         0.00%       0.000us         0.00%       0.000us       0.000us       5.374ms         8.04%       5.374ms     671.751us             8  
+         nvjet_sm90_tst_256x128_64x4_1x2_h_bz_coopA_NNT         0.00%       0.000us         0.00%       0.000us       0.000us       2.885ms         4.32%       2.885ms      42.420us            68  
+         nvjet_sm90_tst_256x128_64x4_1x2_h_bz_coopA_TNT         0.00%       0.000us         0.00%       0.000us       0.000us       2.571ms         3.85%       2.571ms      49.441us            52  
+                         aten::_flash_attention_forward         0.11%      82.404us         0.33%     249.248us      31.156us       2.139ms         3.20%       2.139ms     267.354us             8  
+void pytorch_flash::flash_fwd_kernel<Flash_fwd_kerne...         0.00%       0.000us         0.00%       0.000us       0.000us       2.139ms         3.20%       2.139ms     267.354us             8  
+## Call CompiledFxGraph flajjdwrrzsudkqfnj5zjc27fukl...         0.00%       0.000us         0.00%       0.000us       0.000us       1.966ms         2.94%       1.966ms       1.966ms             1  
+        nvjet_sm90_tst_128x128_64x6_2x1_v_bz_splitK_NTT         0.00%       0.000us         0.00%       0.000us       0.000us       1.332ms         1.99%       1.332ms      88.821us            15  
+## Call CompiledFxGraph fjipryyfn4czaspfwkd2kle4rreh...         0.00%       0.000us         0.00%       0.000us       0.000us       1.102ms         1.65%       1.102ms       1.102ms             1  
+         nvjet_sm90_tst_128x64_64x8_1x2_h_bz_splitK_NTT         0.00%       0.000us         0.00%       0.000us       0.000us       1.087ms         1.63%       1.087ms      33.978us            32  
+## Call CompiledFxGraph fmrafpiqxo7zyh374s6gm64trmck...         0.00%       0.000us         0.00%       0.000us       0.000us       1.074ms         1.61%       1.074ms       1.074ms             1  
+triton_poi_fused__unsafe_view_mul_pow_relu_threshold...         0.05%      39.323us         0.09%      63.442us       7.930us       1.060ms         1.59%       1.060ms     132.551us             8  
+triton_poi_fused__unsafe_view_mul_pow_relu_threshold...         0.00%       0.000us         0.00%       0.000us       0.000us       1.060ms         1.59%       1.060ms     132.551us             8  
+## Call CompiledFxGraph fwch5bim6sjykcjnkicaedkhn2ev...         0.00%       0.000us         0.00%       0.000us       0.000us       1.054ms         1.58%       1.054ms       1.054ms             1  
+## Call CompiledFxGraph fvfcc3nimaqo5f65zxydq7uspn4r...         0.00%       0.000us         0.00%       0.000us       0.000us       1.031ms         1.54%       1.031ms       1.031ms             1  
+## Call CompiledFxGraph frrgccevmrhba7guykyukivdr6lg...         0.00%       0.000us         0.00%       0.000us       0.000us     914.042us         1.37%     914.042us     914.042us             1  
+               triton_poi_fused__unsafe_view_pow_relu_5         0.04%      29.750us         0.07%      49.002us       7.000us     624.156us         0.93%     624.156us      89.165us             7  
+               triton_poi_fused__unsafe_view_pow_relu_5         0.00%       0.000us         0.00%       0.000us       0.000us     624.156us         0.93%     624.156us      89.165us             7  
+                                              aten::bmm         2.39%       1.783ms         2.59%       1.931ms      42.913us     621.117us         0.93%     621.117us      13.803us            45  
+triton_per_fused__fused_rms_norm__unsafe_view_add_ca...         0.12%      90.540us         0.16%     116.092us      14.511us     589.403us         0.88%     589.403us      73.675us             8  
+triton_per_fused__fused_rms_norm__unsafe_view_add_ca...         0.00%       0.000us         0.00%       0.000us       0.000us     589.403us         0.88%     589.403us      73.675us             8  
+triton_per_fused__fused_rms_norm__fused_rms_norm_bac...         0.06%      47.390us         0.09%      69.977us       9.997us     478.047us         0.72%     478.047us      68.292us             7  
+triton_per_fused__fused_rms_norm__fused_rms_norm_bac...         0.00%       0.000us         0.00%       0.000us       0.000us     478.047us         0.72%     478.047us      68.292us             7  
+triton_poi_fused__fused_rms_norm__fused_rms_norm_bac...         0.11%      83.674us         0.14%     106.976us      15.282us     440.990us         0.66%     440.990us      62.999us             7  
+triton_poi_fused__fused_rms_norm__fused_rms_norm_bac...         0.00%       0.000us         0.00%       0.000us       0.000us     440.990us         0.66%     440.990us      62.999us             7  
+triton_per_fused__fused_rms_norm__fused_rms_norm_bac...         0.06%      46.576us         0.09%      68.140us       9.734us     391.004us         0.58%     391.004us      55.858us             7  
+triton_per_fused__fused_rms_norm__fused_rms_norm_bac...         0.00%       0.000us         0.00%       0.000us       0.000us     391.004us         0.58%     391.004us      55.858us             7  
+triton_per_fused__fused_rms_norm__fused_rms_norm_bac...         0.12%      87.382us         0.17%     129.699us       9.264us     372.414us         0.56%     372.414us      26.601us            14  
+triton_per_fused__fused_rms_norm__fused_rms_norm_bac...         0.00%       0.000us         0.00%       0.000us       0.000us     372.414us         0.56%     372.414us      26.601us            14  
+void pytorch_flash::flash_bwd_dot_do_o_kernel<true, ...         0.00%       0.000us         0.00%       0.000us       0.000us     361.918us         0.54%     361.918us      45.240us             8  
+                                              aten::all         0.52%     388.436us         0.87%     650.541us      12.756us     341.241us         0.51%     341.241us       6.691us            51  
+void pytorch_flash::flash_bwd_convert_dq_kernel<Flas...         0.00%       0.000us         0.00%       0.000us       0.000us     314.846us         0.47%     314.846us      39.356us             8  
+-------------------------------------------------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  ------------  
+Self CPU time total: 74.588ms
+Self CUDA time total: 66.848ms
