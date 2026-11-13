@@ -24,7 +24,9 @@ def run_model(args):
     init=None
     if args.width:
         x,y=data.batch('train',0,1)
+        torch.cuda.synchronize();calibration_start=time.perf_counter()
         init=initialize_gradmax(model,x,y)
+        torch.cuda.synchronize();init['seconds']=time.perf_counter()-calibration_start
     opt,wd=optimizer_for(model)
     # Warm all compilation/autotuning and optimizer state before timing.
     for step in range(10):

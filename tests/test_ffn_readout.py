@@ -1,6 +1,5 @@
 """GPU-only numerical, routing, causal, compile, and checkpoint checks."""
 from dataclasses import asdict
-import copy
 
 import pytest
 import torch
@@ -147,6 +146,8 @@ def test_checkpoint_optimizer_and_next_update(tmp_path):
     other_opt,other_wd=optimizer_for(other)
     other.load_state_dict(restored['model']);other_opt.load_state_dict(restored['optimizer'])
     equal_tree(model.state_dict(),other.state_dict());equal_tree(opt.state_dict(),other_opt.state_dict())
+    with torch.no_grad():
+        assert torch.equal(model.hidden(x),other.hidden(x))
     assert restored['step']==3 and restored['next_data_row']==6
     restore_rng(state['rng']);expected=(torch.rand(4),torch.rand(4,device='cuda'))
     restore_rng(restored['rng']);equal_tree(expected,(torch.rand(4),torch.rand(4,device='cuda')))
