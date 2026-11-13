@@ -1,10 +1,90 @@
 # Fixed HCA / free Dynamic HCA
 
 Status: reference plus opt-in Triton implementation. Source `3ed3470` passed the
-full H100 startup gate and Fixed formal pretraining has started; see the
+full H100 startup gate. Fixed B16 and separately authorized B4 formal pretraining
+are running. Dynamic stopped on a nonfinite update and remains held; see the
 [training record](../hca-train/README.md). No completed 10B or matched-budget
 quality result. The initial hard-quota
 version was stopped; its checkpoints are explicitly rejected for HCA loading.
+
+### Dynamic stability diagnosis and alternatives, 2026-11-13
+
+The original Dynamic run completed update 148 and rejected update 149 before
+the optimizer ran. Its durable checkpoint is update 50. Two bounded diagnostic
+trajectories from that checkpoint reached 301 and 1501 without reproducing the
+nonfinite event. Update 51's forward loss matched the original; later updates
+diverged under the previously isolated CCE backward nondeterminism. This is not
+a repaired or stable 10B result. Optimizer tensors at diagnostic step 1501 were
+finite, while loss had deteriorated to roughly 7–8.
+
+One conditioning problem is independently confirmed. For one pooling channel,
+at hard start=1, the derivative of the pooled value with respect to start is:
+
+    prior_mass / current_weight * (current_value - prior_pooled_value)
+
+Exponential channel weights and a hard reset can make this multiplier very large.
+On a diagnostic update, layer 0's largest mass ratio was 47,568,932; its boundary
+gradient reached 7,404,190.5 in Triton and 7,404,186.15 in the independent FP64
+reference. Layer 7 had mass ratio 223,359,568, upstream magnitude 8.25e-5, and
+boundary gradient 296.56. Thus the measured amplification is in this estimator's
+mathematics, not merely FP32 roundoff. It is a plausible instability mechanism,
+not proof of the unrecorded original failing backward. No clipping, threshold
+relaxation, or silent formal restart was used.
+
+The debug evidence, isolated operator inputs, and profiles are under
+`/home/yzhong239/hca-10b-20261112/debug-dynamic/results/dynamic-diagnosis/`.
+`NonfiniteTrainingError` now identifies the rejected update/data row, separates
+nonfinite loss from gradients, lists affected parameter names, and writes a
+small `failure.json`. Three GPU tests verify the failure and successful paths.
+
+Official dynamic-chunking designs reviewed:
+
+- **H-Net:** the [routing/chunking source](https://github.com/goombalab/hnet/blob/main/hnet/modules/dc.py)
+  uses adjacent projected cosine similarity, hard boundary selection, and direct
+  selection of encoder vectors. Dechunking uses a probability-weighted EMA,
+  clamped probabilities, and the Mamba2 scan kernel. The
+  [model source](https://github.com/goombalab/hnet/blob/main/hnet/models/hnet.py)
+  places a confidence STE on the reconstructed output. Its
+  [ratio loss](https://arxiv.org/html/2507.07955v1#S2.SS3.SSS2)
+  couples actual and soft keep rates around a target, without a fixed quota.
+  This is a hierarchy with chunk selection/dechunking, not our weighted KV reset.
+- **BLT:** the [official patcher](https://github.com/facebookresearch/blt/blob/main/bytelatent/data/patcher.py)
+  thresholds entropy from a separate prediction model; entropy computation
+  defaults to no-grad. Boundaries adapt to content without differentiating the
+  main LM through this hard threshold. It offers a simpler stability reference,
+  at the cost of a separate patcher and a different training setup.
+- **Dynamic Token Pooling:** the [boundary predictor](https://github.com/PiotrNawrot/dynamic-pooling/blob/main/hourglass.py)
+  provides a relaxed-Bernoulli hard STE with a binomial prior, or supervised
+  entropy/unigram boundaries. Its [pooling code](https://github.com/PiotrNawrot/dynamic-pooling/blob/main/shortening.py)
+  averages groups and delays their use to the following group to preserve
+  causality. This is a useful reference for supervised causal chunking.
+
+Our inference from this comparison: H-Net's smoothing and confidence-gradient
+path is the most relevant end-to-end alternative to investigate. Merely swapping
+our scalar router for cosine similarity would leave the problematic pooling
+reset derivative intact. Adapting its complete gradient path to per-chunk KV
+pooling would change the estimator and requires separate validation; it is not
+an already implemented or proven fix. DMC itself notes difficulties with
+[training from scratch](https://arxiv.org/html/2403.09636v2#A8), unlike its main
+retrofitting setting. That observation does not establish our NaN's cause.
+
+### Measured execution overhead
+
+The current kernels are an independent correctness-first implementation informed
+by NVIDIA/DeepSeek source, not their complete optimized kernels. Same-H200
+profiling over eight layers measured baseline FlashAttention forward/backward
+at 8.033 ms and Fixed B16 attention at 20.815 ms, including 13.198 ms for dKV.
+Fixed adds 5.462 ms of FP32 score-projection GEMMs and 2.110 ms of pooling.
+Dynamic dKV takes 48.209 ms and pooling 5.033 ms. These are individual GPU kernel
+durations, not a cross-card attribution of end-to-end wall time.
+
+Fixed pooling parallelizes independent chunks. Dynamic parallelizes within
+64-token scans and across batch/head/channel, but carries state serially between
+time tiles. Attention is tiled and parallel. Remaining cost comes from extra
+operations, FP32/TF32x3 products, intermediate traffic, and implementation
+efficiency—not from Triton intrinsically. Fixed still builds all token prefixes
+and shares precision choices motivated by Dynamic. Those are concrete future
+optimization targets, not measured speedups.
 
 ### Official-source audit, 2026-11-13
 

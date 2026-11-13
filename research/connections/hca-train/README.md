@@ -2,7 +2,8 @@
 
 User authorization (2026-11-12): after validation passes, automatically run one
 Fixed HCA and one Dynamic HCA nanochat experiment, each 10B tokens. No baseline
-training, extra run, or hyperparameter sweep is authorized by this plan.
+training or hyperparameter sweep is authorized by this paired plan. A later
+explicit request separately authorized one additional Fixed B4 10B run below.
 
 Common recipe: vanilla backbone, baseline additive residual, 1 stream, 8 layers,
 D512, 4 heads, 32768 vocabulary, context 2048, seed 42, BF16, existing MuonAdamW
@@ -109,3 +110,24 @@ container URI remains in TransferInput. Any failed/missing transfer blocks the
 handoff. Dynamic retains run ID `6e68ed48` and uses the same frozen source.
 The AP controller has separate operational commits; these do not change the
 model source saved in the two formal checkpoints.
+
+## Additional Fixed B4 run
+
+User explicitly requested one additional 10B run with compression 4 rather than
+16. It uses `/home/yzhong239/hca-b4-10b-20261112`, W&B ID `b5e421af`, source
+`129c39e0f55525f01cd19829f5b8043ce52f8a1e`, and the same data, seed, model,
+global batch and microbatch 16. Three B4-specific GPU tests cover VJPs,
+causality, unfinished chunks, and 2K split-cache consistency. Full 8-layer
+controlled recovery and same-card throughput passed. The original kernel/core
+evidence is reused because the HCA model and kernel files are unchanged; these
+are not claims of rerunning 24+18 tests for B4.
+
+Formal B4 training starts clean in interactive allocation 8526544.0 after the
+diagnostics. Its separately audited job 8526795.0 remains held until the first
+1800-second segment transfers and `b4.py`/`bridge.py` verify its own B4 report,
+source, run ID, recipe and latest/best checkpoints. The debug weights occupy a
+separate scratch directory and never enter the formal model initialization.
+The B4 controller uses its own lock/state/PID. Measured H200 update time was
+0.11834 s versus 0.07638 s baseline, yielding a train-only estimate of 10.03 h,
+excluding evaluation, transfer and scheduling. The original Dynamic job remains
+held after its nonfinite event; this B4 authorization does not resume Dynamic.
