@@ -7,9 +7,10 @@ the reference's visible open prefix. Dynamic backward retains zero-gate STE
 derivatives; forward compaction alone would not preserve that estimator.
 
 No T x T intermediates, no atomic gradient updates, no Python token loop.
-Probabilities and score adjoints remain FP32 in value/gradient dot products
-(TF32x3 accumulation) rather than rounding them to BF16 before multiplication;
-the extra BF16 rounding can dominate a small, cancelling router-bias gradient.
+Dynamic probabilities and score adjoints remain FP32 in dot products because
+BF16 rounding can dominate a small, cancelling router-bias gradient. Fixed
+BF16 attention uses BF16 matrix products with FP32 accumulators, following the
+official DeepSeek attention precision scheme; FP32 oracle inputs stay precise.
 GPU validation is mandatory before selecting this backend for a formal run.
 """
 import torch
@@ -63,9 +64,10 @@ def _pool_fwd(K, V, S, G, M, SK, SV, PK, PV,
             cm = tl.sum(tl.where(rows[:, None] == BT-1, m, 0), 0)
             ck = tl.sum(tl.where(rows[:, None] == BT-1, sk, 0), 0)
             cv = tl.sum(tl.where(rows[:, None] == BT-1, sv, 0), 0)
-        tl.store(M + off, m, valid)
-        tl.store(SK + off, sk, valid)
-        tl.store(SV + off, sv, valid)
+        if not FIXED:
+            tl.store(M + off, m, valid)
+            tl.store(SK + off, sk, valid)
+            tl.store(SV + off, sv, valid)
         tl.store(PK + off, sk / m, valid)
         tl.store(PV + off, sv / m, valid)
 
@@ -94,9 +96,21 @@ def _pool_bwd(K, V, S, G, M, SK, SV, DPK, DPV, DK, DV, DS, DG,
         if FIXED:
             valid = valid & (t[:, None] < lo + R)
         off = ((b * T + t[:, None]) * H + h) * D + d[None, :]
-        m = tl.load(M + off, valid, 1)
-        sk = tl.load(SK + off, valid, 0)
-        sv = tl.load(SV + off, valid, 0)
+        # Independent fixed chunks can recompute their prefix sums in registers.
+        # This avoids three full FP32 state writes/reads and saved activations.
+        s = tl.load(S + off, valid, 0).to(tl.float32)
+        u = libdevice.tanh(s / 10)
+        w = tl.exp(10 * u)
+        k = tl.load(K + off, valid, 0).to(tl.float32)
+        v = tl.load(V + off, valid, 0).to(tl.float32)
+        if FIXED:
+            m = tl.cumsum(w, 0)
+            sk = tl.cumsum(w*k, 0)
+            sv = tl.cumsum(w*v, 0)
+        else:
+            m = tl.load(M + off, valid, 1)
+            sk = tl.load(SK + off, valid, 0)
+            sv = tl.load(SV + off, valid, 0)
         gk = tl.load(DPK + off, valid, 0).to(tl.float32)
         gv = tl.load(DPV + off, valid, 0).to(tl.float32)
         dk, dv = gk / m, gv / m
@@ -122,11 +136,6 @@ def _pool_bwd(K, V, S, G, M, SK, SV, DPK, DPV, DK, DV, DS, DG,
             psv = tl.load(SV + off - H*D, prior, 0)
             dg = -tl.sum(tl.where(d[None, :] < D, dm*pm + dk*psk + dv*psv, 0), 1)
             tl.store(DG + ((b*T+t)*H+h)*ND+dc, dg, t < T)
-        s = tl.load(S + off, valid, 0).to(tl.float32)
-        u = libdevice.tanh(s / 10)
-        w = tl.exp(10 * u)
-        k = tl.load(K + off, valid, 0).to(tl.float32)
-        v = tl.load(V + off, valid, 0).to(tl.float32)
         tl.store(DK + off, dk*w, valid)
         tl.store(DV + off, dv*w, valid)
         tl.store(DS + off, w*(dm + dk*k + dv*v)*(1-u*u), valid)
@@ -140,7 +149,8 @@ class _Pool(torch.autograd.Function):
         fixed = ratio > 0
         bt = tr.next_power_of_2(ratio) if fixed else 64
         bd = 32
-        m, sk, sv = [torch.empty_like(k, dtype=torch.float32) for _ in range(3)]
+        # Fixed kernels never dereference the dummy state pointers.
+        m, sk, sv = (k, k, k) if fixed else [torch.empty_like(k, dtype=torch.float32) for _ in range(3)]
         pk, pv = torch.empty_like(k), torch.empty_like(v)
         grid = (b*h, tr.cdiv(d, bd), tr.cdiv(t, ratio) if fixed else 1)
         _pool_fwd[grid](k, v, score, starts, m, sk, sv, pk, pv,
