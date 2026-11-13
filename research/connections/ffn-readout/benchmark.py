@@ -17,7 +17,7 @@ from nanochat.packed_training import seed_all, PackedData, train_step, evaluate
 
 
 def run_model(args):
-    seed_all(42);configure_attention('fa3');torch.backends.cuda.matmul.allow_tf32=False
+    seed_all(42);configure_attention('fa2');torch.backends.cuda.matmul.allow_tf32=False
     c=ConnectionConfig(streams=1,ffn_readout_width=args.width,ffn_readout_backend=args.backend)
     model=ConnectionModel(c).prepare(compile_blocks=True)
     data=PackedData('../data')
@@ -46,7 +46,8 @@ def run_model(args):
             last_ffn_up=model.blocks[-1].mlp.c_fc.weight.grad.norm().item())
         assert all(v>0 for v in gradients.values())
     dev,tokens=evaluate(model,data,max_rows=64)
-    report=dict(formal_training=False,gpu=torch.cuda.get_device_name(),torch=torch.__version__,
+    report=dict(formal_training=False,source=json.loads(Path('source.json').read_text()),
+        data_manifest=data.manifest,attention_backend='fa2',gpu=torch.cuda.get_device_name(),torch=torch.__version__,
         triton=triton.__version__,config=asdict(c),parameters=sum(p.numel() for p in model.parameters()),
         init=init,warmup_updates=10,measured_updates=args.steps,median_ms=statistics.median(times),
         p10_ms=sorted(times)[len(times)//10],p90_ms=sorted(times)[9*len(times)//10],
