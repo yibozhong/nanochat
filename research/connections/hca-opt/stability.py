@@ -40,15 +40,16 @@ def validation():
     model.eval()
     rows=[]
     with torch.no_grad():
-        for start in range(0,128,16):
-            x,y=data.batch('dev',start,16)
+        limit=min(128,len(data.arrays['dev']))
+        for start in range(0,limit,16):
+            x,y=data.batch('dev',start,min(16,limit-start))
             ce=model(x,y).item()
             metrics={k:v.item() for k,v in model.last_hca_metrics.items()}
             rows.append(dict(ce=ce,**{k:metrics[k] for k in ('hard_keep_rate','soft_keep_rate')}))
     model.train()
     result={k:statistics.mean(row[k] for row in rows) for k in rows[0]}
     result['summary_compression']=1/result['hard_keep_rate']
-    result['tokens']=128*c.sequence_length
+    result['tokens']=limit*c.sequence_length
     return result
 with (out/(a.label+'-steps.jsonl')).open('w',buffering=1) as log:
     for step in range(a.steps):
