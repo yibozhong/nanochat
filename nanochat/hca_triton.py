@@ -19,6 +19,10 @@ import triton.language as tl
 from triton.language.extra.cuda import libdevice
 from torch.autograd.function import once_differentiable
 
+# Diagnostic tuning defaults; Dynamic and FP32 retain the validated geometry.
+FIXED_FWD_TILE = (32, 32, 4)
+FIXED_BWD_TILE = (32, 32, 4)
+
 
 @tr.jit
 def _affine(a, m, k, v, aa, mm, kk, vv):
@@ -213,7 +217,10 @@ def _attn_fwd(Q, K, V, PK, PV, INDEX, COUNTS, O, OF, LSE,
     m = tl.sum(q.to(tl.float32)*pk, 1)*scale
     l = tl.full((BM,), 1, tl.float32)
     acc = pv
-    for base in range(tl.maximum(0, block*BM-W+1), tl.minimum(T, (block+1)*BM), BN):
+    first_local = block*BM-W+1
+    if R > 0:
+        first_local = first_local//BN*BN
+    for base in range(tl.maximum(0, first_local), tl.minimum(T, (block+1)*BM), BN):
         j = base+cols
         ko = ((b*T+j[:, None])*H+h)*D+d[None, :]
         kv = (j[:, None] < T) & (d[None, :] < D)
@@ -284,7 +291,10 @@ def _attn_dq(Q, K, V, PK, PV, INDEX, COUNTS, DO, OF, LSE, DQ,
     diag_p = tl.exp(tl.sum(q.to(tl.float32)*diag_k, 1)*scale-lse)
     diag_ds = diag_p*(tl.sum(do.to(tl.float32)*diag_v, 1)-delta)
     dq = diag_ds[:, None]*diag_k*scale
-    for base in range(tl.maximum(0, block*BM-W+1), tl.minimum(T, (block+1)*BM), BN):
+    first_local = block*BM-W+1
+    if R > 0:
+        first_local = first_local//BN*BN
+    for base in range(tl.maximum(0, first_local), tl.minimum(T, (block+1)*BM), BN):
         j = base+cols
         ko = ((b*T+j[:, None])*H+h)*D+d[None, :]
         kv = (j[:, None] < T) & (d[None, :] < D)
@@ -432,8 +442,9 @@ class _Attention(torch.autograd.Function):
         out = torch.empty_like(q)
         of = torch.empty_like(q, dtype=torch.float32)
         lse = torch.empty((b, h, t), device=q.device, dtype=torch.float32)
-        _attn_fwd[(tr.cdiv(t, 32), b*h)](q, k, v, pk, pv, index, counts, out, of, lse,
-                        t, h, d, window, ratio, 32, 32, tr.next_power_of_2(d))
+        bm, bn, warps = FIXED_FWD_TILE if ratio and q.dtype == torch.bfloat16 else (32, 32, 4)
+        _attn_fwd[(tr.cdiv(t, bm), b*h)](q, k, v, pk, pv, index, counts, out, of, lse,
+                        t, h, d, window, ratio, bm, bn, tr.next_power_of_2(d), num_warps=warps)
         ctx.save_for_backward(q, k, v, pk, pv, starts, index, counts, of, lse)
         ctx.params = window, ratio
         return out
@@ -449,15 +460,18 @@ class _Attention(torch.autograd.Function):
         # FP32 prefix buffers avoid rounding once per source before adding.
         dpk, dpv = [torch.empty_like(x, dtype=torch.float32) for x in (pk, pv)]
         dg = torch.empty((b, t, h), device=q.device, dtype=torch.float32)
-        grid, bd = (tr.cdiv(t, 32), b*h), tr.next_power_of_2(d)
-        _attn_dq[grid](q, k, v, pk, pv, index, counts, do, of, lse, dq, t, h, d, w, r, 32, 32, bd)
-        _attn_dkv[grid](q, k, v, starts, do, of, lse, dk, dv, dg, t, h, d, w, r, 0, 32, 32, bd)
+        bm, bn, warps = FIXED_BWD_TILE if r and q.dtype == torch.bfloat16 else (32, 32, 4)
+        grid, bd = (tr.cdiv(t, bn), b*h), tr.next_power_of_2(d)
+        _attn_dq[(tr.cdiv(t, bm), b*h)](q, k, v, pk, pv, index, counts, do, of, lse, dq,
+                                     t, h, d, w, r, bm, bn, bd, num_warps=warps)
+        _attn_dkv[grid](q, k, v, starts, do, of, lse, dk, dv, dg, t, h, d, w, r, 0,
+                       bm, bn, bd, num_warps=warps)
         if r > 0:
-            _prefix_diag_bwd[grid](q, pk, pv, do, of, lse, dpk, dpv, t, h, d, 32, bd)
+            _prefix_diag_bwd[(tr.cdiv(t, 32), b*h)](q, pk, pv, do, of, lse, dpk, dpv, t, h, d, 32, bd)
             n = (t-1)//r
             if n:
-                _attn_dkv[(tr.cdiv(n, 32), b*h)](q, pk, pv, starts, do, of, lse,
-                        dpk, dpv, dg, t, h, d, w, r, 2, 32, 32, bd)
+                _attn_dkv[(tr.cdiv(n, bn), b*h)](q, pk, pv, starts, do, of, lse,
+                        dpk, dpv, dg, t, h, d, w, r, 2, bm, bn, bd, num_warps=warps)
         else:
             _attn_dkv[grid](q, pk, pv, starts, do, of, lse, dpk, dpv, dg,
                            t, h, d, w, r, 1, 32, 32, bd)
