@@ -16,6 +16,7 @@ p.add_argument('--block-size', type=int, default=16)
 p.add_argument('--steps', type=int, default=20)
 p.add_argument('--projection', choices=['native','tf32x3','bf16x3'])
 p.add_argument('--rotary',choices=['native','fused'])
+p.add_argument('--resume', help='Diagnostic checkpoint; never written back')
 a = p.parse_args()
 assert os.environ['WANDB_MODE'] == 'disabled'
 if a.kernel_file:
@@ -46,24 +47,36 @@ configure_attention('fa2')
 seed_all(42)
 c = ConnectionConfig(variant='baseline', streams=1, attention_mode=a.mode,
                      hca_backend='triton', hca_block_size=a.block_size)
+state = torch.load(a.resume, map_location='cpu', weights_only=False) if a.resume else None
+if state is not None:
+    assert state['formal_training'] is False
+    c = ConnectionConfig(**state['config'])
+    assert c.attention_mode == a.mode and c.hca_block_size == a.block_size
 model = build_connection_model(c).prepare(compile_blocks=False)
 opt, wd = optimizer_for(model)
+start_step = 0
+checkpoint_source = None
+if state is not None:
+    from nanochat.packed_training import restore_rng
+    model.load_state_dict(state['model']); opt.load_state_dict(state['optimizer'])
+    restore_rng(state['rng']); start_step = state['step']
+    checkpoint_source = state['source']; del state
 data = PackedData('../data')
 seconds, losses = [], []
 torch.cuda.reset_peak_memory_stats()
-for step in range(5 + a.steps):
+for step in range(start_step, start_step + 5 + a.steps):
     schedule(opt, step, 305176, wd)
     torch.cuda.synchronize()
     start = time.perf_counter()
     loss = train_step(model, opt, data, step, microbatch=16)
     torch.cuda.synchronize()
-    if step >= 5:
+    if step >= start_step + 5:
         seconds.append(time.perf_counter() - start)
         losses.append(loss)
 with torch.profiler.profile(activities=[torch.profiler.ProfilerActivity.CPU,
                                        torch.profiler.ProfilerActivity.CUDA]) as prof:
-    schedule(opt, 5 + a.steps, 305176, wd)
-    train_step(model, opt, data, 5 + a.steps, microbatch=16)
+    schedule(opt, start_step + 5 + a.steps, 305176, wd)
+    train_step(model, opt, data, start_step + 5 + a.steps, microbatch=16)
     torch.cuda.synchronize()
 kernels = {}
 for e in prof.events():
@@ -77,6 +90,8 @@ report = dict(args=vars(a), formal_training=False, gpu=torch.cuda.get_device_nam
               median_seconds=statistics.median(seconds), mean_seconds=statistics.mean(seconds),
               peak_allocated_bytes=torch.cuda.max_memory_allocated(),
               peak_reserved_bytes=torch.cuda.max_memory_reserved(),
+              start_step=start_step, checkpoint_source=checkpoint_source,
+              metrics=getattr(model, 'last_train_metrics', {}),
               losses=losses, kernels=[dict(name=k, **v) for k, v in kernels.items()],
               note='CUDA profiler events may include annotations; do not sum as wall time.')
 out = Path('results/optimization'); out.mkdir(parents=True, exist_ok=True)
