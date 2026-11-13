@@ -15,10 +15,12 @@ rows=[];path=Path('results/optimization/pool-sweep.json')
 for ratio in (16,4):
     starts=(torch.arange(2048,device='cuda')%ratio==0).float()[None].expand(16,-1)
     hca.FIXED_POOL_CHANNELS,hca.FIXED_POOL_WARPS=32,4
+    hca.FIXED_SMALL_POOL_CHANNELS=32
     ref=hca.prefix_pool(*xs,starts,ratio)
     gr=torch.autograd.grad(ref,xs,upstream)
     for channels,warps in [(32,4),(64,4),(128,4),(64,8),(128,8)]:
         hca.FIXED_POOL_CHANNELS,hca.FIXED_POOL_WARPS=channels,warps
+        hca.FIXED_SMALL_POOL_CHANNELS=channels
         def run():
             ys=hca.prefix_pool(*xs,starts,ratio)
             return ys,torch.autograd.grad(ys,xs,upstream)

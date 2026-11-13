@@ -16,14 +16,18 @@ for ratio in (16, 4):
                       requires_grad=True) for _ in range(5)]
     starts = (torch.arange(2048, device='cuda') % ratio == 0).float()[None].expand(16, -1)
     dy = torch.randn_like(xs[0])
-    hca.FIXED_FWD_TILE = hca.FIXED_BWD_TILE = (32, 32, 4)
+    hca.FIXED_FWD_TILE = hca.FIXED_BWD_TILE = hca.FIXED_SMALL_TILE = (32, 32, 4)
+    hca.FIXED_LOCAL_DKV_TILE = hca.FIXED_SUMMARY_TILE = (32,32,4)
+    hca.FIXED_DKV_SPLITS = hca.FIXED_SMALL_SPLITS = 1
+    hca.FIXED_BWD_STAGES = 3
     yref = hca.attention(*xs, starts, 256, ratio)
     gref = torch.autograd.grad(yref, xs, dy)
     for bm, bn, nw, stages in [(32,32,4,3), (64,32,4,3), (32,64,4,3), (64,64,4,3),
                        (128,64,4,1), (64,128,4,1), (128,64,8,1), (128,128,8,1),
                        (64,64,4,1), (128,64,4,2)]:
         hca.FIXED_BWD_STAGES = stages
-        hca.FIXED_FWD_TILE = hca.FIXED_BWD_TILE = (bm, bn, nw)
+        hca.FIXED_FWD_TILE = hca.FIXED_BWD_TILE = hca.FIXED_SMALL_TILE = (bm, bn, nw)
+        hca.FIXED_LOCAL_DKV_TILE = hca.FIXED_SUMMARY_TILE = (bm,bn,nw)
         def run():
             y = hca.attention(*xs, starts, 256, ratio)
             return y, torch.autograd.grad(y, xs, dy)
