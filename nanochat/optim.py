@@ -436,8 +436,19 @@ class MuonAdamW(torch.optim.Optimizer):
             world_size = 1
 
         # Phase 1: launch all async reduce ops
-        reduce_infos: list[dict] = []
+        active_groups = []
         for group in self.param_groups:
+            if group.get('conditional', False):
+                # Conditional groups must be all used or all unused on every
+                # rank. The feedback sampler makes one seed/step draw per update.
+                present = [p.grad is not None for p in group['params']]
+                if not any(present):
+                    continue
+                if not all(present):
+                    raise RuntimeError('Partially active conditional optimizer group')
+            active_groups.append(group)
+        reduce_infos: list[dict] = []
+        for group in active_groups:
             if group['kind'] == 'adamw':
                 reduce_infos.append(self._reduce_adamw(group, world_size))
             elif group['kind'] == 'muon':
@@ -447,7 +458,7 @@ class MuonAdamW(torch.optim.Optimizer):
 
         # Phase 2: wait for reduces, compute updates, launch gathers
         gather_list: list[dict] = []
-        for group, info in zip(self.param_groups, reduce_infos):
+        for group, info in zip(active_groups, reduce_infos):
             if group['kind'] == 'adamw':
                 self._compute_adamw(group, info, gather_list, rank, world_size)
             elif group['kind'] == 'muon':

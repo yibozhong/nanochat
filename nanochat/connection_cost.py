@@ -1,7 +1,7 @@
 """Analytic matrix FLOPs for the retained full-attention vanilla model."""
 
 
-def model_cost(config, batch=1, activation_bytes=2):
+def model_cost(config, batch=1, activation_bytes=2, feedback_passes=None):
     c=config
     if c.architecture!='vanilla' or c.variant not in ('baseline','attnres','attnres_scale','skip_scale'):
         return None
@@ -10,6 +10,20 @@ def model_cost(config, batch=1, activation_bytes=2):
     head=2*batch*t*d*c.vocab_size
     attention=4*batch*d*depth*(t*(t+1)//2)
     forward=projections+head+attention
+    if c.latent_feedback:
+        backbone=projections+attention
+        fusion=2*batch*t*d*d
+        # P1/P2 mixture expectation unless accounting for a particular update.
+        p=1.85 if feedback_passes is None else feedback_passes
+        if p<1:
+            raise ValueError('Feedback passes must be >=1')
+        extra=p-1
+        fusion_train=2*extra if feedback_passes is None else (p if p>1 else 0)
+        return dict(estimated_forward_flops=p*backbone+head+extra*fusion,
+            estimated_training_flops=(p+2)*backbone+3*head+fusion_train*fusion,
+            estimated_evaluation_flops=c.feedback_eval_passes*backbone+head+(c.feedback_eval_passes-1)*fusion,
+            additional_parameters=d*d, expected_training_passes=p,
+            accounting='FMA=2; only final backbone pass and head have backward. Final fusion has weight gradient only (detached input); earlier fusion passes have no backward. Default averages 15% P1 / 85% P2. Excludes elementwise work, optimizer and checkpoint recomputation.')
     if c.variant=='skip_scale':
         # Relative to vanilla's already-present residual adds: one multiply
         # forward; dx multiply plus dscale multiply/reduction in backward.

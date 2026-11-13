@@ -37,8 +37,15 @@ class ConnectionConfig:
     compact_routing: bool = False
     attnres_block_size: int = 2  # Moonshot paper's S: Attention and MLP each count once
     attnres_block_size_unit: str = 'sublayers'
+    latent_feedback: bool = False
+    feedback_eval_passes: int = 4
 
     def __post_init__(self):
+        if type(self.feedback_eval_passes) is not int or self.feedback_eval_passes < 1:
+            raise ValueError('Feedback evaluation passes must be a positive integer')
+        if self.latent_feedback and (self.architecture != 'vanilla' or self.variant != 'baseline'
+                                    or self.attention_kernel != 'original'):
+            raise ValueError('Latent feedback uses the vanilla baseline and original attention')
         if self.variant in ('skip_scale','attnres_scale'):
             if self.architecture != 'vanilla' or self.streams != 1 or self.fused_connection_grad:
                 raise ValueError('Skip scale uses vanilla, exactly one residual stream, and ordinary gradients')
@@ -267,13 +274,16 @@ class ConnectionModel(nn.Module):
         return self
 
     def hidden(self, idx, kv_cache=None):
+        return norm(self.backbone(norm(self.wte(idx)), kv_cache))
+
+    def backbone(self, x, kv_cache=None):
+        """Unnormalized top state, also used by detached latent feedback passes."""
         start = 0 if kv_cache is None else kv_cache.get_pos()
-        if start + idx.shape[1] > self.config.sequence_length:
+        if start + x.shape[1] > self.config.sequence_length:
             raise ValueError('Input exceeds configured context length')
-        x = norm(self.wte(idx))
         if self.config.variant not in ('baseline', 'skip_scale'):
             x = expand_streams(x, self.config.streams)
-        cos, sin = self.cos[:, start:start+idx.shape[1]], self.sin[:, start:start+idx.shape[1]]
+        cos, sin = self.cos[:, start:start+x.shape[1]], self.sin[:, start:start+x.shape[1]]
         for i, b in enumerate(self.blocks):
             # Cache positions mutate across calls and stay outside static
             # fullgraph training capture; attention keeps its GPU kernels.
@@ -286,10 +296,13 @@ class ConnectionModel(nn.Module):
                 x = fn(x, cos, sin, kv_cache)
         if self.stream_head is not None:
             x = self.stream_head(x)
-        return norm(x)
+        return x
 
     def forward(self, idx, targets=None, dense=False, kv_cache=None):
         h = self.hidden(idx, kv_cache)
+        return self.readout(h, targets, dense)
+
+    def readout(self, h, targets=None, dense=False):
         w = self.lm_head.weight.to(h.dtype)
         if targets is None or dense:
             logits = 15 * torch.tanh(F.linear(h, w).float() / 15)
@@ -331,6 +344,10 @@ def optimizer_for(model, batch_tokens=32768):
     for shape in sorted({p.shape for p in matrices}):
         groups.append(dict(kind='muon', params=[p for p in matrices if p.shape == shape],
             lr=.02*batch_scale, momentum=.95, ns_steps=5, beta2=.9, weight_decay=wd))
+    if c.latent_feedback:
+        # Own group: single-pass updates must not advance momentum or decay W.
+        groups.append(dict(kind='muon', params=[model.fusion.weight], conditional=True,
+            lr=.02*batch_scale, momentum=.95, ns_steps=5, beta2=.9, weight_decay=wd))
     ids = [id(p) for g in groups for p in g['params']]
     assert len(ids) == len(set(ids)) and set(ids) == {id(p) for p in model.parameters()}
     if c.variant in ('mhc_channel_no_sinkhorn', 'scaled_hc', 'scaled_hc_all', 'attnres_scale'):
@@ -348,6 +365,9 @@ def optimizer_for(model, batch_tokens=32768):
 
 
 def build_connection_model(config):
+    if config.latent_feedback:
+        from nanochat.latent_feedback import LatentFeedbackModel
+        return LatentFeedbackModel(config)
     if config.variant == 'attnres_scale':
         from nanochat.scaled_attention_residuals import ScaledAttnResModel
         return ScaledAttnResModel(config)

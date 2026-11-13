@@ -53,28 +53,29 @@ class PackedData:
 
 
 @torch.no_grad()
-def evaluate(model,data,split='dev',microbatch=16,max_rows=None):
+def evaluate(model,data,split='dev',microbatch=16,max_rows=None,**forward_options):
     was_training=model.training
     model.eval()
     total=0.; count=0
     limit=len(data.arrays[split]) if max_rows is None else min(max_rows,len(data.arrays[split]))
     for start in range(0,limit,microbatch):
         x,y=data.batch(split,start,min(microbatch,limit-start))
-        loss=model(x,y)
+        loss=model(x,y,**forward_options)
         total += loss.item()*y.numel(); count+=y.numel()
     model.train(was_training)
     return total/count,count
 
 
-def train_step(model,opt,data,step,microbatch=16,batch_tokens=32768):
+def train_step(model,opt,data,step,microbatch=16,batch_tokens=32768,seed=42):
     T=model.config.sequence_length
     rows=batch_tokens//T
     assert rows % microbatch == 0
     opt.zero_grad(set_to_none=True)
     total=torch.zeros((),device='cuda')
+    options = dict(passes=model.training_passes(seed, step)) if model.config.latent_feedback else {}
     for start in range(0,rows,microbatch):
         x,y=data.batch('train',step*rows+start,microbatch)
-        loss=model(x,y)
+        loss=model(x,y,**options)
         (loss/(rows//microbatch)).backward()
         total += loss.detach()/(rows//microbatch)
     # Preserve nanochat's lack of clipping, but stop before a nonfinite update.

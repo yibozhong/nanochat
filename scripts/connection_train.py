@@ -28,6 +28,8 @@ def main():
     p.add_argument('--sequence-length', type=int, default=2048)
     p.add_argument('--attention-kernel', choices=('original','fla_triton'), default='original')
     p.add_argument('--architecture', choices=('vanilla', 'native'), default='vanilla')
+    p.add_argument('--latent-feedback', action='store_true')
+    p.add_argument('--feedback-eval-passes', type=int, default=4)
     p.add_argument('--window-pattern', default='SSSL', help='Native backbone only; vanilla always uses full attention')
     p.add_argument('--formal-training', action='store_true', help='Explicitly enable W&B for a formal training run')
     p.add_argument('--wandb-group', default='mhc-official-kernels-20261030')
@@ -74,6 +76,7 @@ def main():
                        attnres_block_size=a.attnres_block_size,
                        attention_kernel=a.attention_kernel,
                        architecture=a.architecture, window_pattern=a.window_pattern,
+                       latent_feedback=a.latent_feedback, feedback_eval_passes=a.feedback_eval_passes,
                        activation_checkpoint=a.activation_checkpoint,
                        connection_backend=a.connection_backend, fused_connection_grad=a.fused_connection_grad)
     data=PackedData(a.data_dir)
@@ -96,6 +99,9 @@ def main():
                   microbatch=a.microbatch,grad_accum=rows_per_step//a.microbatch,seed=a.seed,
                   attention_backend=a.attention_backend,matched_backbone_init=a.matched_backbone_init,
                   evaluate_test=a.evaluate_test)
+    if c.latent_feedback:
+        protocol['feedback']=dict(pass_mix=[.15,.85],sampler='numpy.default_rng([seed,zero_based_step])',
+            earlier_passes='no_grad_detached',eval_passes=c.feedback_eval_passes)
     step=0;best=float('inf');training_seconds=0.;prior_elapsed=0.;initial_dev=None
     run_id=a.run_id or uuid.uuid4().hex[:8]
     if a.resume=='auto':
@@ -143,7 +149,8 @@ def main():
         config['profile_matches_current_gpu']=str(torch.cuda.get_device_properties(0).uuid)==profile_reference.get('gpu_uuid')
     kwargs=dict(project='nanochat',entity='yibozhong657-none',group=a.wandb_group,
                 job_type='pretrain' if a.formal_training else 'diagnostic',
-                name=f'{a.architecture}-{a.variant}'+f'-{c.sequence_length}ctx-{a.steps}steps',id=run_id,resume='allow',config=config)
+                name=f'{a.architecture}-{a.variant}'+('-feedback' if c.latent_feedback else '')+
+                    f'-{c.sequence_length}ctx-{a.steps}steps',id=run_id,resume='allow',config=config)
     run=training_run(formal_training=a.formal_training, local_dir=out/"diagnostics", **kwargs)
     run.define_metric('tokens')
     for metric in ('train/*','dev/*','perf/*'):
@@ -165,22 +172,31 @@ def main():
     def save_best(dev):
         atomic_save(dict(model=model.state_dict(),config=asdict(c),protocol=protocol,source=source,
             run_id=run_id,step=step,dev_ce=dev,data_manifest=data.manifest),ckpt/'best.pt')
+    def dev_metrics(dev):
+        metrics={'dev/ce':dev}
+        if c.latent_feedback:
+            metrics[f'dev/ce_p{c.feedback_eval_passes}']=dev
+            if c.feedback_eval_passes != 1:
+                metrics['dev/ce_p1']=evaluate(model,data,microbatch=a.microbatch,passes=1)[0]
+        return metrics
     try:
         torch.cuda.reset_peak_memory_stats()
         dev,dev_tokens=evaluate(model,data,microbatch=a.microbatch)
         if initial_dev is None:initial_dev=dev
         if step==0:
             best=dev;save_best(dev);save()
-        run.log(dict(step=step,tokens=step*32768,**{'dev/ce':dev}))
+        run.log(dict(step=step,tokens=step*32768,**dev_metrics(dev)))
         durations=[]
         with (out/'steps.jsonl').open('a',buffering=1) as log:
             while step<a.steps:
                 lr=schedule(opt,step,a.schedule_steps,wd)
                 torch.cuda.synchronize();start=time.perf_counter()
-                loss=train_step(model,opt,data,step,microbatch=a.microbatch)
+                loss=train_step(model,opt,data,step,microbatch=a.microbatch,seed=a.seed)
                 torch.cuda.synchronize();duration=time.perf_counter()-start
                 durations.append(duration);training_seconds+=duration;step+=1
                 row=dict(step=step,tokens=step*32768,loss=loss,seconds=duration,lr_multiplier=lr)
+                if c.latent_feedback:
+                    row['passes']=model.training_passes(a.seed,step-1)
                 log.write(json.dumps(row)+'\n')
                 if step<=5 or step%10==0:
                     print(json.dumps(row),flush=True)
@@ -188,8 +204,11 @@ def main():
                           'perf/peak_allocated_bytes':torch.cuda.max_memory_allocated(),
                           'perf/peak_reserved_bytes':torch.cuda.max_memory_reserved()}
                     if cost:
-                        perf.update({'perf/estimated_training_flops_per_step':cost['estimated_training_flops'],
-                            'perf/estimated_forward_flops_per_step':cost['estimated_forward_flops']})
+                        step_cost=model_cost(c,batch=rows_per_step,feedback_passes=row['passes']) if c.latent_feedback else cost
+                        perf.update({'perf/estimated_training_flops_per_step':step_cost['estimated_training_flops'],
+                            'perf/estimated_forward_flops_per_step':step_cost['estimated_forward_flops']})
+                    if c.latent_feedback:
+                        perf['train/passes']=row['passes']
                     if profile_reference and 'additional_peak_allocated_bytes' in profile_reference:
                         perf['perf/profile_additional_peak_allocated_bytes']=profile_reference['additional_peak_allocated_bytes']
                         perf['perf/profile_additional_peak_reserved_bytes']=profile_reference['additional_peak_reserved_bytes']
@@ -199,7 +218,7 @@ def main():
                     assert math.isfinite(dev)
                     if dev<best:
                         best=dev;save_best(dev)
-                    run.log(dict(step=step,tokens=step*32768,**{'dev/ce':dev,'dev/tokens':dev_tokens}))
+                    run.log(dict(step=step,tokens=step*32768,**dev_metrics(dev),**{'dev/tokens':dev_tokens}))
                 if step==50 or step%500==0 or step==a.steps or stop:save()
                 if step<a.steps and (stop or time.perf_counter()-begin>=a.segment_seconds
                                       or a.segment_steps and step-start_step>=a.segment_steps):
