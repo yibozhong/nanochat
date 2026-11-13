@@ -1,8 +1,15 @@
 """Parallel carries must preserve the original hard recurrence, including tails."""
 import pytest
 import torch
+import importlib.util
+from pathlib import Path
 from nanochat.hca_triton import prefix_pool
-from nanochat.hca_parallel_pool import hard_prefix_pool
+
+_path=Path(__file__).resolve().parents[1]/'research/connections/hca-opt/parallel_pool.py'
+_spec=importlib.util.spec_from_file_location('parallel_pool_candidate',_path)
+_candidate=importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(_candidate)
+hard_prefix_pool=_candidate.hard_prefix_pool
 
 
 @pytest.mark.parametrize('dtype',[torch.float32,torch.bfloat16])

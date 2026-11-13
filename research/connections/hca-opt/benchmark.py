@@ -60,7 +60,7 @@ if state is not None:
 if a.pool == 'parallel':
     assert c.attention_mode == 'dynamic_hca' and c.hca_dynamic_gradient == 'confidence'
     from nanochat import hca_triton as ht
-    from nanochat.hca_parallel_pool import hard_prefix_pool
+    from parallel_pool import hard_prefix_pool
     original_pool = ht.prefix_pool
     ht.prefix_pool = lambda k,v,s,g,ratio=0: (hard_prefix_pool(k,v,s,g) if ratio == 0
                                              else original_pool(k,v,s,g,ratio))

@@ -6,7 +6,7 @@ from pathlib import Path
 import torch
 import triton as tr
 from nanochat.hca_triton import prefix_pool
-from nanochat.hca_parallel_pool import hard_prefix_pool
+from parallel_pool import hard_prefix_pool
 
 assert os.environ['WANDB_MODE']=='disabled'
 p=argparse.ArgumentParser();p.add_argument('--label',default='parallel-pool-benchmark');a=p.parse_args()
