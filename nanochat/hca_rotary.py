@@ -67,7 +67,10 @@ class _RotaryNorm(torch.autograd.Function):
         b,t,h,d=x.shape
         out=torch.empty_like(x)
         inv=torch.empty(b*t*h,device=x.device,dtype=torch.float32)
-        _fwd[(tr.cdiv(b*t*h,8),)](x,cos,sin,out,inv,t,h,d,torch.finfo(x.dtype).eps,
+        # The locked PyTorch runtime resolves default RMSNorm epsilon in its
+        # FP32 accumulation dtype, including BF16 inputs. Guarded by tests at
+        # small input magnitudes, where using BF16 epsilon changes the model.
+        _fwd[(tr.cdiv(b*t*h,8),)](x,cos,sin,out,inv,t,h,d,torch.finfo(torch.float32).eps,
                        tr.next_power_of_2(d//2),b*t*h,8,num_warps=4,enable_fp_fusion=False)
         ctx.save_for_backward(x,cos,sin,inv)
         return out
