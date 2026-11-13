@@ -34,6 +34,7 @@ def main():
     p.add_argument('--hca-temperature', type=float, default=1.0)
     p.add_argument('--hca-noise', action=argparse.BooleanOptionalAction, default=True)
     p.add_argument('--hca-backend', choices=('reference', 'triton'), default='reference')
+    p.add_argument('--hca-dynamic-gradient', choices=('dmc','confidence'), default='dmc')
     p.add_argument('--architecture', choices=('vanilla', 'native'), default='vanilla')
     p.add_argument('--window-pattern', default='SSSL', help='Native backbone only; vanilla always uses full attention')
     p.add_argument('--formal-training', action='store_true', help='Explicitly enable W&B for a formal training run')
@@ -84,7 +85,7 @@ def main():
                        attention_mode=a.attention_mode, hca_block_size=a.hca_block_size,
                        hca_ratio_loss_weight=a.hca_ratio_loss_weight, hca_window=a.hca_window,
                        hca_temperature=a.hca_temperature, hca_noise=a.hca_noise,
-                       hca_backend=a.hca_backend,
+                       hca_backend=a.hca_backend, hca_dynamic_gradient=a.hca_dynamic_gradient,
                        architecture=a.architecture, window_pattern=a.window_pattern,
                        activation_checkpoint=a.activation_checkpoint,
                        connection_backend=a.connection_backend, fused_connection_grad=a.fused_connection_grad)
