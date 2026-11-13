@@ -27,6 +27,10 @@ def main():
     p.add_argument('--variant', choices=CONNECTION_VARIANTS, required=True)
     p.add_argument('--sequence-length', type=int, default=2048)
     p.add_argument('--attention-kernel', choices=('original','fla_triton'), default='original')
+    p.add_argument('--vocab-gate', action='store_true')
+    p.add_argument('--vocab-gate-alpha', type=float, default=.5)
+    p.add_argument('--vocab-gate-backend', choices=('reference','triton'), default='triton')
+    p.add_argument('--vocab-gate-chunk', type=int, default=2048)
     p.add_argument('--architecture', choices=('vanilla', 'native'), default='vanilla')
     p.add_argument('--window-pattern', default='SSSL', help='Native backbone only; vanilla always uses full attention')
     p.add_argument('--formal-training', action='store_true', help='Explicitly enable W&B for a formal training run')
@@ -57,7 +61,7 @@ def main():
     p.add_argument('--seed', type=int, default=42)
     a = p.parse_args()
     if a.streams is None:
-        a.streams = 1 if a.variant in ('skip_scale','attnres_scale') else 4
+        a.streams = 1 if a.variant in ('skip_scale','attnres_scale') or a.vocab_gate else 4
     assert torch.cuda.is_available() and torch.cuda.device_count()==1
     assert a.sequence_length>0 and 32768%a.sequence_length==0
     rows_per_step=32768//a.sequence_length
@@ -73,6 +77,8 @@ def main():
                        sequence_length=a.sequence_length, compact_routing=a.compact_routing,
                        attnres_block_size=a.attnres_block_size,
                        attention_kernel=a.attention_kernel,
+                       vocab_gate=a.vocab_gate, vocab_gate_alpha=a.vocab_gate_alpha,
+                       vocab_gate_backend=a.vocab_gate_backend, vocab_gate_chunk=a.vocab_gate_chunk,
                        architecture=a.architecture, window_pattern=a.window_pattern,
                        activation_checkpoint=a.activation_checkpoint,
                        connection_backend=a.connection_backend, fused_connection_grad=a.fused_connection_grad)
@@ -132,7 +138,8 @@ def main():
         applied_sinkhorn_iterations=c.sinkhorn_iterations if a.variant=='mhc' else 0,
         optimizer='native MuonAdamW; connector AdamW at native unembedding LR, no decay',
         optimizer_groups=initial_groups,
-        loss='full-token full-vocabulary CCE; no gradient filtering',
+        loss=('full-vocabulary gated CE; fused Triton, FP32 chunk gradient accumulation' if c.vocab_gate else
+              'full-token full-vocabulary CCE; no gradient filtering'),
         references='research/connections/references.json')
     from nanochat.connection_cost import model_cost
     cost=model_cost(c,batch=rows_per_step)
@@ -143,7 +150,8 @@ def main():
         config['profile_matches_current_gpu']=str(torch.cuda.get_device_properties(0).uuid)==profile_reference.get('gpu_uuid')
     kwargs=dict(project='nanochat',entity='yibozhong657-none',group=a.wandb_group,
                 job_type='pretrain' if a.formal_training else 'diagnostic',
-                name=f'{a.architecture}-{a.variant}'+f'-{c.sequence_length}ctx-{a.steps}steps',id=run_id,resume='allow',config=config)
+                name=f'{a.architecture}-{a.variant}'+('-dense-vocab-gate' if c.vocab_gate else '')
+                     +f'-{c.sequence_length}ctx-{a.steps}steps',id=run_id,resume='allow',config=config)
     run=training_run(formal_training=a.formal_training, local_dir=out/"diagnostics", **kwargs)
     run.define_metric('tokens')
     for metric in ('train/*','dev/*','perf/*'):
