@@ -3,12 +3,11 @@ import pytest
 import torch
 from nanochat.hca_triton import prefix_pool
 from nanochat.hca_parallel_pool import hard_prefix_pool
-from test_hca_triton import close
 
 
 @pytest.mark.parametrize('dtype',[torch.float32,torch.bfloat16])
 @pytest.mark.parametrize('kind',['single','every','mixed'])
-@pytest.mark.parametrize('length',[137,2048])
+@pytest.mark.parametrize('length',[1,63,64,65,137,2048])
 def test_parallel_hard_pool(dtype,kind,length):
     torch.manual_seed(888)
     b,h,d=2,2,32
