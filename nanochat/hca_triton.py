@@ -629,3 +629,78 @@ def cached_attention(q, local_k, local_v, summary_k, summary_v, open_k, open_v,
                       position, local_k.shape[0], n, h, d, window, ratio, bm, bn,
                       tr.next_power_of_2(d), num_warps=4)
     return out
+
+
+@tr.jit
+def _cached_pool(K, V, S, G, CM, CK, CV, M, SK, SV, PK, PV, INDEX,
+                 H: tl.constexpr, D: tl.constexpr, FIXED: tl.constexpr,
+                 BT: tl.constexpr, BD: tl.constexpr):
+    h, dc = tl.program_id(0), tl.program_id(1)
+    t = tl.arange(0, BT)
+    d = dc*BD+tl.arange(0, BD)
+    off = (t[:, None]*H+h)*D+d[None, :]
+    valid = (t[:, None] <= INDEX) & (d[None, :] < D)
+    s = tl.load(S+off, valid, 0).to(tl.float32)
+    u = libdevice.tanh(s/10)
+    w = tl.exp(10*u)
+    k = tl.load(K+off, valid, 0).to(tl.float32)
+    v = tl.load(V+off, valid, 0).to(tl.float32)
+    if FIXED:
+        m = tl.cumsum(w, 0)
+        sk = tl.cumsum(w*k, 0)
+        sv = tl.cumsum(w*v, 0)
+    else:
+        a = 1-tl.load(G+t, t <= INDEX, 1)
+        aa, m, sk, sv = tl.associative_scan(
+            (tl.broadcast_to(a[:, None], (BT, BD)), w, w*k, w*v), 0, _affine)
+        cm = tl.load(CM+h*D+d, d < D, 0)
+        ck = tl.load(CK+h*D+d, d < D, 0)
+        cv = tl.load(CV+h*D+d, d < D, 0)
+        m += aa*cm[None, :]
+        sk += aa*ck[None, :]
+        sv += aa*cv[None, :]
+    at = t[:, None] == INDEX
+    mass = tl.sum(tl.where(at, m, 0), 0)
+    key = tl.sum(tl.where(at, sk, 0), 0)
+    value = tl.sum(tl.where(at, sv, 0), 0)
+    # Divide before selection, matching the parallel pool's instruction layout.
+    pk = tl.sum(tl.where(at, sk/m, 0), 0)
+    pv = tl.sum(tl.where(at, sv/m, 0), 0)
+    dst = h*D+d
+    tl.store(M+dst, mass, d < D)
+    tl.store(SK+dst, key, d < D)
+    tl.store(SV+dst, value, d < D)
+    tl.store(PK+dst, pk, d < D)
+    tl.store(PV+dst, pv, d < D)
+
+
+def cached_pool(k, v, score, start, state, ratio):
+    """Replay the current scan tile so arbitrary API splits keep training sums.
+
+    Only one unfinished execution tile is retained (R tokens for Fixed, 64 for
+    Dynamic), in addition to its incoming FP32 accumulators. Completed chunks
+    stay compressed; execution-tile boundaries never close a semantic chunk.
+    """
+    assert not torch.is_grad_enabled() and k.dtype == torch.bfloat16
+    _, h, d = k.shape
+    bt = tr.next_power_of_2(ratio) if ratio else 64
+    bd = (FIXED_SMALL_POOL_CHANNELS if ratio <= 4 else FIXED_POOL_CHANNELS) if ratio else 32
+    index = state.position % (ratio or bt)
+    if state.pool_tile_k is None:
+        state.pool_tile_k = torch.zeros((bt,h,d), device=k.device, dtype=k.dtype)
+        state.pool_tile_v = torch.zeros_like(state.pool_tile_k)
+        state.pool_tile_score = torch.zeros((bt,h,d), device=k.device, dtype=torch.float32)
+        state.pool_tile_starts = torch.zeros(bt, device=k.device, dtype=torch.float32)
+        state.pool_carry = tuple(torch.zeros_like(k, dtype=torch.float32) for _ in range(3))
+    state.pool_tile_k[index:index+1].copy_(k)
+    state.pool_tile_v[index:index+1].copy_(v)
+    state.pool_tile_score[index:index+1].copy_(score)
+    state.pool_tile_starts[index:index+1].copy_(start)
+    state.pool = tuple(torch.empty_like(k, dtype=torch.float32) for _ in range(3))
+    pk, pv = torch.empty_like(k), torch.empty_like(v)
+    _cached_pool[(h,tr.cdiv(d,bd))](state.pool_tile_k, state.pool_tile_v, state.pool_tile_score,
+        state.pool_tile_starts, *state.pool_carry, *state.pool, pk, pv, index,
+        h,d,ratio > 0,bt,bd,num_warps=FIXED_POOL_WARPS if ratio else 4,enable_fp_fusion=False)
+    if not ratio and index == bt-1:
+        state.pool_carry = state.pool
+    return pk,pv

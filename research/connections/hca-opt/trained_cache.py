@@ -63,8 +63,12 @@ with torch.no_grad():
         (x is None and y is None) or (x is not None and y is not None and torch.equal(x, y))
         for la, lb in zip(cache.layers, restored.layers)
         for sa, sb in zip(la, lb)
-        for x, y in zip((*sa.pool, sa.local_k, sa.local_v, sa.summary_k, sa.summary_v, sa.open_k, sa.open_v),
-                        (*sb.pool, sb.local_k, sb.local_v, sb.summary_k, sb.summary_v, sb.open_k, sb.open_v)))
+        for x, y in zip((*sa.pool, *sa.pool_carry, sa.pool_tile_k, sa.pool_tile_v,
+                        sa.pool_tile_score, sa.pool_tile_starts, sa.local_k, sa.local_v,
+                        sa.summary_k, sa.summary_v, sa.open_k, sa.open_v),
+                       (*sb.pool, *sb.pool_carry, sb.pool_tile_k, sb.pool_tile_v,
+                        sb.pool_tile_score, sb.pool_tile_starts, sb.local_k, sb.local_v,
+                        sb.summary_k, sb.summary_v, sb.open_k, sb.open_v)))
     parts.append(suffix)
     actual = torch.cat(parts, 1)
     delta = actual.float() - expected.float()

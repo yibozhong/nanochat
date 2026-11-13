@@ -136,6 +136,11 @@ class LayerCache:
     position: int = 0
     age: int = 0
     pool: tuple = field(default_factory=tuple)
+    pool_tile_k: torch.Tensor | None = None
+    pool_tile_v: torch.Tensor | None = None
+    pool_tile_score: torch.Tensor | None = None
+    pool_tile_starts: torch.Tensor | None = None
+    pool_carry: tuple = field(default_factory=tuple)
     local_k: torch.Tensor | None = None
     local_v: torch.Tensor | None = None
     summary_k: torch.Tensor | None = None
@@ -203,7 +208,9 @@ class HCAKVCache:
             tails.append([s.age for s in layer])
             entries.append([len(s.ends) + int(s.position > 0) for s in layer])
             for s in layer:
-                for t in (*s.pool, s.local_k, s.local_v, s.summary_k, s.summary_v, s.open_k, s.open_v):
+                for t in (*s.pool, *s.pool_carry, s.pool_tile_k, s.pool_tile_v,
+                          s.pool_tile_score, s.pool_tile_starts, s.local_k, s.local_v,
+                          s.summary_k, s.summary_v, s.open_k, s.open_v):
                     if t is not None:
                         tensor_bytes += t.numel() * t.element_size()
                         st = t.untyped_storage()
@@ -314,15 +321,21 @@ class HCAAttention(nn.Module):
                     state.ends.append(state.position - 1)
                 if not state.pool:
                     state.pool = tuple(torch.zeros((1, heads, dim), dtype=dtype, device=q.device) for _ in range(3))
-                state.pool, pk, pv = pool_step(raw_k[b:b+1, t], v[b:b+1, t], score[b:b+1, t], state.pool, start)
+                fast_cache = (self.config.hca_backend == 'triton' and q.dtype == torch.bfloat16
+                              and (self.boundary is None or self.config.hca_dynamic_gradient == 'confidence'))
+                if fast_cache:
+                    from nanochat.hca_triton import cached_pool
+                    pk, pv = cached_pool(raw_k[b:b+1, t], v[b:b+1, t], score[b:b+1, t], start,
+                                         state, self.config.hca_block_size if self.boundary is None else 0)
+                else:
+                    state.pool, pk, pv = pool_step(raw_k[b:b+1, t], v[b:b+1, t], score[b:b+1, t], state.pool, start)
                 cos, sin = (r[:, t:t+1] for r in cos_sin)
                 state.open_k = self.rotated(pk[:, None].to(q.dtype), (cos, sin))[0].clone()
                 state.open_v = pv.to(v.dtype).clone()
                 lk, lv = local_k[b, t:t+1], v[b, t:t+1]
                 state.local_k = (lk.clone() if state.local_k is None else torch.cat((state.local_k, lk))[-self.config.hca_window:].clone())
                 state.local_v = (lv.clone() if state.local_v is None else torch.cat((state.local_v, lv))[-self.config.hca_window:].clone())
-                if (self.config.hca_backend == 'triton' and q.dtype == torch.bfloat16
-                        and (self.boundary is None or self.config.hca_dynamic_gradient == 'confidence')):
+                if fast_cache:
                     from nanochat.hca_triton import cached_attention
                     outputs.append(cached_attention(q[b:b+1, t:t+1], state.local_k, state.local_v,
                         state.summary_k, state.summary_v, state.open_k, state.open_v,
