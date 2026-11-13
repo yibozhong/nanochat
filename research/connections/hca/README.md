@@ -1,8 +1,8 @@
 # Fixed HCA / free Dynamic HCA
 
-Status: reference plus opt-in Triton implementation. The optimization branch
-adds the validated Fixed execution improvements and an experimental confidence
-gradient for Dynamic. Existing formal runs retain their frozen source; the
+Status: H100 optimization and bounded validation completed. The opt-in Triton
+path includes the Fixed improvements and a validated confidence-gradient
+alternative for Dynamic. Existing formal runs retain their frozen source; the
 diagnostic weights and kernels have not silently replaced them.
 
 ### Current optimization evidence (2026-11-13, H100)
@@ -13,21 +13,30 @@ All measurements below use one allocation, H100 UUID
 
 | Implementation | Warm median update | 2000-step median | Dev CE at 2000 |
 |---|---:|---:|---:|
-| Original full baseline | 80.60 ms | 80.12 ms | 3.9492 |
+| Original full baseline | 80.99 ms | 80.12 ms | 3.9492 |
 | Original Fixed B16 | 114.24 ms | — | — |
-| Optimized Fixed B16 | 79.34 ms | 78.93 ms | 3.9929 |
+| Optimized Fixed B16 | 78.46 ms | 78.93 ms | 3.9929 |
 | Original Fixed B4 | 124.59 ms | — | — |
-| Optimized Fixed B4 | 81.85 ms | 81.19 ms | 3.9712 |
-| Dynamic confidence, rate weight 1 | 89.24 ms | 87.95 ms | 3.9948 |
+| Optimized Fixed B4 | 82.53 ms | 81.19 ms | 3.9712 |
+| Dynamic confidence, rate weight 1 | 86.06 ms | 87.95 ms | 3.9948 |
 
-Source `81ec37a` passed 79 GPU numerical/gradient/causality/cache checks.
+Final source `21ef47d` passed **147 GPU checks** (111 runtime/reference checks
+and 36 checks of the rejected parallel-pool experiment), plus 13 AP-safe
+submission-control checks. Final timings use 5 warmup and 40 measured updates;
+the original Fixed timings used 20 measured updates. The 2000-step Dynamic
+median predates the final routing fusion. The final Dynamic warm measurement
+loads its diagnostic step-5000 checkpoint, at a realized rate near the target.
+The baseline and Fixed timing runs start from the common seed-42 initialization.
+
+Earlier source `81ec37a` passed 79 GPU numerical/gradient/causality/cache checks.
 `65f978e` passed both Fixed production-model recovery checks and the bounded
 2000-update diagnostics (65,536,000 training tokens each, seed 42, existing dev
 split 131072 tokens). These short tests do not establish final quality or 10B
 stability. The slightly better B16 wall time is not evidence of a general
 speed advantage over baseline. Training peak allocated memory is 7.376 GiB for
-Fixed versus 5.599 GiB for baseline; inference KV compression is a separate
-measurement.
+Fixed versus 5.599 GiB for baseline; final Dynamic uses 8.877 GiB. Inference KV
+compression is a separate measurement. Machine-readable evidence, exact source
+commits and diagnostic scope are in [results.json](../hca-opt/results.json).
 
 The measured improvements preserve the original local-window plus completed
 and causal open-prefix semantics:
@@ -41,6 +50,18 @@ and causal open-prefix semantics:
   independent FP64 pre-cast oracle; master weights and outputs stay FP32.
 - Fused RoPE/RMSNorm/scale, retaining BF16 rounding points and the locked Torch
   runtime's FP32 accumulation epsilon. Four input magnitudes are tested.
+- For confidence Dynamic, fused FP32 scalar routing and confidence-gradient
+  reductions avoid expanded FP32 activation copies. The measured update drops
+  from 89.49 to 86.59 ms; the 16-channel pool tile then saves another 0.48 ms
+  in a paired end-to-end check. Original DMC keeps its reset/visibility estimator.
+
+Two parallel-tile pooling candidates preserved original outputs and VJPs
+exactly but were slower, including a recomputation variant (89.64 ms serial
+versus 90.50 ms parallel in that comparison). They remain under the research
+directory and are not selected at runtime. Large attention/pool tiles and the
+initial TF32x3 projection also lost to the measured defaults. The remaining
+large shared cost is CCE, roughly 39 ms of GPU kernel time per update. This is
+a measured stopping point for this workload, not a claim of universal optimality.
 
 The original unmodified CCE implementation has unordered floating-point
 reductions in both forward and backward. Recovery checks require exact model,
@@ -73,10 +94,16 @@ confirmed that task pressure exceeded the weighted rate gradient in several
 layers. Weight 0.3 reached 16.98x on the final dev sample but only 15.14x over
 the last 500 training updates. Weight 1 reached 15.86x dev and 15.72x over the
 last 500 training updates, with dev CE 3.9948. These are actual measurements,
-not exact-rate guarantees. The weight-1 trajectory is being extended to 5000
-updates and checked with another seed. No original formal run was restarted.
+not exact-rate guarantees. Seed 42 completed 5000 finite updates and then another
+500 on the final fused-routing/16-channel implementation. At update 5500,
+dev CE is 3.8166, dev summary compression 16.51x, and the last-500-update training
+average 15.67x. Seed 43 completed 2000 finite updates, dev CE 4.0085, dev 16.20x
+and last-500 training average 15.73x. No gradient clipping or finite-check
+relaxation was introduced. This is bounded stability evidence, not a completed
+10B run or exactly matched compression at every step. No original formal run
+was restarted.
 
-The practical configuration for the ongoing confidence diagnostics is:
+The validated confidence configuration is:
 
 ```python
 ConnectionConfig(attention_mode='dynamic_hca', hca_backend='triton',
@@ -110,12 +137,18 @@ the full 85-check regression passed. For each trained 2000-step weight-0.03 and
 weight-1 model, a production 8-layer/2048-token example split as
 `137,1,511,7,1000,392` produced exactly equal hidden outputs and all boundaries.
 Restoring mid-prefill also reproduced every cache tensor and output exactly.
+The final step-5500 model passed both this split and
+`1,63,64,7,512,1,1400` on a second held-out sequence, again with exact hidden
+outputs, boundaries and restored state. Fixed B16/B4 also passed full-size
+cache checks with transplanted trained diagnostic weights; that transplant is
+an execution/storage check, not a Fixed quality result.
 This is evidence for those cases, not a promise of bitwise equality across
 arbitrary hardware or external GEMM implementations.
 
 Execution tiles, SWA, open state and all backing storage are included in cache
-statistics. The weight-1 example uses 8,413,184 bytes versus 33,554,432 bytes
-for the full KV cache: 3.99x actual storage compression at 2K. Summary compression
+statistics. At 2K, Fixed B16/B4 storage compresses by 4.85x/2.62x; the two final
+Dynamic examples compress by 4.00x/4.12x versus 33,554,432 bytes for full KV.
+Summary compression
 alone is therefore not the total cache compression. Python cache bookkeeping
 remains a correctness-oriented implementation; these training speed results
 do not claim optimized decoding or cached-prefill latency.

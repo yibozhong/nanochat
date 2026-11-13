@@ -1,0 +1,977 @@
+{
+  "verification_commit": "21ef47d9bc6db859fcf4386205f2ed35cb5c4969",
+  "formal_training": false,
+  "allocation": "8527072.0",
+  "gpu": "NVIDIA H100 80GB HBM3",
+  "gpu_uuid": "fff6db8e-df5b-6a7f-c506-eb78b2f0c043",
+  "workload": {
+    "depth": 8,
+    "width": 512,
+    "heads": 4,
+    "sequence_length": 2048,
+    "vocab_size": 32768,
+    "microbatch": 16,
+    "global_batch_tokens": 32768,
+    "local_window": 256
+  },
+  "runtime": {
+    "torch": "2.10.0+cu130",
+    "triton": "3.6.0",
+    "transformer_engine": "2.20.2",
+    "lock": "research/connections/runtime/uv.lock",
+    "gpu_driver": "570 with CUDA 13.1 compatibility library"
+  },
+  "evidence_directory": "/home/yzhong239/hca-opt-20261112/results",
+  "tests": {
+    "gpu": 147,
+    "failed": 0,
+    "skipped": 0,
+    "ap_stdlib": 13,
+    "runtime_and_reference_gpu": 111,
+    "experimental_parallel_pool_gpu": 36
+  },
+  "performance": {
+    "final-baseline": {
+      "source": {
+        "commit": "21ef47d9bc6db859fcf4386205f2ed35cb5c4969",
+        "formal_training": false,
+        "phase": "final_candidate_verification"
+      },
+      "median_ms": 80.98649978637695,
+      "measured_updates": 40,
+      "warmup_updates": 5,
+      "peak_allocated_gib": 5.598947525024414,
+      "checkpoint_step": 0,
+      "metrics": {}
+    },
+    "final-fixed-b16": {
+      "source": {
+        "commit": "21ef47d9bc6db859fcf4386205f2ed35cb5c4969",
+        "formal_training": false,
+        "phase": "final_candidate_verification"
+      },
+      "median_ms": 78.46021372824907,
+      "measured_updates": 40,
+      "warmup_updates": 5,
+      "peak_allocated_gib": 7.376285552978516,
+      "checkpoint_step": 0,
+      "metrics": {
+        "soft_keep_rate": 0.0625,
+        "hard_keep_rate": 0.0625,
+        "compression_loss": 0.0,
+        "ce": 6.570504188537598,
+        "objective": 6.570504188537598
+      }
+    },
+    "final-fixed-b4": {
+      "source": {
+        "commit": "21ef47d9bc6db859fcf4386205f2ed35cb5c4969",
+        "formal_training": false,
+        "phase": "final_candidate_verification"
+      },
+      "median_ms": 82.52634759992361,
+      "measured_updates": 40,
+      "warmup_updates": 5,
+      "peak_allocated_gib": 7.376285552978516,
+      "checkpoint_step": 0,
+      "metrics": {
+        "soft_keep_rate": 0.25,
+        "hard_keep_rate": 0.25,
+        "compression_loss": 0.0,
+        "ce": 6.575004577636719,
+        "objective": 6.575004577636719
+      }
+    },
+    "final-confidence": {
+      "source": {
+        "commit": "21ef47d9bc6db859fcf4386205f2ed35cb5c4969",
+        "formal_training": false,
+        "phase": "final_candidate_verification"
+      },
+      "median_ms": 86.06131188571453,
+      "measured_updates": 40,
+      "warmup_updates": 5,
+      "peak_allocated_gib": 8.876587390899658,
+      "checkpoint_step": 5000,
+      "metrics": {
+        "soft_keep_rate": 0.10501058399677277,
+        "hard_keep_rate": 0.06142425537109375,
+        "compression_loss": 0.999219536781311,
+        "ce": 3.875437021255493,
+        "objective": 4.874656677246094
+      }
+    }
+  },
+  "stability": {
+    "fixed-b16-stability": {
+      "source": {
+        "commit": "65f978e7fea4851dd2ab5b0e3cf939448eab4689",
+        "formal_training": false,
+        "phase": "exact_checkpoint_verification_and_bounded_comparisons",
+        "reference_commit": "27794fb"
+      },
+      "args": {
+        "gradient": "confidence",
+        "mode": "fixed_hca",
+        "block_size": 16,
+        "ratio_weight": 0.03,
+        "steps": 2000,
+        "seed": 42,
+        "label": "fixed-b16-stability",
+        "save_state": false,
+        "resume": null
+      },
+      "steps": 2000,
+      "median_seconds": 0.07893353514373302,
+      "validation": [
+        {
+          "step": 500,
+          "ce": 4.696131706237793,
+          "hard_keep_rate": 0.0625,
+          "soft_keep_rate": 0.0625,
+          "summary_compression": 16.0,
+          "tokens": 131072
+        },
+        {
+          "step": 1000,
+          "ce": 4.231004238128662,
+          "hard_keep_rate": 0.0625,
+          "soft_keep_rate": 0.0625,
+          "summary_compression": 16.0,
+          "tokens": 131072
+        },
+        {
+          "step": 1500,
+          "ce": 4.078825235366821,
+          "hard_keep_rate": 0.0625,
+          "soft_keep_rate": 0.0625,
+          "summary_compression": 16.0,
+          "tokens": 131072
+        },
+        {
+          "step": 2000,
+          "ce": 3.9928557872772217,
+          "hard_keep_rate": 0.0625,
+          "soft_keep_rate": 0.0625,
+          "summary_compression": 16.0,
+          "tokens": 131072
+        }
+      ],
+      "last_500_train_summary_compression": 16.0,
+      "new_steps_in_report": 2000,
+      "training_tokens_at_final_step": 65536000
+    },
+    "fixed-b4-stability": {
+      "source": {
+        "commit": "65f978e7fea4851dd2ab5b0e3cf939448eab4689",
+        "formal_training": false,
+        "phase": "exact_checkpoint_verification_and_bounded_comparisons",
+        "reference_commit": "27794fb"
+      },
+      "args": {
+        "gradient": "confidence",
+        "mode": "fixed_hca",
+        "block_size": 4,
+        "ratio_weight": 0.03,
+        "steps": 2000,
+        "seed": 42,
+        "label": "fixed-b4-stability",
+        "save_state": false,
+        "resume": null
+      },
+      "steps": 2000,
+      "median_seconds": 0.08119286969304085,
+      "validation": [
+        {
+          "step": 500,
+          "ce": 4.692772626876831,
+          "hard_keep_rate": 0.25,
+          "soft_keep_rate": 0.25,
+          "summary_compression": 4.0,
+          "tokens": 131072
+        },
+        {
+          "step": 1000,
+          "ce": 4.199812889099121,
+          "hard_keep_rate": 0.25,
+          "soft_keep_rate": 0.25,
+          "summary_compression": 4.0,
+          "tokens": 131072
+        },
+        {
+          "step": 1500,
+          "ce": 4.056739091873169,
+          "hard_keep_rate": 0.25,
+          "soft_keep_rate": 0.25,
+          "summary_compression": 4.0,
+          "tokens": 131072
+        },
+        {
+          "step": 2000,
+          "ce": 3.971192717552185,
+          "hard_keep_rate": 0.25,
+          "soft_keep_rate": 0.25,
+          "summary_compression": 4.0,
+          "tokens": 131072
+        }
+      ],
+      "last_500_train_summary_compression": 4.0,
+      "new_steps_in_report": 2000,
+      "training_tokens_at_final_step": 65536000
+    },
+    "baseline-stability": {
+      "source": {
+        "commit": "65f978e7fea4851dd2ab5b0e3cf939448eab4689",
+        "formal_training": false,
+        "phase": "exact_checkpoint_verification_and_bounded_comparisons",
+        "reference_commit": "27794fb"
+      },
+      "args": {
+        "gradient": "confidence",
+        "mode": "full",
+        "block_size": 16,
+        "ratio_weight": 0.03,
+        "steps": 2000,
+        "seed": 42,
+        "label": "baseline-stability",
+        "save_state": false,
+        "resume": null
+      },
+      "steps": 2000,
+      "median_seconds": 0.08011503703892231,
+      "validation": [
+        {
+          "step": 500,
+          "ce": 4.705501079559326,
+          "hard_keep_rate": 1.0,
+          "soft_keep_rate": 1.0,
+          "summary_compression": 1.0,
+          "tokens": 131072
+        },
+        {
+          "step": 1000,
+          "ce": 4.180565357208252,
+          "hard_keep_rate": 1.0,
+          "soft_keep_rate": 1.0,
+          "summary_compression": 1.0,
+          "tokens": 131072
+        },
+        {
+          "step": 1500,
+          "ce": 4.034956932067871,
+          "hard_keep_rate": 1.0,
+          "soft_keep_rate": 1.0,
+          "summary_compression": 1.0,
+          "tokens": 131072
+        },
+        {
+          "step": 2000,
+          "ce": 3.949208617210388,
+          "hard_keep_rate": 1.0,
+          "soft_keep_rate": 1.0,
+          "summary_compression": 1.0,
+          "tokens": 131072
+        }
+      ],
+      "new_steps_in_report": 2000,
+      "training_tokens_at_final_step": 65536000
+    },
+    "confidence-1": {
+      "source": {
+        "commit": "ddd3729625b3992c96b113fb1e809ed60071aa2a",
+        "formal_training": false,
+        "phase": "exact_cache_reduction_layout"
+      },
+      "args": {
+        "gradient": "confidence",
+        "mode": "dynamic_hca",
+        "block_size": 16,
+        "ratio_weight": 1.0,
+        "steps": 2000,
+        "seed": 42,
+        "label": "confidence-1",
+        "save_state": true,
+        "resume": null
+      },
+      "steps": 2000,
+      "median_seconds": 0.08795393258333206,
+      "validation": [
+        {
+          "step": 500,
+          "ce": 4.730394244194031,
+          "hard_keep_rate": 0.07034492492675781,
+          "soft_keep_rate": 0.1383138969540596,
+          "summary_compression": 14.215666603400125,
+          "tokens": 131072
+        },
+        {
+          "step": 1000,
+          "ce": 4.245520710945129,
+          "hard_keep_rate": 0.05538177490234375,
+          "soft_keep_rate": 0.13290029764175415,
+          "summary_compression": 18.056481609037057,
+          "tokens": 131072
+        },
+        {
+          "step": 1500,
+          "ce": 4.083848237991333,
+          "hard_keep_rate": 0.06132316589355469,
+          "soft_keep_rate": 0.11915183439850807,
+          "summary_compression": 16.30705110260956,
+          "tokens": 131072
+        },
+        {
+          "step": 2000,
+          "ce": 3.9948368668556213,
+          "hard_keep_rate": 0.06304168701171875,
+          "soft_keep_rate": 0.11631541326642036,
+          "summary_compression": 15.862519665980878,
+          "tokens": 131072
+        }
+      ],
+      "last_500_train_summary_compression": 15.722471131226953,
+      "new_steps_in_report": 2000,
+      "training_tokens_at_final_step": 65536000
+    },
+    "confidence-1-extended": {
+      "source": {
+        "commit": "9451b7ee6934d6cc686d3997b9548c2c6931bbc3",
+        "formal_training": false,
+        "phase": "extended_confidence_stability_and_cache_audits"
+      },
+      "args": {
+        "gradient": "confidence",
+        "mode": "dynamic_hca",
+        "block_size": 16,
+        "ratio_weight": 1.0,
+        "steps": 5000,
+        "seed": 42,
+        "label": "confidence-1-extended",
+        "save_state": true,
+        "resume": "../diagnostic-state/latest.pt"
+      },
+      "steps": 5000,
+      "median_seconds": 0.08879230916500092,
+      "validation": [
+        {
+          "step": 2500,
+          "ce": 3.9466485381126404,
+          "hard_keep_rate": 0.07295989990234375,
+          "soft_keep_rate": 0.11876144260168076,
+          "summary_compression": 13.70615915507686,
+          "tokens": 131072
+        },
+        {
+          "step": 3000,
+          "ce": 3.910576641559601,
+          "hard_keep_rate": 0.057453155517578125,
+          "soft_keep_rate": 0.10947013460099697,
+          "summary_compression": 17.405484363588076,
+          "tokens": 131072
+        },
+        {
+          "step": 3500,
+          "ce": 3.8830122351646423,
+          "hard_keep_rate": 0.06420326232910156,
+          "soft_keep_rate": 0.1134270429611206,
+          "summary_compression": 15.575532515373874,
+          "tokens": 131072
+        },
+        {
+          "step": 4000,
+          "ce": 3.8635050654411316,
+          "hard_keep_rate": 0.06458187103271484,
+          "soft_keep_rate": 0.1108398474752903,
+          "summary_compression": 15.484221562633826,
+          "tokens": 131072
+        },
+        {
+          "step": 4500,
+          "ce": 3.8543728590011597,
+          "hard_keep_rate": 0.06026744842529297,
+          "soft_keep_rate": 0.11014322564005852,
+          "summary_compression": 16.592705119075877,
+          "tokens": 131072
+        },
+        {
+          "step": 5000,
+          "ce": 3.8398972153663635,
+          "hard_keep_rate": 0.061110496520996094,
+          "soft_keep_rate": 0.10833321325480938,
+          "summary_compression": 16.363800933223054,
+          "tokens": 131072
+        }
+      ],
+      "last_500_train_summary_compression": 15.68963368789585,
+      "new_steps_in_report": 3000,
+      "training_tokens_at_final_step": 163840000
+    },
+    "confidence-1-seed43": {
+      "source": {
+        "commit": "9451b7ee6934d6cc686d3997b9548c2c6931bbc3",
+        "formal_training": false,
+        "phase": "extended_confidence_stability_and_cache_audits"
+      },
+      "args": {
+        "gradient": "confidence",
+        "mode": "dynamic_hca",
+        "block_size": 16,
+        "ratio_weight": 1.0,
+        "steps": 2000,
+        "seed": 43,
+        "label": "confidence-1-seed43",
+        "save_state": false,
+        "resume": null
+      },
+      "steps": 2000,
+      "median_seconds": 0.08888711966574192,
+      "validation": [
+        {
+          "step": 500,
+          "ce": 4.7153685092926025,
+          "hard_keep_rate": 0.06464481353759766,
+          "soft_keep_rate": 0.1270209215581417,
+          "summary_compression": 15.46914509109685,
+          "tokens": 131072
+        },
+        {
+          "step": 1000,
+          "ce": 4.239994168281555,
+          "hard_keep_rate": 0.062109947204589844,
+          "soft_keep_rate": 0.1418122462928295,
+          "summary_compression": 16.100480599444165,
+          "tokens": 131072
+        },
+        {
+          "step": 1500,
+          "ce": 4.090325832366943,
+          "hard_keep_rate": 0.06564617156982422,
+          "soft_keep_rate": 0.1337364874780178,
+          "summary_compression": 15.233180794653883,
+          "tokens": 131072
+        },
+        {
+          "step": 2000,
+          "ce": 4.008465766906738,
+          "hard_keep_rate": 0.061745643615722656,
+          "soft_keep_rate": 0.12049692496657372,
+          "summary_compression": 16.195474554019615,
+          "tokens": 131072
+        }
+      ],
+      "last_500_train_summary_compression": 15.72634772755523,
+      "new_steps_in_report": 2000,
+      "training_tokens_at_final_step": 65536000
+    },
+    "confidence-final-5500": {
+      "source": {
+        "commit": "21ef47d9bc6db859fcf4386205f2ed35cb5c4969",
+        "formal_training": false,
+        "phase": "final_candidate_verification"
+      },
+      "args": {
+        "gradient": "confidence",
+        "mode": "dynamic_hca",
+        "block_size": 16,
+        "ratio_weight": 1.0,
+        "steps": 5500,
+        "seed": 42,
+        "label": "confidence-final-5500",
+        "save_state": true,
+        "resume": "../diagnostic-state/latest.pt"
+      },
+      "steps": 5500,
+      "median_seconds": 0.08609136939048767,
+      "validation": [
+        {
+          "step": 5500,
+          "ce": 3.8165754675865173,
+          "hard_keep_rate": 0.06055641174316406,
+          "soft_keep_rate": 0.10449611954391003,
+          "summary_compression": 16.51352798513339,
+          "tokens": 131072
+        }
+      ],
+      "last_500_train_summary_compression": 15.670884641237027,
+      "new_steps_in_report": 500,
+      "training_tokens_at_final_step": 180224000
+    }
+  },
+  "cache": {
+    "fixed-b16-cache-storage": {
+      "step": 5000,
+      "source": {
+        "commit": "9451b7ee6934d6cc686d3997b9548c2c6931bbc3",
+        "formal_training": false,
+        "phase": "extended_confidence_stability_and_cache_audits"
+      },
+      "args": {
+        "checkpoint": "../diagnostic-state/latest.pt",
+        "label": "fixed-b16-cache-storage",
+        "row": 0,
+        "splits": "137,1,511,7,1000,392",
+        "fixed_block_size": 16
+      },
+      "transplanted_weights": true,
+      "cache": {
+        "tokens": 2048,
+        "completed_chunks": [
+          [
+            127
+          ],
+          [
+            127
+          ],
+          [
+            127
+          ],
+          [
+            127
+          ],
+          [
+            127
+          ],
+          [
+            127
+          ],
+          [
+            127
+          ],
+          [
+            127
+          ]
+        ],
+        "open_chunk_tokens": [
+          [
+            16
+          ],
+          [
+            16
+          ],
+          [
+            16
+          ],
+          [
+            16
+          ],
+          [
+            16
+          ],
+          [
+            16
+          ],
+          [
+            16
+          ],
+          [
+            16
+          ]
+        ],
+        "compressed_entries": [
+          [
+            128
+          ],
+          [
+            128
+          ],
+          [
+            128
+          ],
+          [
+            128
+          ],
+          [
+            128
+          ],
+          [
+            128
+          ],
+          [
+            128
+          ],
+          [
+            128
+          ]
+        ],
+        "tensor_bytes": 6914560,
+        "storage_bytes": 6914560,
+        "local_window": 256,
+        "note": "Tensor storage only; excludes Python metadata, model and allocator overhead"
+      },
+      "baseline_kv_bytes": 33554432,
+      "cache_storage_compression": 4.85272121436505,
+      "exact_hidden": true,
+      "exact_boundaries": true,
+      "exact_cache_replay": true
+    },
+    "fixed-b4-cache-storage": {
+      "step": 5000,
+      "source": {
+        "commit": "9451b7ee6934d6cc686d3997b9548c2c6931bbc3",
+        "formal_training": false,
+        "phase": "extended_confidence_stability_and_cache_audits"
+      },
+      "args": {
+        "checkpoint": "../diagnostic-state/latest.pt",
+        "label": "fixed-b4-cache-storage",
+        "row": 0,
+        "splits": "137,1,511,7,1000,392",
+        "fixed_block_size": 4
+      },
+      "transplanted_weights": true,
+      "cache": {
+        "tokens": 2048,
+        "completed_chunks": [
+          [
+            511
+          ],
+          [
+            511
+          ],
+          [
+            511
+          ],
+          [
+            511
+          ],
+          [
+            511
+          ],
+          [
+            511
+          ],
+          [
+            511
+          ],
+          [
+            511
+          ]
+        ],
+        "open_chunk_tokens": [
+          [
+            4
+          ],
+          [
+            4
+          ],
+          [
+            4
+          ],
+          [
+            4
+          ],
+          [
+            4
+          ],
+          [
+            4
+          ],
+          [
+            4
+          ],
+          [
+            4
+          ]
+        ],
+        "compressed_entries": [
+          [
+            512
+          ],
+          [
+            512
+          ],
+          [
+            512
+          ],
+          [
+            512
+          ],
+          [
+            512
+          ],
+          [
+            512
+          ],
+          [
+            512
+          ],
+          [
+            512
+          ]
+        ],
+        "tensor_bytes": 12812416,
+        "storage_bytes": 12812416,
+        "local_window": 256,
+        "note": "Tensor storage only; excludes Python metadata, model and allocator overhead"
+      },
+      "baseline_kv_bytes": 33554432,
+      "cache_storage_compression": 2.618899667322697,
+      "exact_hidden": true,
+      "exact_boundaries": true,
+      "exact_cache_replay": true
+    },
+    "final-confidence-cache": {
+      "step": 5500,
+      "source": {
+        "commit": "21ef47d9bc6db859fcf4386205f2ed35cb5c4969",
+        "formal_training": false,
+        "phase": "final_candidate_verification"
+      },
+      "args": {
+        "checkpoint": "../diagnostic-state/latest.pt",
+        "label": "final-confidence-cache",
+        "row": 0,
+        "splits": "137,1,511,7,1000,392",
+        "fixed_block_size": null
+      },
+      "transplanted_weights": false,
+      "cache": {
+        "tokens": 2048,
+        "completed_chunks": [
+          [
+            212
+          ],
+          [
+            27
+          ],
+          [
+            35
+          ],
+          [
+            148
+          ],
+          [
+            77
+          ],
+          [
+            111
+          ],
+          [
+            247
+          ],
+          [
+            133
+          ]
+        ],
+        "open_chunk_tokens": [
+          [
+            12
+          ],
+          [
+            155
+          ],
+          [
+            12
+          ],
+          [
+            4
+          ],
+          [
+            25
+          ],
+          [
+            5
+          ],
+          [
+            5
+          ],
+          [
+            5
+          ]
+        ],
+        "compressed_entries": [
+          [
+            213
+          ],
+          [
+            28
+          ],
+          [
+            36
+          ],
+          [
+            149
+          ],
+          [
+            78
+          ],
+          [
+            112
+          ],
+          [
+            248
+          ],
+          [
+            134
+          ]
+        ],
+        "tensor_bytes": 8435712,
+        "storage_bytes": 8386560,
+        "local_window": 256,
+        "note": "Tensor storage only; excludes Python metadata, model and allocator overhead"
+      },
+      "baseline_kv_bytes": 33554432,
+      "cache_storage_compression": 4.000976800976801,
+      "exact_hidden": true,
+      "exact_boundaries": true,
+      "exact_cache_replay": true
+    },
+    "final-confidence-row1-cache": {
+      "step": 5500,
+      "source": {
+        "commit": "21ef47d9bc6db859fcf4386205f2ed35cb5c4969",
+        "formal_training": false,
+        "phase": "final_candidate_verification"
+      },
+      "args": {
+        "checkpoint": "../diagnostic-state/latest.pt",
+        "label": "final-confidence-row1-cache",
+        "row": 1,
+        "splits": "1,63,64,7,512,1,1400",
+        "fixed_block_size": null
+      },
+      "transplanted_weights": false,
+      "cache": {
+        "tokens": 2048,
+        "completed_chunks": [
+          [
+            190
+          ],
+          [
+            15
+          ],
+          [
+            39
+          ],
+          [
+            197
+          ],
+          [
+            86
+          ],
+          [
+            108
+          ],
+          [
+            145
+          ],
+          [
+            93
+          ]
+        ],
+        "open_chunk_tokens": [
+          [
+            10
+          ],
+          [
+            350
+          ],
+          [
+            7
+          ],
+          [
+            7
+          ],
+          [
+            6
+          ],
+          [
+            7
+          ],
+          [
+            6
+          ],
+          [
+            6
+          ]
+        ],
+        "compressed_entries": [
+          [
+            191
+          ],
+          [
+            16
+          ],
+          [
+            40
+          ],
+          [
+            198
+          ],
+          [
+            87
+          ],
+          [
+            109
+          ],
+          [
+            146
+          ],
+          [
+            94
+          ]
+        ],
+        "tensor_bytes": 8196096,
+        "storage_bytes": 8146944,
+        "local_window": 256,
+        "note": "Tensor storage only; excludes Python metadata, model and allocator overhead"
+      },
+      "baseline_kv_bytes": 33554432,
+      "cache_storage_compression": 4.118652589240824,
+      "exact_hidden": true,
+      "exact_boundaries": true,
+      "exact_cache_replay": true
+    }
+  },
+  "recovery": {
+    "fixed-b16-replay": {
+      "commit": "65f978e7fea4851dd2ab5b0e3cf939448eab4689",
+      "actual_cce_loss_abs_difference": 0.0,
+      "actual_cce_replay_loss_equal": true,
+      "restore_contract": "exact_state_rng_data_and_fixed_cce_gradient_replay",
+      "exact_checkpoint_inputs_and_controlled_update": true
+    },
+    "fixed-b4-replay": {
+      "commit": "65f978e7fea4851dd2ab5b0e3cf939448eab4689",
+      "actual_cce_loss_abs_difference": 9.5367431640625e-07,
+      "actual_cce_replay_loss_equal": false,
+      "restore_contract": "exact_state_rng_data_and_fixed_cce_gradient_replay",
+      "exact_checkpoint_inputs_and_controlled_update": true
+    },
+    "final-confidence-replay": {
+      "commit": "21ef47d9bc6db859fcf4386205f2ed35cb5c4969",
+      "actual_cce_loss_abs_difference": 0.0,
+      "actual_cce_replay_loss_equal": true,
+      "restore_contract": "exact_state_rng_data_and_fixed_cce_gradient_replay",
+      "exact_checkpoint_inputs_and_controlled_update": true
+    }
+  },
+  "limitations": [
+    "Bounded diagnostics, not 10B stability or a final quality result.",
+    "Dynamic rate is a soft average target, not an exact quota; report actual rates.",
+    "Cache storage includes SWA and scan-tile state; summary ratio is not total cache ratio.",
+    "Normal CCE forward/backward reductions are nondeterministic; controlled replay is exact.",
+    "GPU validation is on H100 only; do not assume other hardware backends are validated.",
+    "Python cache bookkeeping remains correctness-oriented; training timings do not measure decode/prefill throughput.",
+    "Original formal runs retain their frozen sources; the old DMC job remains held."
+  ],
+  "not_selected": {
+    "parallel_pool": {
+      "exact_forward_vjps": true,
+      "reason": "Slower end to end, including recompute variant",
+      "serial_ms": 89.64393939822912,
+      "parallel_recompute_ms": 90.49829002469778,
+      "location": "research/connections/hca-opt/parallel_pool.py"
+    }
+  },
+  "data": {
+    "sequence_length": 2048,
+    "dataset_revision": "87f09149ef4734204d70ed1d046ddc9ca3f2b8f9",
+    "train_shards": "000..012",
+    "heldout_shard": "013",
+    "validation": "dev first 64 rows, test next 1024 rows; no shared packed rows",
+    "archive": "nanochat-2k-10b-data-7685535.tar",
+    "tokenizer": "existing native RustBPE 32768, FineWeb-Edu sample-10BT"
+  },
+  "diagnostic_checkpoint_persisted": false
+}
