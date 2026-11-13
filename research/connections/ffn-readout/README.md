@@ -1,8 +1,8 @@
 # Final-FFN narrow readout
 
-User-authorized implementation and bounded GPU validation, 2026-11-13.
-No new formal training run is authorized by this task. HCA/Dynamic HCA are
-retired; their small closeout is in `../archive/hca-closed-20261113/summary.json`.
+Implementation and bounded GPU validation completed on 2026-11-13. The user
+subsequently authorized one 10B-token run, described below. HCA/Dynamic HCA
+remain retired; their closeout is in `../archive/hca-closed-20261113/summary.json`.
 
 ## Architecture
 
@@ -107,4 +107,30 @@ validation.
 
 Small evidence: `results.json`, `validation/*.xml`, `validation/cli-check.json`,
 `validation/environment.txt`, and `validation/profile.txt`. Diagnostic weights
-were not retained. No formal run or W&B run was created.
+were not retained. Validation created no formal run or W&B run.
+
+## Authorized 10B run
+
+`submit_10b.py` freezes and submits exactly one run under
+`/home/yzhong239/ffn-readout-r64-10b-20261113`. Configuration is the verified
+R64/GradMax/Triton model, eight layers D512/H4, full FA2 attention, sequence2048,
+microbatch16/global32768, seed42, original packed FineWeb-Edu/tokenizer, and
+305176 updates (10,000,007,168 tokens). The original optimizer and schedule
+are unchanged. Final and dev-selected checkpoints are evaluated on test.
+
+The launcher reuses the existing GPU evidence, starts from fresh weights and
+row0, and restores the same model/optimizer/RNG/global step/run ID after an
+interruption. GradMax calibration runs only for the fresh model. Exit85 every
+1800 seconds transfers atomic latest/best checkpoint and result archives;
+archive failure cannot report85. A completed summary prevents restarting a
+finished run. Failures retain the allocation for600 seconds and then hold.
+
+Scheduling requests one full H100/H200, 2 CPUs, 48GiB RAM and100GiB scratch,
+with public-pool preference and backfill allowed. Submission is held for an
+input/resource/recovery audit before release. Credentials are encrypted input
+only. Formal W&B uses `yibozhong657-none/nanochat`, one stable run ID.
+
+`submit_10b.py monitor` records queue/preparation/formal/finished states and
+collects small final evidence. It never creates replacement jobs or releases
+failed jobs. `test_run_policy.py` provides seven AP stdlib checks for recipe
+bounds, completion and checkpoint archive behavior.
