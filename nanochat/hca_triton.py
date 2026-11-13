@@ -570,15 +570,15 @@ def _cached_fast(Q, K, V, SK, SV, PK, PV, O, POSITION, LOCAL, SUMMARIES,
     # Use the training path's online-softmax order and BF16 probability products.
     # Padding the single query permits the same Tensor Core dot operations.
     h = tl.program_id(0)
-    rows, cols, d = tl.arange(0, 16), tl.arange(0, BN), tl.arange(0, BD)
-    off = h*D + d[None, :] + tl.zeros((16, 1), tl.int32)
+    rows, cols, d = tl.arange(0, TRAIN_BM), tl.arange(0, BN), tl.arange(0, BD)
+    off = h*D + d[None, :] + tl.zeros((TRAIN_BM, 1), tl.int32)
     valid = d[None, :] < D
     q = tl.load(Q+off, valid, 0)
     pk = tl.load(PK+off, valid, 0).to(tl.float32)
     acc = tl.load(PV+off, valid, 0).to(tl.float32)
     scale: tl.constexpr = D**-.5
     m = tl.sum(q.to(tl.float32)*pk, 1)*scale
-    l = tl.full((16,), 1, tl.float32)
+    l = tl.full((TRAIN_BM,), 1, tl.float32)
     first = (POSITION//TRAIN_BM)*TRAIN_BM-W+1
     if R > 0:
         first = first//BN*BN
@@ -620,14 +620,14 @@ def cached_attention(q, local_k, local_v, summary_k, summary_v, open_k, open_v,
     """One causal query over compressed storage, matching fast training arithmetic."""
     assert not torch.is_grad_enabled() and q.dtype == torch.bfloat16
     h, d = q.shape[-2:]
-    bm, bn, _ = FIXED_SMALL_TILE if 0 < ratio <= 4 else FIXED_FWD_TILE
+    bm, bn, warps = FIXED_SMALL_TILE if 0 < ratio <= 4 else FIXED_FWD_TILE
     n = 0 if summary_k is None else summary_k.shape[0]
     out = torch.empty((1, 1, h, d), device=q.device, dtype=q.dtype)
     _cached_fast[(h,)](q, local_k, local_v,
                       open_k if summary_k is None else summary_k,
                       open_v if summary_v is None else summary_v, open_k, open_v, out,
                       position, local_k.shape[0], n, h, d, window, ratio, bm, bn,
-                      tr.next_power_of_2(d), num_warps=4)
+                      tr.next_power_of_2(d), num_warps=warps)
     return out
 
 

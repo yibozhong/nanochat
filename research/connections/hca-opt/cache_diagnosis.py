@@ -30,6 +30,12 @@ def record_step(*args,**kwargs):
     cached[active]['pool'].append(tuple(x[:,None].to(torch.bfloat16).clone() for x in result[1:]))
     return result
 hca.pool_step=record_step
+old_cached_pool=hca_triton.cached_pool
+def record_cached_pool(*args,**kwargs):
+    result=old_cached_pool(*args,**kwargs)
+    cached[active]['pool'].append(tuple(x[:,None].clone() for x in result))
+    return result
+hca_triton.cached_pool=record_cached_pool
 for i,b in enumerate(m.blocks):
     project=b.attn.project;accelerated=b.attn.accelerated;cachefn=b.attn.cached
     def proj(*args,_i=i,_fn=project,**kwargs):

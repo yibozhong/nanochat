@@ -23,6 +23,7 @@ def test_cached_attention_same_inputs(ratio):
             actual = cached_attention(q[:,pos:pos+1],k[0,local],v[0,local],
                 sk,sv,pk[0,pos:pos+1],pv[0,pos:pos+1],pos,w,ratio)
             close(actual,full[:,pos:pos+1],torch.bfloat16)
+            torch.testing.assert_close(actual,full[:,pos:pos+1],rtol=0,atol=0)
 
 
 @pytest.mark.parametrize('ratio', [0, 4, 16])
