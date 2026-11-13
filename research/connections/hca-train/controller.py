@@ -105,7 +105,7 @@ def tick():
             state.update(status='needs_attention', failure='Stopped marker; no new actions')
             write(path, state); continue
         ads = json.loads(subprocess.check_output(['condor_q', state['job'], '-json', '-attributes',
-            'ClusterId,ProcId,JobStatus,HoldReason,RemoteHost,JobCurrentStartDate,QDate,NumJobStarts'], text=True) or '[]')
+            'ClusterId,ProcId,JobStatus,HoldReason,RemoteHost,JobCurrentStartDate,QDate,NumJobStarts,ExitCode,ExitBySignal'], text=True) or '[]')
         if not ads:
             ads = json.loads(subprocess.check_output(['condor_history', state['job'], '-limit', '1', '-json',
                 '-attributes', 'ClusterId,ProcId,JobStatus,ExitCode,ExitBySignal,HoldReason'], text=True) or '[]')
