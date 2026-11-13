@@ -9,6 +9,8 @@ import time
 
 p=argparse.ArgumentParser()
 p.add_argument('--gradient', choices=['dmc','confidence'],default='confidence')
+p.add_argument('--mode',choices=['full','fixed_hca','dynamic_hca'],default='dynamic_hca')
+p.add_argument('--block-size',type=int,default=16)
 p.add_argument('--ratio-weight',type=float,default=.03)
 p.add_argument('--steps',type=int,default=2000)
 p.add_argument('--seed',type=int,default=42)
@@ -23,8 +25,9 @@ from nanochat.packed_training import PackedData,seed_all,train_step,NonfiniteTra
 
 torch.set_num_threads(2);torch.backends.cuda.matmul.allow_tf32=False
 configure_attention('fa2');seed_all(a.seed)
-c=ConnectionConfig(variant='baseline',streams=1,attention_mode='dynamic_hca',
-                   hca_backend='triton',hca_dynamic_gradient=a.gradient,
+c=ConnectionConfig(variant='baseline',streams=1,attention_mode=a.mode,
+                   hca_backend='triton',hca_block_size=a.block_size,
+                   hca_dynamic_gradient=a.gradient if a.mode=='dynamic_hca' else 'dmc',
                    hca_noise=False,hca_ratio_loss_weight=a.ratio_weight)
 model=build_connection_model(c).prepare(compile_blocks=False)
 opt,wd=optimizer_for(model)
@@ -44,7 +47,8 @@ def validation():
         for start in range(0,limit,16):
             x,y=data.batch('dev',start,min(16,limit-start))
             ce=model(x,y).item()
-            metrics={k:v.item() for k,v in model.last_hca_metrics.items()}
+            metrics={k:v.item() for k,v in getattr(model,'last_hca_metrics',{}).items()}
+            if not metrics:metrics=dict(hard_keep_rate=1.,soft_keep_rate=1.)
             rows.append(dict(ce=ce,**{k:metrics[k] for k in ('hard_keep_rate','soft_keep_rate')}))
     model.train()
     result={k:statistics.mean(row[k] for row in rows) for k in rows[0]}
@@ -61,7 +65,7 @@ with (out/(a.label+'-steps.jsonl')).open('w',buffering=1) as log:
             report.update(status='nonfinite',failed_update=step+1,failure=e.report)
             write();raise
         torch.cuda.synchronize();seconds=time.perf_counter()-start
-        row=dict(step=step+1,loss=loss,seconds=seconds,**model.last_train_metrics)
+        row=dict(step=step+1,loss=loss,seconds=seconds,**getattr(model,'last_train_metrics',{}))
         log.write(json.dumps(row,allow_nan=False)+'\n')
         if step>=5:timings.append(seconds)
         last.append(row)
@@ -75,6 +79,6 @@ with (out/(a.label+'-steps.jsonl')).open('w',buffering=1) as log:
             print(json.dumps(dict(event='VALIDATION',step=step+1,**val)),flush=True)
 report.update(complete=True,status='finite_limit',steps=a.steps,last_100=last,
               median_seconds=statistics.median(timings),
-              final_train_metrics=model.last_train_metrics,
+              final_train_metrics=getattr(model,'last_train_metrics',{}),
               note='Finite diagnostic trajectory only, not proof of 10B stability or quality.')
 write()

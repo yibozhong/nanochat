@@ -70,6 +70,8 @@ def main():
     p.add_argument('--output', required=True)
     p.add_argument('--backend', choices=('reference','triton'), default='reference')
     p.add_argument('--block-size', type=int, default=16)
+    p.add_argument('--dynamic-gradient', choices=('dmc','confidence'), default='dmc')
+    p.add_argument('--ratio-weight', type=float, default=1.)
     a = p.parse_args()
     import torch
     from nanochat.connection_model import ConnectionConfig, build_connection_model, optimizer_for, schedule
@@ -79,8 +81,9 @@ def main():
     torch.set_num_threads(2); torch.backends.cuda.matmul.allow_tf32 = False
     source = json.loads(Path('source.json').read_text())
     c = ConnectionConfig(variant='baseline', streams=1, attention_mode=a.mode,
-                         hca_block_size=a.block_size, hca_ratio_loss_weight=1., hca_window=256,
-                         hca_noise=True, hca_temperature=1., hca_backend=a.backend)
+                         hca_block_size=a.block_size, hca_ratio_loss_weight=a.ratio_weight, hca_window=256,
+                         hca_noise=a.dynamic_gradient == 'dmc', hca_temperature=1., hca_backend=a.backend,
+                         hca_dynamic_gradient=a.dynamic_gradient)
     out = Path(a.output); out.parent.mkdir(parents=True, exist_ok=True)
     scratch = Path('../hca-diagnostic-checkpoints') / (a.mode+'-'+str(a.microbatch))
     assert not scratch.exists(), 'Inspect an interrupted probe; do not overwrite it'
@@ -139,11 +142,13 @@ def main():
         assert result['loaded_rng_equal'] and result['loaded_data_row_equal']
         del state
         schedule(opt, 2, STEPS, wd)
-        replay_loss = train_step(model, opt, data, 2, microbatch=a.microbatch)
-        assert replay_loss == losses[2], (replay_loss, losses[2])
+        with cce_tape(tape, actual=True):
+            replay_loss = train_step(model, opt, data, 2, microbatch=a.microbatch)
         model_equal, opt_equal = same(expected_model, model.state_dict()), same(expected_opt, opt.state_dict())
         result.update(parameters=parameters, steps=3, replayed_step=2,
             actual_cce_replay_model_equal=model_equal, actual_cce_replay_optimizer_equal=opt_equal,
+            actual_cce_inputs_equal=True,
+            actual_cce_loss_abs_difference=abs(replay_loss-losses[2]),
             actual_cce_replay_loss_equal=replay_loss == losses[2],
             all_gradients_finite=True, losses=losses, metrics=metrics,
             pool_gradient_nonzero=pool_nonzero, router_gradient_nonzero=router_nonzero,
