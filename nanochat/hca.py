@@ -72,22 +72,23 @@ def balanced_compression_loss(soft_count, hard_count, count, ratio):
 
 class _Confidence(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, output, selected):
+    def forward(ctx, output, selected, fused):
         ctx.save_for_backward(output)
+        ctx.fused = fused
         return output
 
     @staticmethod
     def backward(ctx, grad):
         output, = ctx.saved_tensors
-        if USE_FUSED_ROUTING and output.is_cuda and output.dtype == torch.bfloat16:
+        if ctx.fused and output.is_cuda and output.dtype == torch.bfloat16:
             from nanochat.hca_routing import confidence_gradient
-            return grad, confidence_gradient(grad, output)
+            return grad, confidence_gradient(grad, output), None
         dtype = work_dtype(output)
         score_grad = (grad.to(dtype)*output.to(dtype)).sum((-1, -2))
-        return grad, score_grad
+        return grad, score_grad, None
 
 
-def confidence_output(output, starts, soft):
+def confidence_output(output, starts, soft, *, fused=False):
     """H-Net-inspired confidence STE, adapted to the HCA attention branch.
 
     Forward multiplier is one; backward multiplier derivative is one. Unlike
@@ -96,7 +97,7 @@ def confidence_output(output, starts, soft):
     dechunker, and must be evaluated as a distinct estimator.
     """
     selected = torch.where(starts.detach() > .5, soft, 1-soft)
-    return _Confidence.apply(output, selected)
+    return _Confidence.apply(output, selected, fused)
 
 
 def pool_step(k, v, score, previous, start):
@@ -399,7 +400,7 @@ class HCAAttention(nn.Module):
         y = attention(q, local_k, v, pk, pv, starts, self.config.hca_window, ratio,
                       compact=self.config.hca_dynamic_gradient == 'confidence')
         if self.config.hca_dynamic_gradient == 'confidence':
-            y = confidence_output(y, starts, soft)
+            y = confidence_output(y, starts, soft, fused=USE_FUSED_ROUTING)
         return y, starts, soft
 
     def forward_with_stats(self, x, cos_sin):
