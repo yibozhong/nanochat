@@ -284,7 +284,10 @@ class ConnectionModel(nn.Module):
             x = expand_streams(x, self.config.streams)
         cos, sin = self.cos[:, start:start+idx.shape[1]], self.sin[:, start:start+idx.shape[1]]
         for i, b in enumerate(self.blocks):
-            fn = self.compiled_steps[i] if self.compiled_steps is not None else b.forward
+            # Training graphs specialize static sequence shapes. The cache's
+            # live position mutates between calls and must stay outside that
+            # fullgraph capture; attention still uses its native GPU kernels.
+            fn = self.compiled_steps[i] if self.compiled_steps is not None and kv_cache is None else b.forward
             if self.config.activation_checkpoint and self.training and torch.is_grad_enabled():
                 if kv_cache is not None:
                     raise ValueError('Activation checkpointing cannot mutate a KV cache')

@@ -159,7 +159,7 @@ def test_causal_cached_inference_nonzero_gate():
     from nanochat import flash_attention
     from nanochat.engine import KVCache
     flash_attention.USE_FA3=False;torch.backends.cuda.enable_math_sdp(True)
-    m=build().eval()
+    m=build(compiled=True).eval()
     with torch.no_grad():
         m.lm_head.weight[512:].normal_(0,.02)
         for b in m.blocks:

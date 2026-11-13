@@ -62,6 +62,8 @@ def main():
         diagnostic_dev_ce=dev,gate_gradient_nonzero=True,trained_gate_nonzero=True,
         gate_weight_norm=m.lm_head.weight[32768:].norm().item(),
         peak_allocated_bytes=torch.cuda.max_memory_allocated())
+    json_write(a.output,result)
+    print(json.dumps({k:v for k,v in result.items() if k not in ('source','config','head_tuning')}),flush=True)
     # Test the actual trained 2K model, including all output gates.
     from nanochat.engine import KVCache
     from nanochat import flash_attention
