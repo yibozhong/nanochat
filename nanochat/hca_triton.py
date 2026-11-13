@@ -24,6 +24,8 @@ FIXED_FWD_TILE = (32, 32, 4)
 FIXED_BWD_TILE = (32, 32, 4)
 FIXED_DKV_SPLITS = 1
 FIXED_BWD_STAGES = 3
+FIXED_POOL_CHANNELS = 32
+FIXED_POOL_WARPS = 4
 
 
 @tr.jit
@@ -156,29 +158,30 @@ class _Pool(torch.autograd.Function):
         b, t, h, d = k.shape
         fixed = ratio > 0
         bt = tr.next_power_of_2(ratio) if fixed else 64
-        bd = 32
+        bd = FIXED_POOL_CHANNELS if fixed else 32
+        warps = FIXED_POOL_WARPS if fixed else 4
         # Fixed kernels never dereference the dummy state pointers.
         m, sk, sv = (k, k, k) if fixed else [torch.empty_like(k, dtype=torch.float32) for _ in range(3)]
         pk, pv = torch.empty_like(k), torch.empty_like(v)
         grid = (b*h, tr.cdiv(d, bd), tr.cdiv(t, ratio) if fixed else 1)
         _pool_fwd[grid](k, v, score, starts, m, sk, sv, pk, pv,
-                       t, h, d, ratio, fixed, bt, bd, enable_fp_fusion=False)
+                       t, h, d, ratio, fixed, bt, bd, enable_fp_fusion=False, num_warps=warps)
         ctx.save_for_backward(k, v, score, starts, m, sk, sv)
-        ctx.params = ratio, bt, bd, grid
+        ctx.params = ratio, bt, bd, grid, warps
         return pk, pv
 
     @staticmethod
     @once_differentiable
     def backward(ctx, gk, gv):
         k, v, score, starts, m, sk, sv = ctx.saved_tensors
-        ratio, bt, bd, grid = ctx.params
+        ratio, bt, bd, grid, warps = ctx.params
         b, t, h, d = k.shape
         dk, dv, ds = [torch.empty_like(x) for x in (k, v, score)]
         learn = ratio == 0 and ctx.needs_input_grad[3]
         dg = torch.empty((b, t, h, tr.cdiv(d, bd)), device=k.device, dtype=torch.float32) if learn else starts
         _pool_bwd[grid](k, v, score, starts, m, sk, sv, gk.contiguous(), gv.contiguous(),
                        dk, dv, ds, dg, t, h, d, tr.cdiv(d, bd), ratio, ratio > 0,
-                       bt, bd, learn, enable_fp_fusion=False)
+                       bt, bd, learn, enable_fp_fusion=False, num_warps=warps)
         return dk, dv, ds, dg.sum((2, 3)) if learn else None, None
 
 
