@@ -20,11 +20,16 @@ from triton.language.extra.cuda import libdevice
 from torch.autograd.function import once_differentiable
 
 # Diagnostic tuning defaults; Dynamic and FP32 retain the validated geometry.
-FIXED_FWD_TILE = (32, 32, 4)
-FIXED_BWD_TILE = (32, 32, 4)
-FIXED_DKV_SPLITS = 1
-FIXED_BWD_STAGES = 3
+FIXED_FWD_TILE = (64, 64, 4)
+FIXED_BWD_TILE = (64, 64, 4)
+FIXED_SMALL_TILE = (128, 64, 8)
+FIXED_LOCAL_DKV_TILE = (32, 64, 4)
+FIXED_SUMMARY_TILE = (32, 32, 4)
+FIXED_DKV_SPLITS = 4
+FIXED_SMALL_SPLITS = 2
+FIXED_BWD_STAGES = 1
 FIXED_POOL_CHANNELS = 32
+FIXED_SMALL_POOL_CHANNELS = 128
 FIXED_POOL_WARPS = 4
 
 
@@ -158,7 +163,7 @@ class _Pool(torch.autograd.Function):
         b, t, h, d = k.shape
         fixed = ratio > 0
         bt = tr.next_power_of_2(ratio) if fixed else 64
-        bd = FIXED_POOL_CHANNELS if fixed else 32
+        bd = (FIXED_SMALL_POOL_CHANNELS if ratio <= 4 else FIXED_POOL_CHANNELS) if fixed else 32
         warps = FIXED_POOL_WARPS if fixed else 4
         # Fixed kernels never dereference the dummy state pointers.
         m, sk, sv = (k, k, k) if fixed else [torch.empty_like(k, dtype=torch.float32) for _ in range(3)]
@@ -487,7 +492,8 @@ class _Attention(torch.autograd.Function):
         of = torch.empty_like(q, dtype=torch.float32)
         lse = torch.empty((b, h, t), device=q.device, dtype=torch.float32)
         fast = ratio > 0 or compact
-        bm, bn, warps = FIXED_FWD_TILE if fast and q.dtype == torch.bfloat16 else (32, 32, 4)
+        tile = FIXED_SMALL_TILE if 0 < ratio <= 4 else FIXED_FWD_TILE
+        bm, bn, warps = tile if fast and q.dtype == torch.bfloat16 else (32, 32, 4)
         _attn_fwd[(tr.cdiv(t, bm), b*h)](q, k, v, pk, pv, index, counts, out, of, lse,
                         t, h, d, window, ratio, bm, bn, tr.next_power_of_2(d), fast, num_warps=warps)
         ctx.save_for_backward(q, k, v, pk, pv, starts, index, counts, of, lse)
@@ -506,27 +512,32 @@ class _Attention(torch.autograd.Function):
         dpk, dpv = [torch.empty_like(x, dtype=torch.float32) for x in (pk, pv)]
         dg = torch.empty((b, t, h), device=q.device, dtype=torch.float32)
         fast = r > 0 or compact
-        bm, bn, warps = FIXED_BWD_TILE if fast and q.dtype == torch.bfloat16 else (32, 32, 4)
+        tile = FIXED_SMALL_TILE if 0 < r <= 4 else FIXED_BWD_TILE
+        bm, bn, warps = tile if fast and q.dtype == torch.bfloat16 else (32, 32, 4)
         stages = FIXED_BWD_STAGES if fast and q.dtype == torch.bfloat16 else 3
         grid, bd = (tr.cdiv(t, bn), b*h), tr.next_power_of_2(d)
         _attn_dq[(tr.cdiv(t, bm), b*h)](q, k, v, pk, pv, index, counts, do, of, lse, dq,
                                      t, h, d, w, r, bm, bn, bd, fast, num_warps=warps, num_stages=stages)
-        _attn_dkv[grid](q, k, v, starts, do, of, lse, dk, dv, dg, t, h, d, w, r, 0,
-                       bm, bn, bd, FAST=fast, num_warps=warps, num_stages=stages)
+        lm, ln, lw = FIXED_LOCAL_DKV_TILE if fast and q.dtype == torch.bfloat16 else (32,32,4)
+        _attn_dkv[(tr.cdiv(t,ln),b*h)](q, k, v, starts, do, of, lse, dk, dv, dg, t, h, d, w, r, 0,
+                       lm, ln, bd, FAST=fast, num_warps=lw, num_stages=stages)
         if r > 0:
             _prefix_diag_bwd[(tr.cdiv(t, 32), b*h)](q, pk, pv, do, of, lse, dpk, dpv, t, h, d, 32, bd)
             n = (t-1)//r
             if n:
-                splits = FIXED_DKV_SPLITS if q.dtype == torch.bfloat16 else 1
+                sm, sn, sw = FIXED_SMALL_TILE if r <= 4 else FIXED_SUMMARY_TILE
+                splits = FIXED_SMALL_SPLITS if r <= 4 else FIXED_DKV_SPLITS
+                if q.dtype != torch.bfloat16:
+                    sm, sn, sw, splits = 32,32,4,1
                 if splits == 1:
-                    _attn_dkv[(tr.cdiv(n, bn), b*h)](q, pk, pv, starts, do, of, lse,
-                            dpk, dpv, dg, t, h, d, w, r, 2, bm, bn, bd, num_warps=warps, num_stages=stages)
+                    _attn_dkv[(tr.cdiv(n, sn), b*h)](q, pk, pv, starts, do, of, lse,
+                            dpk, dpv, dg, t, h, d, w, r, 2, sm, sn, bd, num_warps=sw, num_stages=stages)
                 else:
                     ak, av = [torch.empty((splits, b, n, h, d), dtype=torch.float32,
                                          device=q.device) for _ in range(2)]
-                    _attn_dkv[(tr.cdiv(n, bn), b*h, splits)](
+                    _attn_dkv[(tr.cdiv(n, sn), b*h, splits)](
                         q, pk, pv, starts, do, of, lse, ak, av, dg, t, h, d, w, r, 2,
-                        bm, bn, bd, n, b, splits, num_warps=warps, num_stages=stages)
+                        sm, sn, bd, n, b, splits, num_warps=sw, num_stages=stages)
                     _merge_summary_parts[(tr.cdiv(b*n*h*d, 256),)](
                         ak, av, dpk, dpv, t, n, h, d, b, r, splits, 256)
         elif fast:

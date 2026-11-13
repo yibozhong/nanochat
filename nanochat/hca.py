@@ -15,6 +15,8 @@ from torch.nn import functional as F
 
 from nanochat.gpt import Linear, apply_rotary_emb, norm
 
+USE_FUSED_ROTARY = True
+
 
 def work_dtype(x):
     return torch.float64 if x.dtype == torch.float64 else torch.float32
@@ -235,11 +237,19 @@ class HCAAttention(nn.Module):
                 # DMC's mostly uncompressed initialization is retained.
                 nn.init.constant_(self.boundary.bias, 2.)
 
+    def rotated(self, x, cos_sin):
+        if (USE_FUSED_ROTARY and self.config.hca_backend == 'triton' and x.is_cuda
+                and x.dtype == torch.bfloat16
+                and (self.boundary is None or self.config.hca_dynamic_gradient == 'confidence')):
+            from nanochat.hca_rotary import rotary_norm
+            return rotary_norm(x, *cos_sin)
+        return norm(apply_rotary_emb(x, *cos_sin)) * 1.2
+
     def project(self, x, cos_sin):
         shape = (*x.shape[:2], self.n_head, self.head_dim)
         raw_k, v = self.c_k(x).view(shape), self.c_v(x).view(shape)
-        q = norm(apply_rotary_emb(self.c_q(x).view(shape), *cos_sin)) * 1.2
-        local_k = norm(apply_rotary_emb(raw_k, *cos_sin)) * 1.2
+        q = self.rotated(self.c_q(x).view(shape), cos_sin)
+        local_k = self.rotated(raw_k, cos_sin)
         # Pool/router projections use FP32 even with BF16 backbone activations.
         dtype = work_dtype(x)
         if (self.config.hca_backend == 'triton' and x.is_cuda and x.dtype == torch.bfloat16
@@ -263,7 +273,7 @@ class HCAAttention(nn.Module):
             keys.append(pk); values.append(pv); starts.append(start); soft_starts.append(soft)
         pk = torch.stack(keys, 1).to(q.dtype)
         pv = torch.stack(values, 1).to(v.dtype)
-        pk = norm(apply_rotary_emb(pk, *cos_sin)) * 1.2
+        pk = self.rotated(pk, cos_sin)
         starts = torch.stack(starts, 1)
         soft_starts = torch.stack(soft_starts, 1)
         pos = torch.arange(length, device=q.device)
@@ -305,7 +315,7 @@ class HCAAttention(nn.Module):
                     state.pool = tuple(torch.zeros((1, heads, dim), dtype=dtype, device=q.device) for _ in range(3))
                 state.pool, pk, pv = pool_step(raw_k[b:b+1, t], v[b:b+1, t], score[b:b+1, t], state.pool, start)
                 cos, sin = (r[:, t:t+1] for r in cos_sin)
-                state.open_k = (norm(apply_rotary_emb(pk[:, None].to(q.dtype), cos, sin)) * 1.2)[0].clone()
+                state.open_k = self.rotated(pk[:, None].to(q.dtype), (cos, sin))[0].clone()
                 state.open_v = pv.to(v.dtype).clone()
                 lk, lv = local_k[b, t:t+1], v[b, t:t+1]
                 state.local_k = (lk.clone() if state.local_k is None else torch.cat((state.local_k, lk))[-self.config.hca_window:].clone())
@@ -351,7 +361,7 @@ class HCAAttention(nn.Module):
                 starts = starts + (soft-soft.detach())
             ratio = 0
         pk, pv = prefix_pool(raw_k, v, score, starts, ratio)
-        pk = norm(apply_rotary_emb(pk, *cos_sin)) * 1.2
+        pk = self.rotated(pk, cos_sin)
         y = attention(q, local_k, v, pk, pv, starts, self.config.hca_window, ratio,
                       compact=self.config.hca_dynamic_gradient == 'confidence')
         if self.config.hca_dynamic_gradient == 'confidence':

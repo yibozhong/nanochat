@@ -6,14 +6,16 @@ from nanochat.hca import weighted_attention
 from test_hca_triton import close
 
 
+@pytest.mark.parametrize('d',[32,128])
 @pytest.mark.parametrize('ratio',[4,16])
 @pytest.mark.parametrize('splits',[2,4,8])
-def test_fixed_summary_splits(ratio,splits,monkeypatch):
+def test_fixed_summary_splits(d,ratio,splits,monkeypatch):
     monkeypatch.setattr(hca,'FIXED_DKV_SPLITS',splits)
+    monkeypatch.setattr(hca,'FIXED_SMALL_SPLITS',splits)
     monkeypatch.setattr(hca,'FIXED_BWD_TILE',(64,64,4))
     monkeypatch.setattr(hca,'FIXED_BWD_STAGES',1)
     torch.manual_seed(807)
-    b,t,h,d,w=2,137,2,32,17
+    b,t,h,w=2,137,2,17
     xs=[torch.randn(b,t,h,d,device='cuda',dtype=torch.bfloat16,requires_grad=True) for _ in range(5)]
     pos=torch.arange(t,device='cuda')
     starts=(pos%ratio==0).float()[None].expand(b,-1)
