@@ -10,8 +10,8 @@ from test_hca import config, model
 
 
 def close(actual, expected, dtype, *, pooling=False):
-    # Relative L2 plus a scale-normalized max error handles BF16 rounding and
-    # cancellation near zero. Neither threshold is adjusted by the launcher.
+    # Relative L2 plus normalized peak for nonzero quantities. Analytically
+    # zero derivatives need an absolute roundoff bound, tested explicitly below.
     a, e = actual.detach().float(), expected.detach().float()
     assert torch.isfinite(a).all() and torch.isfinite(e).all()
     rel = (a-e).norm() / e.norm().clamp_min(1e-7)
@@ -54,7 +54,26 @@ def test_pool_all_vjps(dtype, kind, ratio):
     inputs = (k,v,s) if ratio else (k,v,s,g)
     actual = torch.autograd.grad((pk,pv),inputs,(uk,uv),retain_graph=True)
     ref = torch.autograd.grad((rk,rv),inputs,(uk,uv))
-    for a,e in zip(actual,ref):close(a,e,dtype,pooling=True)
+    for index,(a,e) in enumerate(zip(actual,ref)):
+        if kind == 'every' and index == 2:
+            # A singleton weighted mean is K or V, independent of its score.
+            # Comparing two cancellation residuals by relative norm is invalid.
+            # Establish the zero independently in FP64, then bound both FP32
+            # evaluations by 16 eps times the uncancelled local VJP scale.
+            sd=s.detach().double().requires_grad_()
+            wd=(10*torch.tanh(sd/10)).exp()
+            yd=(wd*k.detach().double())/wd
+            zd=(wd*v.detach().double())/wd
+            oracle,=torch.autograd.grad((yd*uk.double()+zd*uv.double()).sum(),sd)
+            scale=(uk.float()*k.detach().float()).abs()+(uv.float()*v.detach().float()).abs()
+            scale=scale.clamp_min(1.)
+            assert (oracle.abs() <= 16*torch.finfo(torch.float64).eps*scale.double()).all()
+            bound=16*torch.finfo(torch.float32).eps*scale
+            assert (a.abs() <= bound).all() and (e.abs() <= bound).all()
+            print('SINGLETON_SCORE_ORACLE',dict(fp64_max=oracle.abs().max().item(),
+                  triton_max=a.abs().max().item(),eager_max=e.abs().max().item()),flush=True)
+        else:
+            close(a,e,dtype,pooling=True)
     # No atomics: repeated backward on identical inputs must be bitwise equal.
     again = torch.autograd.grad((pk,pv),inputs,(uk,uv))
     for a,e in zip(actual,again):torch.testing.assert_close(a,e,rtol=0,atol=0)

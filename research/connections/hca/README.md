@@ -134,6 +134,17 @@ reduction orders. The startup contract now requires exact state/RNG/data and
 controlled full-update replay, supported by the prior CCE-isolation evidence.
 No CCE tape is used in formal training. See the paired-run README for gates.
 
+Interactive H200 debug fixed a Triton loop-carried shape/type reuse in query
+backward and the forced-first-boundary graph for T=1. Probability/value and
+score-adjoint/input products now retain FP32 operands using TF32x3, avoiding
+extra BF16 rounding that distorted a cancelling router-bias gradient. All 24
+kernel/integration tests passed on that allocation; full production-shape
+validation is a separate gate. For singleton pooling, the score derivative is
+analytically zero: its test independently establishes this in FP64 and bounds
+both FP32 cancellation residuals by 16 eps times the uncancelled local VJP
+scale. Relative error between two near-zero residuals is not a valid metric;
+the nonzero-gradient tolerances were not widened.
+
 `ConnectionConfig.attention_mode = full | fixed_hca | dynamic_hca` selects the
 attention. `full` retains the original default. HCA currently requires vanilla,
 baseline residuals, one stream and the original Q/K/V projection layout.

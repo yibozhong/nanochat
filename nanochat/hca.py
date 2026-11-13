@@ -282,6 +282,12 @@ class HCAAttention(nn.Module):
             starts = (positions % self.config.hca_block_size == 0).to(score.dtype)[None].expand(q.shape[0], -1)
             soft = starts
             ratio = self.config.hca_block_size
+        elif q.shape[1] == 1:
+            # The first boundary is compulsory and independent of the router,
+            # including its autograd connectivity (None, not a synthetic zero).
+            starts = torch.ones_like(content)
+            soft = starts
+            ratio = 0
         else:
             logits = content if noise is None else content + noise
             relaxed = torch.sigmoid(logits / self.config.hca_temperature)

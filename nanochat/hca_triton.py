@@ -7,6 +7,9 @@ the reference's visible open prefix. Dynamic backward retains zero-gate STE
 derivatives; forward compaction alone would not preserve that estimator.
 
 No T x T intermediates, no atomic gradient updates, no Python token loop.
+Probabilities and score adjoints remain FP32 in value/gradient dot products
+(TF32x3 accumulation) rather than rounding them to BF16 before multiplication;
+the extra BF16 rounding can dominate a small, cancelling router-bias gradient.
 GPU validation is mandatory before selecting this backend for a formal run.
 """
 import torch
@@ -212,7 +215,7 @@ def _attn_fwd(Q, K, V, PK, PV, INDEX, COUNTS, O, OF, LSE,
         new_m = tl.maximum(m, tl.max(z, 1))
         p = tl.exp(z-new_m[:, None])
         alpha = tl.exp(m-new_m)
-        acc = acc*alpha[:, None]+tl.dot(p.to(v.dtype), v, input_precision='ieee')
+        acc = acc*alpha[:, None]+tl.dot(p, v.to(tl.float32), input_precision='tf32x3')
         l = l*alpha+tl.sum(p, 1)
         m = new_m
     last = tl.minimum(T-1, (block+1)*BM-1)
@@ -235,7 +238,7 @@ def _attn_fwd(Q, K, V, PK, PV, INDEX, COUNTS, O, OF, LSE,
         new_m = tl.maximum(m, tl.max(z, 1))
         p = tl.exp(z-new_m[:, None])
         alpha = tl.exp(m-new_m)
-        acc = acc*alpha[:, None]+tl.dot(p.to(v.dtype), v, input_precision='ieee')
+        acc = acc*alpha[:, None]+tl.dot(p, v.to(tl.float32), input_precision='tf32x3')
         l = l*alpha+tl.sum(p, 1)
         m = new_m
     out = acc/l[:, None]
@@ -259,12 +262,12 @@ def _attn_dq(Q, K, V, PK, PV, INDEX, COUNTS, DO, OF, LSE, DQ,
     o = tl.load(OF+off, valid, 0)
     lse = tl.load(LSE+bh*T+t, t < T, 0)
     delta = tl.sum(do.to(tl.float32)*o, 1)
-    k = tl.load(PK+off, valid, 0).to(tl.float32)
-    v = tl.load(PV+off, valid, 0).to(tl.float32)
+    diag_k = tl.load(PK+off, valid, 0).to(tl.float32)
+    diag_v = tl.load(PV+off, valid, 0).to(tl.float32)
     scale: tl.constexpr = D ** -.5
-    p = tl.exp(tl.sum(q.to(tl.float32)*k, 1)*scale-lse)
-    ds = p*(tl.sum(do.to(tl.float32)*v, 1)-delta)
-    dq = ds[:, None]*k*scale
+    diag_p = tl.exp(tl.sum(q.to(tl.float32)*diag_k, 1)*scale-lse)
+    diag_ds = diag_p*(tl.sum(do.to(tl.float32)*diag_v, 1)-delta)
+    dq = diag_ds[:, None]*diag_k*scale
     for base in range(tl.maximum(0, block*BM-W+1), tl.minimum(T, (block+1)*BM), BN):
         j = base+cols
         ko = ((b*T+j[:, None])*H+h)*D+d[None, :]
@@ -276,7 +279,7 @@ def _attn_dq(Q, K, V, PK, PV, INDEX, COUNTS, DO, OF, LSE, DQ,
         p = tl.exp(tl.where(allowed, z-lse[:, None], -float('inf')))
         dp = tl.dot(do, tl.trans(v), input_precision='ieee')
         ds = p*(dp-delta[:, None])
-        dq += tl.dot(ds.to(k.dtype), k, input_precision='ieee')*scale
+        dq += tl.dot(ds, k.to(tl.float32), input_precision='tf32x3')*scale
     last = tl.minimum(T-1, (block+1)*BM-1)
     if R > 0:
         n = last // R
@@ -296,7 +299,7 @@ def _attn_dq(Q, K, V, PK, PV, INDEX, COUNTS, DO, OF, LSE, DQ,
         p = tl.exp(tl.where((c[None, :] < n) & (j[None, :] < t[:, None]), z-lse[:, None], -float('inf')))
         dp = tl.dot(do, tl.trans(v), input_precision='ieee')
         ds = p*(dp-delta[:, None])
-        dq += tl.dot(ds.to(k.dtype), k, input_precision='ieee')*scale
+        dq += tl.dot(ds, k.to(tl.float32), input_precision='tf32x3')*scale
     tl.store(DQ+off, dq, valid)
 
 
@@ -377,8 +380,8 @@ def _attn_dkv(Q, K, V, G, DO, OF, LSE, DK, DV, DG,
         else:
             p = e
         ds = p*dp
-        dk += tl.dot(tl.trans(ds.to(q.dtype)), q, input_precision='ieee')*(D**-.5)
-        dv += tl.dot(tl.trans(p.to(do.dtype)), do, input_precision='ieee')
+        dk += tl.dot(tl.trans(ds), q.to(tl.float32), input_precision='tf32x3')*(D**-.5)
+        dv += tl.dot(tl.trans(p), do.to(tl.float32), input_precision='tf32x3')
     if SOURCE == 2:
         dk += tl.load(DK+off, valid, 0)
         dv += tl.load(DV+off, valid, 0)

@@ -47,7 +47,7 @@ def main():
     if a.mode == 'fixed_hca':
         kernel_xml = Path('results/hca-startup/kernels.xml')
         kernel_xml.parent.mkdir(parents=True, exist_ok=True)
-        subprocess.run([sys.executable, '-m', 'pytest', '-x', '-v', 'tests/test_hca_triton.py',
+        subprocess.run([sys.executable, '-m', 'pytest', '-v', 'tests/test_hca_triton.py',
                         '--junitxml='+str(kernel_xml)], check=True)
         suites = ET.parse(kernel_xml).getroot().findall('testsuite')
         kernel_tests = {k:sum(int(s.get(k,0)) for s in suites) for k in ('tests','failures','errors','skipped')}
