@@ -404,7 +404,7 @@ def _attn_dkv(Q, K, V, G, DO, OF, LSE, DK, DV, DG,
     if SOURCE == 2 and SPLITS > 1:
         # Completed summaries have few CTAs and long query loops. Partition
         # query ownership, then reduce compact FP32 partials deterministically.
-        span: tl.constexpr = tr.cdiv(T, SPLITS*BM)*BM
+        span: tl.constexpr = tl.cdiv(T, SPLITS*BM)*BM
         first = tl.maximum(first, tl.program_id(2)*span)
         hi = tl.minimum(hi, (tl.program_id(2)+1)*span)
     for base in range(first//BM*BM, hi, BM):

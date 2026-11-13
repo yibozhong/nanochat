@@ -16,7 +16,7 @@ def _mm(A, B, C, M: tl.constexpr, N: tl.constexpr, K: tl.constexpr,
     m = tl.program_id(0)*BM + tl.arange(0, BM)
     n = tl.program_id(1)*BC + tl.arange(0, BC)
     part = tl.program_id(2)
-    span: tl.constexpr = tr.cdiv(K, SPLIT*BT)*BT
+    span: tl.constexpr = tl.cdiv(K, SPLIT*BT)*BT
     kk = tl.arange(0, BT)
     acc = tl.zeros((BM, BC), tl.float32)
     for base in range(part*span, tl.minimum(K, (part+1)*span), BT):
