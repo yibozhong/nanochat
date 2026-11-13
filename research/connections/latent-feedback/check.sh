@@ -13,21 +13,7 @@ set -e
 test "$TASK_STATUS" -eq 85
 python -m scripts.connection_train "${TASK_ARGS[@]}" --output-dir ../resume-check --resume auto
 python -m scripts.connection_train "${TASK_ARGS[@]}" --output-dir ../continuous-check
-python - <<'PY'
-import json,sys,torch
-from pathlib import Path
-sys.path.insert(0,'tests')
-from test_connection_training_resume import equal_tree
-a=torch.load('../resume-check/checkpoints/latest.pt',map_location='cpu',weights_only=False)
-b=torch.load('../continuous-check/checkpoints/latest.pt',map_location='cpu',weights_only=False)
-assert a['step']==b['step']==3
-for key in ('model','optimizer','rng','config','protocol','run_id','data_manifest'):
-    equal_tree(a[key],b[key])
-rows=[json.loads(line) for line in Path('../resume-check/steps.jsonl').read_text().splitlines()]
-assert [r['step'] for r in rows]==[1,2,3]
-Path('results/cli-resume.json').write_text(json.dumps(dict(complete=True,step=3,exit85=True,
-    checks=['model','optimizer','rng','config','protocol','run_id','data_position'],
-    passes=[r['passes'] for r in rows],formal_training=False),indent=2)+'\n')
-PY
+python -m scripts.connection_feedback_resume_check --resumed ../resume-check \
+    --continuous ../continuous-check --data-dir ../data --output results/cli-resume.json
 rm -r ../resume-check ../continuous-check
 echo 'FEEDBACK_DEBUG_COMPLETE'

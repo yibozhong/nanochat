@@ -26,7 +26,10 @@ LM head, optimizer settings, and packed FineWeb-Edu data.
 
 The bounded debug job runs GPU correctness/gradient/cache tests, 96 updates
 per model at 8 layers / D512 / T2048 / batch 32768 on one GPU, and an actual
-CLI exit85/resume comparison. Data are the existing 128-step packed prefix.
+CLI exit85/resume comparison. Checkpoint tensors, optimizer/RNG/data position,
+and the next fixed-gradient optimizer update must match exactly. Independent
+FA2/CCE backward runs have floating-point reduction nondeterminism; their
+trajectory differences are recorded separately. Data are the existing 128-step packed prefix.
 No W&B run or formal 10B training is created. Timing excludes 16 warmup updates;
 baseline and feedback alternate on the same card. Both model/optimizer states
 are resident, so the reported peak memory is combined.
