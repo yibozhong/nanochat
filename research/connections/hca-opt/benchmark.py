@@ -19,6 +19,7 @@ p.add_argument('--rotary',choices=['native','fused'])
 p.add_argument('--resume', help='Diagnostic checkpoint; never written back')
 p.add_argument('--pool', choices=['serial','parallel'], default='serial')
 p.add_argument('--routing', choices=['native','fused'])
+p.add_argument('--pool-channels',type=int,choices=[16,32])
 a = p.parse_args()
 assert os.environ['WANDB_MODE'] == 'disabled'
 if a.kernel_file:
@@ -38,6 +39,9 @@ if a.rotary:
 if a.routing:
     import nanochat.hca as hca
     hca.USE_FUSED_ROUTING = a.routing == 'fused'
+if a.pool_channels:
+    from nanochat import hca_triton as ht
+    ht.DYNAMIC_POOL_CHANNELS = a.pool_channels
 
 if a.projection:
     import nanochat.hca_projection as projection
