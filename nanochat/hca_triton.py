@@ -31,6 +31,8 @@ FIXED_BWD_STAGES = 1
 FIXED_POOL_CHANNELS = 32
 FIXED_SMALL_POOL_CHANNELS = 128
 FIXED_POOL_WARPS = 4
+DYNAMIC_POOL_CHANNELS = 32
+DYNAMIC_POOL_WARPS = 4
 
 
 @tr.jit
@@ -163,8 +165,8 @@ class _Pool(torch.autograd.Function):
         b, t, h, d = k.shape
         fixed = ratio > 0
         bt = tr.next_power_of_2(ratio) if fixed else 64
-        bd = (FIXED_SMALL_POOL_CHANNELS if ratio <= 4 else FIXED_POOL_CHANNELS) if fixed else 32
-        warps = FIXED_POOL_WARPS if fixed else 4
+        bd = (FIXED_SMALL_POOL_CHANNELS if ratio <= 4 else FIXED_POOL_CHANNELS) if fixed else DYNAMIC_POOL_CHANNELS
+        warps = FIXED_POOL_WARPS if fixed else DYNAMIC_POOL_WARPS
         # Fixed kernels never dereference the dummy state pointers.
         m, sk, sv = (k, k, k) if fixed else [torch.empty_like(k, dtype=torch.float32) for _ in range(3)]
         pk, pv = torch.empty_like(k), torch.empty_like(v)
@@ -684,7 +686,7 @@ def cached_pool(k, v, score, start, state, ratio):
     assert not torch.is_grad_enabled() and k.dtype == torch.bfloat16
     _, h, d = k.shape
     bt = tr.next_power_of_2(ratio) if ratio else 64
-    bd = (FIXED_SMALL_POOL_CHANNELS if ratio <= 4 else FIXED_POOL_CHANNELS) if ratio else 32
+    bd = (FIXED_SMALL_POOL_CHANNELS if ratio <= 4 else FIXED_POOL_CHANNELS) if ratio else DYNAMIC_POOL_CHANNELS
     index = state.position % (ratio or bt)
     if state.pool_tile_k is None:
         state.pool_tile_k = torch.zeros((bt,h,d), device=k.device, dtype=k.dtype)
@@ -700,7 +702,7 @@ def cached_pool(k, v, score, start, state, ratio):
     pk, pv = torch.empty_like(k), torch.empty_like(v)
     _cached_pool[(h,tr.cdiv(d,bd))](state.pool_tile_k, state.pool_tile_v, state.pool_tile_score,
         state.pool_tile_starts, *state.pool_carry, *state.pool, pk, pv, index,
-        h,d,ratio > 0,bt,bd,num_warps=FIXED_POOL_WARPS if ratio else 4,enable_fp_fusion=False)
+        h,d,ratio > 0,bt,bd,num_warps=FIXED_POOL_WARPS if ratio else DYNAMIC_POOL_WARPS,enable_fp_fusion=False)
     if not ratio and index == bt-1:
         state.pool_carry = state.pool
     return pk,pv
