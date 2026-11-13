@@ -131,3 +131,43 @@ The B4 controller uses its own lock/state/PID. Measured H200 update time was
 0.11834 s versus 0.07638 s baseline, yielding a train-only estimate of 10.03 h,
 excluding evaluation, transfer and scheduling. The original Dynamic job remains
 held after its nonfinite event; this B4 authorization does not resume Dynamic.
+
+
+## Optimized B4 pair (2026-11-13 authorization)
+
+The new `optimized_pair.py` plan creates exactly two independent 10B-token runs:
+Fixed HCA B4 and confidence Dynamic HCA targeting mean B4. It does not change,
+replace or restart any older run. Both use seed42, 8 layers / width512 / 4 heads,
+2K context, microbatch16, 32768 tokens/update, 305176 updates (10,000,007,168
+tokens), local window256, ratio weight1, temperature1, noiseFalse and the locked
+Triton runtime. The dataset and tokenizer remain the existing packed cache.
+
+`optimized_preflight.py` reuses the final Fixed B4 evidence from
+`../hca-opt/results.json`. Dynamic B4 runs exact state/RNG/data/controlled-CCE
+replay, 2000 finite diagnostic updates, two trained 2K cache/causality/open-chunk
+checks and a same-GPU full/Fixed/Dynamic timing comparison. Its last500 training
+mean and final dev summary compression must both be in [3.2, 5.0], a startup
+acceptance band fixed before observing B4 results, not a guarantee of exact
+4x or per-sequence quotas. The existing cache numerical tolerance is unchanged.
+
+The gate runs with W&B disabled in the same allocation as formal training.
+Diagnostics use disposable weights; the separate formal process starts from
+seed42 and row0. Failed validation stops the job, retains the allocation for
+600 seconds and never automatically retries. Passed gates persist across native
+1800-second exit85 checkpoints. Checkpoint archive failures return74, not85;
+resume retains model/optimizer/RNG/data/step and the same W&B run ID. The monitor
+collects results and never creates replacement jobs. Complete H100/H200 GPUs
+are required; other architectures are not enabled without compatible checks.
+
+AP commands after committing/pushing source:
+
+```sh
+python research/connections/hca-train/optimized_pair.py initialize
+python research/connections/hca-train/optimized_pair.py fixed_hca
+python research/connections/hca-train/optimized_pair.py dynamic_hca
+python research/connections/hca-train/optimized_pair.py monitor
+```
+
+Each submission is held for an audit of source/config, encrypted W&B credential
+transport, automatic container input, resources and recovery settings before
+release. Run IDs and job IDs live in the plan root and RESEARCH_HISTORY.md.

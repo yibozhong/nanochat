@@ -145,7 +145,9 @@ def main():
         applied_sinkhorn_iterations=c.sinkhorn_iterations if a.variant=='mhc' else 0,
         optimizer='native MuonAdamW; connector AdamW at native unembedding LR, no decay',
         optimizer_groups=initial_groups,
-        loss=('full-token CCE + weighted global one-sided HCA compression loss; eval CE only'
+        loss=(('full-token CCE + confidence STE + balanced hard/soft HCA rate loss; eval CE only'
+               if c.hca_dynamic_gradient == 'confidence' else
+               'full-token CCE + weighted global one-sided HCA compression loss; eval CE only')
               if c.attention_mode == 'dynamic_hca' else 'full-token full-vocabulary CCE; no gradient filtering'),
         references='research/connections/references.json')
     from nanochat.connection_cost import model_cost
@@ -157,7 +159,9 @@ def main():
         config['profile_matches_current_gpu']=str(torch.cuda.get_device_properties(0).uuid)==profile_reference.get('gpu_uuid')
     kwargs=dict(project='nanochat',entity='yibozhong657-none',group=a.wandb_group,
                 job_type='pretrain' if a.formal_training else 'diagnostic',
-                name=f'{a.architecture}-{a.variant}'+(f'-{a.attention_mode}' if a.attention_mode != 'full' else '')
+                name=f'{a.architecture}-{a.variant}'+(f'-{a.attention_mode}-b{c.hca_block_size}'
+                     +(f'-{c.hca_dynamic_gradient}' if c.attention_mode == 'dynamic_hca' else '')
+                     if a.attention_mode != 'full' else '')
                      +f'-{c.sequence_length}ctx-{a.steps}steps',id=run_id,resume='allow',config=config)
     run=training_run(formal_training=a.formal_training, local_dir=out/"diagnostics", **kwargs)
     run.define_metric('tokens')
