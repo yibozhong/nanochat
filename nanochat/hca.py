@@ -241,7 +241,12 @@ class HCAAttention(nn.Module):
         local_k = norm(apply_rotary_emb(raw_k, *cos_sin)) * 1.2
         # Pool/router projections use FP32 even with BF16 backbone activations.
         dtype = work_dtype(x)
-        score = F.linear(x.to(dtype), self.pool_score.weight.to(dtype)).view(shape)
+        if (self.config.hca_backend == 'triton' and x.is_cuda and x.dtype == torch.bfloat16
+                and (self.boundary is None or self.config.hca_dynamic_gradient == 'confidence')):
+            from nanochat.hca_projection import score_linear
+            score = score_linear(x, self.pool_score.weight).view(shape)
+        else:
+            score = F.linear(x.to(dtype), self.pool_score.weight.to(dtype)).view(shape)
         content = (F.linear(x.to(dtype), self.boundary.weight.to(dtype), self.boundary.bias.to(dtype)).squeeze(-1)
                    if self.boundary is not None else x.new_zeros(x.shape[:2], dtype=dtype))
         return q, raw_k, local_k, v, score, content
