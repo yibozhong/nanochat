@@ -18,6 +18,7 @@ All measurements below use one allocation, H100 UUID
 | Optimized Fixed B16 | 79.34 ms | 78.93 ms | 3.9929 |
 | Original Fixed B4 | 124.59 ms | — | — |
 | Optimized Fixed B4 | 81.85 ms | 81.19 ms | 3.9712 |
+| Dynamic confidence, rate weight 1 | 89.24 ms | 87.95 ms | 3.9948 |
 
 Source `81ec37a` passed 79 GPU numerical/gradient/causality/cache checks.
 `65f978e` passed both Fixed production-model recovery checks and the bounded
@@ -66,10 +67,58 @@ inference hard decisions consistent.
 
 The first weight-0.03 diagnostic completed 2000 finite updates, with dev CE
 3.9979. However, final dev hard keep was 0.10256 (9.75x summary compression),
-so it has **not** met the requested matched 16x comparison. Its warmed update
-is about 88.95 ms at that achieved rate. Rate strength, trained-cache boundaries
-and remaining kernel costs are still under investigation. It is not approved
-as a stable replacement for the held original Dynamic formal run.
+so that setting does **not** meet the requested matched 16x comparison. Its
+warmed update is about 88.95 ms at that achieved rate. A gradient diagnostic
+confirmed that task pressure exceeded the weighted rate gradient in several
+layers. Weight 0.3 reached 16.98x on the final dev sample but only 15.14x over
+the last 500 training updates. Weight 1 reached 15.86x dev and 15.72x over the
+last 500 training updates, with dev CE 3.9948. These are actual measurements,
+not exact-rate guarantees. The weight-1 trajectory is being extended to 5000
+updates and checked with another seed. No original formal run was restarted.
+
+The practical configuration for the ongoing confidence diagnostics is:
+
+```python
+ConnectionConfig(attention_mode='dynamic_hca', hca_backend='triton',
+                 hca_block_size=16, hca_dynamic_gradient='confidence',
+                 hca_ratio_loss_weight=1., hca_noise=False)
+```
+
+The equivalent new training flag is `--hca-dynamic-gradient confidence`, used
+with `--no-hca-noise`; existing baseline/Fixed/DMC defaults are unchanged.
+The frozen original two-run submission policy explicitly excludes this new
+estimator, so a diagnostic result cannot silently replace a formal recipe.
+
+### Streaming numerical consistency
+
+Testing trained weights exposed a difference that small-model checks missed:
+sequential cache pooling and parallel training scans differ slightly in FP32
+addition order, and the old cache attention used FP32 probability products.
+Tiny first-layer differences amplified through the BF16 backbone and flipped
+near-threshold boundaries. Merely using the same mathematical equations was
+insufficient for this implementation.
+
+Source `ddd3729` makes cached BF16 execution use the training attention's online
+softmax order, tensor layout and probability precision. Pooling retains one
+unfinished execution tile and its incoming FP32 carry, and replays the same
+scan. This is R tokens for Fixed, 64 for Dynamic; the latter is an execution
+tile, **not** a chunk-size limit. The sample includes an unfinished 2048-token
+dynamic chunk. No semantic chunk is closed at an API or tile boundary.
+
+Six dedicated GPU checks require exact same-input pool/attention outputs;
+the full 85-check regression passed. For each trained 2000-step weight-0.03 and
+weight-1 model, a production 8-layer/2048-token example split as
+`137,1,511,7,1000,392` produced exactly equal hidden outputs and all boundaries.
+Restoring mid-prefill also reproduced every cache tensor and output exactly.
+This is evidence for those cases, not a promise of bitwise equality across
+arbitrary hardware or external GEMM implementations.
+
+Execution tiles, SWA, open state and all backing storage are included in cache
+statistics. The weight-1 example uses 8,413,184 bytes versus 33,554,432 bytes
+for the full KV cache: 3.99x actual storage compression at 2K. Summary compression
+alone is therefore not the total cache compression. Python cache bookkeeping
+remains a correctness-oriented implementation; these training speed results
+do not claim optimized decoding or cached-prefill latency.
 
 Diagnostic entry points are `research/connections/hca-opt/{benchmark,stability,
 trained_cache,rate_gradients}.py`. They assert `WANDB_MODE=disabled`, use the
