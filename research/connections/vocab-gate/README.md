@@ -39,4 +39,26 @@ in-place debug, never automatically retries or launches formal training.
 
 Formal recovery retains model/optimizer/RNG/step/data position and run ID.
 Every 1800 seconds exit85 returns atomic latest/best archives; archive failure
-returns 74. Failed jobs hold without resubmission. All results are pending.
+returns 74. Failed jobs hold without resubmission. GPU validation is complete; the authorized formal training is starting.
+
+## Validated results (H100 80GB, source ada2613)
+
+- 48 GPU tests passed, including production-width gradients for all parameters,
+  FP32/BF16 kernels, saturation, upstream scaling, compile/checkpoint, baseline
+  initialization/RNG, causal cache, and exact optimizer/RNG/next-update recovery.
+- 200 diagnostic updates finite; gate gradients and trained weights nonzero.
+  Trained 2K cache relative/peak errors: 0.002667 / 0.006206; causal prefix exact.
+- Real CLI step2/exit85/step3 recovery passed, same diagnostic ID, no W&B.
+- Interleaved 10 warm + 40 measured updates per model on the same H100:
+  original baseline 67.674 ms; dense gate 43.929 ms. This includes replacing the
+  old CCE compute path, not an architecture-only speed comparison.
+- Tiled CE beats row CE. Production retains 2048-token chunks (256 MiB scratch);
+  8192-token chunks save about 1.2 ms for the head while requiring 1 GiB scratch.
+- Candidate peak allocated: 6,475,694,592 bytes (~6.03 GiB).
+- One formal job 8547392.0, W&B 45674cbf. Pure training estimate ~3.72 hours,
+  excluding evaluation, environment setup, queueing and checkpoint transport.
+
+The first validation attempt exposed a preexisting static-graph/cache-position
+incompatibility. Cached calls now use the ordinary block entry point while
+training retains compiled blocks. The same GPU allocation completed the fix,
+revalidation and formal launch; no replacement job was submitted.

@@ -1,0 +1,11 @@
+{
+  "gpu": "NVIDIA H100 80GB HBM3",
+  "capability": [
+    9,
+    0
+  ],
+  "torch": "2.10.0+cu130",
+  "triton": "3.6.0",
+  "attention_backend": "fa2",
+  "validation": "same-allocation before formal"
+}
