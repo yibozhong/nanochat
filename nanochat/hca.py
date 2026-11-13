@@ -245,6 +245,11 @@ class HCAAttention(nn.Module):
                 # Content-dependent initial boundaries; balanced rate loss
                 # subsequently learns the target. No hard quota or length cap.
                 nn.init.zeros_(self.boundary.bias)
+                if config.hca_router_init == 'uncompressed':
+                    # With noise disabled, every initial token starts a chunk.
+                    # A moderate logit preserves useful sigmoid derivatives.
+                    nn.init.zeros_(self.boundary.weight)
+                    nn.init.constant_(self.boundary.bias, 2.)
             else:
                 nn.init.zeros_(self.boundary.weight)
                 # DMC's mostly uncompressed initialization is retained.

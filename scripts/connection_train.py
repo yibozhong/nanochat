@@ -35,6 +35,9 @@ def main():
     p.add_argument('--hca-noise', action=argparse.BooleanOptionalAction, default=True)
     p.add_argument('--hca-backend', choices=('reference', 'triton'), default='reference')
     p.add_argument('--hca-dynamic-gradient', choices=('dmc','confidence'), default='dmc')
+    p.add_argument('--hca-router-init', choices=('default','uncompressed'), default='default')
+    p.add_argument('--hca-ratio-warmup-steps', type=int, default=0,
+                   help='Linear ratio-loss weight warmup indexed by completed optimizer steps')
     p.add_argument('--architecture', choices=('vanilla', 'native'), default='vanilla')
     p.add_argument('--window-pattern', default='SSSL', help='Native backbone only; vanilla always uses full attention')
     p.add_argument('--formal-training', action='store_true', help='Explicitly enable W&B for a formal training run')
@@ -86,6 +89,7 @@ def main():
                        hca_ratio_loss_weight=a.hca_ratio_loss_weight, hca_window=a.hca_window,
                        hca_temperature=a.hca_temperature, hca_noise=a.hca_noise,
                        hca_backend=a.hca_backend, hca_dynamic_gradient=a.hca_dynamic_gradient,
+                       hca_router_init=a.hca_router_init, hca_ratio_warmup_steps=a.hca_ratio_warmup_steps,
                        architecture=a.architecture, window_pattern=a.window_pattern,
                        activation_checkpoint=a.activation_checkpoint,
                        connection_backend=a.connection_backend, fused_connection_grad=a.fused_connection_grad)
@@ -162,6 +166,7 @@ def main():
                 name=f'{a.architecture}-{a.variant}'+(f'-{a.attention_mode}-b{c.hca_block_size}'
                      +(f'-{c.hca_dynamic_gradient}' if c.attention_mode == 'dynamic_hca' else '')
                      if a.attention_mode != 'full' else '')
+                     +(f'-{c.hca_router_init}-rw{c.hca_ratio_warmup_steps}' if c.hca_ratio_warmup_steps else '')
                      +f'-{c.sequence_length}ctx-{a.steps}steps',id=run_id,resume='allow',config=config)
     run=training_run(formal_training=a.formal_training, local_dir=out/"diagnostics", **kwargs)
     run.define_metric('tokens')

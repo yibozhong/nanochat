@@ -126,18 +126,18 @@ def initialize():
         return plan
 
 
-def enqueue(mode):
-    plan = json.loads((ROOT/'plan.json').read_text()); info = plan['runs'][mode]; root = Path(info['root'])
+def enqueue(mode, *, plan_root=ROOT, source_validator=validate_source):
+    plan = json.loads((plan_root/'plan.json').read_text()); info = plan['runs'][mode]; root = Path(info['root'])
     with (root/'submit.lock').open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        assert not stopped(ROOT) and not stopped(root)
+        assert not stopped(plan_root) and not stopped(root)
         if (root/'state.json').exists():
             return json.loads((root/'state.json').read_text())
         assert not (root/'submission-intent.json').exists(), 'Inspect prior submission intent; never duplicate'
         active = json.loads(command(['condor_q', 'yzhong239', '-constraint',
-            f'HCAPlanKey == "{PLAN}" && HCATrainMode == "{mode}"', '-json', '-attributes', 'ClusterId,ProcId,JobStatus']) or '[]')
+            f'HCAPlanKey == "{plan_root.name}" && HCATrainMode == "{mode}"', '-json', '-attributes', 'ClusterId,ProcId,JobStatus']) or '[]')
         assert not active
-        source = json.loads((root/'bundles/source.json').read_text()); validate_source(source)
+        source = json.loads((root/'bundles/source.json').read_text()); source_validator(source)
         assert source['commit'] == plan['commit'] and source['run_id'] == info['run_id'] and source['attention_mode'] == mode
         subprocess.run(['condor_submit', '-dry-run', str(root/'dry-run.ads'), 'train.sub'], cwd=root, check=True, capture_output=True)
         write(root/'submission-intent.json', dict(source=source, time=time.time()))
@@ -154,7 +154,7 @@ def enqueue(mode):
         assert 'nanochat-uv-v4.sif' in ad['TransferInput'] and 'source.tar' in ad['TransferInput']
         assert 'validated-shared' not in ad['TransferInput']
         assert 'H100|H200' in ad['RequireGPUs'] and '78000' in ad['RequireGPUs']
-        assert ad['HCAPlanKey'] == PLAN and ad['HCATrainMode'] == mode and ad['HCARunId'] == info['run_id']
+        assert ad['HCAPlanKey'] == plan_root.name and ad['HCATrainMode'] == mode and ad['HCARunId'] == info['run_id']
         assert ad['WantGPULab'] is True and 'backfill' in ad['Rank']
         write(root/'submission-verified.json', ad)
         subprocess.run(['condor_release', job], check=True, capture_output=True)
@@ -162,13 +162,13 @@ def enqueue(mode):
         return state
 
 
-def tick():
+def tick(*, plan_root=ROOT, modes=MODES, ready_validator=validate_ready):
     from controller import consume, collect
-    if stopped(ROOT):
+    if stopped(plan_root):
         return False
-    plan = json.loads((ROOT/'plan.json').read_text()); states = {}
-    attrs = 'ClusterId,ProcId,JobStatus,HoldReason,RemoteHost,NumJobStarts,ExitCode,ExitBySignal,QDate'
-    for mode in MODES:
+    plan = json.loads((plan_root/'plan.json').read_text()); states = {}
+    attrs = 'ClusterId,ProcId,JobStatus,HoldReason,RemoteHost,NumJobStarts,TransferringInput,ExitCode,ExitBySignal,QDate'
+    for mode in modes:
         root = Path(plan['runs'][mode]['root']); path = root/'state.json'
         if not path.exists():
             continue  # No automatic new submissions from the monitor.
@@ -189,7 +189,7 @@ def tick():
         if not state.get('startup_passed') and log.exists():
             for line in log.read_text(errors='replace').splitlines():
                 if line.startswith('OPTIMIZED_B4_STARTUP_PASSED '):
-                    report = json.loads(line.split(' ', 1)[1]); validate_ready(report, state['source'])
+                    report = json.loads(line.split(' ', 1)[1]); ready_validator(report, state['source'])
                     write(root/'validated.json', report)
                     state.update(startup_passed=True, estimated_train_only_hours=report['estimated_train_only_hours'])
         consume(root, state, plan)
@@ -202,32 +202,37 @@ def tick():
             collect(root, state)
             c = json.loads((root/'reports/train/config.json').read_text())['model']
             assert c['hca_block_size'] == 4 and c['hca_noise'] is False and c['hca_dynamic_gradient'] == state['source']['hca']['dynamic_gradient']
+            if 'router_init' in state['source']['hca']:
+                assert c['hca_router_init'] == state['source']['hca']['router_init']
+                assert c['hca_ratio_warmup_steps'] == state['source']['hca']['ratio_warmup_steps']
+        elif ad['JobStatus'] == 2 and (ad.get('TransferringInput') or ad.get('NumJobStarts', 0) == 0):
+            state['status'] = 'transferring_input'
         elif ad['JobStatus'] == 2:
             state['status'] = 'formal_training' if state['formal_started'] else ('formal_initialization' if state.get('startup_passed') else 'startup_validation')
         elif ad['JobStatus'] == 1:
             state['status'] = 'queued_for_resume' if state['formal_started'] else 'queued_for_startup_validation'
         state['updated_at'] = time.time(); write(path, state)
     plan.update(updated_at=time.time(), states={k:dict(job=v['job'], status=v['status'], formal_started=v['formal_started']) for k,v in states.items()})
-    plan['status'] = ('complete' if len(states) == 2 and all(v['status'] == 'complete' for v in states.values())
+    plan['status'] = ('complete' if len(states) == len(modes) and all(v['status'] == 'complete' for v in states.values())
                       else 'needs_attention' if any(v['status'] == 'needs_attention' for v in states.values()) else 'active')
-    write(ROOT/'plan.json', plan)
+    write(plan_root/'plan.json', plan)
     return any(v['status'] not in ('needs_attention', 'complete') for v in states.values())
 
 
-def monitor():
-    with (ROOT/'controller.lock').open('a') as lock:
+def monitor(*, plan_root=ROOT, modes=MODES, ready_validator=validate_ready):
+    with (plan_root/'controller.lock').open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        (ROOT/'controller.pid').write_text(str(os.getpid())+'\n')
+        (plan_root/'controller.pid').write_text(str(os.getpid())+'\n')
         errors = 0
         while True:
             try:
-                if not tick():
+                if not tick(plan_root=plan_root, modes=modes, ready_validator=ready_validator):
                     return
                 errors = 0
             except Exception:
                 errors += 1; traceback.print_exc()
                 if errors >= 3:
-                    write(ROOT/'controller-failure.json', dict(error=traceback.format_exc(), time=time.time()))
+                    write(plan_root/'controller-failure.json', dict(error=traceback.format_exc(), time=time.time()))
                     return
             time.sleep(60)
 

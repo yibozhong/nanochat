@@ -35,10 +35,10 @@ def validate_source(s):
                            temperature=1, noise=False, dynamic_gradient=expected_gradient)
 
 
-def validate_probe(v, s):
+def validate_probe(v, s, *, initial_step=0):
     assert v['complete'] is True and v['status'] == 'passed' and v['formal_training'] is False
     assert v['mode'] == s['attention_mode'] and v['commit'] == s['commit'] and v['microbatch'] == 16
-    assert v['steps'] == 3 and v['replayed_step'] == 2 and v['cce_replay_microbatches'] == 1
+    assert v['steps'] == 3 and v['replayed_step'] == initial_step+2 and v['cce_replay_microbatches'] == 1
     assert v['restore_contract'] == 'exact_state_rng_data_and_fixed_cce_gradient_replay'
     for key in ('loaded_model_equal', 'loaded_optimizer_equal', 'loaded_rng_equal',
                 'loaded_data_row_equal', 'actual_cce_inputs_equal', 'controlled_backward_loss_equal',
@@ -78,9 +78,9 @@ def validate_stability(v, rows, s):
                 diagnostic_dev_ce=dev['ce'], diagnostic_steps=DIAGNOSTIC_STEPS)
 
 
-def validate_cache(v, s):
+def validate_cache(v, s, *, diagnostic_steps=DIAGNOSTIC_STEPS):
     assert v['complete'] is True and v['status'] == 'passed' and v['formal_training'] is False
-    assert v['source'] == s and v['checkpoint_source'] == s and v['step'] == DIAGNOSTIC_STEPS
+    assert v['source'] == s and v['checkpoint_source'] == s and v['step'] == diagnostic_steps
     assert v['transplanted_weights'] is False
     for key in ('causal_prefix_exact', 'cache_replay_exact', 'cache_replay_stats_equal',
                 'cache_replay_tensors_exact', 'hidden_finite'):

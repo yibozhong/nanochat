@@ -80,9 +80,13 @@ def train_step(model,opt,data,step,microbatch=16,batch_tokens=32768):
     opt.zero_grad(set_to_none=True)
     total=torch.zeros((),device='cuda')
     hca_metrics = {}
+    # Recomputed from the restored global step on every update, shared by all
+    # accumulation microbatches. No mutable warmup counter or inference state.
+    hca_kwargs = ({'hca_training_step': step}
+                  if getattr(model.config, 'hca_ratio_warmup_steps', 0) else {})
     for start in range(0,rows,microbatch):
         x,y=data.batch('train',step*rows+start,microbatch)
-        loss=model(x,y)
+        loss=model(x,y,**hca_kwargs)
         (loss/(rows//microbatch)).backward()
         total += loss.detach()/(rows//microbatch)
         if getattr(model.config, 'attention_mode', 'full') != 'full':

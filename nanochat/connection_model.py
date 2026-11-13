@@ -42,6 +42,8 @@ class ConnectionConfig:
     hca_noise: bool = True
     hca_backend: str = 'reference'
     hca_dynamic_gradient: str = 'dmc'
+    hca_router_init: str = 'default'
+    hca_ratio_warmup_steps: int = 0
     compact_routing: bool = False
     attnres_block_size: int = 2  # Moonshot paper's S: Attention and MLP each count once
     attnres_block_size_unit: str = 'sublayers'
@@ -55,6 +57,13 @@ class ConnectionConfig:
             raise ValueError('Unknown dynamic HCA gradient estimator')
         if self.hca_dynamic_gradient == 'confidence' and self.attention_mode != 'dynamic_hca':
             raise ValueError('Confidence routing applies only to Dynamic HCA')
+        if self.hca_router_init not in ('default', 'uncompressed'):
+            raise ValueError('Unknown HCA router initialization')
+        if type(self.hca_ratio_warmup_steps) is not int or self.hca_ratio_warmup_steps < 0:
+            raise ValueError('HCA ratio warmup steps must be a nonnegative integer')
+        if self.hca_router_init != 'default' or self.hca_ratio_warmup_steps:
+            if self.attention_mode != 'dynamic_hca' or self.hca_dynamic_gradient != 'confidence' or self.hca_noise:
+                raise ValueError('Uncompressed initialization/warmup require noiseless confidence Dynamic HCA')
         if self.attention_mode != 'full':
             if self.architecture != 'vanilla' or self.variant != 'baseline' or self.streams != 1 or self.attention_kernel != 'original':
                 raise ValueError('HCA reference supports vanilla baseline, one stream, original projections')
@@ -342,7 +351,8 @@ class ConnectionModel(nn.Module):
             return norm(x), torch.stack(routing).sum(0) if routing else None
         return norm(x)
 
-    def forward(self, idx, targets=None, dense=False, kv_cache=None, return_loss_components=False):
+    def forward(self, idx, targets=None, dense=False, kv_cache=None, return_loss_components=False,
+                hca_training_step=None):
         hca = self.config.attention_mode != 'full'
         if hca and kv_cache is not None and targets is not None:
             raise ValueError('Mutable HCA cache is for inference logits only')
@@ -376,7 +386,13 @@ class ConnectionModel(nn.Module):
                 accum_e_fp32=True, accum_c_fp32=True)
         if not hca:
             return ce
-        total = ce + self.config.hca_ratio_loss_weight * ratio_loss if self.training else ce
+        weight = self.config.hca_ratio_loss_weight
+        if self.config.hca_ratio_warmup_steps and self.training:
+            from nanochat.hca_schedule import ratio_loss_weight
+            weight = ratio_loss_weight(weight, self.config.hca_ratio_warmup_steps, hca_training_step)
+        total = ce + weight * ratio_loss if self.training else ce
+        if self.config.hca_ratio_warmup_steps:
+            self.last_hca_metrics['ratio_loss_weight'] = ratio_loss.new_tensor(weight if self.training else 0.)
         self.last_hca_metrics.update(ce=ce.detach(), objective=total.detach())
         if return_loss_components:
             return dict(ce=ce, compression_loss=ratio_loss, total=total,

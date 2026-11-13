@@ -171,3 +171,46 @@ python research/connections/hca-train/optimized_pair.py monitor
 Each submission is held for an audit of source/config, encrypted W&B credential
 transport, automatic container input, resources and recovery settings before
 release. Run IDs and job IDs live in the plan root and RESEARCH_HISTORY.md.
+
+
+## Uncompressed initialization + auxiliary warmup (2026-11-13)
+
+The separately authorized `warmup_run.py` creates **one** additional 10B run,
+keeping the existing pair intact. It uses the same confidence Dynamic B4 model,
+seed42, data/tokenizer, optimizer, batch and 305176-update schedule. The only
+training changes are `--hca-router-init uncompressed` (router weight zero,
+bias +2, noise disabled, all initial chunks length1) and
+`--hca-ratio-warmup-steps 2000`. The ratio-loss multiplier is
+`lambda(s) = min(s/2000, 1)`, where s counts completed optimizer updates. Thus
+update1 has weight0, update1001 has .5 and update2001 has 1. The target ratio
+stays4; this is weight warmup, not a prescribed trajectory of actual boundaries.
+
+Both options default to historical behavior. Configuration is checkpointed;
+`train_step` passes the restored global update index explicitly to every
+accumulation microbatch, so restarting cannot reset warmup. Evaluation still
+uses CE only and inference uses the same learned hard router. Initial 1x refers
+to summary entries: the additional SWA means this is not identical to baseline
+full attention or a claim of reduced cache memory at initialization.
+
+`warmup_preflight.py` runs bounded GPU checks before W&B/formal initialization
+in the same allocation: new init/auxiliary-gradient/accumulation/restore tests,
+reference HCA/confidence/nonfinite regressions; 1000 diagnostic updates; exact
+checkpoint and controlled-CCE replay inside warmup; resume to3000 updates;
+repeat replay after warmup; two trained 2K causal/cache/open-chunk checks and a
+same-card baseline/Fixed/Dynamic speed check. The gate verifies initial hard
+keep1/weight0, all3000 scheduled weights, finite gradients/loss and post-warmup
+last500/dev summary compression within the prior [3.2,5.0] band. Failed checks
+stop with a600-second debug scene and no automatic retry. Diagnostic weights
+are removed before the separate fresh formal process.
+
+AP commands after review, stdlib checks, commit and push:
+
+```sh
+python research/connections/hca-train/warmup_run.py initialize
+python research/connections/hca-train/warmup_run.py submit
+python research/connections/hca-train/warmup_run.py monitor
+```
+
+Submission/recovery reuse the optimized pair's audited held-release path,
+H100/H200 resources, encrypted credentials and1800-second exit85 transport.
+Only source/plan-specific validators differ. No other formal run is created.

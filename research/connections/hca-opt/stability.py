@@ -17,6 +17,9 @@ p.add_argument('--seed',type=int,default=42)
 p.add_argument('--label',required=True)
 p.add_argument('--save-state',action='store_true')
 p.add_argument('--resume')
+p.add_argument('--router-init', choices=('default','uncompressed'), default='default')
+p.add_argument('--ratio-warmup-steps', type=int, default=0)
+p.add_argument('--record-initial', action='store_true')
 a=p.parse_args()
 assert os.environ['WANDB_MODE']=='disabled'
 
@@ -31,7 +34,8 @@ configure_attention('fa2');seed_all(a.seed)
 c=ConnectionConfig(variant='baseline',streams=1,attention_mode=a.mode,
                    hca_backend='triton',hca_block_size=a.block_size,
                    hca_dynamic_gradient=a.gradient if a.mode=='dynamic_hca' else 'dmc',
-                   hca_noise=False,hca_ratio_loss_weight=a.ratio_weight)
+                   hca_noise=False,hca_ratio_loss_weight=a.ratio_weight,
+                   hca_router_init=a.router_init,hca_ratio_warmup_steps=a.ratio_warmup_steps)
 model=build_connection_model(c).prepare(compile_blocks=False)
 opt,wd=optimizer_for(model)
 data=PackedData('../data')
@@ -66,6 +70,8 @@ def validation():
     result['summary_compression']=1/result['hard_keep_rate']
     result['tokens']=limit*c.sequence_length
     return result
+if a.record_initial:
+    report['initial_validation'] = dict(step=start_step, **validation()); write()
 with (out/(a.label+'-steps.jsonl')).open('w',buffering=1) as log:
     for step in range(start_step,a.steps):
         schedule(opt,step,305176,wd)

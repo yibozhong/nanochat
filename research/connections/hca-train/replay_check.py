@@ -72,6 +72,9 @@ def main():
     p.add_argument('--block-size', type=int, default=16)
     p.add_argument('--dynamic-gradient', choices=('dmc','confidence'), default='dmc')
     p.add_argument('--ratio-weight', type=float, default=1.)
+    p.add_argument('--router-init', choices=('default','uncompressed'), default='default')
+    p.add_argument('--ratio-warmup-steps', type=int, default=0)
+    p.add_argument('--resume', help='Read-only diagnostic checkpoint; never formal weights')
     a = p.parse_args()
     import torch
     from nanochat.connection_model import ConnectionConfig, build_connection_model, optimizer_for, schedule
@@ -83,7 +86,8 @@ def main():
     c = ConnectionConfig(variant='baseline', streams=1, attention_mode=a.mode,
                          hca_block_size=a.block_size, hca_ratio_loss_weight=a.ratio_weight, hca_window=256,
                          hca_noise=a.dynamic_gradient == 'dmc', hca_temperature=1., hca_backend=a.backend,
-                         hca_dynamic_gradient=a.dynamic_gradient)
+                         hca_dynamic_gradient=a.dynamic_gradient,
+                         hca_router_init=a.router_init, hca_ratio_warmup_steps=a.ratio_warmup_steps)
     out = Path(a.output); out.parent.mkdir(parents=True, exist_ok=True)
     scratch = Path('../hca-diagnostic-checkpoints') / (a.mode+'-'+str(a.microbatch))
     assert not scratch.exists(), 'Inspect an interrupted probe; do not overwrite it'
@@ -98,16 +102,27 @@ def main():
         assert data.manifest['sequence_length'] == 2048
         model = build_connection_model(c).prepare(compile_blocks=False)
         opt, wd = optimizer_for(model)
+        start_step = 0
+        if a.resume:
+            initial = torch.load(a.resume, map_location='cpu', weights_only=False)
+            assert initial['formal_training'] is False and initial['config'] == asdict(c)
+            assert initial['source'] == source and initial['seed'] == 42
+            start_step = initial['step']
+            assert initial['next_data_row'] == start_step*16
+            model.load_state_dict(initial['model']); opt.load_state_dict(initial['optimizer'])
+            restore_rng(initial['rng']); del initial
+        replay_step = start_step + 2
+        result['initial_step'] = start_step
         torch.cuda.reset_peak_memory_stats()
         losses, times = [], []
-        for step in range(3):
+        for step in range(start_step, start_step+3):
             schedule(opt, step, STEPS, wd)
-            if step == 2:
+            if step == replay_step:
                 atomic_save(snapshot(model, opt, step, config=asdict(c), next_data_row=step*16), scratch/'latest.pt')
             torch.cuda.synchronize(); begin = time.perf_counter()
-            with cce_tape() if step == 2 else nullcontext() as entries:
+            with cce_tape() if step == replay_step else nullcontext() as entries:
                 losses.append(train_step(model, opt, data, step, microbatch=a.microbatch))
-                if step == 2:
+                if step == replay_step:
                     tape = entries
             torch.cuda.synchronize(); times.append(time.perf_counter()-begin)
             if torch.cuda.max_memory_reserved() > CAPACITY_BYTES:
@@ -125,7 +140,7 @@ def main():
         del model, opt
         gc.collect(); torch.cuda.empty_cache()
         state = torch.load(scratch/'latest.pt', map_location='cpu', weights_only=False)
-        assert state['step'] == 2 and state['next_data_row'] == 32 and state['config'] == asdict(c)
+        assert state['step'] == replay_step and state['next_data_row'] == replay_step*16 and state['config'] == asdict(c)
         model = build_connection_model(c).prepare(compile_blocks=False)
         opt, wd = optimizer_for(model)
         model.load_state_dict(state['model']); opt.load_state_dict(state['optimizer'])
@@ -138,14 +153,14 @@ def main():
         assert result['loaded_model_equal'] and result['loaded_optimizer_equal'], 'Checkpoint load changed stored values'
         restore_rng(state['rng'])
         result['loaded_rng_equal'] = same(state['rng'], rng_state())
-        result['loaded_data_row_equal'] = state['next_data_row'] == 32
+        result['loaded_data_row_equal'] = state['next_data_row'] == replay_step*16
         assert result['loaded_rng_equal'] and result['loaded_data_row_equal']
         del state
-        schedule(opt, 2, STEPS, wd)
+        schedule(opt, replay_step, STEPS, wd)
         with cce_tape(tape, actual=True):
-            replay_loss = train_step(model, opt, data, 2, microbatch=a.microbatch)
+            replay_loss = train_step(model, opt, data, replay_step, microbatch=a.microbatch)
         model_equal, opt_equal = same(expected_model, model.state_dict()), same(expected_opt, opt.state_dict())
-        result.update(parameters=parameters, steps=3, replayed_step=2,
+        result.update(parameters=parameters, steps=3, replayed_step=replay_step,
             actual_cce_replay_model_equal=model_equal, actual_cce_replay_optimizer_equal=opt_equal,
             actual_cce_inputs_equal=True,
             actual_cce_loss_abs_difference=abs(replay_loss-losses[2]),
@@ -172,9 +187,9 @@ def main():
         model.load_state_dict(state['model']); opt.load_state_dict(state['optimizer'])
         assert same(state['model'], model.state_dict()) and same(state['optimizer'], opt.state_dict())
         restore_rng(state['rng']); assert same(state['rng'], rng_state()); del state
-        schedule(opt, 2, STEPS, wd)
+        schedule(opt, replay_step, STEPS, wd)
         with cce_tape(tape):
-            controlled_loss = train_step(model, opt, data, 2, microbatch=a.microbatch)
+            controlled_loss = train_step(model, opt, data, replay_step, microbatch=a.microbatch)
         controlled_model = same(expected_model, model.state_dict())
         controlled_opt = same(expected_opt, opt.state_dict())
         controlled_rng = same(expected_rng, rng_state())
