@@ -22,6 +22,7 @@ from torch.autograd.function import once_differentiable
 # Diagnostic tuning defaults; Dynamic and FP32 retain the validated geometry.
 FIXED_FWD_TILE = (32, 32, 4)
 FIXED_BWD_TILE = (32, 32, 4)
+FIXED_DKV_SPLITS = 1
 
 
 @tr.jit
@@ -361,7 +362,8 @@ def _prefix_diag_bwd(Q, PK, PV, DO, OF, LSE, DK, DV,
 def _attn_dkv(Q, K, V, G, DO, OF, LSE, DK, DV, DG,
               T: tl.constexpr, H: tl.constexpr, D: tl.constexpr, W: tl.constexpr,
               R: tl.constexpr, SOURCE: tl.constexpr,
-              BM: tl.constexpr, BN: tl.constexpr, BD: tl.constexpr):
+              BM: tl.constexpr, BN: tl.constexpr, BD: tl.constexpr,
+              N: tl.constexpr = 0, B: tl.constexpr = 0, SPLITS: tl.constexpr = 1):
     # SOURCE 0: local; 1: dynamic prefix incl. zero-gate counterfactuals;
     # 2: fixed completed summaries (diagonal gradients already written).
     block, bh = tl.program_id(0), tl.program_id(1)
@@ -388,6 +390,12 @@ def _attn_dkv(Q, K, V, G, DO, OF, LSE, DK, DV, DG,
     hi = T
     if SOURCE == 0:
         hi = tl.minimum(T, (block+1)*BN+W-1)
+    if SOURCE == 2 and SPLITS > 1:
+        # Completed summaries have few CTAs and long query loops. Partition
+        # query ownership, then reduce compact FP32 partials deterministically.
+        span: tl.constexpr = tr.cdiv(T, SPLITS*BM)*BM
+        first = tl.maximum(first, tl.program_id(2)*span)
+        hi = tl.minimum(hi, (tl.program_id(2)+1)*span)
     for base in range(first//BM*BM, hi, BM):
         t = base+tl.arange(0, BM)
         qo = ((b*T+t[:, None])*H+h)*D+d[None, :]
@@ -418,9 +426,11 @@ def _attn_dkv(Q, K, V, G, DO, OF, LSE, DK, DV, DG,
         else:
             dk += tl.dot(tl.trans(ds), q.to(tl.float32), input_precision='tf32x3')*(D**-.5)
             dv += tl.dot(tl.trans(p), do.to(tl.float32), input_precision='tf32x3')
-    if SOURCE == 2:
+    if SOURCE == 2 and SPLITS == 1:
         dk += tl.load(DK+off, valid, 0)
         dv += tl.load(DV+off, valid, 0)
+    if SOURCE == 2 and SPLITS > 1:
+        off = (((tl.program_id(2)*B+b)*N+c[:, None])*H+h)*D+d[None, :]
     tl.store(DK+off, dk, valid)
     tl.store(DV+off, dv, valid)
     if SOURCE == 1:
@@ -428,6 +438,25 @@ def _attn_dkv(Q, K, V, G, DO, OF, LSE, DK, DV, DG,
         tl.store(DG+(b*T+j+1)*H+h, dg, j+1 < T)
         if block == 0:
             tl.store(DG+b*T*H+h, 0.)
+
+
+@tr.jit
+def _merge_summary_parts(AK, AV, DK, DV, T: tl.constexpr, N: tl.constexpr,
+                         H: tl.constexpr, D: tl.constexpr, B: tl.constexpr,
+                         R: tl.constexpr, SPLITS: tl.constexpr, BLOCK: tl.constexpr):
+    x = tl.program_id(0)*BLOCK+tl.arange(0, BLOCK)
+    valid = x < B*N*H*D
+    b = x//(N*H*D)
+    c = x//(H*D)%N
+    hd = x%(H*D)
+    off = (b*T+(c+1)*R-1)*H*D+hd
+    dk = tl.load(DK+off, valid, 0)
+    dv = tl.load(DV+off, valid, 0)
+    for part in range(SPLITS):
+        dk += tl.load(AK+part*B*N*H*D+x, valid, 0)
+        dv += tl.load(AV+part*B*N*H*D+x, valid, 0)
+    tl.store(DK+off, dk, valid)
+    tl.store(DV+off, dv, valid)
 
 
 class _Attention(torch.autograd.Function):
@@ -470,8 +499,18 @@ class _Attention(torch.autograd.Function):
             _prefix_diag_bwd[(tr.cdiv(t, 32), b*h)](q, pk, pv, do, of, lse, dpk, dpv, t, h, d, 32, bd)
             n = (t-1)//r
             if n:
-                _attn_dkv[(tr.cdiv(n, bn), b*h)](q, pk, pv, starts, do, of, lse,
-                        dpk, dpv, dg, t, h, d, w, r, 2, bm, bn, bd, num_warps=warps)
+                splits = FIXED_DKV_SPLITS if q.dtype == torch.bfloat16 else 1
+                if splits == 1:
+                    _attn_dkv[(tr.cdiv(n, bn), b*h)](q, pk, pv, starts, do, of, lse,
+                            dpk, dpv, dg, t, h, d, w, r, 2, bm, bn, bd, num_warps=warps)
+                else:
+                    ak, av = [torch.empty((splits, b, n, h, d), dtype=torch.float32,
+                                         device=q.device) for _ in range(2)]
+                    _attn_dkv[(tr.cdiv(n, bn), b*h, splits)](
+                        q, pk, pv, starts, do, of, lse, ak, av, dg, t, h, d, w, r, 2,
+                        bm, bn, bd, n, b, splits, num_warps=warps)
+                    _merge_summary_parts[(tr.cdiv(b*n*h*d, 256),)](
+                        ak, av, dpk, dpv, t, n, h, d, b, r, splits, 256)
         else:
             _attn_dkv[grid](q, pk, pv, starts, do, of, lse, dpk, dpv, dg,
                            t, h, d, w, r, 1, 32, 32, bd)
