@@ -1,4 +1,5 @@
 """Production-sized hard pooling: exact values/VJPs and full forward/back timing."""
+import argparse
 import json
 import os
 from pathlib import Path
@@ -8,11 +9,12 @@ from nanochat.hca_triton import prefix_pool
 from nanochat.hca_parallel_pool import hard_prefix_pool
 
 assert os.environ['WANDB_MODE']=='disabled'
+p=argparse.ArgumentParser();p.add_argument('--label',default='parallel-pool-benchmark');a=p.parse_args()
 torch.manual_seed(481)
 xs=[torch.randn(16,2048,4,128,device='cuda',dtype=dt,requires_grad=True)
     for dt in (torch.bfloat16,torch.bfloat16,torch.float32)]
 gs=[torch.randn_like(xs[0]) for _ in range(2)]
-rows=[];path=Path('results/optimization/parallel-pool-benchmark.json')
+rows=[];path=Path('results/optimization')/(a.label+'.json')
 for keep in (0.,1/16,.125):
     starts=(torch.rand(16,2048,device='cuda')<keep).float();starts[:,0]=1
     ref=prefix_pool(*xs,starts);gr=torch.autograd.grad(ref,xs,gs)
