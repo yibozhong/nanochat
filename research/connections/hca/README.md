@@ -31,7 +31,76 @@ At microbatch8/four heads one such FP32 score tensor alone is 1 GiB per layer,
 before softmax intermediates and backward. These are implementation differences,
 not evidence that HCA intrinsically needs a 54-day 10B run. The actual official
 release reviewed is inference code; its custom kernel is not an available
-training/backward implementation. Training remains blocked pending diagnosis.
+training/backward implementation. Training remains blocked pending the execution
+path repair and its validation. The completed diagnosis is summarized below.
+
+### NVIDIA source review and execution repair, 2026-11-13
+
+Directly reviewed NVIDIA's [Megatron CSA/HCA model code](https://github.com/NVIDIA/Megatron-LM/blob/main/megatron/core/transformer/experimental_attention_variant/csa.py),
+[sparse-attention adapter](https://github.com/NVIDIA/Megatron-LM/blob/main/megatron/core/transformer/experimental_attention_variant/csa_utils/fused_sparse_attention.py),
+and cuDNN Frontend's [Compressor kernels](https://github.com/NVIDIA/cudnn-frontend/blob/develop/python/cudnn/csa/compressor/compressor_sm100.py)
+and [API support checks](https://github.com/NVIDIA/cudnn-frontend/blob/develop/python/cudnn/csa/compressor/api.py).
+The fused Compressor is CuTe DSL, with both forward and backward; it is not
+itself a complete HCA attention implementation. Its public validated ratios
+are 2, 4 and 128, not 16. Ratios 2/4 support SM90 and capability major >=10;
+ratio 128 requires major >=10 and head dimension 128 or 512. The generic
+ratio-2/4 API does not share that two-value head-dimension restriction.
+The filename `compressor_sm100.py` therefore does not imply Blackwell-only.
+These are the reviewed development branch's checks, not a promise about an
+installed cuDNN package.
+
+The useful implementation choices are:
+
+- Each output chunk/channel owns its pooling work. Compute the channel softmax
+  in FP32 and round the output once, avoiding token-by-token Python dispatch.
+- Recompute probabilities in backward rather than saving expanded pooling
+  intermediates. The nonoverlapping input-gradient stores have unique owners,
+  avoiding atomics for dKV/dScore. NVIDIA also handles unused tail gradients
+  explicitly, including segments shorter than one chunk.
+- Shared position-bias gradients need a reduction. NVIDIA exposes both an
+  atomic path and a deterministic partial-buffer/fixed-order reduction path;
+  deterministic training is not intrinsically excluded by its Compressor.
+- The model's attention uses local raw positions plus causally valid compressed
+  positions in a common normalization. The fused adapter uses FlashMLA forward
+  and cuDNN DSA backward with additional layout/head/alignment requirements.
+  This is not a drop-in kernel for nanochat's separate K/V, four heads, D128.
+
+The same-H200 diagnosis (source `01ddae1`, microbatch 8, global 32768 tokens,
+8 layers, D512/H4/T2048, two warmed updates) measured baseline 0.08165 s/update,
+Fixed 15.0530 s/update, Dynamic 21.2035 s/update. Each HCA update dispatched
+32768 Python pooling calls. Forward routing/pooling/mask preparation alone
+took about 5.07 s for Fixed and 6.72 s for Dynamic on the CUDA timeline, which
+includes launch gaps. This is execution overhead, not a time-to-quality result.
+For completed fixed chunks alone, the sequential pooling forward+backward
+took 682.4 ms versus 0.661 ms for the vectorized official pattern; FP64
+outputs and VJPs matched. That component speedup is not an end-to-end claim.
+
+A Triton implementation can target our R16/H4/D128 geometry on Hopper without
+porting MLA, FP8/FP4, or the CSA indexer. The implementation sequence is:
+
+1. Use batched PyTorch pooling as an oracle, then implement nonoverlapping
+   per-channel softmax pooling forward/backward for separate K and V with
+   shared weights. For upstream gradients gK/gV, dP = gK*K + gV*V and
+   dScore = P*(dP - sum(P*dP)); dK=P*gK and dV=P*gV. Do not use BF16-rounded
+   pooled outputs as the FP32 softmax-backward reduction. Validate tails,
+   extreme scores, FP32/BF16 VJPs and repeatability before selecting it.
+2. Implement tiled attention over the local window and compact completed
+   summaries with ONE online softmax/LSE and a corresponding backward. Do not
+   add two separately normalized attention outputs. Resolve the declared
+   completed-only versus visible-open-prefix semantics in the oracle, cache
+   and training together; an attention kernel alone does not fix that choice.
+3. Dynamic needs a segmented recurrence and an explicit boundary backward.
+   Hard compaction alone drops the current STE visibility gradient at zero
+   gates: for a weighted softmax, dL/dgate_j can be nonzero even when gate_j=0.
+   Preserving that estimator can require backward work for unselected prefix
+   candidates. Test CE-only router gradients against the reference, including
+   arbitrarily long chunks, before claiming equivalent sparse training.
+
+This review does not claim a new Triton kernel has been implemented or GPU
+validated. Both 10B runs remain at zero formal steps. Controlled-CCE-gradient
+checkpoint replay passed for both variants; the original uncontrolled replay
+still differs because actual CCE backward is numerically nondeterministic.
+The diagnostic result has not silently relaxed the formal startup gate.
 
 `ConnectionConfig.attention_mode = full | fixed_hca | dynamic_hca` selects the
 attention. `full` retains the original default. HCA currently requires vanilla,
@@ -100,8 +169,8 @@ tradeoff. This is not an equality constraint and does not guarantee actual R.
 Log continuous keep rate, hard keep rate, and actual inference cache entries
 separately. A later quality comparison must match measured average cache budgets
 on held-out data, freeze its settings, and report any mismatch. A target R=16
-label alone is not evidence of a fair comparison. No long training is authorized
-or launched by this implementation task.
+label alone is not evidence of a fair comparison. The subsequent two 10B runs
+are authorized in RESEARCH_HISTORY.md but remain gated; neither has started.
 
 ## Pooling, causality and arbitrarily long unfinished chunks
 
