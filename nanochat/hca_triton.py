@@ -472,7 +472,7 @@ def _merge_summary_parts(AK, AV, DK, DV, T: tl.constexpr, N: tl.constexpr,
 
 class _Attention(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, q, k, v, pk, pv, starts, window, ratio):
+    def forward(ctx, q, k, v, pk, pv, starts, window, ratio, compact):
         q, k, v, pk, pv, starts = [x.contiguous() for x in (q, k, v, pk, pv, starts)]
         b, t, h, d = q.shape
         index = torch.empty((b, t), device=q.device, dtype=torch.int32)
@@ -482,26 +482,26 @@ class _Attention(torch.autograd.Function):
         out = torch.empty_like(q)
         of = torch.empty_like(q, dtype=torch.float32)
         lse = torch.empty((b, h, t), device=q.device, dtype=torch.float32)
-        fast = ratio > 0 or not ctx.needs_input_grad[5]
+        fast = ratio > 0 or compact
         bm, bn, warps = FIXED_FWD_TILE if fast and q.dtype == torch.bfloat16 else (32, 32, 4)
         _attn_fwd[(tr.cdiv(t, bm), b*h)](q, k, v, pk, pv, index, counts, out, of, lse,
                         t, h, d, window, ratio, bm, bn, tr.next_power_of_2(d), fast, num_warps=warps)
         ctx.save_for_backward(q, k, v, pk, pv, starts, index, counts, of, lse)
-        ctx.params = window, ratio
+        ctx.params = window, ratio, compact
         return out
 
     @staticmethod
     @once_differentiable
     def backward(ctx, do):
         q, k, v, pk, pv, starts, index, counts, of, lse = ctx.saved_tensors
-        w, r = ctx.params
+        w, r, compact = ctx.params
         b, t, h, d = q.shape
         do = do.contiguous()
         dq, dk, dv = [torch.empty_like(x) for x in (q, k, v)]
         # FP32 prefix buffers avoid rounding once per source before adding.
         dpk, dpv = [torch.empty_like(x, dtype=torch.float32) for x in (pk, pv)]
         dg = torch.empty((b, t, h), device=q.device, dtype=torch.float32)
-        fast = r > 0 or not ctx.needs_input_grad[5]
+        fast = r > 0 or compact
         bm, bn, warps = FIXED_BWD_TILE if fast and q.dtype == torch.bfloat16 else (32, 32, 4)
         grid, bd = (tr.cdiv(t, bn), b*h), tr.next_power_of_2(d)
         _attn_dq[(tr.cdiv(t, bm), b*h)](q, k, v, pk, pv, index, counts, do, of, lse, dq,
@@ -532,14 +532,16 @@ class _Attention(torch.autograd.Function):
         else:
             _attn_dkv[grid](q, pk, pv, starts, do, of, lse, dpk, dpv, dg,
                            t, h, d, w, r, 1, 32, 32, bd)
-        return dq, dk, dv, dpk.to(pk.dtype), dpv.to(pv.dtype), None if fast else dg.sum(2), None, None
+        return dq, dk, dv, dpk.to(pk.dtype), dpv.to(pv.dtype), None if fast else dg.sum(2), None, None, None
 
 
-def attention(q, k, v, pk, pv, starts, window, ratio=0):
+def attention(q, k, v, pk, pv, starts, window, ratio=0, compact=False):
     if not q.is_cuda or q.dtype not in (torch.float32, torch.bfloat16):
         raise ValueError('HCA Triton attention requires CUDA FP32/BF16')
     if any(x.shape != q.shape or x.dtype != q.dtype for x in (k, v, pk, pv)):
         raise ValueError('HCA attention requires matching separate Q/K/V shapes and dtypes')
     if not 16 <= q.shape[-1] <= 128 or q.shape[1] > 8192:
         raise ValueError('Initial HCA Triton envelope: head_dim 16..128, sequence <=8192')
-    return _Attention.apply(q, k, v, pk, pv, starts, window, ratio)
+    if compact and starts.requires_grad:
+        raise ValueError('Compact backward requires detached hard routing')
+    return _Attention.apply(q, k, v, pk, pv, starts, window, ratio, compact)

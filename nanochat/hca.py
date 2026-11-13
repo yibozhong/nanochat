@@ -59,7 +59,8 @@ def balanced_compression_loss(soft_count, hard_count, count, ratio):
     corrected. It is not a quota and does not guarantee an exact achieved rate.
     R=1 reduces to an objective encouraging all boundaries.
     """
-    f, g = (hard_count/count).detach(), soft_count/count
+    f = (torch.as_tensor(hard_count, dtype=soft_count.dtype, device=soft_count.device)/count).detach()
+    g = soft_count/count
     if ratio == 1:
         return 1-g
     return ratio/(ratio-1) * ((ratio-1)*f*g+(1-f)*(1-g))
@@ -351,7 +352,8 @@ class HCAAttention(nn.Module):
             ratio = 0
         pk, pv = prefix_pool(raw_k, v, score, starts, ratio)
         pk = norm(apply_rotary_emb(pk, *cos_sin)) * 1.2
-        y = attention(q, local_k, v, pk, pv, starts, self.config.hca_window, ratio)
+        y = attention(q, local_k, v, pk, pv, starts, self.config.hca_window, ratio,
+                      compact=self.config.hca_dynamic_gradient == 'confidence')
         if self.config.hca_dynamic_gradient == 'confidence':
             y = confidence_output(y, starts, soft)
         return y, starts, soft

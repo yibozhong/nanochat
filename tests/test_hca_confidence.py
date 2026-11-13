@@ -43,7 +43,7 @@ def test_compact_attention_vjps(dtype, kind):
     if kind == 'single': starts.zero_()
     if kind == 'every': starts.fill_(1)
     starts[:,0] = 1
-    y = attention(*xs, starts, w, 0)
+    y = attention(*xs, starts, w, 0, compact=True)
     pos = torch.arange(t, device='cuda')
     local = (pos[:,None] >= pos) & (pos[:,None]-pos < w)
     closed = torch.cat((starts[:,1:], starts.new_zeros(b,1)),1)
