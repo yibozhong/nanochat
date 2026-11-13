@@ -15,13 +15,16 @@ p.add_argument('--ratio-weight',type=float,default=.03)
 p.add_argument('--steps',type=int,default=2000)
 p.add_argument('--seed',type=int,default=42)
 p.add_argument('--label',required=True)
+p.add_argument('--save-state',action='store_true')
+p.add_argument('--resume')
 a=p.parse_args()
 assert os.environ['WANDB_MODE']=='disabled'
 
 import torch
 from nanochat.connection_model import ConnectionConfig,build_connection_model,optimizer_for,schedule
 from nanochat.connection_experiment import configure_attention
-from nanochat.packed_training import PackedData,seed_all,train_step,NonfiniteTrainingError
+from nanochat.packed_training import (PackedData,seed_all,train_step,NonfiniteTrainingError,
+                                     snapshot,atomic_save,restore_rng)
 
 torch.set_num_threads(2);torch.backends.cuda.matmul.allow_tf32=False
 configure_attention('fa2');seed_all(a.seed)
@@ -36,6 +39,14 @@ out=Path('results/optimization');out.mkdir(parents=True,exist_ok=True)
 report=dict(complete=False,formal_training=False,args=vars(a),config=asdict(c),
             gpu=torch.cuda.get_device_name(),gpu_uuid=str(torch.cuda.get_device_properties(0).uuid),
             source=json.loads(Path('source.json').read_text()))
+start_step=0
+if a.resume:
+    state=torch.load(a.resume,map_location='cpu',weights_only=False)
+    assert state['config']==asdict(c) and state['seed']==a.seed
+    model.load_state_dict(state['model']);opt.load_state_dict(state['optimizer'])
+    restore_rng(state['rng']);start_step=state['step']
+    report.update(resumed_step=start_step,checkpoint_source=state['source'])
+    del state
 def write():
     (out/(a.label+'.json')).write_text(json.dumps(report,indent=2,allow_nan=False)+'\n')
 write();timings=[];last=[]
@@ -56,7 +67,7 @@ def validation():
     result['tokens']=limit*c.sequence_length
     return result
 with (out/(a.label+'-steps.jsonl')).open('w',buffering=1) as log:
-    for step in range(a.steps):
+    for step in range(start_step,a.steps):
         schedule(opt,step,305176,wd)
         torch.cuda.synchronize();start=time.perf_counter()
         try:
@@ -77,6 +88,11 @@ with (out/(a.label+'-steps.jsonl')).open('w',buffering=1) as log:
             val=validation()
             report.setdefault('validation',[]).append(dict(step=step+1,**val));write()
             print(json.dumps(dict(event='VALIDATION',step=step+1,**val)),flush=True)
+        if a.save_state and ((step+1)%100==0 or step+1==a.steps):
+            path=Path('../diagnostic-state/latest.pt');path.parent.mkdir(exist_ok=True)
+            atomic_save(snapshot(model,opt,step+1,config=asdict(c),seed=a.seed,
+                                 source=report['source'],formal_training=False,
+                                 next_data_row=(step+1)*16),path)
 report.update(complete=True,status='finite_limit',steps=a.steps,last_100=last,
               median_seconds=statistics.median(timings),
               final_train_metrics=getattr(model,'last_train_metrics',{}),
