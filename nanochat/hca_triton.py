@@ -215,7 +215,10 @@ def _attn_fwd(Q, K, V, PK, PV, INDEX, COUNTS, O, OF, LSE,
         new_m = tl.maximum(m, tl.max(z, 1))
         p = tl.exp(z-new_m[:, None])
         alpha = tl.exp(m-new_m)
-        acc = acc*alpha[:, None]+tl.dot(p, v.to(tl.float32), input_precision='tf32x3')
+        if R > 0 and q.dtype == tl.bfloat16:
+            acc = acc*alpha[:, None]+tl.dot(p.to(tl.bfloat16), v)
+        else:
+            acc = acc*alpha[:, None]+tl.dot(p, v.to(tl.float32), input_precision='tf32x3')
         l = l*alpha+tl.sum(p, 1)
         m = new_m
     last = tl.minimum(T-1, (block+1)*BM-1)
@@ -238,7 +241,10 @@ def _attn_fwd(Q, K, V, PK, PV, INDEX, COUNTS, O, OF, LSE,
         new_m = tl.maximum(m, tl.max(z, 1))
         p = tl.exp(z-new_m[:, None])
         alpha = tl.exp(m-new_m)
-        acc = acc*alpha[:, None]+tl.dot(p, v.to(tl.float32), input_precision='tf32x3')
+        if R > 0 and q.dtype == tl.bfloat16:
+            acc = acc*alpha[:, None]+tl.dot(p.to(tl.bfloat16), v)
+        else:
+            acc = acc*alpha[:, None]+tl.dot(p, v.to(tl.float32), input_precision='tf32x3')
         l = l*alpha+tl.sum(p, 1)
         m = new_m
     out = acc/l[:, None]
@@ -279,7 +285,10 @@ def _attn_dq(Q, K, V, PK, PV, INDEX, COUNTS, DO, OF, LSE, DQ,
         p = tl.exp(tl.where(allowed, z-lse[:, None], -float('inf')))
         dp = tl.dot(do, tl.trans(v), input_precision='ieee')
         ds = p*(dp-delta[:, None])
-        dq += tl.dot(ds, k.to(tl.float32), input_precision='tf32x3')*scale
+        if R > 0 and q.dtype == tl.bfloat16:
+            dq += tl.dot(ds.to(tl.bfloat16), k)*scale
+        else:
+            dq += tl.dot(ds, k.to(tl.float32), input_precision='tf32x3')*scale
     last = tl.minimum(T-1, (block+1)*BM-1)
     if R > 0:
         n = last // R
@@ -299,7 +308,10 @@ def _attn_dq(Q, K, V, PK, PV, INDEX, COUNTS, DO, OF, LSE, DQ,
         p = tl.exp(tl.where((c[None, :] < n) & (j[None, :] < t[:, None]), z-lse[:, None], -float('inf')))
         dp = tl.dot(do, tl.trans(v), input_precision='ieee')
         ds = p*(dp-delta[:, None])
-        dq += tl.dot(ds, k.to(tl.float32), input_precision='tf32x3')*scale
+        if R > 0 and q.dtype == tl.bfloat16:
+            dq += tl.dot(ds.to(tl.bfloat16), k)*scale
+        else:
+            dq += tl.dot(ds, k.to(tl.float32), input_precision='tf32x3')*scale
     tl.store(DQ+off, dq, valid)
 
 
@@ -380,8 +392,12 @@ def _attn_dkv(Q, K, V, G, DO, OF, LSE, DK, DV, DG,
         else:
             p = e
         ds = p*dp
-        dk += tl.dot(tl.trans(ds), q.to(tl.float32), input_precision='tf32x3')*(D**-.5)
-        dv += tl.dot(tl.trans(p), do.to(tl.float32), input_precision='tf32x3')
+        if R > 0 and q.dtype == tl.bfloat16:
+            dk += tl.dot(tl.trans(ds.to(tl.bfloat16)), q)*(D**-.5)
+            dv += tl.dot(tl.trans(p.to(tl.bfloat16)), do)
+        else:
+            dk += tl.dot(tl.trans(ds), q.to(tl.float32), input_precision='tf32x3')*(D**-.5)
+            dv += tl.dot(tl.trans(p), do.to(tl.float32), input_precision='tf32x3')
     if SOURCE == 2:
         dk += tl.load(DK+off, valid, 0)
         dv += tl.load(DV+off, valid, 0)
