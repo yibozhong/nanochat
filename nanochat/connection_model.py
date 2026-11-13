@@ -34,11 +34,20 @@ class ConnectionConfig:
     architecture: str = 'vanilla'
     window_pattern: str = 'SSSL'  # native only; vanilla is always full attention
     attention_kernel: str = 'original'
+    ffn_readout_width: int = 0
+    ffn_readout_backend: str = 'triton'
+    ffn_readout_init: str = 'gradmax'
     compact_routing: bool = False
     attnres_block_size: int = 2  # Moonshot paper's S: Attention and MLP each count once
     attnres_block_size_unit: str = 'sublayers'
 
     def __post_init__(self):
+        if type(self.ffn_readout_width) is not int or self.ffn_readout_width < 0:
+            raise ValueError('FFN readout width must be a nonnegative integer')
+        if self.ffn_readout_backend not in ('reference', 'triton') or self.ffn_readout_init not in ('random', 'gradmax'):
+            raise ValueError('Unknown FFN readout backend/initialization')
+        if self.ffn_readout_width and (self.architecture != 'vanilla' or self.variant != 'baseline' or self.streams != 1):
+            raise ValueError('FFN readout uses vanilla baseline with one residual stream')
         if self.variant in ('skip_scale','attnres_scale'):
             if self.architecture != 'vanilla' or self.streams != 1 or self.fused_connection_grad:
                 raise ValueError('Skip scale uses vanilla, exactly one residual stream, and ordinary gradients')
@@ -91,6 +100,11 @@ class ConnectionConfig:
     def from_checkpoint(cls, config):
         """Read pre-cleanup NVIDIA/vanilla metadata; reject retired model weights."""
         config = dict(config)
+        if config.pop('attention_mode', 'full') != 'full':
+            raise ValueError('Checkpoint belongs to the retired HCA experiment')
+        for name in list(config):
+            if name.startswith('hca_'):
+                config.pop(name)  # inert metadata on retained full-attention checkpoints
         if config.pop('window_final_full', True) is not True:
             raise ValueError('Checkpoint belongs to the retired native frontloaded-attention experiment')
         if config.pop('attention_pattern', 'full') != 'full':
@@ -146,6 +160,7 @@ class ConnectionBlock(Block):
         self.attn.ve_gate = None
         self.variant = config.variant
         self.compiled_attention = self.compiled_mlp = None
+        self.ffn_readout_width = 0
         if self.variant == 'skip_scale':
             self.attn_skip_scale = nn.Parameter(torch.ones(config.width))
             self.mlp_skip_scale = nn.Parameter(torch.ones(config.width))
@@ -174,6 +189,10 @@ class ConnectionBlock(Block):
         return self.mlp(norm(h))
 
     def forward(self, x, cos, sin, kv_cache=None):
+        if self.ffn_readout_width:
+            from nanochat.ffn_readout import readout
+            x = x + self.attention_branch(x, cos, sin, kv_cache)
+            return readout(x, self.mlp(norm(x)), self.ffn_readout_backend)
         if self.variant == 'baseline':
             return super().forward(x, None, (cos, sin), (-1, 0), kv_cache)
         if self.variant == 'skip_scale':
@@ -230,6 +249,9 @@ class ConnectionModel(nn.Module):
         self.register_buffer('cos', freq.cos()[None, :, None, :], persistent=False)
         self.register_buffer('sin', freq.sin()[None, :, None, :], persistent=False)
         self.compiled_steps = None
+        if config.ffn_readout_width:
+            from nanochat.ffn_readout import install_readout
+            install_readout(self)
         if config.attention_kernel == 'fla_triton':
             from nanochat.fla_attention import FlaAttention
             for block in self.blocks:
@@ -271,7 +293,7 @@ class ConnectionModel(nn.Module):
                 x = fn(x, cos, sin, kv_cache)
         if self.stream_head is not None:
             x = self.stream_head(x)
-        return norm(x)
+        return x if self.config.ffn_readout_width else norm(x)
 
     def forward(self, idx, targets=None, dense=False, kv_cache=None):
         h = self.hidden(idx, kv_cache)

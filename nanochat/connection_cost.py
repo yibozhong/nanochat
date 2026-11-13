@@ -7,7 +7,9 @@ def model_cost(config, batch=1, activation_bytes=2):
         return None
     t,d,depth=c.sequence_length,c.width,c.depth
     projections=24*batch*t*depth*d*d
-    head=2*batch*t*d*c.vocab_size
+    r=c.ffn_readout_width
+    projections += 2*batch*t*(4*d)*r
+    head=2*batch*t*(d+r)*c.vocab_size
     attention=4*batch*d*depth*(t*(t+1)//2)
     forward=projections+head+attention
     if c.variant=='skip_scale':
