@@ -33,6 +33,7 @@ def main():
     p.add_argument('--hca-window', type=int, default=256)
     p.add_argument('--hca-temperature', type=float, default=1.0)
     p.add_argument('--hca-noise', action=argparse.BooleanOptionalAction, default=True)
+    p.add_argument('--hca-backend', choices=('reference', 'triton'), default='reference')
     p.add_argument('--architecture', choices=('vanilla', 'native'), default='vanilla')
     p.add_argument('--window-pattern', default='SSSL', help='Native backbone only; vanilla always uses full attention')
     p.add_argument('--formal-training', action='store_true', help='Explicitly enable W&B for a formal training run')
@@ -74,7 +75,7 @@ def main():
     ckpt.mkdir(parents=True,exist_ok=True)
     torch.set_num_threads(2);torch.backends.cuda.matmul.allow_tf32=False
     actual_attention_backend = (configure_attention(a.attention_backend) if a.attention_mode == 'full'
-                                else 'pytorch_hca_reference')
+                                else 'hca_'+a.hca_backend)
     seed_all(a.seed)
     c=ConnectionConfig(variant=a.variant,streams=a.streams,sinkhorn_iterations=a.sinkhorn_iterations,
                        sequence_length=a.sequence_length, compact_routing=a.compact_routing,
@@ -83,6 +84,7 @@ def main():
                        attention_mode=a.attention_mode, hca_block_size=a.hca_block_size,
                        hca_ratio_loss_weight=a.hca_ratio_loss_weight, hca_window=a.hca_window,
                        hca_temperature=a.hca_temperature, hca_noise=a.hca_noise,
+                       hca_backend=a.hca_backend,
                        architecture=a.architecture, window_pattern=a.window_pattern,
                        activation_checkpoint=a.activation_checkpoint,
                        connection_backend=a.connection_backend, fused_connection_grad=a.fused_connection_grad)

@@ -12,6 +12,7 @@ import xml.etree.ElementTree as ET
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--reuse-core-tests', help='Passed core-tests evidence from identical model/test code on this GPU family')
+    parser.add_argument('--hca-backend', choices=('reference','triton'), default='reference')
     a = parser.parse_args()
     out = Path('results/hca'); out.mkdir(parents=True, exist_ok=True)
     if a.reuse_core_tests:
@@ -42,7 +43,8 @@ def main():
     report = dict(complete=False, formal_training=False, tests=counts,
                   source=json.loads(Path('source.json').read_text()),
                   gpu=torch.cuda.get_device_name(), torch=torch.__version__, cuda=torch.version.cuda,
-                  comparisons={}, limitations='Unoptimized reference; bounded checks, not learned quality evidence. No formal training.')
+                  comparisons={}, backend=a.hca_backend,
+                  limitations='Bounded engineering checks, not learned quality evidence. No formal training.')
     data = PackedData('../data')
     x, y = data.batch('train', 0, 1)
     # Full 2K and production width/head geometry; two layers limit reference
@@ -50,7 +52,7 @@ def main():
     for mode in ('full', 'fixed_hca', 'dynamic_hca'):
         seed_all(42)
         c = ConnectionConfig(variant='baseline', streams=1, depth=2, width=512, heads=4,
-                             sequence_length=2048, attention_mode=mode, hca_noise=False)
+                             sequence_length=2048, attention_mode=mode, hca_noise=False, hca_backend=a.hca_backend)
         m = build_connection_model(c).prepare(dtype=torch.bfloat16).eval()
         # Nonzero output branches exercise the attention beyond initialization.
         with torch.no_grad():

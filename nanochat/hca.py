@@ -271,6 +271,28 @@ class HCAAttention(nn.Module):
             cache.advance(length)
         return torch.cat(results)
 
+    def accelerated(self, q, raw_k, local_k, v, score, content, cos_sin, noise=None):
+        # FP64 stays on the independent oracle path; ordinary FP32/BF16 use
+        # explicit fused forward/backward kernels, including router gradients.
+        if q.dtype == torch.float64:
+            return self.dense(q, raw_k, local_k, v, score, content, cos_sin, noise)
+        from nanochat.hca_triton import prefix_pool, attention
+        if self.boundary is None:
+            positions = torch.arange(q.shape[1], device=q.device)
+            starts = (positions % self.config.hca_block_size == 0).to(score.dtype)[None].expand(q.shape[0], -1)
+            soft = starts
+            ratio = self.config.hca_block_size
+        else:
+            logits = content if noise is None else content + noise
+            relaxed = torch.sigmoid(logits / self.config.hca_temperature)
+            soft = torch.cat((torch.ones_like(relaxed[:, :1]), relaxed[:, 1:]), 1)
+            starts = (soft >= .5).to(soft.dtype) + (soft-soft.detach())
+            ratio = 0
+        pk, pv = prefix_pool(raw_k, v, score, starts, ratio)
+        pk = norm(apply_rotary_emb(pk, *cos_sin)) * 1.2
+        y = attention(q, local_k, v, pk, pv, starts, self.config.hca_window, ratio)
+        return y, starts, soft
+
     def forward_with_stats(self, x, cos_sin):
         if x.shape[1] == 0:
             raise ValueError('Empty HCA input')
@@ -279,7 +301,8 @@ class HCAAttention(nn.Module):
         if self.training and self.boundary is not None and self.config.hca_noise:
             u = torch.rand_like(args[-1]).clamp(1e-6, 1 - 1e-6)
             noise = u.log() - torch.log1p(-u)  # difference of two Gumbels
-        y, starts, soft = self.dense(*args, cos_sin, noise)
+        execute = self.accelerated if self.config.hca_backend == 'triton' else self.dense
+        y, starts, soft = execute(*args, cos_sin, noise)
         stats = torch.stack((soft.sum(), starts.detach().sum(), soft.new_tensor(soft.numel())))
         return self.c_proj(y.reshape(*x.shape[:2], self.n_embd)), stats
 

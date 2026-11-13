@@ -1,6 +1,7 @@
 # Fixed HCA / free Dynamic HCA
 
-Status: reference implementation; GPU validation results are recorded separately.
+Status: reference plus opt-in Triton implementation; GPU validation results are
+recorded separately. A new kernel is not approved for training until startup passes.
 No formal pretraining or matched-budget quality result. The initial hard-quota
 version was stopped; its checkpoints are explicitly rejected for HCA loading.
 
@@ -96,11 +97,42 @@ porting MLA, FP8/FP4, or the CSA indexer. The implementation sequence is:
    candidates. Test CE-only router gradients against the reference, including
    arbitrarily long chunks, before claiming equivalent sparse training.
 
-This review does not claim a new Triton kernel has been implemented or GPU
-validated. Both 10B runs remain at zero formal steps. Controlled-CCE-gradient
+At the time of the source review no new Triton kernel was implemented or GPU
+validated. Both 10B runs were at zero formal steps. Controlled-CCE-gradient
 checkpoint replay passed for both variants; the original uncontrolled replay
 still differs because actual CCE backward is numerically nondeterministic.
 The diagnostic result has not silently relaxed the formal startup gate.
+
+### Opt-in Triton implementation
+
+`ConnectionConfig.hca_backend = reference | triton` and the training argument
+`--hca-backend triton` select `nanochat/hca_triton.py`. Full-attention defaults
+are unchanged. This implementation preserves the existing bounded pooling
+logits, prefix-end RoPE and visible unfinished summary in both variants; it is
+an execution optimization of this adaptation, not a switch to completed-only
+DeepSeek semantics or to MLA. Cached inference retains the reference state
+machine, with split-prefill parity tested against the accelerated training path.
+
+Fixed computes all within-chunk prefixes in parallel and attention reads only
+the completed R16 positions plus its current diagonal prefix. Dynamic computes
+affine segmented scans in time tiles and compacts closed indices for forward
+and query backward. Its prefix backward also evaluates unselected candidates
+to retain the zero-gate visibility derivative. Prefix states cost O(T*D);
+Dynamic's counterfactual backward can still cost O(T*T*D), but never stores a
+T-by-T score/probability matrix. No maximum dynamic chunk length is introduced.
+All input-gradient stores have unique owners; head/channel router contributions
+are reduced explicitly rather than atomically. FP64 calls use the reference
+oracle. Initial explicit kernel envelope: CUDA FP32/BF16, head dimensions
+16..128, sequence up to 8192, fixed block sizes 1..128. Formal scheduling remains
+Hopper-only until GPU checks establish broader support.
+
+Validation is `tests/test_hca_triton.py` plus the reference tests, 2K cached
+comparison, full-shape finite gradients/replay and same-GPU throughput. Kernel
+correctness and repeatability have separate checks; BF16 parity uses measured
+relative-L2 and normalized-peak error, not bitwise equality to different eager
+reduction orders. The startup contract now requires exact state/RNG/data and
+controlled full-update replay, supported by the prior CCE-isolation evidence.
+No CCE tape is used in formal training. See the paired-run README for gates.
 
 `ConnectionConfig.attention_mode = full | fixed_hca | dynamic_hca` selects the
 attention. `full` retains the original default. HCA currently requires vanilla,

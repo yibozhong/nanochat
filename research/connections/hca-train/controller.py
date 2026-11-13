@@ -88,7 +88,7 @@ def collect(root, state):
 
 def tick():
     plan = json.loads((ROOT/'plan.json').read_text())
-    if stopped(ROOT):
+    if stopped(ROOT) or plan.get('automatic_training_blocked', False):
         return False
     states = {}
     for mode in MODES:

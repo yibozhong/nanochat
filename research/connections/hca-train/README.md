@@ -6,7 +6,7 @@ training, extra run, or hyperparameter sweep is authorized by this plan.
 
 Common recipe: vanilla backbone, baseline additive residual, 1 stream, 8 layers,
 D512, 4 heads, 32768 vocabulary, context 2048, seed 42, BF16, existing MuonAdamW
-schedule, no activation checkpointing, eager PyTorch HCA reference. FineWeb-Edu
+schedule, no activation checkpointing, explicit Triton HCA kernels. FineWeb-Edu
 sample-10BT and the existing packed2K cache/tokenizer are unchanged. Each run is
 305176 updates of 32768 tokens = 10000007168 tokens. Both use SWA256, target B/R16,
 temperature 1, and training Gumbel noise. Dynamic has a one-sided soft compression
@@ -18,16 +18,22 @@ and the per-microbatch global compression loss under gradient accumulation.
 
 1. Freeze one committed source archive and two persistent W&B IDs; only Fixed is
    initially submitted, held/audited/released as a combined validation/training job.
-2. Reuse the 18 core GPU checks passed by job 8483245.0/source 559227a, only after
-   a normal Git diff verifies identical model, tests, and runtime. That prior job
-   failed later in the full baseline's masked FA2 cached prefill, not in those tests.
-   The remaining 2K full/fixed/dynamic cache comparison runs again, using PyTorch
-   math SDPA for the baseline's masked cached prefill.
+2. Run the 24 Triton output/VJP/determinism/causality/cache checks, then rerun
+   the 18 reference core checks and the 2K full/fixed/dynamic cache comparison.
+   Model changes invalidate reuse of the original reference-only evidence.
+   Use PyTorch math SDPA for the baseline's masked cached prefill.
 3. On that same GPU, test the full 8-layer production shape, 3 finite updates plus
-   exact next-update model/optimizer/RNG/data replay for each mode. Check nonzero
+   exact model/optimizer/RNG/data restore and next-update replay under the
+   recorded actual CCE gradients for each mode. Actual CCE backward was isolated
+   as nondeterministic in the earlier diagnosis; its replay loss must still be
+   exact, and its uncontrolled update differences are reported. Check nonzero
    pool/router gradients and measure memory/time. Choose the largest **common**
    microbatch from 16,8,4,2,1 within 90% of 78000 MiB. Only CUDA OOM/capacity
    overflow permits a smaller candidate; other failures stop the process.
+   Separately measure three warmed updates per mode and baseline on this GPU,
+   without replay recording. Stop if either HCA path is >=10x the baseline;
+   this engineering guard rejects the previously diagnosed 184x/260x overhead,
+   not a quality threshold or claimed architecture speedup.
 4. After both pass, Fixed starts a clean formal process in the same allocation.
    A background controller validates the streamed success report and submits the
    one Dynamic job from the same frozen source, with exactly the chosen microbatch.
@@ -46,7 +52,7 @@ Formal W&B only: `yibozhong657-none/nanochat`, group `hca-10b-20261112`. Diagnos
 steps have no W&B run and do not count as formal progress. The first finite step
 after the exact formal marker is required before reporting training started.
 The startup probe records measured train-only ETA; no speed/quality benefit is
-assumed for this unoptimized reference. CE, total objective, compression loss and
+assumed for the kernels before measurement. CE, total objective, compression loss and
 soft/hard training keep rates are logged separately. Dev/test and best selection
 use CE alone; the target R does not establish matched realized KV budgets.
 

@@ -24,9 +24,18 @@ def report():
             config=dict(attention_mode=mode, variant='baseline', architecture='vanilla',
                 depth=8, width=512, heads=4, sequence_length=2048, vocab_size=32768, streams=1,
                 hca_block_size=16, hca_window=256, hca_ratio_loss_weight=1., hca_temperature=1.,
-                hca_noise=True, activation_checkpoint=False))
+                hca_noise=True, activation_checkpoint=False, hca_backend='triton'),
+            restore_contract='exact_state_rng_data_and_fixed_cce_gradient_replay',
+            loaded_model_equal=True, loaded_optimizer_equal=True, loaded_rng_equal=True,
+            loaded_data_row_equal=True, actual_cce_replay_loss_equal=True,
+            controlled_backward_loss_equal=True, controlled_backward_model_equal=True,
+            controlled_backward_optimizer_equal=True, controlled_backward_rng_equal=True,
+            cce_replay_microbatches=4)
     return dict(complete=True, formal_training=False, commit='frozen', capability=[9, 0],
-        core_tests=TEST_COUNTS.copy(), core_source=CORE_SOURCE, comparison_complete=True,
+        core_tests=TEST_COUNTS.copy(), core_source='frozen', comparison_complete=True,
+        hca_backend='triton', kernel_tests=dict(tests=24, failures=0, errors=0, skipped=0),
+        speed=dict(complete=True,formal_training=False,source=dict(commit='frozen'),gpu_uuid='same-device',microbatch=4,
+                   modes={m:dict(relative_to_baseline=2.) for m in MODES}),
         microbatch=4, modes=modes, attention_mode='fixed_hca', run_id='fixed-id')
 
 
@@ -42,7 +51,10 @@ class ControlTests(unittest.TestCase):
         with self.assertRaises(AssertionError): validate_shared(r, 'frozen')
 
     def test_gradients_restore_capacity_and_equal_recipe_required(self):
-        for key, value in [('replay_model_equal', False), ('replay_optimizer_equal', False),
+        for key, value in [('controlled_backward_model_equal', False), ('controlled_backward_optimizer_equal', False),
+                           ('loaded_model_equal', False), ('loaded_rng_equal', False),
+                           ('actual_cce_replay_loss_equal', False), ('controlled_backward_rng_equal', False),
+                           ('cce_replay_microbatches', 1),
                            ('all_gradients_finite', False), ('pool_gradient_nonzero', False),
                            ('router_gradient_nonzero', False), ('losses', [10., float('nan'), 9.]),
                            ('peak_reserved_bytes', 1000*1024**3), ('gpu_uuid', 'different-device'),

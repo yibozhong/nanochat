@@ -96,6 +96,7 @@ echo "FORMAL_TRAINING_BEGIN $TASK_MODE $TASK_RUN_ID"
 python -m scripts.connection_train --architecture vanilla --variant baseline --streams 1 \
     --sequence-length 2048 --attention-kernel original --attention-mode "$TASK_MODE" \
     --hca-block-size 16 --hca-window 256 --hca-ratio-loss-weight 1 --hca-temperature 1 --hca-noise \
+    --hca-backend triton \
     --steps 305176 --schedule-steps 305176 --microbatch "$TASK_MICROBATCH" --seed 42 \
     --no-activation-checkpoint --no-fused-connection-grad --evaluate-test \
     --data-dir ../data --output-dir results/train --checkpoint-dir ../checkpoints \

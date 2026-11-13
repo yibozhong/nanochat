@@ -4,6 +4,7 @@ import json
 from pathlib import Path
 import subprocess
 import sys
+import xml.etree.ElementTree as ET
 
 from policy import MODES, CORE_SOURCE, TEST_COUNTS, validate_probe, validate_shared
 
@@ -16,8 +17,8 @@ def write(path, value):
 
 def probe(mode, micro):
     path = Path('results/hca-startup') / f'{mode}-micro{micro}.json'
-    subprocess.run([sys.executable, 'research/connections/hca-train/probe.py',
-                    '--mode', mode, '--microbatch', str(micro), '--output', str(path)], check=True)
+    subprocess.run([sys.executable, 'research/connections/hca-train/replay_check.py',
+                    '--mode', mode, '--microbatch', str(micro), '--backend', 'triton', '--output', str(path)], check=True)
     return json.loads(path.read_text())
 
 
@@ -26,6 +27,7 @@ def main():
     import torch
     source = json.loads(Path('source.json').read_text())
     assert source['attention_mode'] == a.mode and source['formal_training'] is True
+    assert source['hca_backend'] == 'triton'
     assert torch.cuda.get_device_capability() == (9, 0)
     assert any(name in torch.cuda.get_device_name() for name in ('H100', 'H200'))
     assert torch.cuda.get_device_properties(0).total_memory >= 78000*1024**2
@@ -43,11 +45,17 @@ def main():
         print('Reusing successful persistent HCA startup validation', flush=True)
         return
     if a.mode == 'fixed_hca':
-        evidence = json.loads(Path('../core-evidence.json').read_text())
-        assert evidence['source_commit'] == CORE_SOURCE and evidence['tests'] == TEST_COUNTS
-        assert evidence['validated_bundle_commit'] == source['commit']
+        kernel_xml = Path('results/hca-startup/kernels.xml')
+        kernel_xml.parent.mkdir(parents=True, exist_ok=True)
+        subprocess.run([sys.executable, '-m', 'pytest', '-x', '-v', 'tests/test_hca_triton.py',
+                        '--junitxml='+str(kernel_xml)], check=True)
+        suites = ET.parse(kernel_xml).getroot().findall('testsuite')
+        kernel_tests = {k:sum(int(s.get(k,0)) for s in suites) for k in ('tests','failures','errors','skipped')}
+        assert kernel_tests == dict(tests=24, failures=0, errors=0, skipped=0)
+        # Model code changed: rerun the reference core checks instead of
+        # reusing evidence from the original Python-only implementation.
         subprocess.run([sys.executable, '-m', 'scripts.connection_hca_gate',
-                        '--reuse-core-tests', '../core-evidence.json'], check=True)
+                        '--hca-backend', 'triton'], check=True)
         comparison = json.loads(Path('results/hca/validation.json').read_text())
         assert comparison['complete'] and comparison['tests'] == TEST_COUNTS
         assert comparison['source']['commit'] == source['commit']
@@ -63,10 +71,18 @@ def main():
                 break
         else:
             raise RuntimeError('No common microbatch fits the validated 78GB GPU budget')
+        subprocess.run([sys.executable, 'research/connections/hca-train/speed.py',
+                        '--microbatch', str(micro)], check=True)
+        speed = json.loads(Path('results/hca-startup/speed.json').read_text())
+        assert speed['complete'] and speed['microbatch'] == micro
+        for mode in MODES:
+            reports[mode]['steady_step_seconds'] = speed['modes'][mode]['steady_step_seconds']
+            reports[mode]['estimated_train_only_hours'] = speed['modes'][mode]['estimated_train_only_hours']
         ready = dict(complete=True, formal_training=False, commit=source['commit'],
                      capability=list(torch.cuda.get_device_capability()), core_tests=TEST_COUNTS,
-                     core_source=CORE_SOURCE, comparison_complete=True, microbatch=micro,
-                     modes=reports, comparison_path='results/hca/validation.json')
+                     core_source=source['commit'], kernel_tests=kernel_tests,
+                     hca_backend='triton', comparison_complete=True, microbatch=micro,
+                     modes=reports, speed=speed, comparison_path='results/hca/validation.json')
         validate_shared(ready, source['commit'])
     else:
         ready = json.loads(Path('../validated-shared.json').read_text())

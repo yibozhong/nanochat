@@ -40,6 +40,7 @@ class ConnectionConfig:
     hca_window: int = 256  # includes the current token
     hca_temperature: float = 1.0
     hca_noise: bool = True
+    hca_backend: str = 'reference'
     compact_routing: bool = False
     attnres_block_size: int = 2  # Moonshot paper's S: Attention and MLP each count once
     attnres_block_size_unit: str = 'sublayers'
@@ -47,6 +48,8 @@ class ConnectionConfig:
     def __post_init__(self):
         if self.attention_mode not in ('full', 'fixed_hca', 'dynamic_hca'):
             raise ValueError('Unknown attention_mode')
+        if self.hca_backend not in ('reference', 'triton'):
+            raise ValueError('Unknown HCA backend')
         if self.attention_mode != 'full':
             if self.architecture != 'vanilla' or self.variant != 'baseline' or self.streams != 1 or self.attention_kernel != 'original':
                 raise ValueError('HCA reference supports vanilla baseline, one stream, original projections')

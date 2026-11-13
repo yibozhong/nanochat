@@ -68,6 +68,7 @@ def main():
     p.add_argument('--mode', choices=('fixed_hca', 'dynamic_hca'), required=True)
     p.add_argument('--microbatch', type=int, required=True)
     p.add_argument('--output', required=True)
+    p.add_argument('--backend', choices=('reference','triton'), default='reference')
     a = p.parse_args()
     import torch
     from nanochat.connection_model import ConnectionConfig, build_connection_model, optimizer_for, schedule
@@ -78,7 +79,7 @@ def main():
     source = json.loads(Path('source.json').read_text())
     c = ConnectionConfig(variant='baseline', streams=1, attention_mode=a.mode,
                          hca_block_size=16, hca_ratio_loss_weight=1., hca_window=256,
-                         hca_noise=True, hca_temperature=1.)
+                         hca_noise=True, hca_temperature=1., hca_backend=a.backend)
     out = Path(a.output); out.parent.mkdir(parents=True, exist_ok=True)
     scratch = Path('../hca-diagnostic-checkpoints') / (a.mode+'-'+str(a.microbatch))
     assert not scratch.exists(), 'Inspect an interrupted probe; do not overwrite it'

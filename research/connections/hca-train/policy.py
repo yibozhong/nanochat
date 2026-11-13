@@ -15,7 +15,17 @@ def validate_probe(v, mode, micro, commit):
     assert v['complete'] is True and v['formal_training'] is False
     assert v['status'] == 'passed' and v['mode'] == mode and v['microbatch'] == micro
     assert v['commit'] == commit and v['steps'] == 3 and v['replayed_step'] == 2
-    assert v['replay_model_equal'] is True and v['replay_optimizer_equal'] is True
+    # Same-input CCE backward nondeterminism was isolated in 9499a07 and
+    # controlled full-update replay passed in 01ddae1. Require exact checkpoint
+    # load, RNG/data, actual forward loss, and full backward/update with fixed
+    # CCE gradients; actual uncontrolled differences remain in the report.
+    assert v['restore_contract'] == 'exact_state_rng_data_and_fixed_cce_gradient_replay'
+    for key in ('loaded_model_equal', 'loaded_optimizer_equal', 'loaded_rng_equal',
+                'loaded_data_row_equal', 'actual_cce_replay_loss_equal',
+                'controlled_backward_loss_equal', 'controlled_backward_model_equal',
+                'controlled_backward_optimizer_equal', 'controlled_backward_rng_equal'):
+        assert v[key] is True, key
+    assert v['cce_replay_microbatches'] == 16//micro
     assert v['all_gradients_finite'] is True
     assert v['peak_reserved_bytes'] <= CAPACITY_BYTES
     assert v['parameters'] == (60817408 if mode == 'fixed_hca' else 60821512)
@@ -24,6 +34,7 @@ def validate_probe(v, mode, micro, commit):
     assert (c['depth'], c['width'], c['heads'], c['sequence_length'], c['vocab_size'], c['streams']) == (8, 512, 4, 2048, 32768, 1)
     assert c['hca_block_size'] == 16 and c['hca_window'] == 256 and c['hca_ratio_loss_weight'] == 1
     assert c['hca_temperature'] == 1 and c['hca_noise'] is True and not c['activation_checkpoint']
+    assert c['hca_backend'] == 'triton'
     assert len(v['losses']) == 3 and all(math.isfinite(x) for x in v['losses'])
     assert math.isfinite(v['steady_step_seconds']) and v['steady_step_seconds'] > 0
     assert v['pool_gradient_nonzero'] is True
@@ -34,7 +45,11 @@ def validate_probe(v, mode, micro, commit):
 def validate_shared(v, commit):
     assert v['complete'] is True and v['formal_training'] is False
     assert v['commit'] == commit and v['capability'] == [9, 0]
-    assert v['core_tests'] == TEST_COUNTS and v['core_source'] == CORE_SOURCE
+    assert v['core_tests'] == TEST_COUNTS and v['core_source'] == commit
+    assert v['kernel_tests'] == dict(tests=24, failures=0, errors=0, skipped=0)
+    assert v['hca_backend'] == 'triton'
+    assert v['speed']['complete'] and v['speed']['formal_training'] is False
+    assert v['speed']['source']['commit'] == commit
     assert v['comparison_complete'] is True
     assert set(v['modes']) == set(MODES)
     micro = v['microbatch']
@@ -42,6 +57,10 @@ def validate_shared(v, commit):
     for mode in MODES:
         validate_probe(v['modes'][mode], mode, micro, commit)
     assert len({v['modes'][mode]['gpu_uuid'] for mode in MODES}) == 1
+    assert v['speed']['gpu_uuid'] == v['modes']['fixed_hca']['gpu_uuid']
+    assert v['speed']['microbatch'] == micro
+    for mode in MODES:
+        assert 0 < v['speed']['modes'][mode]['relative_to_baseline'] < 10
     return micro
 
 

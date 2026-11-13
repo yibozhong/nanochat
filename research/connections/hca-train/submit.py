@@ -149,6 +149,7 @@ def enqueue(mode):
     with (root/'submit.lock').open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         assert not stopped(ROOT) and not stopped(root)
+        assert not plan.get('automatic_training_blocked', False), 'Training plan blocked for repair'
         if (root/'state.json').exists():
             return json.loads((root/'state.json').read_text())
         assert not (root/'submission-intent.json').exists(), 'Recover prior submission intent; never duplicate'
