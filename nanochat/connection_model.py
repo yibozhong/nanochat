@@ -34,45 +34,11 @@ class ConnectionConfig:
     architecture: str = 'vanilla'
     window_pattern: str = 'SSSL'  # native only; vanilla is always full attention
     attention_kernel: str = 'original'
-    attention_mode: str = 'full'
-    hca_block_size: int = 16
-    hca_ratio_loss_weight: float = 1.0
-    hca_window: int = 256  # includes the current token
-    hca_temperature: float = 1.0
-    hca_noise: bool = True
-    hca_backend: str = 'reference'
-    hca_dynamic_gradient: str = 'dmc'
-    hca_router_init: str = 'default'
-    hca_ratio_warmup_steps: int = 0
     compact_routing: bool = False
     attnres_block_size: int = 2  # Moonshot paper's S: Attention and MLP each count once
     attnres_block_size_unit: str = 'sublayers'
 
     def __post_init__(self):
-        if self.attention_mode not in ('full', 'fixed_hca', 'dynamic_hca'):
-            raise ValueError('Unknown attention_mode')
-        if self.hca_backend not in ('reference', 'triton'):
-            raise ValueError('Unknown HCA backend')
-        if self.hca_dynamic_gradient not in ('dmc', 'confidence'):
-            raise ValueError('Unknown dynamic HCA gradient estimator')
-        if self.hca_dynamic_gradient == 'confidence' and self.attention_mode != 'dynamic_hca':
-            raise ValueError('Confidence routing applies only to Dynamic HCA')
-        if self.hca_router_init not in ('default', 'uncompressed'):
-            raise ValueError('Unknown HCA router initialization')
-        if type(self.hca_ratio_warmup_steps) is not int or self.hca_ratio_warmup_steps < 0:
-            raise ValueError('HCA ratio warmup steps must be a nonnegative integer')
-        if self.hca_router_init != 'default' or self.hca_ratio_warmup_steps:
-            if self.attention_mode != 'dynamic_hca' or self.hca_dynamic_gradient != 'confidence' or self.hca_noise:
-                raise ValueError('Uncompressed initialization/warmup require noiseless confidence Dynamic HCA')
-        if self.attention_mode != 'full':
-            if self.architecture != 'vanilla' or self.variant != 'baseline' or self.streams != 1 or self.attention_kernel != 'original':
-                raise ValueError('HCA reference supports vanilla baseline, one stream, original projections')
-            if any(type(v) is not int or v < 1 for v in (self.hca_block_size, self.hca_window)):
-                raise ValueError('HCA block size and window must be positive integers')
-            if not math.isfinite(self.hca_ratio_loss_weight) or self.hca_ratio_loss_weight < 0:
-                raise ValueError('HCA ratio loss weight must be finite and nonnegative')
-            if not math.isfinite(self.hca_temperature) or self.hca_temperature <= 0 or type(self.hca_noise) is not bool:
-                raise ValueError('Invalid HCA temperature/noise')
         if self.variant in ('skip_scale','attnres_scale'):
             if self.architecture != 'vanilla' or self.streams != 1 or self.fused_connection_grad:
                 raise ValueError('Skip scale uses vanilla, exactly one residual stream, and ordinary gradients')
@@ -125,10 +91,6 @@ class ConnectionConfig:
     def from_checkpoint(cls, config):
         """Read pre-cleanup NVIDIA/vanilla metadata; reject retired model weights."""
         config = dict(config)
-        if 'hca_budget_chunks' in config:
-            if config.get('attention_mode', 'full') != 'full':
-                raise ValueError('Checkpoint uses the stopped hard-quota HCA semantics')
-            config.pop('hca_budget_chunks')  # inert default in full-attention metadata
         if config.pop('window_final_full', True) is not True:
             raise ValueError('Checkpoint belongs to the retired native frontloaded-attention experiment')
         if config.pop('attention_pattern', 'full') != 'full':
@@ -211,12 +173,6 @@ class ConnectionBlock(Block):
     def mlp_branch(self, h):
         return self.mlp(norm(h))
 
-    def hca_forward(self, x, cos, sin):
-        """Explicit auxiliary output survives activation checkpoint recomputation."""
-        attention, stats = self.attn.forward_with_stats(norm(x), (cos, sin))
-        x = x + attention
-        return x + self.mlp(norm(x)), stats
-
     def forward(self, x, cos, sin, kv_cache=None):
         if self.variant == 'baseline':
             return super().forward(x, None, (cos, sin), (-1, 0), kv_cache)
@@ -278,17 +234,8 @@ class ConnectionModel(nn.Module):
             from nanochat.fla_attention import FlaAttention
             for block in self.blocks:
                 block.attn = FlaAttention(block.attn)
-        if config.attention_mode != 'full':
-            from nanochat.hca import HCAAttention
-            # Complete native backbone initialization first; additions must not
-            # perturb backbone weights or the caller's RNG stream.
-            with torch.random.fork_rng(devices=[]):
-                for block in self.blocks:
-                    block.attn = HCAAttention(block.attn, config)
 
     def prepare(self, device='cuda', dtype=torch.bfloat16, compile_blocks=False):
-        if compile_blocks and self.config.attention_mode != 'full':
-            raise ValueError('HCA reference uses eager execution; pass compile_blocks=False')
         if self.config.variant not in ('baseline', 'skip_scale'):
             check_nvidia_device(device)
             if dtype != torch.bfloat16:
@@ -306,22 +253,7 @@ class ConnectionModel(nn.Module):
                 b.compiled_mlp = torch.compile(b.mlp_branch, dynamic=False, fullgraph=True)
         return self
 
-    def make_kv_cache(self, batch_size=1):
-        if self.config.attention_mode != 'full':
-            from nanochat.hca import HCAKVCache
-            return HCAKVCache(self.config, batch_size)
-        from nanochat.engine import KVCache
-        c = self.config
-        return KVCache(batch_size, c.heads, c.sequence_length, c.width // c.heads,
-                       c.depth, self.wte.weight.device, self.wte.weight.dtype)
-
-    def hidden(self, idx, kv_cache=None, return_hca_stats=False):
-        if self.config.attention_mode != 'full' and kv_cache is not None:
-            from nanochat.hca import HCAKVCache
-            if not isinstance(kv_cache, HCAKVCache) or kv_cache.config != self.config:
-                raise ValueError('Use model.make_kv_cache() for HCA')
-            if self.training or torch.is_grad_enabled():
-                raise ValueError('HCA cache requires eval() and no_grad()')
+    def hidden(self, idx, kv_cache=None):
         start = 0 if kv_cache is None else kv_cache.get_pos()
         if start + idx.shape[1] > self.config.sequence_length:
             raise ValueError('Input exceeds configured context length')
@@ -329,15 +261,7 @@ class ConnectionModel(nn.Module):
         if self.config.variant not in ('baseline', 'skip_scale'):
             x = expand_streams(x, self.config.streams)
         cos, sin = self.cos[:, start:start+idx.shape[1]], self.sin[:, start:start+idx.shape[1]]
-        routing = []
         for i, b in enumerate(self.blocks):
-            if self.config.attention_mode != 'full' and kv_cache is None:
-                if self.config.activation_checkpoint and self.training and torch.is_grad_enabled():
-                    x, stats = checkpoint(b.hca_forward, x, cos, sin, use_reentrant=False)
-                else:
-                    x, stats = b.hca_forward(x, cos, sin)
-                routing.append(stats)
-                continue
             fn = self.compiled_steps[i] if self.compiled_steps is not None else b.forward
             if self.config.activation_checkpoint and self.training and torch.is_grad_enabled():
                 if kv_cache is not None:
@@ -347,57 +271,20 @@ class ConnectionModel(nn.Module):
                 x = fn(x, cos, sin, kv_cache)
         if self.stream_head is not None:
             x = self.stream_head(x)
-        if return_hca_stats:
-            return norm(x), torch.stack(routing).sum(0) if routing else None
         return norm(x)
 
-    def forward(self, idx, targets=None, dense=False, kv_cache=None, return_loss_components=False,
-                hca_training_step=None):
-        hca = self.config.attention_mode != 'full'
-        if hca and kv_cache is not None and targets is not None:
-            raise ValueError('Mutable HCA cache is for inference logits only')
-        stats = None
-        if hca:
-            h, stats = self.hidden(idx, kv_cache, return_hca_stats=True)
-        else:
-            h = self.hidden(idx, kv_cache)
-        ratio_loss = h.new_zeros((), dtype=torch.float32) if hca else None
-        if stats is not None:
-            from nanochat.hca import compression_loss, balanced_compression_loss
-            if self.config.attention_mode == 'dynamic_hca':
-                if self.config.hca_dynamic_gradient == 'confidence':
-                    ratio_loss = balanced_compression_loss(stats[0], stats[1], stats[2], self.config.hca_block_size)
-                else:
-                    ratio_loss = compression_loss(stats[0], stats[2], self.config.hca_block_size)
-            # Only detached scalars are retained on the model, never a graph.
-            self.last_hca_metrics = dict(soft_keep_rate=(stats[0]/stats[2]).detach(),
-                                         hard_keep_rate=(stats[1]/stats[2]).detach(),
-                                         compression_loss=ratio_loss.detach())
+    def forward(self, idx, targets=None, dense=False, kv_cache=None):
+        h = self.hidden(idx, kv_cache)
         w = self.lm_head.weight.to(h.dtype)
         if targets is None or dense:
             logits = 15 * torch.tanh(F.linear(h, w).float() / 15)
             if targets is None:
                 return logits
-            ce = F.cross_entropy(logits.flatten(0, 1), targets.flatten())
-        else:
-            from cut_cross_entropy import linear_cross_entropy
-            ce = linear_cross_entropy(h, w, targets, softcap=15., shift=0,
-                reduction='mean', filter_eps=None, filter_e_grad=False, filter_c_grad=False,
-                accum_e_fp32=True, accum_c_fp32=True)
-        if not hca:
-            return ce
-        weight = self.config.hca_ratio_loss_weight
-        if self.config.hca_ratio_warmup_steps and self.training:
-            from nanochat.hca_schedule import ratio_loss_weight
-            weight = ratio_loss_weight(weight, self.config.hca_ratio_warmup_steps, hca_training_step)
-        total = ce + weight * ratio_loss if self.training else ce
-        if self.config.hca_ratio_warmup_steps:
-            self.last_hca_metrics['ratio_loss_weight'] = ratio_loss.new_tensor(weight if self.training else 0.)
-        self.last_hca_metrics.update(ce=ce.detach(), objective=total.detach())
-        if return_loss_components:
-            return dict(ce=ce, compression_loss=ratio_loss, total=total,
-                        soft_keep_rate=stats[0]/stats[2], hard_keep_rate=stats[1]/stats[2])
-        return total
+            return F.cross_entropy(logits.flatten(0, 1), targets.flatten())
+        from cut_cross_entropy import linear_cross_entropy
+        return linear_cross_entropy(h, w, targets, softcap=15., shift=0,
+            reduction='mean', filter_eps=None, filter_e_grad=False, filter_c_grad=False,
+            accum_e_fp32=True, accum_c_fp32=True)
 
 
 def optimizer_for(model, batch_tokens=32768):
@@ -418,8 +305,7 @@ def optimizer_for(model, batch_tokens=32768):
     matrices, routing = [], []
     for b in model.blocks:
         for name, p in b.named_parameters():
-            (routing if '_connection.' in name or name in ('attn_skip_scale', 'mlp_skip_scale') or
-             name.startswith(('attn.pool_score.', 'attn.boundary.')) else matrices).append(p)
+            (routing if '_connection.' in name or name in ('attn_skip_scale', 'mlp_skip_scale') else matrices).append(p)
     if model.stream_head is not None:
         routing.extend(model.stream_head.parameters())
     if c.variant in ('attnres','attnres_scale'):

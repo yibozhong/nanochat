@@ -1,0 +1,372 @@
+{
+  "stopped_at": "2026-11-13T17:29:51.183060+00:00",
+  "reason": "User terminated HCA/Dynamic HCA and requested cleanup and rollback; supersedes all prior run/restart authorizations.",
+  "source_commit": "c2ff1eb",
+  "restore_base": "c32db70",
+  "removed_jobs": [
+    "8492173.0",
+    "8526496.0",
+    "8526795.0",
+    "8531092.0",
+    "8531093.0",
+    "8538531.0"
+  ],
+  "terminated_monitor_pids": [
+    1515506,
+    3084736
+  ],
+  "runs": [
+    {
+      "root": "/home/yzhong239/hca-10b-20261112/debug",
+      "job": "8526447.0",
+      "run_id": null,
+      "status": "queued_for_bounded_interactive_debug",
+      "formal_started": null,
+      "failure": null,
+      "wandb_url": null
+    },
+    {
+      "root": "/home/yzhong239/hca-10b-20261112/debug-dynamic",
+      "job": "8526544.0",
+      "run_id": null,
+      "status": "queued_corrected_interactive_launcher",
+      "formal_started": null,
+      "failure": null,
+      "wandb_url": null
+    },
+    {
+      "root": "/home/yzhong239/hca-10b-20261112/dynamic_hca",
+      "job": "8526496.0",
+      "run_id": "6e68ed48",
+      "status": "needs_attention",
+      "formal_started": true,
+      "failure": "The job attribute OnExitHold expression '(ExitBySignal == true) || ((ExitCode != 0) && (ExitCode != 85))' evaluated to TRUE",
+      "wandb_url": "https://wandb.ai/yibozhong657-none/nanochat/runs/6e68ed48"
+    },
+    {
+      "root": "/home/yzhong239/hca-10b-20261112/fixed_hca",
+      "job": "8492173.0",
+      "run_id": "f6dd86fc",
+      "status": "needs_attention",
+      "formal_started": true,
+      "failure": "The job attribute OnExitHold expression '(ExitBySignal == true) || ((ExitCode != 0) && (ExitCode != 85))' evaluated to TRUE",
+      "wandb_url": "https://wandb.ai/yibozhong657-none/nanochat/runs/f6dd86fc"
+    },
+    {
+      "root": "/home/yzhong239/hca-b4-10b-20261112",
+      "job": "8526795.0",
+      "run_id": "b5e421af",
+      "status": "needs_attention",
+      "formal_started": true,
+      "failure": "The job attribute OnExitHold expression '(ExitBySignal == true) || ((ExitCode != 0) && (ExitCode != 85))' evaluated to TRUE",
+      "wandb_url": "https://wandb.ai/yibozhong657-none/nanochat/runs/b5e421af"
+    },
+    {
+      "root": "/home/yzhong239/hca-gate-20261112",
+      "job": "8474684.0",
+      "run_id": null,
+      "status": "stopped_design_correction",
+      "formal_started": null,
+      "failure": null,
+      "wandb_url": null
+    },
+    {
+      "root": "/home/yzhong239/hca-gate-20261112-r2",
+      "job": "8483245.0",
+      "run_id": null,
+      "status": "retired_failed_gate",
+      "formal_started": null,
+      "failure": "Baseline split cached prefill used FA2-only with an explicit boolean mask; remaining comparison failed after all HCA core tests passed.",
+      "wandb_url": null
+    },
+    {
+      "root": "/home/yzhong239/hca-opt-20261112",
+      "job": "8527072.0",
+      "run_id": null,
+      "status": "completed",
+      "formal_started": null,
+      "failure": null,
+      "wandb_url": null
+    },
+    {
+      "root": "/home/yzhong239/hca-optimized-b4-10b-20261113/dynamic_hca",
+      "job": "8531093.0",
+      "run_id": "3935dc62",
+      "status": "formal_training",
+      "formal_started": true,
+      "failure": null,
+      "wandb_url": "https://wandb.ai/yibozhong657-none/nanochat/runs/3935dc62"
+    },
+    {
+      "root": "/home/yzhong239/hca-optimized-b4-10b-20261113/fixed_hca",
+      "job": "8531092.0",
+      "run_id": "9209497c",
+      "status": "formal_training",
+      "formal_started": true,
+      "failure": null,
+      "wandb_url": "https://wandb.ai/yibozhong657-none/nanochat/runs/9209497c"
+    },
+    {
+      "root": "/home/yzhong239/hca-warmup-b4-10b-20261113/dynamic_hca",
+      "job": "8538531.0",
+      "run_id": "cadea029",
+      "status": "formal_training",
+      "formal_started": true,
+      "failure": null,
+      "wandb_url": "https://wandb.ai/yibozhong657-none/nanochat/runs/cadea029"
+    }
+  ],
+  "logs": [
+    {
+      "file": "/home/yzhong239/hca-10b-20261112/dynamic_hca/logs/train.8526496.0.out",
+      "last_logged_update": {
+        "step": 140,
+        "tokens": 4587520,
+        "loss": 6.828726291656494,
+        "seconds": 0.15282049775123596,
+        "lr_multiplier": 1.0,
+        "hca": {
+          "soft_keep_rate": 0.4034450352191925,
+          "hard_keep_rate": 0.3982086181640625,
+          "compression_loss": 0.3409450352191925,
+          "ce": 6.487781047821045,
+          "objective": 6.828726291656494
+        }
+      },
+      "last_logged_validation": null
+    },
+    {
+      "file": "/home/yzhong239/hca-10b-20261112/fixed_hca/logs/train.8492173.0.out",
+      "last_logged_update": {
+        "step": 288500,
+        "tokens": 9453568000,
+        "loss": 3.17238712310791,
+        "seconds": 0.11427067965269089,
+        "lr_multiplier": 0.12986907906676615,
+        "hca": {
+          "soft_keep_rate": 0.0625,
+          "hard_keep_rate": 0.0625,
+          "compression_loss": 0.0,
+          "ce": 3.17238712310791,
+          "objective": 3.17238712310791
+        }
+      },
+      "last_logged_validation": null
+    },
+    {
+      "file": "/home/yzhong239/hca-10b-20261112/fixed_hca/logs/train.8526447.0.out",
+      "last_logged_update": {
+        "step": 14720,
+        "tokens": 482344960,
+        "loss": 3.6283376216888428,
+        "seconds": 0.11346290819346905,
+        "lr_multiplier": 1.0,
+        "hca": {
+          "soft_keep_rate": 0.0625,
+          "hard_keep_rate": 0.0625,
+          "compression_loss": 0.0,
+          "ce": 3.6283376216888428,
+          "objective": 3.6283376216888428
+        }
+      },
+      "last_logged_validation": null
+    },
+    {
+      "file": "/home/yzhong239/hca-b4-10b-20261112/logs/train.8526544.0.out",
+      "last_logged_update": {
+        "step": 14410,
+        "tokens": 472186880,
+        "loss": 3.7312002182006836,
+        "seconds": 0.11771876504644752,
+        "lr_multiplier": 1.0,
+        "hca": {
+          "soft_keep_rate": 0.25,
+          "hard_keep_rate": 0.25,
+          "compression_loss": 0.0,
+          "ce": 3.7312002182006836,
+          "objective": 3.7312002182006836
+        }
+      },
+      "last_logged_validation": null
+    },
+    {
+      "file": "/home/yzhong239/hca-b4-10b-20261112/logs/train.8526795.0.out",
+      "last_logged_update": {
+        "step": 179890,
+        "tokens": 5894635520,
+        "loss": 3.5239012241363525,
+        "seconds": 0.11867453902959824,
+        "lr_multiplier": 0.6500214252586155,
+        "hca": {
+          "soft_keep_rate": 0.25,
+          "hard_keep_rate": 0.25,
+          "compression_loss": 0.0,
+          "ce": 3.5239012241363525,
+          "objective": 3.5239012241363525
+        }
+      },
+      "last_logged_validation": null
+    },
+    {
+      "file": "/home/yzhong239/hca-optimized-b4-10b-20261113/dynamic_hca/logs/train.8531093.0.out",
+      "last_logged_update": {
+        "step": 74110,
+        "tokens": 2428436480,
+        "loss": 4.694766998291016,
+        "seconds": 0.08233406767249107,
+        "lr_multiplier": 1.0,
+        "hca": {
+          "soft_keep_rate": 0.30969375371932983,
+          "hard_keep_rate": 0.23585128784179688,
+          "compression_loss": 0.9954955577850342,
+          "ce": 3.6992712020874023,
+          "objective": 4.694766998291016
+        }
+      },
+      "last_logged_validation": null
+    },
+    {
+      "file": "/home/yzhong239/hca-optimized-b4-10b-20261113/fixed_hca/logs/train.8531092.0.out",
+      "last_logged_update": {
+        "step": 113320,
+        "tokens": 3713269760,
+        "loss": 3.7442080974578857,
+        "seconds": 0.0814724788069725,
+        "lr_multiplier": 0.9688368353128592,
+        "hca": {
+          "soft_keep_rate": 0.25,
+          "hard_keep_rate": 0.25,
+          "compression_loss": 0.0,
+          "ce": 3.7442080974578857,
+          "objective": 3.7442080974578857
+        }
+      },
+      "last_logged_validation": null
+    },
+    {
+      "file": "/home/yzhong239/hca-warmup-b4-10b-20261113/dynamic_hca/logs/train.8538531.0.out",
+      "last_logged_update": {
+        "step": 44710,
+        "tokens": 1465057280,
+        "loss": 4.758172035217285,
+        "seconds": 0.083088468760252,
+        "lr_multiplier": 1.0,
+        "hca": {
+          "soft_keep_rate": 0.3342871367931366,
+          "hard_keep_rate": 0.2766685485839844,
+          "compression_loss": 1.0119884014129639,
+          "ratio_loss_weight": 1.0,
+          "ce": 3.7461838722229004,
+          "objective": 4.758172035217285
+        }
+      },
+      "last_logged_validation": null
+    }
+  ],
+  "removed_home_roots": [
+    "/home/yzhong239/hca-10b-20261112",
+    "/home/yzhong239/hca-b4-10b-20261112",
+    "/home/yzhong239/hca-gate-20261112",
+    "/home/yzhong239/hca-gate-20261112-r2",
+    "/home/yzhong239/hca-opt-20261112",
+    "/home/yzhong239/hca-optimized-b4-10b-20261113",
+    "/home/yzhong239/hca-warmup-b4-10b-20261113"
+  ],
+  "remote_wandb": "Retained; no deletion requested",
+  "shared_data_runtime": "Retained",
+  "validated_diagnostic_evidence": {
+    "verification_commit": "21ef47d9bc6db859fcf4386205f2ed35cb5c4969",
+    "allocation": "8527072.0",
+    "gpu": "NVIDIA H100 80GB HBM3",
+    "workload": {
+      "depth": 8,
+      "width": 512,
+      "heads": 4,
+      "sequence_length": 2048,
+      "vocab_size": 32768,
+      "microbatch": 16,
+      "global_batch_tokens": 32768,
+      "local_window": 256
+    },
+    "tests": {
+      "gpu": 147,
+      "failed": 0,
+      "skipped": 0,
+      "ap_stdlib": 13,
+      "runtime_and_reference_gpu": 111,
+      "experimental_parallel_pool_gpu": 36
+    },
+    "performance": {
+      "final-baseline": {
+        "source": {
+          "commit": "21ef47d9bc6db859fcf4386205f2ed35cb5c4969",
+          "formal_training": false,
+          "phase": "final_candidate_verification"
+        },
+        "median_ms": 80.98649978637695,
+        "measured_updates": 40,
+        "warmup_updates": 5,
+        "peak_allocated_gib": 5.598947525024414,
+        "checkpoint_step": 0,
+        "metrics": {}
+      },
+      "final-fixed-b16": {
+        "source": {
+          "commit": "21ef47d9bc6db859fcf4386205f2ed35cb5c4969",
+          "formal_training": false,
+          "phase": "final_candidate_verification"
+        },
+        "median_ms": 78.46021372824907,
+        "measured_updates": 40,
+        "warmup_updates": 5,
+        "peak_allocated_gib": 7.376285552978516,
+        "checkpoint_step": 0,
+        "metrics": {
+          "soft_keep_rate": 0.0625,
+          "hard_keep_rate": 0.0625,
+          "compression_loss": 0.0,
+          "ce": 6.570504188537598,
+          "objective": 6.570504188537598
+        }
+      },
+      "final-fixed-b4": {
+        "source": {
+          "commit": "21ef47d9bc6db859fcf4386205f2ed35cb5c4969",
+          "formal_training": false,
+          "phase": "final_candidate_verification"
+        },
+        "median_ms": 82.52634759992361,
+        "measured_updates": 40,
+        "warmup_updates": 5,
+        "peak_allocated_gib": 7.376285552978516,
+        "checkpoint_step": 0,
+        "metrics": {
+          "soft_keep_rate": 0.25,
+          "hard_keep_rate": 0.25,
+          "compression_loss": 0.0,
+          "ce": 6.575004577636719,
+          "objective": 6.575004577636719
+        }
+      },
+      "final-confidence": {
+        "source": {
+          "commit": "21ef47d9bc6db859fcf4386205f2ed35cb5c4969",
+          "formal_training": false,
+          "phase": "final_candidate_verification"
+        },
+        "median_ms": 86.06131188571453,
+        "measured_updates": 40,
+        "warmup_updates": 5,
+        "peak_allocated_gib": 8.876587390899658,
+        "checkpoint_step": 5000,
+        "metrics": {
+          "soft_keep_rate": 0.10501058399677277,
+          "hard_keep_rate": 0.06142425537109375,
+          "compression_loss": 0.999219536781311,
+          "ce": 3.875437021255493,
+          "objective": 4.874656677246094
+        }
+      }
+    }
+  }
+}

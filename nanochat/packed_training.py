@@ -9,13 +9,6 @@ import numpy as np
 import torch
 
 
-class NonfiniteTrainingError(FloatingPointError):
-    """A rejected update, with small JSON-safe evidence for diagnosis."""
-    def __init__(self, report):
-        self.report = report
-        super().__init__('Nonfinite loss/gradient before optimizer update: ' + json.dumps(report, allow_nan=False))
-
-
 def seed_all(seed=42):
     random.seed(seed)
     np.random.seed(seed)
@@ -79,34 +72,17 @@ def train_step(model,opt,data,step,microbatch=16,batch_tokens=32768):
     assert rows % microbatch == 0
     opt.zero_grad(set_to_none=True)
     total=torch.zeros((),device='cuda')
-    hca_metrics = {}
-    # Recomputed from the restored global step on every update, shared by all
-    # accumulation microbatches. No mutable warmup counter or inference state.
-    hca_kwargs = ({'hca_training_step': step}
-                  if getattr(model.config, 'hca_ratio_warmup_steps', 0) else {})
     for start in range(0,rows,microbatch):
         x,y=data.batch('train',step*rows+start,microbatch)
-        loss=model(x,y,**hca_kwargs)
+        loss=model(x,y)
         (loss/(rows//microbatch)).backward()
         total += loss.detach()/(rows//microbatch)
-        if getattr(model.config, 'attention_mode', 'full') != 'full':
-            for key, value in model.last_hca_metrics.items():
-                hca_metrics[key] = hca_metrics.get(key, 0.) + value / (rows//microbatch)
     # Preserve nanochat's lack of clipping, but stop before a nonfinite update.
     grads=[p.grad for p in model.parameters() if p.grad is not None]
     finite=torch.stack([torch.isfinite(g).all() for g in grads]).all()
     if not bool(finite) or not torch.isfinite(total):
-        # Inspect names only on failure; successful updates retain the same
-        # numerical path. Never serialize nonfinite numbers into the report.
-        bad = [name for name, p in model.named_parameters()
-               if p.grad is not None and not bool(torch.isfinite(p.grad).all())]
-        loss_finite = bool(torch.isfinite(total))
-        raise NonfiniteTrainingError(dict(failed_update=step+1, next_data_row=step*rows,
-            loss_finite=loss_finite, loss=total.item() if loss_finite else None,
-            nonfinite_gradient_parameters=bad, optimizer_updated=False))
+        raise FloatingPointError('Nonfinite loss/gradient before optimizer update')
     opt.step()
-    if hca_metrics:
-        model.last_train_metrics = {key: value.item() for key, value in hca_metrics.items()}
     return total.item()
 
 

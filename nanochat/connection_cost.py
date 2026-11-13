@@ -3,8 +3,6 @@
 
 def model_cost(config, batch=1, activation_bytes=2):
     c=config
-    if c.attention_mode != 'full':
-        return None  # dense differentiable reference cost is not compressed inference cost
     if c.architecture!='vanilla' or c.variant not in ('baseline','attnres','attnres_scale','skip_scale'):
         return None
     t,d,depth=c.sequence_length,c.width,c.depth

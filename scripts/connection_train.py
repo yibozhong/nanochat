@@ -18,7 +18,7 @@ import torch
 from nanochat.experiment_logging import training_run
 
 from nanochat.connection_model import ConnectionConfig, build_connection_model, optimizer_for, schedule, CONNECTION_VARIANTS
-from nanochat.packed_training import PackedData, seed_all, evaluate, train_step, snapshot, atomic_save, restore_rng, json_write, NonfiniteTrainingError
+from nanochat.packed_training import PackedData, seed_all, evaluate, train_step, snapshot, atomic_save, restore_rng, json_write
 from nanochat.connection_experiment import configure_attention, match_vanilla_initialization
 
 
@@ -27,17 +27,6 @@ def main():
     p.add_argument('--variant', choices=CONNECTION_VARIANTS, required=True)
     p.add_argument('--sequence-length', type=int, default=2048)
     p.add_argument('--attention-kernel', choices=('original','fla_triton'), default='original')
-    p.add_argument('--attention-mode', choices=('full','fixed_hca','dynamic_hca'), default='full')
-    p.add_argument('--hca-block-size', type=int, default=16)
-    p.add_argument('--hca-ratio-loss-weight', type=float, default=1.0)
-    p.add_argument('--hca-window', type=int, default=256)
-    p.add_argument('--hca-temperature', type=float, default=1.0)
-    p.add_argument('--hca-noise', action=argparse.BooleanOptionalAction, default=True)
-    p.add_argument('--hca-backend', choices=('reference', 'triton'), default='reference')
-    p.add_argument('--hca-dynamic-gradient', choices=('dmc','confidence'), default='dmc')
-    p.add_argument('--hca-router-init', choices=('default','uncompressed'), default='default')
-    p.add_argument('--hca-ratio-warmup-steps', type=int, default=0,
-                   help='Linear ratio-loss weight warmup indexed by completed optimizer steps')
     p.add_argument('--architecture', choices=('vanilla', 'native'), default='vanilla')
     p.add_argument('--window-pattern', default='SSSL', help='Native backbone only; vanilla always uses full attention')
     p.add_argument('--formal-training', action='store_true', help='Explicitly enable W&B for a formal training run')
@@ -68,7 +57,7 @@ def main():
     p.add_argument('--seed', type=int, default=42)
     a = p.parse_args()
     if a.streams is None:
-        a.streams = 1 if a.variant in ('skip_scale','attnres_scale') or a.attention_mode != 'full' else 4
+        a.streams = 1 if a.variant in ('skip_scale','attnres_scale') else 4
     assert torch.cuda.is_available() and torch.cuda.device_count()==1
     assert a.sequence_length>0 and 32768%a.sequence_length==0
     rows_per_step=32768//a.sequence_length
@@ -78,18 +67,12 @@ def main():
     ckpt=Path(a.checkpoint_dir) if a.checkpoint_dir else out/'checkpoints'
     ckpt.mkdir(parents=True,exist_ok=True)
     torch.set_num_threads(2);torch.backends.cuda.matmul.allow_tf32=False
-    actual_attention_backend = (configure_attention(a.attention_backend) if a.attention_mode == 'full'
-                                else 'hca_'+a.hca_backend)
+    actual_attention_backend = configure_attention(a.attention_backend)
     seed_all(a.seed)
     c=ConnectionConfig(variant=a.variant,streams=a.streams,sinkhorn_iterations=a.sinkhorn_iterations,
                        sequence_length=a.sequence_length, compact_routing=a.compact_routing,
                        attnres_block_size=a.attnres_block_size,
                        attention_kernel=a.attention_kernel,
-                       attention_mode=a.attention_mode, hca_block_size=a.hca_block_size,
-                       hca_ratio_loss_weight=a.hca_ratio_loss_weight, hca_window=a.hca_window,
-                       hca_temperature=a.hca_temperature, hca_noise=a.hca_noise,
-                       hca_backend=a.hca_backend, hca_dynamic_gradient=a.hca_dynamic_gradient,
-                       hca_router_init=a.hca_router_init, hca_ratio_warmup_steps=a.hca_ratio_warmup_steps,
                        architecture=a.architecture, window_pattern=a.window_pattern,
                        activation_checkpoint=a.activation_checkpoint,
                        connection_backend=a.connection_backend, fused_connection_grad=a.fused_connection_grad)
@@ -104,7 +87,7 @@ def main():
         source=json.loads(Path('source.json').read_text())
     else:
         source=dict(commit=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip())
-    model=build_connection_model(c).prepare(compile_blocks=c.attention_mode == 'full')
+    model=build_connection_model(c).prepare(compile_blocks=True)
     if a.matched_backbone_init:
         match_vanilla_initialization(model,a.seed)
     opt,wd=optimizer_for(model)
@@ -149,10 +132,7 @@ def main():
         applied_sinkhorn_iterations=c.sinkhorn_iterations if a.variant=='mhc' else 0,
         optimizer='native MuonAdamW; connector AdamW at native unembedding LR, no decay',
         optimizer_groups=initial_groups,
-        loss=(('full-token CCE + confidence STE + balanced hard/soft HCA rate loss; eval CE only'
-               if c.hca_dynamic_gradient == 'confidence' else
-               'full-token CCE + weighted global one-sided HCA compression loss; eval CE only')
-              if c.attention_mode == 'dynamic_hca' else 'full-token full-vocabulary CCE; no gradient filtering'),
+        loss='full-token full-vocabulary CCE; no gradient filtering',
         references='research/connections/references.json')
     from nanochat.connection_cost import model_cost
     cost=model_cost(c,batch=rows_per_step)
@@ -163,14 +143,10 @@ def main():
         config['profile_matches_current_gpu']=str(torch.cuda.get_device_properties(0).uuid)==profile_reference.get('gpu_uuid')
     kwargs=dict(project='nanochat',entity='yibozhong657-none',group=a.wandb_group,
                 job_type='pretrain' if a.formal_training else 'diagnostic',
-                name=f'{a.architecture}-{a.variant}'+(f'-{a.attention_mode}-b{c.hca_block_size}'
-                     +(f'-{c.hca_dynamic_gradient}' if c.attention_mode == 'dynamic_hca' else '')
-                     if a.attention_mode != 'full' else '')
-                     +(f'-{c.hca_router_init}-rw{c.hca_ratio_warmup_steps}' if c.hca_ratio_warmup_steps else '')
-                     +f'-{c.sequence_length}ctx-{a.steps}steps',id=run_id,resume='allow',config=config)
+                name=f'{a.architecture}-{a.variant}'+f'-{c.sequence_length}ctx-{a.steps}steps',id=run_id,resume='allow',config=config)
     run=training_run(formal_training=a.formal_training, local_dir=out/"diagnostics", **kwargs)
     run.define_metric('tokens')
-    for metric in ('train/*','dev/*','perf/*','hca/*'):
+    for metric in ('train/*','dev/*','perf/*'):
         run.define_metric(metric,step_metric='tokens')
     json_write(out/'config.json',config)
     stop=False;begin=time.perf_counter()
@@ -205,19 +181,12 @@ def main():
                 torch.cuda.synchronize();duration=time.perf_counter()-start
                 durations.append(duration);training_seconds+=duration;step+=1
                 row=dict(step=step,tokens=step*32768,loss=loss,seconds=duration,lr_multiplier=lr)
-                if c.attention_mode != 'full':
-                    row['hca'] = model.last_train_metrics
                 log.write(json.dumps(row)+'\n')
                 if step<=5 or step%10==0:
                     print(json.dumps(row),flush=True)
                     perf={'train/ce':loss,'perf/step_seconds':duration,'perf/tokens_per_second':32768/duration,
                           'perf/peak_allocated_bytes':torch.cuda.max_memory_allocated(),
                           'perf/peak_reserved_bytes':torch.cuda.max_memory_reserved()}
-                    if c.attention_mode != 'full':
-                        perf['train/ce'] = model.last_train_metrics['ce']
-                        perf['train/objective'] = loss
-                        perf.update({'hca/'+key: value for key, value in model.last_train_metrics.items()
-                                     if key not in ('ce','objective')})
                     if cost:
                         perf.update({'perf/estimated_training_flops_per_step':cost['estimated_training_flops'],
                             'perf/estimated_forward_flops_per_step':cost['estimated_forward_flops']})
@@ -259,10 +228,7 @@ def main():
             test_evaluated=a.evaluate_test,checkpoint_files=checkpoint_files,**test_result)
         json_write(out/'summary.json',result);run.summary.update(result);run.finish()
         print(json.dumps(result),flush=True);return 0
-    except BaseException as error:
-        if isinstance(error, NonfiniteTrainingError):
-            json_write(out/'failure.json', dict(run_id=run_id, source=source,
-                last_completed_step=step, **error.report))
+    except BaseException:
         run.finish(exit_code=1);raise
 
 
