@@ -1,0 +1,45 @@
+{
+  "complete": true,
+  "job": "8552928.0",
+  "formal_training": false,
+  "model_commit": "6beacfa",
+  "test_fix_commit": "23ed3af",
+  "gpu": "NVIDIA H200",
+  "gpu_tests_passed": 12,
+  "initial_tests": {
+    "passed": 11,
+    "failed": 1
+  },
+  "repaired_test": "Direct forward bypassed module hook; observe actual backbone call. Recheck passed.",
+  "steps_per_model": 96,
+  "tokens_per_model": 3145728,
+  "baseline_step_ms": 64.98582288622856,
+  "feedback_step_ms": 71.25400551594794,
+  "step_time_ratio": 1.096454616581422,
+  "baseline_dev_ce": 6.084238290786743,
+  "feedback_dev_ce_p1": 6.129245758056641,
+  "feedback_dev_ce_p4": 6.011602282524109,
+  "exact_checkpoint_transport_and_fixed_gradient_update": true,
+  "independent_backward_bitwise_equal": false,
+  "repeated_same_state_max_gradient_relative_l2": 0.0008647408103570342,
+  "cleanup_note": "Initial launcher retains exit1 from original test failure. All repaired checks completed manually in same allocation; no resubmission.",
+  "validation_method_commit": "cde8655",
+  "model": {
+    "depth": 8,
+    "width": 512,
+    "heads": 4,
+    "sequence_length": 2048,
+    "vocab_size": 32768
+  },
+  "batch_tokens": 32768,
+  "microbatch": 16,
+  "seed": 42,
+  "attention_backend": "fa2",
+  "training_pass_mix": [
+    0.15,
+    0.85
+  ],
+  "timing_warmup_steps": 16,
+  "timing_measured_steps": 80,
+  "archive": "latent-feedback-debug-20261113/results/stream-8552928.0.tar"
+}
