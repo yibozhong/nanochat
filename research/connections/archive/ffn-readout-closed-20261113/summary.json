@@ -1,0 +1,751 @@
+{
+  "status": "stopped_by_user",
+  "job": "8544879.0",
+  "run_id": "71b98d1b",
+  "source": {
+    "plan": "ffn-readout-r64-10b-20261113",
+    "commit": "97e1c7a9030f9be234e0cf5b69ca47fed1d720be",
+    "run_id": "71b98d1b",
+    "formal_training": true,
+    "model": {
+      "variant": "baseline",
+      "depth": 8,
+      "width": 512,
+      "heads": 4,
+      "sequence_length": 2048,
+      "vocab_size": 32768,
+      "streams": 1,
+      "sinkhorn_iterations": 20,
+      "activation_checkpoint": false,
+      "connection_backend": "nvidia",
+      "fused_connection_grad": false,
+      "architecture": "vanilla",
+      "window_pattern": "SSSL",
+      "attention_kernel": "original",
+      "ffn_readout_width": 64,
+      "ffn_readout_backend": "triton",
+      "ffn_readout_init": "gradmax",
+      "compact_routing": false,
+      "attnres_block_size": 2,
+      "attnres_block_size_unit": "sublayers"
+    },
+    "steps": 305176,
+    "training_tokens": 10000007168,
+    "batch_tokens": 32768,
+    "microbatch": 16,
+    "seed": 42,
+    "initialization": "seed42_from_zero_no_diagnostic_weights",
+    "attention_backend": "fa2",
+    "data_uri": "osdf:///chtc/staging/y/yzhong239/nanochat-2k-10b-data-7685535.tar",
+    "data_archive_bytes": 20014796800,
+    "dataset_revision": "87f09149ef4734204d70ed1d046ddc9ca3f2b8f9",
+    "tokenizer": "native RustBPE 32768 vocab, first 100M capped characters from training shard",
+    "checkpoint_seconds": 1800,
+    "evaluate_test": true,
+    "verified_model_commit": "2c5d9d0205417f62c3d652f067c9fd67e9c329fa",
+    "prior_validation": "research/connections/ffn-readout/results.json",
+    "original_model_implementation": "2218c2d",
+    "validated_hardware_family": "Hopper SM90; H100/H200; no unvalidated-family expansion",
+    "validation_step_seconds": 0.07039016392081976
+  },
+  "latest_printed_update": {
+    "step": 24000,
+    "tokens": 786432000,
+    "loss": 3.844654083251953,
+    "seconds": 0.06831781379878521,
+    "lr_multiplier": 1.0
+  },
+  "stopped_at": 1794598666.4466836,
+  "monitor_stopped": 3790672,
+  "validation": {
+    "complete": true,
+    "formal_training": false,
+    "implementation_commit": "2218c2d",
+    "production_test_commit": "5572735",
+    "allocation": "8540864.0",
+    "gpu": "NVIDIA H100 80GB HBM3",
+    "gpu_uuid": "f8d23f80-7656-1494-e6f1-22a66463300e",
+    "runtime": {
+      "torch": "2.10.0+cu130",
+      "triton": "3.6.0",
+      "attention": "fa2",
+      "lock": "research/connections/runtime/uv.lock"
+    },
+    "workload": {
+      "variant": "baseline",
+      "depth": 8,
+      "width": 512,
+      "heads": 4,
+      "sequence_length": 2048,
+      "vocab_size": 32768,
+      "streams": 1,
+      "sinkhorn_iterations": 20,
+      "activation_checkpoint": false,
+      "connection_backend": "nvidia",
+      "fused_connection_grad": false,
+      "architecture": "vanilla",
+      "window_pattern": "SSSL",
+      "attention_kernel": "original",
+      "ffn_readout_width": 64,
+      "ffn_readout_backend": "triton",
+      "ffn_readout_init": "gradmax",
+      "compact_routing": false,
+      "attnres_block_size": 2,
+      "attnres_block_size_unit": "sublayers"
+    },
+    "parameters": 60948480,
+    "additional_parameters": 2228224,
+    "data": {
+      "dataset": "HuggingFaceFW/fineweb-edu",
+      "config": "sample-10BT",
+      "revision": "87f09149ef4734204d70ed1d046ddc9ca3f2b8f9",
+      "sequence_length": 2048,
+      "cache": "osdf:///chtc/staging/y/yzhong239/nanochat-2k-10b-data-7685535.tar",
+      "tokenizer": "native RustBPE 32768 vocab, first 100M capped characters from training shard"
+    },
+    "tests": {
+      "gpu_passed": 34,
+      "failed": 0,
+      "coverage": [
+        "FP32/BF16 forward and VJP",
+        "small-amplitude and irregular dimensions",
+        "compiled and checkpointed model gradients",
+        "production D512/R64/V32768 all-parameter gradients",
+        "baseline weights and RNG",
+        "independent gradient path",
+        "GradMax initialization",
+        "causal and split-prefill cache",
+        "model/optimizer/RNG/next-step recovery",
+        "aliased gradient equivalence"
+      ]
+    },
+    "cli_resume": {
+      "passed": true,
+      "first_segment_exit": 85,
+      "resumed_step": 3,
+      "training_tokens": 98304,
+      "initialization_skipped_on_resume": true,
+      "formal_training": false,
+      "wandb_created": false,
+      "model_optimizer_rng_present": true,
+      "data_position": "step 3 * 16 packed rows"
+    },
+    "initialization": {
+      "method": "projected_GradMax_inspired",
+      "tokens": 256,
+      "rank": 64,
+      "top_singular_value": 0.5019291639328003,
+      "last_singular_value": 0.030089855194091797,
+      "relative_overlap": 1.6775592257545213e-06,
+      "new_down_rows_zero": true,
+      "seconds": 0.7313102651387453
+    },
+    "paired_throughput": {
+      "formal_training": false,
+      "source": {
+        "commit": "2218c2d",
+        "formal_training": false
+      },
+      "gpu": "NVIDIA H100 80GB HBM3",
+      "warmup_updates": 10,
+      "measured_updates": 100,
+      "attention_backend": "fa2",
+      "shared_autotune": true,
+      "alternating_order": [
+        [
+          "baseline",
+          "reference",
+          "triton"
+        ],
+        [
+          "triton",
+          "reference",
+          "baseline"
+        ],
+        [
+          "reference",
+          "baseline",
+          "triton"
+        ]
+      ],
+      "models": {
+        "baseline": {
+          "median_ms": 66.84888061136007,
+          "p10_ms": 66.74039177596569,
+          "p90_ms": 67.46933609247208,
+          "last_loss": 6.052859306335449,
+          "all_updates_finite": true
+        },
+        "reference": {
+          "median_ms": 70.44379319995642,
+          "p10_ms": 70.33267617225647,
+          "p90_ms": 71.35670632123947,
+          "last_loss": 6.049614906311035,
+          "all_updates_finite": true
+        },
+        "triton": {
+          "median_ms": 70.39016392081976,
+          "p10_ms": 70.3018568456173,
+          "p90_ms": 71.20846025645733,
+          "last_loss": 6.0493388175964355,
+          "all_updates_finite": true
+        }
+      },
+      "paired_triton_minus_reference_ms": -0.06828363984823227,
+      "cce_backward_configs": {},
+      "cce_lse_forward_configs": {}
+    },
+    "overhead_percent": 5.29744593637651,
+    "memory": {
+      "baseline_peak_allocated_gib": 5.374598026275635,
+      "branch_peak_allocated_gib": 5.430523872375488
+    },
+    "kernel_tuning": {
+      "formal_training": false,
+      "gpu": "NVIDIA H100 80GB HBM3",
+      "shape": [
+        32768,
+        512,
+        64
+      ],
+      "tiles": [
+        {
+          "bm": 1,
+          "warps": 4,
+          "forward_ms": 0.04730714395433873,
+          "backward_ms": 0.0662267028461301,
+          "relative_errors": [
+            8.856311978888698e-06,
+            0.0028220159001648426,
+            0.002660077763721347
+          ]
+        },
+        {
+          "bm": 1,
+          "warps": 8,
+          "forward_ms": 0.06048129294148255,
+          "backward_ms": 0.07001717589441886,
+          "relative_errors": [
+            4.691594767791685e-06,
+            0.002822014968842268,
+            0.002660074271261692
+          ]
+        },
+        {
+          "bm": 2,
+          "warps": 4,
+          "forward_ms": 0.043968728191293445,
+          "backward_ms": 0.06590464323670249,
+          "relative_errors": [
+            4.586395334627014e-06,
+            0.0028220214881002903,
+            0.0026600807905197144
+          ]
+        },
+        {
+          "bm": 2,
+          "warps": 8,
+          "forward_ms": 0.04949116596268947,
+          "backward_ms": 0.06622507012439519,
+          "relative_errors": [
+            8.856311978888698e-06,
+            0.0028220159001648426,
+            0.002660077763721347
+          ]
+        },
+        {
+          "bm": 4,
+          "warps": 4,
+          "forward_ms": 0.04376646118938543,
+          "backward_ms": 0.06587293794504682,
+          "relative_errors": [
+            4.586395334627014e-06,
+            0.0028220214881002903,
+            0.0026600807905197144
+          ]
+        },
+        {
+          "bm": 4,
+          "warps": 8,
+          "forward_ms": 0.04408952631485599,
+          "backward_ms": 0.06578829466624367,
+          "relative_errors": [
+            4.586395334627014e-06,
+            0.0028220214881002903,
+            0.0026600807905197144
+          ]
+        },
+        {
+          "bm": 8,
+          "warps": 4,
+          "forward_ms": 0.043736215284936104,
+          "backward_ms": 0.06681479855969145,
+          "relative_errors": [
+            4.586395334627014e-06,
+            0.0028220212552696466,
+            0.0026600805576890707
+          ]
+        },
+        {
+          "bm": 8,
+          "warps": 8,
+          "forward_ms": 0.043797387465645994,
+          "backward_ms": 0.06670416872470807,
+          "relative_errors": [
+            4.586395334627014e-06,
+            0.0028220214881002903,
+            0.0026600807905197144
+          ]
+        },
+        {
+          "bm": 16,
+          "warps": 4,
+          "forward_ms": 0.044868122415655125,
+          "backward_ms": 0.06867088308509818,
+          "relative_errors": [
+            4.586395334627014e-06,
+            0.0028220214881002903,
+            0.002660081023350358
+          ]
+        },
+        {
+          "bm": 16,
+          "warps": 8,
+          "forward_ms": 0.043620111984757674,
+          "backward_ms": 0.06741734993565514,
+          "relative_errors": [
+            4.586395334627014e-06,
+            0.0028220212552696466,
+            0.0026600805576890707
+          ]
+        }
+      ],
+      "triton_pair_ms": 0.10752450808553406,
+      "triton_separate_gradient_pair_ms": 0.13758430875924102,
+      "compiled_reference_pair_ms": 0.308308570867493
+    },
+    "finite_training": {
+      "warmup_updates": 10,
+      "measured_updates": 100,
+      "all_updates_finite": true,
+      "gradients": {
+        "branch_down": 0.056784555315971375,
+        "branch_head": 0.010284600779414177,
+        "last_ffn_up": 0.019015343859791756
+      }
+    },
+    "notes": [
+      "All timings are same H100; interleaved model comparison uses one process and alternating order.",
+      "No formal run or W&B created; diagnostic weights were not retained.",
+      "The isolated operator gain is small in the complete step; existing CCE dominates runtime.",
+      "The new backward returns the main slice of packed gradient, avoiding its duplicate kernel store.",
+      "Early GradMax hook bug and benchmark report introspection error were fixed in this debug workflow."
+    ]
+  },
+  "interim_comparison": {
+    "branch_run": "71b98d1b",
+    "baseline_run": "6a07f085",
+    "paired": [
+      {
+        "step": 0,
+        "tokens": 0,
+        "branch_ce": 10.398012638092041,
+        "baseline_ce": 10.398012638092041,
+        "delta": 0.0
+      },
+      {
+        "step": 50,
+        "tokens": 1638400,
+        "branch_ce": 6.493364930152893,
+        "baseline_ce": 6.496003150939941,
+        "delta": -0.00263822078704834
+      },
+      {
+        "step": 250,
+        "tokens": 8192000,
+        "branch_ce": 5.225005149841309,
+        "baseline_ce": 5.233327269554138,
+        "delta": -0.00832211971282959
+      },
+      {
+        "step": 500,
+        "tokens": 16384000,
+        "branch_ce": 4.697598695755005,
+        "baseline_ce": 4.705803751945496,
+        "delta": -0.008205056190490723
+      },
+      {
+        "step": 750,
+        "tokens": 24576000,
+        "branch_ce": 4.3515952825546265,
+        "baseline_ce": 4.3562445640563965,
+        "delta": -0.0046492815017700195
+      },
+      {
+        "step": 1000,
+        "tokens": 32768000,
+        "branch_ce": 4.176687836647034,
+        "baseline_ce": 4.179475426673889,
+        "delta": -0.0027875900268554688
+      },
+      {
+        "step": 1250,
+        "tokens": 40960000,
+        "branch_ce": 4.1101906299591064,
+        "baseline_ce": 4.116942644119263,
+        "delta": -0.00675201416015625
+      },
+      {
+        "step": 1500,
+        "tokens": 49152000,
+        "branch_ce": 4.032655835151672,
+        "baseline_ce": 4.034351468086243,
+        "delta": -0.0016956329345703125
+      },
+      {
+        "step": 1750,
+        "tokens": 57344000,
+        "branch_ce": 4.002583086490631,
+        "baseline_ce": 4.004424571990967,
+        "delta": -0.0018414855003356934
+      },
+      {
+        "step": 2000,
+        "tokens": 65536000,
+        "branch_ce": 3.947774291038513,
+        "baseline_ce": 3.94864821434021,
+        "delta": -0.0008739233016967773
+      },
+      {
+        "step": 2250,
+        "tokens": 73728000,
+        "branch_ce": 3.9367445707321167,
+        "baseline_ce": 3.934101700782776,
+        "delta": 0.0026428699493408203
+      },
+      {
+        "step": 2500,
+        "tokens": 81920000,
+        "branch_ce": 3.9040161967277527,
+        "baseline_ce": 3.9041561484336853,
+        "delta": -0.0001399517059326172
+      },
+      {
+        "step": 2750,
+        "tokens": 90112000,
+        "branch_ce": 3.897192120552063,
+        "baseline_ce": 3.8982438445091248,
+        "delta": -0.0010517239570617676
+      },
+      {
+        "step": 3000,
+        "tokens": 98304000,
+        "branch_ce": 3.867159426212311,
+        "baseline_ce": 3.8694522380828857,
+        "delta": -0.002292811870574951
+      },
+      {
+        "step": 3250,
+        "tokens": 106496000,
+        "branch_ce": 3.8616588711738586,
+        "baseline_ce": 3.8665810227394104,
+        "delta": -0.004922151565551758
+      },
+      {
+        "step": 3500,
+        "tokens": 114688000,
+        "branch_ce": 3.841786801815033,
+        "baseline_ce": 3.843957245349884,
+        "delta": -0.0021704435348510742
+      },
+      {
+        "step": 3750,
+        "tokens": 122880000,
+        "branch_ce": 3.8351882100105286,
+        "baseline_ce": 3.8321181535720825,
+        "delta": 0.003070056438446045
+      },
+      {
+        "step": 4000,
+        "tokens": 131072000,
+        "branch_ce": 3.818655252456665,
+        "baseline_ce": 3.8174597024917603,
+        "delta": 0.0011955499649047852
+      },
+      {
+        "step": 4250,
+        "tokens": 139264000,
+        "branch_ce": 3.8089897632598877,
+        "baseline_ce": 3.80986487865448,
+        "delta": -0.0008751153945922852
+      },
+      {
+        "step": 4500,
+        "tokens": 147456000,
+        "branch_ce": 3.8131604194641113,
+        "baseline_ce": 3.817653238773346,
+        "delta": -0.004492819309234619
+      },
+      {
+        "step": 4750,
+        "tokens": 155648000,
+        "branch_ce": 3.7856224179267883,
+        "baseline_ce": 3.783310890197754,
+        "delta": 0.002311527729034424
+      },
+      {
+        "step": 5000,
+        "tokens": 163840000,
+        "branch_ce": 3.7904711961746216,
+        "baseline_ce": 3.7890844345092773,
+        "delta": 0.0013867616653442383
+      },
+      {
+        "step": 5250,
+        "tokens": 172032000,
+        "branch_ce": 3.7670828700065613,
+        "baseline_ce": 3.7688512206077576,
+        "delta": -0.001768350601196289
+      },
+      {
+        "step": 5500,
+        "tokens": 180224000,
+        "branch_ce": 3.77739280462265,
+        "baseline_ce": 3.7820332050323486,
+        "delta": -0.004640400409698486
+      },
+      {
+        "step": 5750,
+        "tokens": 188416000,
+        "branch_ce": 3.7631585597991943,
+        "baseline_ce": 3.763220965862274,
+        "delta": -6.240606307983398e-05
+      },
+      {
+        "step": 6000,
+        "tokens": 196608000,
+        "branch_ce": 3.76965993642807,
+        "baseline_ce": 3.7697163224220276,
+        "delta": -5.638599395751953e-05
+      },
+      {
+        "step": 6250,
+        "tokens": 204800000,
+        "branch_ce": 3.753762662410736,
+        "baseline_ce": 3.7506394386291504,
+        "delta": 0.0031232237815856934
+      },
+      {
+        "step": 6500,
+        "tokens": 212992000,
+        "branch_ce": 3.765620768070221,
+        "baseline_ce": 3.7643354535102844,
+        "delta": 0.0012853145599365234
+      },
+      {
+        "step": 6750,
+        "tokens": 221184000,
+        "branch_ce": 3.74540913105011,
+        "baseline_ce": 3.7472596168518066,
+        "delta": -0.0018504858016967773
+      },
+      {
+        "step": 7000,
+        "tokens": 229376000,
+        "branch_ce": 3.75239098072052,
+        "baseline_ce": 3.753642439842224,
+        "delta": -0.0012514591217041016
+      },
+      {
+        "step": 7250,
+        "tokens": 237568000,
+        "branch_ce": 3.740049123764038,
+        "baseline_ce": 3.7443734407424927,
+        "delta": -0.00432431697845459
+      },
+      {
+        "step": 7500,
+        "tokens": 245760000,
+        "branch_ce": 3.7523491382598877,
+        "baseline_ce": 3.7502790093421936,
+        "delta": 0.002070128917694092
+      },
+      {
+        "step": 7750,
+        "tokens": 253952000,
+        "branch_ce": 3.740895628929138,
+        "baseline_ce": 3.739747107028961,
+        "delta": 0.001148521900177002
+      },
+      {
+        "step": 8000,
+        "tokens": 262144000,
+        "branch_ce": 3.7360045313835144,
+        "baseline_ce": 3.7333544492721558,
+        "delta": 0.0026500821113586426
+      },
+      {
+        "step": 8250,
+        "tokens": 270336000,
+        "branch_ce": 3.7319529056549072,
+        "baseline_ce": 3.73133248090744,
+        "delta": 0.000620424747467041
+      },
+      {
+        "step": 8500,
+        "tokens": 278528000,
+        "branch_ce": 3.7259441018104553,
+        "baseline_ce": 3.727424740791321,
+        "delta": -0.0014806389808654785
+      },
+      {
+        "step": 8750,
+        "tokens": 286720000,
+        "branch_ce": 3.7321722507476807,
+        "baseline_ce": 3.736756205558777,
+        "delta": -0.004583954811096191
+      },
+      {
+        "step": 9000,
+        "tokens": 294912000,
+        "branch_ce": 3.7189213633537292,
+        "baseline_ce": 3.716874063014984,
+        "delta": 0.002047300338745117
+      },
+      {
+        "step": 9250,
+        "tokens": 303104000,
+        "branch_ce": 3.7322821021080017,
+        "baseline_ce": 3.7310922145843506,
+        "delta": 0.001189887523651123
+      },
+      {
+        "step": 9500,
+        "tokens": 311296000,
+        "branch_ce": 3.7117316126823425,
+        "baseline_ce": 3.714255452156067,
+        "delta": -0.0025238394737243652
+      },
+      {
+        "step": 9750,
+        "tokens": 319488000,
+        "branch_ce": 3.726819097995758,
+        "baseline_ce": 3.7262529730796814,
+        "delta": 0.0005661249160766602
+      },
+      {
+        "step": 10000,
+        "tokens": 327680000,
+        "branch_ce": 3.7021989226341248,
+        "baseline_ce": 3.704884648323059,
+        "delta": -0.002685725688934326
+      },
+      {
+        "step": 10250,
+        "tokens": 335872000,
+        "branch_ce": 3.721993625164032,
+        "baseline_ce": 3.7237823009490967,
+        "delta": -0.0017886757850646973
+      },
+      {
+        "step": 10500,
+        "tokens": 344064000,
+        "branch_ce": 3.7105084657669067,
+        "baseline_ce": 3.7081671953201294,
+        "delta": 0.0023412704467773438
+      },
+      {
+        "step": 10750,
+        "tokens": 352256000,
+        "branch_ce": 3.720175087451935,
+        "baseline_ce": 3.7189167737960815,
+        "delta": 0.0012583136558532715
+      },
+      {
+        "step": 11000,
+        "tokens": 360448000,
+        "branch_ce": 3.707322657108307,
+        "baseline_ce": 3.7087209820747375,
+        "delta": -0.001398324966430664
+      },
+      {
+        "step": 11250,
+        "tokens": 368640000,
+        "branch_ce": 3.7190728783607483,
+        "baseline_ce": 3.7159286737442017,
+        "delta": 0.003144204616546631
+      },
+      {
+        "step": 11500,
+        "tokens": 376832000,
+        "branch_ce": 3.70313161611557,
+        "baseline_ce": 3.699187695980072,
+        "delta": 0.003943920135498047
+      },
+      {
+        "step": 11750,
+        "tokens": 385024000,
+        "branch_ce": 3.71236515045166,
+        "baseline_ce": 3.715985596179962,
+        "delta": -0.003620445728302002
+      },
+      {
+        "step": 12000,
+        "tokens": 393216000,
+        "branch_ce": 3.6992366909980774,
+        "baseline_ce": 3.6979053020477295,
+        "delta": 0.0013313889503479004
+      },
+      {
+        "step": 12250,
+        "tokens": 401408000,
+        "branch_ce": 3.710324764251709,
+        "baseline_ce": 3.71215158700943,
+        "delta": -0.0018268227577209473
+      },
+      {
+        "step": 12500,
+        "tokens": 409600000,
+        "branch_ce": 3.703085958957672,
+        "baseline_ce": 3.706657111644745,
+        "delta": -0.003571152687072754
+      },
+      {
+        "step": 12750,
+        "tokens": 417792000,
+        "branch_ce": 3.7020307183265686,
+        "baseline_ce": 3.7044928669929504,
+        "delta": -0.002462148666381836
+      },
+      {
+        "step": 13000,
+        "tokens": 425984000,
+        "branch_ce": 3.6956461668014526,
+        "baseline_ce": 3.703450620174408,
+        "delta": -0.007804453372955322
+      },
+      {
+        "step": 13250,
+        "tokens": 434176000,
+        "branch_ce": 3.696415960788727,
+        "baseline_ce": 3.694057583808899,
+        "delta": 0.002358376979827881
+      },
+      {
+        "step": 13500,
+        "tokens": 442368000,
+        "branch_ce": 3.7028934359550476,
+        "baseline_ce": 3.702434539794922,
+        "delta": 0.0004588961601257324
+      },
+      {
+        "step": 13750,
+        "tokens": 450560000,
+        "branch_ce": 3.6863017678260803,
+        "baseline_ce": 3.6865774393081665,
+        "delta": -0.00027567148208618164
+      }
+    ]
+  },
+  "new_authorization": "Full dense vocabulary gate; efficient Triton; one replacement 10B after same-allocation GPU validation. No FFN readout restart."
+}
