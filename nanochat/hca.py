@@ -35,6 +35,8 @@ def boundary_step(content, position, config, noise=None):
         return first, first
     soft = torch.sigmoid((content if noise is None else content + noise) / config.hca_temperature)
     hard = (soft >= .5).to(soft.dtype)
+    if config.hca_dynamic_gradient == 'confidence':
+        return hard, soft
     gate = hard + (soft - soft.detach())  # hard forward, biased STE backward
     return gate, soft
 
@@ -47,6 +49,46 @@ def compression_loss(soft_count, count, ratio):
     head-weighted average. This is a soft target, not a rate guarantee.
     """
     return F.relu(soft_count / count - 1. / ratio)
+
+
+def balanced_compression_loss(soft_count, hard_count, count, ratio):
+    """H-Net's load-balancing objective; hard rate controls gradient direction.
+
+    F is detached realized keep fraction, G is differentiable mean probability.
+    The derivative changes sign at F=1/R, so both over/under-compression are
+    corrected. It is not a quota and does not guarantee an exact achieved rate.
+    R=1 reduces to an objective encouraging all boundaries.
+    """
+    f, g = (hard_count/count).detach(), soft_count/count
+    if ratio == 1:
+        return 1-g
+    return ratio/(ratio-1) * ((ratio-1)*f*g+(1-f)*(1-g))
+
+
+class _Confidence(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, output, selected):
+        ctx.save_for_backward(output)
+        return output
+
+    @staticmethod
+    def backward(ctx, grad):
+        output, = ctx.saved_tensors
+        dtype = work_dtype(output)
+        score_grad = (grad.to(dtype)*output.to(dtype)).sum((-1, -2))
+        return grad, score_grad
+
+
+def confidence_output(output, starts, soft):
+    """H-Net-inspired confidence STE, adapted to the HCA attention branch.
+
+    Forward multiplier is one; backward multiplier derivative is one. Unlike
+    DMC reset/visibility STE, this surrogate never differentiates chunk mass
+    resets or absent KV entries. This is not a reproduction of H-Net's EMA
+    dechunker, and must be evaluated as a distinct estimator.
+    """
+    selected = torch.where(starts.detach() > .5, soft, 1-soft)
+    return _Confidence.apply(output, selected)
 
 
 def pool_step(k, v, score, previous, start):
@@ -183,10 +225,14 @@ class HCAAttention(nn.Module):
         nn.init.zeros_(self.pool_score.weight)
         self.boundary = nn.Linear(config.width, 1) if config.attention_mode == 'dynamic_hca' else None
         if self.boundary is not None:
-            nn.init.zeros_(self.boundary.weight)
-            # Start mostly uncompressed, as in DMC's retrofitting strategy.
-            # R=16 is an objective, never an initialization/achieved-rate claim.
-            nn.init.constant_(self.boundary.bias, 2.)
+            if config.hca_dynamic_gradient == 'confidence':
+                # Content-dependent initial boundaries; balanced rate loss
+                # subsequently learns the target. No hard quota or length cap.
+                nn.init.zeros_(self.boundary.bias)
+            else:
+                nn.init.zeros_(self.boundary.weight)
+                # DMC's mostly uncompressed initialization is retained.
+                nn.init.constant_(self.boundary.bias, 2.)
 
     def project(self, x, cos_sin):
         shape = (*x.shape[:2], self.n_head, self.head_dim)
@@ -225,6 +271,8 @@ class HCAAttention(nn.Module):
         weights = torch.cat((local[None].expand(batch, -1, -1).to(dtype), memory), -1)
         eligible = torch.cat((local, pos[:, None] >= pos), -1)[None].expand(batch, -1, -1)
         y = weighted_attention(q, torch.cat((local_k, pk), 1), torch.cat((v, pv), 1), weights, eligible)
+        if self.config.hca_dynamic_gradient == 'confidence':
+            y = confidence_output(y, starts, soft_starts)
         return y, starts, soft_starts
 
     def cached(self, q, raw_k, local_k, v, score, content, cos_sin, cache):
@@ -292,11 +340,15 @@ class HCAAttention(nn.Module):
             logits = content if noise is None else content + noise
             relaxed = torch.sigmoid(logits / self.config.hca_temperature)
             soft = torch.cat((torch.ones_like(relaxed[:, :1]), relaxed[:, 1:]), 1)
-            starts = (soft >= .5).to(soft.dtype) + (soft-soft.detach())
+            starts = (soft >= .5).to(soft.dtype)
+            if self.config.hca_dynamic_gradient == 'dmc':
+                starts = starts + (soft-soft.detach())
             ratio = 0
         pk, pv = prefix_pool(raw_k, v, score, starts, ratio)
         pk = norm(apply_rotary_emb(pk, *cos_sin)) * 1.2
         y = attention(q, local_k, v, pk, pv, starts, self.config.hca_window, ratio)
+        if self.config.hca_dynamic_gradient == 'confidence':
+            y = confidence_output(y, starts, soft)
         return y, starts, soft
 
     def forward_with_stats(self, x, cos_sin):

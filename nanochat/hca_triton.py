@@ -80,7 +80,8 @@ def _pool_fwd(K, V, S, G, M, SK, SV, PK, PV,
 @tr.jit
 def _pool_bwd(K, V, S, G, M, SK, SV, DPK, DPV, DK, DV, DS, DG,
               T: tl.constexpr, H: tl.constexpr, D: tl.constexpr, ND: tl.constexpr,
-              R: tl.constexpr, FIXED: tl.constexpr, BT: tl.constexpr, BD: tl.constexpr):
+              R: tl.constexpr, FIXED: tl.constexpr, BT: tl.constexpr, BD: tl.constexpr,
+              LEARN: tl.constexpr):
     bh = tl.program_id(0)
     b, h = bh // H, bh % H
     dc = tl.program_id(1)
@@ -135,12 +136,13 @@ def _pool_bwd(K, V, S, G, M, SK, SV, DPK, DPV, DK, DV, DS, DG,
             am = tl.sum(tl.where(rows[:, None] == 0, dm, 0), 0)
             ak = tl.sum(tl.where(rows[:, None] == 0, dk, 0), 0)
             av = tl.sum(tl.where(rows[:, None] == 0, dv, 0), 0)
-            prior = valid & (t[:, None] > 0)
-            pm = tl.load(M + off - H*D, prior, 0)
-            psk = tl.load(SK + off - H*D, prior, 0)
-            psv = tl.load(SV + off - H*D, prior, 0)
-            dg = -tl.sum(tl.where(d[None, :] < D, dm*pm + dk*psk + dv*psv, 0), 1)
-            tl.store(DG + ((b*T+t)*H+h)*ND+dc, dg, t < T)
+            if LEARN:
+                prior = valid & (t[:, None] > 0)
+                pm = tl.load(M + off - H*D, prior, 0)
+                psk = tl.load(SK + off - H*D, prior, 0)
+                psv = tl.load(SV + off - H*D, prior, 0)
+                dg = -tl.sum(tl.where(d[None, :] < D, dm*pm + dk*psk + dv*psv, 0), 1)
+                tl.store(DG + ((b*T+t)*H+h)*ND+dc, dg, t < T)
         tl.store(DK + off, dk*w, valid)
         tl.store(DV + off, dv*w, valid)
         tl.store(DS + off, w*(dm + dk*k + dv*v)*(1-u*u), valid)
@@ -171,11 +173,12 @@ class _Pool(torch.autograd.Function):
         ratio, bt, bd, grid = ctx.params
         b, t, h, d = k.shape
         dk, dv, ds = [torch.empty_like(x) for x in (k, v, score)]
-        dg = torch.empty((b, t, h, tr.cdiv(d, bd)), device=k.device, dtype=torch.float32)
+        learn = ratio == 0 and ctx.needs_input_grad[3]
+        dg = torch.empty((b, t, h, tr.cdiv(d, bd)), device=k.device, dtype=torch.float32) if learn else starts
         _pool_bwd[grid](k, v, score, starts, m, sk, sv, gk.contiguous(), gv.contiguous(),
                        dk, dv, ds, dg, t, h, d, tr.cdiv(d, bd), ratio, ratio > 0,
-                       bt, bd, enable_fp_fusion=False)
-        return dk, dv, ds, None if ratio > 0 else dg.sum((2, 3)), None
+                       bt, bd, learn, enable_fp_fusion=False)
+        return dk, dv, ds, dg.sum((2, 3)) if learn else None, None
 
 
 def prefix_pool(k, v, score, starts, ratio=0):
@@ -202,7 +205,8 @@ def _pack(G, INDEX, COUNTS, T: tl.constexpr, BT: tl.constexpr):
 @tr.jit
 def _attn_fwd(Q, K, V, PK, PV, INDEX, COUNTS, O, OF, LSE,
               T: tl.constexpr, H: tl.constexpr, D: tl.constexpr, W: tl.constexpr,
-              R: tl.constexpr, BM: tl.constexpr, BN: tl.constexpr, BD: tl.constexpr):
+              R: tl.constexpr, BM: tl.constexpr, BN: tl.constexpr, BD: tl.constexpr,
+              FAST: tl.constexpr = False):
     block, bh = tl.program_id(0), tl.program_id(1)
     b, h = bh // H, bh % H
     rows, cols, d = tl.arange(0, BM), tl.arange(0, BN), tl.arange(0, BD)
@@ -233,7 +237,7 @@ def _attn_fwd(Q, K, V, PK, PV, INDEX, COUNTS, O, OF, LSE,
         new_m = tl.maximum(m, tl.max(z, 1))
         p = tl.exp(z-new_m[:, None])
         alpha = tl.exp(m-new_m)
-        if R > 0 and q.dtype == tl.bfloat16:
+        if (R > 0 or FAST) and q.dtype == tl.bfloat16:
             acc = acc*alpha[:, None]+tl.dot(p.to(tl.bfloat16), v)
         else:
             acc = acc*alpha[:, None]+tl.dot(p, v.to(tl.float32), input_precision='tf32x3')
@@ -259,7 +263,7 @@ def _attn_fwd(Q, K, V, PK, PV, INDEX, COUNTS, O, OF, LSE,
         new_m = tl.maximum(m, tl.max(z, 1))
         p = tl.exp(z-new_m[:, None])
         alpha = tl.exp(m-new_m)
-        if R > 0 and q.dtype == tl.bfloat16:
+        if (R > 0 or FAST) and q.dtype == tl.bfloat16:
             acc = acc*alpha[:, None]+tl.dot(p.to(tl.bfloat16), v)
         else:
             acc = acc*alpha[:, None]+tl.dot(p, v.to(tl.float32), input_precision='tf32x3')
@@ -274,7 +278,8 @@ def _attn_fwd(Q, K, V, PK, PV, INDEX, COUNTS, O, OF, LSE,
 @tr.jit
 def _attn_dq(Q, K, V, PK, PV, INDEX, COUNTS, DO, OF, LSE, DQ,
              T: tl.constexpr, H: tl.constexpr, D: tl.constexpr, W: tl.constexpr,
-             R: tl.constexpr, BM: tl.constexpr, BN: tl.constexpr, BD: tl.constexpr):
+             R: tl.constexpr, BM: tl.constexpr, BN: tl.constexpr, BD: tl.constexpr,
+              FAST: tl.constexpr = False):
     block, bh = tl.program_id(0), tl.program_id(1)
     b, h = bh // H, bh % H
     t = block*BM+tl.arange(0, BM)
@@ -306,7 +311,7 @@ def _attn_dq(Q, K, V, PK, PV, INDEX, COUNTS, DO, OF, LSE, DQ,
         p = tl.exp(tl.where(allowed, z-lse[:, None], -float('inf')))
         dp = tl.dot(do, tl.trans(v), input_precision='ieee')
         ds = p*(dp-delta[:, None])
-        if R > 0 and q.dtype == tl.bfloat16:
+        if (R > 0 or FAST) and q.dtype == tl.bfloat16:
             dq += tl.dot(ds.to(tl.bfloat16), k)*scale
         else:
             dq += tl.dot(ds, k.to(tl.float32), input_precision='tf32x3')*scale
@@ -329,7 +334,7 @@ def _attn_dq(Q, K, V, PK, PV, INDEX, COUNTS, DO, OF, LSE, DQ,
         p = tl.exp(tl.where((c[None, :] < n) & (j[None, :] < t[:, None]), z-lse[:, None], -float('inf')))
         dp = tl.dot(do, tl.trans(v), input_precision='ieee')
         ds = p*(dp-delta[:, None])
-        if R > 0 and q.dtype == tl.bfloat16:
+        if (R > 0 or FAST) and q.dtype == tl.bfloat16:
             dq += tl.dot(ds.to(tl.bfloat16), k)*scale
         else:
             dq += tl.dot(ds, k.to(tl.float32), input_precision='tf32x3')*scale
@@ -363,7 +368,8 @@ def _attn_dkv(Q, K, V, G, DO, OF, LSE, DK, DV, DG,
               T: tl.constexpr, H: tl.constexpr, D: tl.constexpr, W: tl.constexpr,
               R: tl.constexpr, SOURCE: tl.constexpr,
               BM: tl.constexpr, BN: tl.constexpr, BD: tl.constexpr,
-              N: tl.constexpr = 0, B: tl.constexpr = 0, SPLITS: tl.constexpr = 1):
+              N: tl.constexpr = 0, B: tl.constexpr = 0, SPLITS: tl.constexpr = 1,
+              INDEX=None, COUNTS=None, FAST: tl.constexpr = False):
     # SOURCE 0: local; 1: dynamic prefix incl. zero-gate counterfactuals;
     # 2: fixed completed summaries (diagonal gradients already written).
     block, bh = tl.program_id(0), tl.program_id(1)
@@ -374,6 +380,11 @@ def _attn_dkv(Q, K, V, G, DO, OF, LSE, DK, DV, DG,
         j = (c+1)*R-1
         jvalid = j < T-1
         first = (block*BN+1)*R-1
+    elif SOURCE == 3:
+        n = tl.load(COUNTS+b*T+T-1)
+        j = tl.load(INDEX+b*T+c, c < n, 0)
+        jvalid = c < n
+        first = tl.load(INDEX+b*T+block*BN, block*BN < n, T)
     else:
         j = c
         jvalid = j < T
@@ -409,7 +420,7 @@ def _attn_dkv(Q, K, V, G, DO, OF, LSE, DK, DV, DG,
         allowed = (t[:, None] < T) & jvalid[None, :] & (t[:, None] >= j[None, :])
         if SOURCE == 0:
             allowed = allowed & (t[:, None]-j[None, :] < W)
-        if SOURCE == 2:
+        if SOURCE == 2 or SOURCE == 3:
             allowed = allowed & (t[:, None] > j[None, :])
         e = tl.exp(tl.where(allowed, z-lse[:, None], -float('inf')))
         dp = tl.dot(do, tl.trans(v), input_precision='ieee')-delta[:, None]
@@ -420,13 +431,13 @@ def _attn_dkv(Q, K, V, G, DO, OF, LSE, DK, DV, DG,
         else:
             p = e
         ds = p*dp
-        if R > 0 and q.dtype == tl.bfloat16:
+        if (R > 0 or FAST) and q.dtype == tl.bfloat16:
             dk += tl.dot(tl.trans(ds.to(tl.bfloat16)), q)*(D**-.5)
             dv += tl.dot(tl.trans(p.to(tl.bfloat16)), do)
         else:
             dk += tl.dot(tl.trans(ds), q.to(tl.float32), input_precision='tf32x3')*(D**-.5)
             dv += tl.dot(tl.trans(p), do.to(tl.float32), input_precision='tf32x3')
-    if SOURCE == 2 and SPLITS == 1:
+    if (SOURCE == 2 and SPLITS == 1) or SOURCE == 3:
         dk += tl.load(DK+off, valid, 0)
         dv += tl.load(DV+off, valid, 0)
     if SOURCE == 2 and SPLITS > 1:
@@ -471,9 +482,10 @@ class _Attention(torch.autograd.Function):
         out = torch.empty_like(q)
         of = torch.empty_like(q, dtype=torch.float32)
         lse = torch.empty((b, h, t), device=q.device, dtype=torch.float32)
-        bm, bn, warps = FIXED_FWD_TILE if ratio and q.dtype == torch.bfloat16 else (32, 32, 4)
+        fast = ratio > 0 or not ctx.needs_input_grad[5]
+        bm, bn, warps = FIXED_FWD_TILE if fast and q.dtype == torch.bfloat16 else (32, 32, 4)
         _attn_fwd[(tr.cdiv(t, bm), b*h)](q, k, v, pk, pv, index, counts, out, of, lse,
-                        t, h, d, window, ratio, bm, bn, tr.next_power_of_2(d), num_warps=warps)
+                        t, h, d, window, ratio, bm, bn, tr.next_power_of_2(d), fast, num_warps=warps)
         ctx.save_for_backward(q, k, v, pk, pv, starts, index, counts, of, lse)
         ctx.params = window, ratio
         return out
@@ -489,12 +501,13 @@ class _Attention(torch.autograd.Function):
         # FP32 prefix buffers avoid rounding once per source before adding.
         dpk, dpv = [torch.empty_like(x, dtype=torch.float32) for x in (pk, pv)]
         dg = torch.empty((b, t, h), device=q.device, dtype=torch.float32)
-        bm, bn, warps = FIXED_BWD_TILE if r and q.dtype == torch.bfloat16 else (32, 32, 4)
+        fast = r > 0 or not ctx.needs_input_grad[5]
+        bm, bn, warps = FIXED_BWD_TILE if fast and q.dtype == torch.bfloat16 else (32, 32, 4)
         grid, bd = (tr.cdiv(t, bn), b*h), tr.next_power_of_2(d)
         _attn_dq[(tr.cdiv(t, bm), b*h)](q, k, v, pk, pv, index, counts, do, of, lse, dq,
-                                     t, h, d, w, r, bm, bn, bd, num_warps=warps)
+                                     t, h, d, w, r, bm, bn, bd, fast, num_warps=warps)
         _attn_dkv[grid](q, k, v, starts, do, of, lse, dk, dv, dg, t, h, d, w, r, 0,
-                       bm, bn, bd, num_warps=warps)
+                       bm, bn, bd, FAST=fast, num_warps=warps)
         if r > 0:
             _prefix_diag_bwd[(tr.cdiv(t, 32), b*h)](q, pk, pv, do, of, lse, dpk, dpv, t, h, d, 32, bd)
             n = (t-1)//r
@@ -511,10 +524,15 @@ class _Attention(torch.autograd.Function):
                         bm, bn, bd, n, b, splits, num_warps=warps)
                     _merge_summary_parts[(tr.cdiv(b*n*h*d, 256),)](
                         ak, av, dpk, dpv, t, n, h, d, b, r, splits, 256)
+        elif fast:
+            _prefix_diag_bwd[(tr.cdiv(t, 32), b*h)](q, pk, pv, do, of, lse, dpk, dpv, t, h, d, 32, bd)
+            _attn_dkv[grid](q, pk, pv, starts, do, of, lse, dpk, dpv, dg,
+                           t, h, d, w, r, 3, bm, bn, bd,
+                           INDEX=index, COUNTS=counts, FAST=True, num_warps=warps)
         else:
             _attn_dkv[grid](q, pk, pv, starts, do, of, lse, dpk, dpv, dg,
                            t, h, d, w, r, 1, 32, 32, bd)
-        return dq, dk, dv, dpk.to(pk.dtype), dpv.to(pv.dtype), None if r else dg.sum(2), None, None
+        return dq, dk, dv, dpk.to(pk.dtype), dpv.to(pv.dtype), None if fast else dg.sum(2), None, None
 
 
 def attention(q, k, v, pk, pv, starts, window, ratio=0):

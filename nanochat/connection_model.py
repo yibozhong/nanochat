@@ -41,6 +41,7 @@ class ConnectionConfig:
     hca_temperature: float = 1.0
     hca_noise: bool = True
     hca_backend: str = 'reference'
+    hca_dynamic_gradient: str = 'dmc'
     compact_routing: bool = False
     attnres_block_size: int = 2  # Moonshot paper's S: Attention and MLP each count once
     attnres_block_size_unit: str = 'sublayers'
@@ -50,6 +51,10 @@ class ConnectionConfig:
             raise ValueError('Unknown attention_mode')
         if self.hca_backend not in ('reference', 'triton'):
             raise ValueError('Unknown HCA backend')
+        if self.hca_dynamic_gradient not in ('dmc', 'confidence'):
+            raise ValueError('Unknown dynamic HCA gradient estimator')
+        if self.hca_dynamic_gradient == 'confidence' and self.attention_mode != 'dynamic_hca':
+            raise ValueError('Confidence routing applies only to Dynamic HCA')
         if self.attention_mode != 'full':
             if self.architecture != 'vanilla' or self.variant != 'baseline' or self.streams != 1 or self.attention_kernel != 'original':
                 raise ValueError('HCA reference supports vanilla baseline, one stream, original projections')
@@ -348,9 +353,12 @@ class ConnectionModel(nn.Module):
             h = self.hidden(idx, kv_cache)
         ratio_loss = h.new_zeros((), dtype=torch.float32) if hca else None
         if stats is not None:
-            from nanochat.hca import compression_loss
+            from nanochat.hca import compression_loss, balanced_compression_loss
             if self.config.attention_mode == 'dynamic_hca':
-                ratio_loss = compression_loss(stats[0], stats[2], self.config.hca_block_size)
+                if self.config.hca_dynamic_gradient == 'confidence':
+                    ratio_loss = balanced_compression_loss(stats[0], stats[1], stats[2], self.config.hca_block_size)
+                else:
+                    ratio_loss = compression_loss(stats[0], stats[2], self.config.hca_block_size)
             # Only detached scalars are retained on the model, never a graph.
             self.last_hca_metrics = dict(soft_keep_rate=(stats[0]/stats[2]).detach(),
                                          hard_keep_rate=(stats[1]/stats[2]).detach(),
