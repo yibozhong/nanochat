@@ -1,0 +1,198 @@
+{
+  "status": "stopped_by_user",
+  "stopped_at": 1794599831.0015225,
+  "job": "8547392.0",
+  "run_id": "45674cbf",
+  "source": {
+    "plan": "vocab-gate-dense-10b-20261113",
+    "commit": "ada2613683eb3ce76a53e0a4e542e30aef4a7733",
+    "run_id": "45674cbf",
+    "formal_training": true,
+    "model": {
+      "variant": "baseline",
+      "depth": 8,
+      "width": 512,
+      "heads": 4,
+      "sequence_length": 2048,
+      "vocab_size": 32768,
+      "streams": 1,
+      "sinkhorn_iterations": 20,
+      "activation_checkpoint": false,
+      "connection_backend": "nvidia",
+      "fused_connection_grad": false,
+      "architecture": "vanilla",
+      "window_pattern": "SSSL",
+      "attention_kernel": "original",
+      "compact_routing": false,
+      "attnres_block_size": 2,
+      "attnres_block_size_unit": "sublayers",
+      "vocab_gate": true,
+      "vocab_gate_alpha": 0.5,
+      "vocab_gate_backend": "triton",
+      "vocab_gate_chunk": 2048
+    },
+    "steps": 305176,
+    "training_tokens": 10000007168,
+    "batch_tokens": 32768,
+    "microbatch": 16,
+    "seed": 42,
+    "initialization": "seed42_from_zero_no_diagnostic_weights",
+    "attention_backend": "fa2",
+    "data_uri": "osdf:///chtc/staging/y/yzhong239/nanochat-2k-10b-data-7685535.tar",
+    "data_archive_bytes": 20014796800,
+    "dataset_revision": "87f09149ef4734204d70ed1d046ddc9ca3f2b8f9",
+    "tokenizer": "native RustBPE 32768 vocab, first 100M capped characters from training shard",
+    "checkpoint_seconds": 1800,
+    "evaluate_test": true,
+    "validation": "same allocation GPU tests + speed + finite training + actual CLI resume before formal",
+    "hardware_family": "Hopper SM90; H100/H200 only",
+    "validation_step_seconds": null
+  },
+  "latest_printed_update": {
+    "step": 4230,
+    "tokens": 138608640,
+    "loss": 3.827108860015869,
+    "seconds": 0.044311463832855225,
+    "lr_multiplier": 1.0
+  },
+  "comparison": {
+    "gate_run": "45674cbf",
+    "baseline_run": "6a07f085",
+    "baseline_backend": "cuDNN",
+    "gate_backend": "FA2",
+    "paired": [
+      {
+        "step": 0,
+        "tokens": 0,
+        "gate_ce": 10.398012638092041,
+        "baseline_ce": 10.398012638092041,
+        "delta": 0.0
+      },
+      {
+        "step": 50,
+        "tokens": 1638400,
+        "gate_ce": 6.447827577590942,
+        "baseline_ce": 6.496003150939941,
+        "delta": -0.04817557334899902
+      },
+      {
+        "step": 250,
+        "tokens": 8192000,
+        "gate_ce": 5.304489254951477,
+        "baseline_ce": 5.233327269554138,
+        "delta": 0.07116198539733887
+      },
+      {
+        "step": 500,
+        "tokens": 16384000,
+        "gate_ce": 4.771673560142517,
+        "baseline_ce": 4.705803751945496,
+        "delta": 0.06586980819702148
+      },
+      {
+        "step": 750,
+        "tokens": 24576000,
+        "gate_ce": 4.405471563339233,
+        "baseline_ce": 4.3562445640563965,
+        "delta": 0.049226999282836914
+      },
+      {
+        "step": 1000,
+        "tokens": 32768000,
+        "gate_ce": 4.222590088844299,
+        "baseline_ce": 4.179475426673889,
+        "delta": 0.043114662170410156
+      },
+      {
+        "step": 1250,
+        "tokens": 40960000,
+        "gate_ce": 4.1612937450408936,
+        "baseline_ce": 4.116942644119263,
+        "delta": 0.04435110092163086
+      },
+      {
+        "step": 1500,
+        "tokens": 49152000,
+        "gate_ce": 4.0803245306015015,
+        "baseline_ce": 4.034351468086243,
+        "delta": 0.04597306251525879
+      },
+      {
+        "step": 1750,
+        "tokens": 57344000,
+        "gate_ce": 4.050815463066101,
+        "baseline_ce": 4.004424571990967,
+        "delta": 0.04639089107513428
+      },
+      {
+        "step": 2000,
+        "tokens": 65536000,
+        "gate_ce": 3.9888100028038025,
+        "baseline_ce": 3.94864821434021,
+        "delta": 0.04016178846359253
+      },
+      {
+        "step": 2250,
+        "tokens": 73728000,
+        "gate_ce": 3.980122208595276,
+        "baseline_ce": 3.934101700782776,
+        "delta": 0.0460205078125
+      },
+      {
+        "step": 2500,
+        "tokens": 81920000,
+        "gate_ce": 3.9447052478790283,
+        "baseline_ce": 3.9041561484336853,
+        "delta": 0.04054909944534302
+      },
+      {
+        "step": 2750,
+        "tokens": 90112000,
+        "gate_ce": 3.9317943453788757,
+        "baseline_ce": 3.8982438445091248,
+        "delta": 0.03355050086975098
+      },
+      {
+        "step": 3000,
+        "tokens": 98304000,
+        "gate_ce": 3.900252103805542,
+        "baseline_ce": 3.8694522380828857,
+        "delta": 0.03079986572265625
+      },
+      {
+        "step": 3250,
+        "tokens": 106496000,
+        "gate_ce": 3.901180922985077,
+        "baseline_ce": 3.8665810227394104,
+        "delta": 0.034599900245666504
+      },
+      {
+        "step": 3500,
+        "tokens": 114688000,
+        "gate_ce": 3.871455490589142,
+        "baseline_ce": 3.843957245349884,
+        "delta": 0.027498245239257812
+      },
+      {
+        "step": 3750,
+        "tokens": 122880000,
+        "gate_ce": 3.8650031685829163,
+        "baseline_ce": 3.8321181535720825,
+        "delta": 0.03288501501083374
+      }
+    ]
+  },
+  "validation": {
+    "source": "ada2613683eb3ce76a53e0a4e542e30aef4a7733",
+    "gpu_tests_passed": 48,
+    "finite_training_steps": 200,
+    "cli_resume_passed": true,
+    "baseline_step_ms": 67.67419166862965,
+    "gate_step_ms": 43.928648345172405,
+    "comparison_note": "Baseline retains original Apple CCE. Gate uses new chunked fused CE; timing includes this implementation change, not an isolated architecture speed comparison.",
+    "peak_allocated_bytes": 6475694592
+  },
+  "authorization": "Dense vocabulary gate stopped, reverted and cleaned. No new implementation/training run authorized; discuss alternatives only.",
+  "preserved": "Shared datasets/runtime/credentials, remote W&B, small metrics/configuration summary; ordinary Git history retains implementation.",
+  "independent_fix_retained": "Cached calls bypass the static fullgraph training capture; retired-checkpoint metadata remains recognized."
+}

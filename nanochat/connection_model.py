@@ -34,21 +34,11 @@ class ConnectionConfig:
     architecture: str = 'vanilla'
     window_pattern: str = 'SSSL'  # native only; vanilla is always full attention
     attention_kernel: str = 'original'
-    vocab_gate: bool = False
-    vocab_gate_alpha: float = .5
-    vocab_gate_backend: str = 'triton'
-    vocab_gate_chunk: int = 2048
     compact_routing: bool = False
     attnres_block_size: int = 2  # Moonshot paper's S: Attention and MLP each count once
     attnres_block_size_unit: str = 'sublayers'
 
     def __post_init__(self):
-        if not 0 < self.vocab_gate_alpha <= 1 or type(self.vocab_gate_chunk) is not int or self.vocab_gate_chunk < 1:
-            raise ValueError('Invalid vocabulary gate scale/chunk')
-        if self.vocab_gate_backend not in ('reference','triton'):
-            raise ValueError('Unknown vocabulary gate backend')
-        if self.vocab_gate and (self.variant != 'baseline' or self.architecture != 'vanilla' or self.streams != 1):
-            raise ValueError('Vocabulary gate uses the vanilla one-stream baseline')
         if self.variant in ('skip_scale','attnres_scale'):
             if self.architecture != 'vanilla' or self.streams != 1 or self.fused_connection_grad:
                 raise ValueError('Skip scale uses vanilla, exactly one residual stream, and ordinary gradients')
@@ -101,6 +91,10 @@ class ConnectionConfig:
     def from_checkpoint(cls, config):
         """Read pre-cleanup NVIDIA/vanilla metadata; reject retired model weights."""
         config = dict(config)
+        if config.pop('vocab_gate', False):
+            raise ValueError('Checkpoint belongs to the retired vocabulary gate experiment')
+        for name in ('vocab_gate_alpha', 'vocab_gate_backend', 'vocab_gate_chunk'):
+            config.pop(name, None)
         if config.pop('ffn_readout_width', 0):
             raise ValueError('Checkpoint belongs to the retired FFN readout experiment')
         config.pop('ffn_readout_backend', None)
@@ -249,9 +243,6 @@ class ConnectionModel(nn.Module):
         self.register_buffer('cos', freq.cos()[None, :, None, :], persistent=False)
         self.register_buffer('sin', freq.sin()[None, :, None, :], persistent=False)
         self.compiled_steps = None
-        if config.vocab_gate:
-            from nanochat.vocab_gate import install_gate
-            install_gate(self)
         if config.attention_kernel == 'fla_triton':
             from nanochat.fla_attention import FlaAttention
             for block in self.blocks:
@@ -284,9 +275,8 @@ class ConnectionModel(nn.Module):
             x = expand_streams(x, self.config.streams)
         cos, sin = self.cos[:, start:start+idx.shape[1]], self.sin[:, start:start+idx.shape[1]]
         for i, b in enumerate(self.blocks):
-            # Training graphs specialize static sequence shapes. The cache's
-            # live position mutates between calls and must stay outside that
-            # fullgraph capture; attention still uses its native GPU kernels.
+            # Cache positions mutate across calls and stay outside static
+            # fullgraph training capture; attention keeps its GPU kernels.
             fn = self.compiled_steps[i] if self.compiled_steps is not None and kv_cache is None else b.forward
             if self.config.activation_checkpoint and self.training and torch.is_grad_enabled():
                 if kv_cache is not None:
@@ -300,13 +290,6 @@ class ConnectionModel(nn.Module):
 
     def forward(self, idx, targets=None, dense=False, kv_cache=None):
         h = self.hidden(idx, kv_cache)
-        if self.config.vocab_gate:
-            from nanochat.vocab_gate import gate_logits, gate_loss
-            if targets is None:
-                return gate_logits(h,self.lm_head.weight,self.config.vocab_gate_alpha)
-            return gate_loss(h,self.lm_head.weight,targets,self.config.vocab_gate_alpha,
-                             'reference' if dense else self.config.vocab_gate_backend,
-                             self.config.vocab_gate_chunk)
         w = self.lm_head.weight.to(h.dtype)
         if targets is None or dense:
             logits = 15 * torch.tanh(F.linear(h, w).float() / 15)
