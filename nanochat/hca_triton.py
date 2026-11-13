@@ -23,6 +23,7 @@ from torch.autograd.function import once_differentiable
 FIXED_FWD_TILE = (32, 32, 4)
 FIXED_BWD_TILE = (32, 32, 4)
 FIXED_DKV_SPLITS = 1
+FIXED_BWD_STAGES = 3
 
 
 @tr.jit
@@ -503,11 +504,12 @@ class _Attention(torch.autograd.Function):
         dg = torch.empty((b, t, h), device=q.device, dtype=torch.float32)
         fast = r > 0 or compact
         bm, bn, warps = FIXED_BWD_TILE if fast and q.dtype == torch.bfloat16 else (32, 32, 4)
+        stages = FIXED_BWD_STAGES if fast and q.dtype == torch.bfloat16 else 3
         grid, bd = (tr.cdiv(t, bn), b*h), tr.next_power_of_2(d)
         _attn_dq[(tr.cdiv(t, bm), b*h)](q, k, v, pk, pv, index, counts, do, of, lse, dq,
-                                     t, h, d, w, r, bm, bn, bd, fast, num_warps=warps)
+                                     t, h, d, w, r, bm, bn, bd, fast, num_warps=warps, num_stages=stages)
         _attn_dkv[grid](q, k, v, starts, do, of, lse, dk, dv, dg, t, h, d, w, r, 0,
-                       bm, bn, bd, FAST=fast, num_warps=warps)
+                       bm, bn, bd, FAST=fast, num_warps=warps, num_stages=stages)
         if r > 0:
             _prefix_diag_bwd[(tr.cdiv(t, 32), b*h)](q, pk, pv, do, of, lse, dpk, dpv, t, h, d, 32, bd)
             n = (t-1)//r
@@ -515,20 +517,20 @@ class _Attention(torch.autograd.Function):
                 splits = FIXED_DKV_SPLITS if q.dtype == torch.bfloat16 else 1
                 if splits == 1:
                     _attn_dkv[(tr.cdiv(n, bn), b*h)](q, pk, pv, starts, do, of, lse,
-                            dpk, dpv, dg, t, h, d, w, r, 2, bm, bn, bd, num_warps=warps)
+                            dpk, dpv, dg, t, h, d, w, r, 2, bm, bn, bd, num_warps=warps, num_stages=stages)
                 else:
                     ak, av = [torch.empty((splits, b, n, h, d), dtype=torch.float32,
                                          device=q.device) for _ in range(2)]
                     _attn_dkv[(tr.cdiv(n, bn), b*h, splits)](
                         q, pk, pv, starts, do, of, lse, ak, av, dg, t, h, d, w, r, 2,
-                        bm, bn, bd, n, b, splits, num_warps=warps)
+                        bm, bn, bd, n, b, splits, num_warps=warps, num_stages=stages)
                     _merge_summary_parts[(tr.cdiv(b*n*h*d, 256),)](
                         ak, av, dpk, dpv, t, n, h, d, b, r, splits, 256)
         elif fast:
             _prefix_diag_bwd[(tr.cdiv(t, 32), b*h)](q, pk, pv, do, of, lse, dpk, dpv, t, h, d, 32, bd)
             _attn_dkv[grid](q, pk, pv, starts, do, of, lse, dpk, dpv, dg,
                            t, h, d, w, r, 3, bm, bn, bd,
-                           INDEX=index, COUNTS=counts, FAST=True, num_warps=warps)
+                           INDEX=index, COUNTS=counts, FAST=True, num_warps=warps, num_stages=stages)
         else:
             _attn_dkv[grid](q, pk, pv, starts, do, of, lse, dpk, dpv, dg,
                            t, h, d, w, r, 1, 32, 32, bd)

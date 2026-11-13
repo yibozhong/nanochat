@@ -14,6 +14,7 @@ p.add_argument('--kernel-file')
 p.add_argument('--mode', choices=['full', 'fixed_hca', 'dynamic_hca'], default='fixed_hca')
 p.add_argument('--block-size', type=int, default=16)
 p.add_argument('--steps', type=int, default=20)
+p.add_argument('--projection', choices=['native','tf32x3','bf16x3'])
 a = p.parse_args()
 assert os.environ['WANDB_MODE'] == 'disabled'
 if a.kernel_file:
@@ -26,6 +27,13 @@ import torch
 from nanochat.connection_model import ConnectionConfig, build_connection_model, optimizer_for, schedule
 from nanochat.connection_experiment import configure_attention
 from nanochat.packed_training import PackedData, seed_all, train_step
+
+if a.projection:
+    import nanochat.hca_projection as projection
+    if a.projection == 'native':
+        projection.score_linear = lambda x,w: torch.nn.functional.linear(x.float(),w)
+    else:
+        projection.PRECISION = a.projection
 
 torch.set_num_threads(2)
 torch.backends.cuda.matmul.allow_tf32 = False

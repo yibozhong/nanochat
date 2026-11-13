@@ -29,7 +29,7 @@ for ratio in (16,4):
                 grid=(tr.cdiv(t if source==0 else n,bn),b*h,splits)
                 def run():
                     return _attn_dkv[grid](q,k,v,g,do,out,lse,dk,dv,dg,
-                           t,h,d,w,ratio,source,bm,bn,d,n,b,splits,num_warps=nw)
+                           t,h,d,w,ratio,source,bm,bn,d,n,b,splits,num_warps=nw,num_stages=1)
                 try:
                     kernel=run()
                     ms=tr.testing.do_bench(run,warmup=50,rep=200)
@@ -40,7 +40,7 @@ for ratio in (16,4):
                     continue
                 row=dict(ratio=ratio,source=source,tile=[bm,bn,nw],splits=splits,
                          milliseconds=ms,registers=kernel.n_regs,spills=kernel.n_spills,
-                         shared_bytes=kernel.metadata.shared,
+                         shared_bytes=kernel.metadata.shared,stages=1,
                          gpu_uuid=str(torch.cuda.get_device_properties(0).uuid))
                 rows.append(row);print(json.dumps(row),flush=True)
                 path.write_text(json.dumps(rows,indent=2)+'\n')

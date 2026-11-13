@@ -8,11 +8,13 @@ import triton as tr
 import triton.language as tl
 from torch.autograd.function import once_differentiable
 
+PRECISION = 'bf16x3'
 
 @tr.jit
 def _mm(A, B, C, M: tl.constexpr, N: tl.constexpr, K: tl.constexpr,
         AM: tl.constexpr, AK: tl.constexpr, BK: tl.constexpr, BN: tl.constexpr,
-        SPLIT: tl.constexpr, BM: tl.constexpr, BC: tl.constexpr, BT: tl.constexpr):
+        SPLIT: tl.constexpr, BM: tl.constexpr, BC: tl.constexpr, BT: tl.constexpr,
+        PRECISION: tl.constexpr):
     m = tl.program_id(0)*BM + tl.arange(0, BM)
     n = tl.program_id(1)*BC + tl.arange(0, BC)
     part = tl.program_id(2)
@@ -25,7 +27,19 @@ def _mm(A, B, C, M: tl.constexpr, N: tl.constexpr, K: tl.constexpr,
                     (m[:, None] < M) & (k[None, :] < K), 0).to(tl.float32)
         b = tl.load(B+k[:, None]*BK+n[None, :]*BN,
                     (k[:, None] < K) & (n[None, :] < N), 0).to(tl.float32)
-        acc += tl.dot(a, b, input_precision='tf32x3')
+        if PRECISION == 'tf32x3':
+            acc += tl.dot(a, b, input_precision='tf32x3')
+        else:
+            # High and residual BF16 parts preserve FP32 inputs to ~1e-6.
+            # BF16 inputs need no residual term. Keep all accumulators FP32.
+            ah, bh = a.to(tl.bfloat16), b.to(tl.bfloat16)
+            if A.dtype.element_ty != tl.bfloat16:
+                al = (a-ah.to(tl.float32)).to(tl.bfloat16)
+                acc += tl.dot(al, bh)
+            if B.dtype.element_ty != tl.bfloat16:
+                bl = (b-bh.to(tl.float32)).to(tl.bfloat16)
+                acc += tl.dot(ah, bl)
+            acc += tl.dot(ah, bh)
     tl.store(C+part*M*N+m[:, None]*N+n[None, :], acc,
              (m[:, None] < M) & (n[None, :] < N))
 
@@ -36,7 +50,7 @@ def matmul(a, b, split=1):
     assert k == kb and a.is_cuda and b.is_cuda
     out = torch.empty((split, m, n), device=a.device, dtype=torch.float32)
     _mm[(tr.cdiv(m, 64), tr.cdiv(n, 64), split)](
-        a, b, out, m, n, k, *a.stride(), *b.stride(), split, 64, 64, 32,
+        a, b, out, m, n, k, *a.stride(), *b.stride(), split, 64, 64, 32, PRECISION,
         num_warps=4)
     return out[0] if split == 1 else out.sum(0)
 
