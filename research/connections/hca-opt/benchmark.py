@@ -37,6 +37,7 @@ model = build_connection_model(c).prepare(compile_blocks=False)
 opt, wd = optimizer_for(model)
 data = PackedData('../data')
 seconds, losses = [], []
+torch.cuda.reset_peak_memory_stats()
 for step in range(5 + a.steps):
     schedule(opt, step, 305176, wd)
     torch.cuda.synchronize()
@@ -61,6 +62,8 @@ report = dict(args=vars(a), formal_training=False, gpu=torch.cuda.get_device_nam
               gpu_uuid=str(torch.cuda.get_device_properties(0).uuid),
               source=json.loads(Path('source.json').read_text()), seconds=seconds,
               median_seconds=statistics.median(seconds), mean_seconds=statistics.mean(seconds),
+              peak_allocated_bytes=torch.cuda.max_memory_allocated(),
+              peak_reserved_bytes=torch.cuda.max_memory_reserved(),
               losses=losses, kernels=[dict(name=k, **v) for k, v in kernels.items()],
               note='CUDA profiler events may include annotations; do not sum as wall time.')
 out = Path('results/optimization'); out.mkdir(parents=True, exist_ok=True)
