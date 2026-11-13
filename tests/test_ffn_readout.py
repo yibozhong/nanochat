@@ -110,6 +110,29 @@ def test_gradmax_preserves_function_rng_and_selects_new_directions():
     assert model.blocks[-1].mlp.c_proj.weight.grad[128:].norm()>0
 
 
+def test_production_width_vocab_and_all_parameter_gradients():
+    """Full D512/R64/V32768 readout and eight blocks, bounded token count."""
+    configure_attention('fa2');torch.backends.cuda.matmul.allow_tf32=False
+    models=[]
+    for backend in ('reference','triton'):
+        seed_all(42)
+        c=ConnectionConfig(streams=1,sequence_length=128,ffn_readout_width=64,
+                           ffn_readout_backend=backend)
+        models.append(ConnectionModel(c).prepare(compile_blocks=True))
+    ref,actual=models
+    with torch.no_grad():
+        for b in ref.blocks:
+            b.attn.c_proj.weight.normal_(0,.01);b.mlp.c_proj.weight.normal_(0,.01)
+    actual.load_state_dict(ref.state_dict())
+    x=torch.randint(0,32768,(2,128),device='cuda');y=(x+1)%32768
+    expected=ref(x,y,dense=True);expected.backward()
+    got=actual(x,y);got.backward()
+    torch.testing.assert_close(got,expected,rtol=1e-4,atol=2e-5)
+    for (name,p),(_,q) in zip(actual.named_parameters(),ref.named_parameters()):
+        try:close(p.grad,q.grad,.02)
+        except AssertionError as e:raise AssertionError(name,str(e)) from e
+
+
 def test_causal_cache_after_nonzero_branch():
     from nanochat import flash_attention
     from nanochat.engine import KVCache
