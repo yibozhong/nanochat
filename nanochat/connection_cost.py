@@ -13,6 +13,26 @@ def model_cost(config, batch=1, activation_bytes=2, feedback_passes=None):
     if c.latent_feedback:
         backbone=projections+attention
         fusion=2*batch*t*d*d
+        if c.feedback_source in ('embedding_qkv','per_layer_qkv'):
+            readers=depth if c.feedback_source=='per_layer_qkv' else 1
+            # Q/O have input and weight gradients; detached bank K/V only
+            # need weight gradients. Bank normalization is shared by readers.
+            bank_norm=4*batch*t*depth*d
+            read_forward=4*batch*t*depth*d
+            read_backward=10*batch*t*depth*d
+            mix_forward=bank_norm+readers*((2+2*depth)*fusion+read_forward)
+            mix_train=bank_norm+readers*((6+4*depth)*fusion+read_forward+read_backward)
+            p=1.85 if feedback_passes is None else feedback_passes
+            if p<1:raise ValueError('Feedback passes must be >=1')
+            extra=.85*mix_train if feedback_passes is None else ((p-2)*mix_forward+mix_train if p>1 else 0)
+            return dict(estimated_forward_flops=p*backbone+head+(p-1)*mix_forward,
+                estimated_training_flops=(p+2)*backbone+3*head+extra,
+                estimated_evaluation_flops=c.feedback_eval_passes*backbone+head+(c.feedback_eval_passes-1)*mix_forward,
+                additional_parameters=4*readers*d*d,expected_training_passes=p,
+                detached_layer_bank_bytes=batch*t*depth*d*activation_bytes,
+                projected_kv_saved_bytes=2*readers*batch*t*depth*d*activation_bytes,
+                accounting='FMA=2; full-width independent Q/K/V/O per reader, final-only backbone/head backward. K/V projections follow bank detach and retain weight gradients. Default averages 15% P1 / 85% P2. Excludes softmax/rsqrt scalars, other elementwise work, optimizer and recomputation.',
+                memory_note='Bank estimates exclude model, gradients, backward temporaries and allocator peak; measure full training peak.')
         if c.feedback_source=='layers':
             # Query/output GEMMs both backpropagate to their inputs. Bank is
             # detached. Read: norm, scores, depth mix; backward only computes dQ.

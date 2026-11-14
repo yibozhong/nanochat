@@ -66,6 +66,11 @@ class LatentFeedbackModel(ConnectionModel):
     def training_passes(seed, step):
         return sampled_passes(seed, step)
 
+    def feedback_parameters(self):
+        yield self.fusion.weight
+        if self.config.feedback_source == 'layers':
+            yield self.feedback_query.weight
+
     def hidden(self, idx, kv_cache=None, passes=None):
         if idx.ndim != 2 or idx.shape[1] < 1:
             raise ValueError('Expected a nonempty [batch, tokens] input')

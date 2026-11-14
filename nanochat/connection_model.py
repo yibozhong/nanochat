@@ -43,9 +43,9 @@ class ConnectionConfig:
     feedback_attention_backend: str = 'triton'
 
     def __post_init__(self):
-        if self.feedback_source not in ('top','layers') or self.feedback_attention_backend not in ('torch','triton'):
+        if self.feedback_source not in ('top','layers','embedding_qkv','per_layer_qkv') or self.feedback_attention_backend not in ('torch','triton'):
             raise ValueError('Unknown feedback source or attention backend')
-        if self.feedback_source == 'layers' and not self.latent_feedback:
+        if self.feedback_source != 'top' and not self.latent_feedback:
             raise ValueError('Layer feedback requires latent_feedback')
         if type(self.feedback_eval_passes) is not int or self.feedback_eval_passes < 1:
             raise ValueError('Feedback evaluation passes must be a positive integer')
@@ -282,7 +282,7 @@ class ConnectionModel(nn.Module):
     def hidden(self, idx, kv_cache=None):
         return norm(self.backbone(norm(self.wte(idx)), kv_cache))
 
-    def backbone(self, x, kv_cache=None, return_layers=False):
+    def backbone(self, x, kv_cache=None, return_layers=False, before_block=None):
         """Unnormalized top state, also used by detached latent feedback passes."""
         start = 0 if kv_cache is None else kv_cache.get_pos()
         if start + x.shape[1] > self.config.sequence_length:
@@ -292,6 +292,8 @@ class ConnectionModel(nn.Module):
         cos, sin = self.cos[:, start:start+x.shape[1]], self.sin[:, start:start+x.shape[1]]
         states = [] if return_layers else None
         for i, b in enumerate(self.blocks):
+            if before_block is not None:
+                x = before_block(i, x)
             # Cache positions mutate across calls and stay outside static
             # fullgraph training capture; attention keeps its GPU kernels.
             fn = self.compiled_steps[i] if self.compiled_steps is not None and kv_cache is None else b.forward
@@ -355,9 +357,7 @@ def optimizer_for(model, batch_tokens=32768):
             lr=.02*batch_scale, momentum=.95, ns_steps=5, beta2=.9, weight_decay=wd))
     if c.latent_feedback:
         # Own group: single-pass updates must not advance momentum or decay W.
-        feedback_params=[model.fusion.weight]
-        if c.feedback_source == 'layers':
-            feedback_params.append(model.feedback_query.weight)
+        feedback_params=list(model.feedback_parameters())
         groups.append(dict(kind='muon', params=feedback_params, conditional=True,
             lr=.02*batch_scale, momentum=.95, ns_steps=5, beta2=.9, weight_decay=wd))
     ids = [id(p) for g in groups for p in g['params']]
@@ -377,6 +377,9 @@ def optimizer_for(model, batch_tokens=32768):
 
 
 def build_connection_model(config):
+    if config.feedback_source in ('embedding_qkv','per_layer_qkv'):
+        from nanochat.projected_feedback import ProjectedFeedbackModel
+        return ProjectedFeedbackModel(config)
     if config.latent_feedback:
         from nanochat.latent_feedback import LatentFeedbackModel
         return LatentFeedbackModel(config)

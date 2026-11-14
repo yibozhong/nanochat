@@ -30,7 +30,7 @@ def main():
     p.add_argument('--architecture', choices=('vanilla', 'native'), default='vanilla')
     p.add_argument('--latent-feedback', action='store_true')
     p.add_argument('--feedback-eval-passes', type=int, default=4)
-    p.add_argument('--feedback-source', choices=('top','layers'), default='top')
+    p.add_argument('--feedback-source', choices=('top','layers','embedding_qkv','per_layer_qkv'), default='top')
     p.add_argument('--feedback-attention-backend', choices=('torch','triton'), default='triton')
     p.add_argument('--window-pattern', default='SSSL', help='Native backbone only; vanilla always uses full attention')
     p.add_argument('--formal-training', action='store_true', help='Explicitly enable W&B for a formal training run')
@@ -152,7 +152,7 @@ def main():
         config['profile_matches_current_gpu']=str(torch.cuda.get_device_properties(0).uuid)==profile_reference.get('gpu_uuid')
     kwargs=dict(project='nanochat',entity='yibozhong657-none',group=a.wandb_group,
                 job_type='pretrain' if a.formal_training else 'diagnostic',
-                name=f'{a.architecture}-{a.variant}'+('-layer-feedback' if c.feedback_source=='layers' else '-feedback' if c.latent_feedback else '')+
+                name=f'{a.architecture}-{a.variant}'+(f'-{c.feedback_source}-feedback' if c.latent_feedback else '')+
                     f'-{c.sequence_length}ctx-{a.steps}steps',id=run_id,resume='allow',config=config)
     run=training_run(formal_training=a.formal_training, local_dir=out/"diagnostics", **kwargs)
     run.define_metric('tokens')
