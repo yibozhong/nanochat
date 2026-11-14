@@ -39,8 +39,14 @@ class ConnectionConfig:
     attnres_block_size_unit: str = 'sublayers'
     latent_feedback: bool = False
     feedback_eval_passes: int = 4
+    feedback_source: str = 'top'
+    feedback_attention_backend: str = 'triton'
 
     def __post_init__(self):
+        if self.feedback_source not in ('top','layers') or self.feedback_attention_backend not in ('torch','triton'):
+            raise ValueError('Unknown feedback source or attention backend')
+        if self.feedback_source == 'layers' and not self.latent_feedback:
+            raise ValueError('Layer feedback requires latent_feedback')
         if type(self.feedback_eval_passes) is not int or self.feedback_eval_passes < 1:
             raise ValueError('Feedback evaluation passes must be a positive integer')
         if self.latent_feedback and (self.architecture != 'vanilla' or self.variant != 'baseline'
@@ -276,7 +282,7 @@ class ConnectionModel(nn.Module):
     def hidden(self, idx, kv_cache=None):
         return norm(self.backbone(norm(self.wte(idx)), kv_cache))
 
-    def backbone(self, x, kv_cache=None):
+    def backbone(self, x, kv_cache=None, return_layers=False):
         """Unnormalized top state, also used by detached latent feedback passes."""
         start = 0 if kv_cache is None else kv_cache.get_pos()
         if start + x.shape[1] > self.config.sequence_length:
@@ -284,6 +290,7 @@ class ConnectionModel(nn.Module):
         if self.config.variant not in ('baseline', 'skip_scale'):
             x = expand_streams(x, self.config.streams)
         cos, sin = self.cos[:, start:start+x.shape[1]], self.sin[:, start:start+x.shape[1]]
+        states = [] if return_layers else None
         for i, b in enumerate(self.blocks):
             # Cache positions mutate across calls and stay outside static
             # fullgraph training capture; attention keeps its GPU kernels.
@@ -294,9 +301,11 @@ class ConnectionModel(nn.Module):
                 x = checkpoint(fn, x, cos, sin, use_reentrant=False)
             else:
                 x = fn(x, cos, sin, kv_cache)
+            if return_layers:
+                states.append(x)
         if self.stream_head is not None:
             x = self.stream_head(x)
-        return x
+        return (x, torch.stack(states, dim=2)) if return_layers else x
 
     def forward(self, idx, targets=None, dense=False, kv_cache=None):
         h = self.hidden(idx, kv_cache)
@@ -346,7 +355,10 @@ def optimizer_for(model, batch_tokens=32768):
             lr=.02*batch_scale, momentum=.95, ns_steps=5, beta2=.9, weight_decay=wd))
     if c.latent_feedback:
         # Own group: single-pass updates must not advance momentum or decay W.
-        groups.append(dict(kind='muon', params=[model.fusion.weight], conditional=True,
+        feedback_params=[model.fusion.weight]
+        if c.feedback_source == 'layers':
+            feedback_params.append(model.feedback_query.weight)
+        groups.append(dict(kind='muon', params=feedback_params, conditional=True,
             lr=.02*batch_scale, momentum=.95, ns_steps=5, beta2=.9, weight_decay=wd))
     ids = [id(p) for g in groups for p in g['params']]
     assert len(ids) == len(set(ids)) and set(ids) == {id(p) for p in model.parameters()}

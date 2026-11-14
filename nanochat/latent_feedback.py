@@ -33,7 +33,7 @@ class FeedbackKVCache(KVCache):
             raise TypeError('Feedback prefill requires a feedback cache')
         super().prefill(other)
         self.feedback_state = (None if other.feedback_state is None else
-            other.feedback_state.expand(self.batch_size, -1, -1).clone())
+            other.feedback_state.expand(self.batch_size, *other.feedback_state.shape[1:]).clone())
 
 
 class LatentFeedbackModel(ConnectionModel):
@@ -42,9 +42,17 @@ class LatentFeedbackModel(ConnectionModel):
         # Construct after the baseline so shared tensors have identical seed init.
         self.fusion = Linear(config.width, config.width, bias=False)
         nn.init.normal_(self.fusion.weight, std=.02)
+        if config.feedback_source == 'layers':
+            self.feedback_query = Linear(config.width, config.width, bias=False)
+            nn.init.normal_(self.feedback_query.weight, std=.02)
         self.compiled_mix = None
 
     def mix(self, embedding, top):
+        if self.config.feedback_source == 'layers':
+            from nanochat.layer_feedback import layer_read
+            read = layer_read(self.feedback_query(embedding), top,
+                backend=self.config.feedback_attention_backend)
+            return embedding + self.fusion(read)
         fed = self.fusion(F.rms_norm(top, (top.shape[-1],), eps=1e-5))
         return torch.cat((embedding[:, :1], embedding[:, 1:] + fed[:, :-1]), dim=1)
 
@@ -77,9 +85,19 @@ class LatentFeedbackModel(ConnectionModel):
                 x = norm(self.wte(token))
                 if kv_cache.get_pos():
                     prev = kv_cache.feedback_state
-                    x = x + self.fusion(F.rms_norm(prev, (prev.shape[-1],), eps=1e-5))
-                top = self.backbone(x, kv_cache)
-                kv_cache.feedback_state = top.detach()
+                    if self.config.feedback_source == 'layers':
+                        from nanochat.layer_feedback import layer_read
+                        read = layer_read(self.feedback_query(x), prev, shift=False,
+                            backend=self.config.feedback_attention_backend)
+                    else:
+                        read = F.rms_norm(prev, (prev.shape[-1],), eps=1e-5)
+                    x = x + self.fusion(read)
+                if self.config.feedback_source == 'layers':
+                    top, bank = self.backbone(x, kv_cache, return_layers=True)
+                    kv_cache.feedback_state = bank.detach()
+                else:
+                    top = self.backbone(x, kv_cache)
+                    kv_cache.feedback_state = top.detach()
                 outputs.append(top)
             return norm(torch.cat(outputs, dim=1))
         passes = (2 if self.training else self.config.feedback_eval_passes) if passes is None else passes
@@ -89,8 +107,12 @@ class LatentFeedbackModel(ConnectionModel):
         grad_enabled = torch.is_grad_enabled()
         for index in range(passes):
             with torch.set_grad_enabled(grad_enabled and index == passes - 1):
-                state = embedding if index == 0 else (self.compiled_mix or self.mix)(embedding, top.detach())
-                top = self.backbone(state)
+                state = embedding if index == 0 else (self.compiled_mix or self.mix)(embedding, feedback.detach())
+                if self.config.feedback_source == 'layers' and index < passes-1:
+                    top, feedback = self.backbone(state, return_layers=True)
+                else:
+                    top = self.backbone(state)
+                    feedback = top
         return norm(top)
 
     def forward(self, idx, targets=None, dense=False, kv_cache=None, passes=None):

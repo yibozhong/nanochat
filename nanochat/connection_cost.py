@@ -13,6 +13,23 @@ def model_cost(config, batch=1, activation_bytes=2, feedback_passes=None):
     if c.latent_feedback:
         backbone=projections+attention
         fusion=2*batch*t*d*d
+        if c.feedback_source=='layers':
+            # Query/output GEMMs both backpropagate to their inputs. Bank is
+            # detached. Read: norm, scores, depth mix; backward only computes dQ.
+            read_forward=8*batch*t*depth*d
+            read_backward=6*batch*t*depth*d
+            mix_forward=2*fusion+read_forward
+            mix_train=6*fusion+read_forward+read_backward
+            p=1.85 if feedback_passes is None else feedback_passes
+            if p<1:
+                raise ValueError('Feedback passes must be >=1')
+            extra_mix_train=.85*mix_train if feedback_passes is None else ((p-2)*mix_forward+mix_train if p>1 else 0)
+            return dict(estimated_forward_flops=p*backbone+head+(p-1)*mix_forward,
+                estimated_training_flops=(p+2)*backbone+3*head+extra_mix_train,
+                estimated_evaluation_flops=c.feedback_eval_passes*backbone+head+(c.feedback_eval_passes-1)*mix_forward,
+                additional_parameters=2*d*d,expected_training_passes=p,
+                detached_layer_bank_bytes=batch*t*depth*d*activation_bytes,
+                accounting='FMA=2; detached preliminary passes, final-only head/backbone backward; full-width query/output projections, no K/V projections. Read approximates reductions and excludes softmax/rsqrt scalar costs, other elementwise work, optimizer and recomputation.')
         # P1/P2 mixture expectation unless accounting for a particular update.
         p=1.85 if feedback_passes is None else feedback_passes
         if p<1:
