@@ -39,6 +39,8 @@ def main():
         source=dict(commit=commit,formal_training=False,purpose='Embedding and independent-per-block QKV feedback correctness, timing and memory',
             variants=['embedding_qkv','per_layer_qkv'],
             training_steps_per_model=96,tokens_per_model=96*32768,cli_steps=3,
+            materialized_comparison_steps_per_model=48,projection_order='reassociated',
+            efficiency_checks=['component forward/backward','same-GPU P2 comparison','CUDA kernel/copy/launch profile','training memory peak'],
             data='existing packed2K prefix from FineWeb-Edu sample-10BT',
             data_archive_bytes=(bundle/'gate-data.tar').stat().st_size,
             runtime='mhc-official-runtime-7546767.tar.gz + frozen uv.lock',

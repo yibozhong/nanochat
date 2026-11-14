@@ -32,6 +32,7 @@ def main():
     p.add_argument('--feedback-eval-passes', type=int, default=4)
     p.add_argument('--feedback-source', choices=('top','layers','embedding_qkv','per_layer_qkv'), default='top')
     p.add_argument('--feedback-attention-backend', choices=('torch','triton'), default='triton')
+    p.add_argument('--feedback-projection-order', choices=('materialized','reassociated'), default='reassociated')
     p.add_argument('--window-pattern', default='SSSL', help='Native backbone only; vanilla always uses full attention')
     p.add_argument('--formal-training', action='store_true', help='Explicitly enable W&B for a formal training run')
     p.add_argument('--wandb-group', default='mhc-official-kernels-20261030')
@@ -80,6 +81,7 @@ def main():
                        architecture=a.architecture, window_pattern=a.window_pattern,
                        latent_feedback=a.latent_feedback, feedback_eval_passes=a.feedback_eval_passes,
                        feedback_source=a.feedback_source, feedback_attention_backend=a.feedback_attention_backend,
+                       feedback_projection_order=a.feedback_projection_order,
                        activation_checkpoint=a.activation_checkpoint,
                        connection_backend=a.connection_backend, fused_connection_grad=a.fused_connection_grad)
     data=PackedData(a.data_dir)

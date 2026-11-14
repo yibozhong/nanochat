@@ -41,8 +41,11 @@ class ConnectionConfig:
     feedback_eval_passes: int = 4
     feedback_source: str = 'top'
     feedback_attention_backend: str = 'triton'
+    feedback_projection_order: str = 'reassociated'
 
     def __post_init__(self):
+        if self.feedback_projection_order not in ('materialized','reassociated'):
+            raise ValueError('Unknown feedback projection order')
         if self.feedback_source not in ('top','layers','embedding_qkv','per_layer_qkv') or self.feedback_attention_backend not in ('torch','triton'):
             raise ValueError('Unknown feedback source or attention backend')
         if self.feedback_source != 'top' and not self.latent_feedback:
@@ -104,6 +107,8 @@ class ConnectionConfig:
     def from_checkpoint(cls, config):
         """Read pre-cleanup NVIDIA/vanilla metadata; reject retired model weights."""
         config = dict(config)
+        if config.get('feedback_source') in ('embedding_qkv','per_layer_qkv'):
+            config.setdefault('feedback_projection_order','materialized')
         if config.pop('vocab_gate', False):
             raise ValueError('Checkpoint belongs to the retired vocabulary gate experiment')
         for name in ('vocab_gate_alpha', 'vocab_gate_backend', 'vocab_gate_chunk'):

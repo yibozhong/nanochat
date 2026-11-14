@@ -6,6 +6,7 @@ from torch.nn import functional as F
 from nanochat.connection_model import ConnectionModel
 from nanochat.gpt import Linear,norm
 from nanochat.latent_feedback import FeedbackKVCache,sampled_passes
+from nanochat.layer_feedback import layer_read
 from nanochat.projected_layer_read import projected_read
 
 
@@ -16,8 +17,8 @@ def normalize_bank(bank):
 
 
 class ProjectedLayerReader(nn.Module):
-    def __init__(self,width,backend):
-        super().__init__();self.backend=backend
+    def __init__(self,width,backend,projection_order='reassociated'):
+        super().__init__();self.backend=backend;self.projection_order=projection_order
         self.q_proj=Linear(width,width,bias=False)
         self.k_proj=Linear(width,width,bias=False)
         self.v_proj=Linear(width,width,bias=False)
@@ -26,6 +27,13 @@ class ProjectedLayerReader(nn.Module):
 
     def forward(self,x,bank,shift=True,normalize_query=False):
         q=self.q_proj(norm(x) if normalize_query else x)
+        if self.projection_order=='reassociated':
+            # q @ (bank @ Wk.T).T == (q @ Wk) @ bank.T.
+            # softmax(scores) @ (bank @ Wv.T) == read(bank) @ Wv.T.
+            # All four full-width parameters and their gradients are retained.
+            effective_q=F.linear(q,self.k_proj.weight.T.to(q.dtype))
+            read=layer_read(effective_q,bank,shift=shift,backend=self.backend,normalize=False)
+            return x+self.o_proj(self.v_proj(read))
         # Independent K and V parameters, packed into one large GEMM.
         weight=torch.cat((self.k_proj.weight,self.v_proj.weight),0).to(bank.dtype)
         kv=F.linear(bank,weight)
@@ -37,7 +45,8 @@ class ProjectedFeedbackModel(ConnectionModel):
     def __init__(self,config):
         super().__init__(config)
         count=config.depth if config.feedback_source=='per_layer_qkv' else 1
-        self.feedback_readers=nn.ModuleList([ProjectedLayerReader(config.width,config.feedback_attention_backend) for _ in range(count)])
+        self.feedback_readers=nn.ModuleList([ProjectedLayerReader(config.width,config.feedback_attention_backend,
+            config.feedback_projection_order) for _ in range(count)])
         self.compiled_readers=None;self.compiled_bank_norm=None
 
     def feedback_parameters(self):

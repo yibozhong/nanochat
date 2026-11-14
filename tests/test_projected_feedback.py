@@ -12,7 +12,8 @@ from nanochat.connection_model import ConnectionConfig,build_connection_model,op
 from nanochat.gpt import norm
 from nanochat.latent_feedback import FeedbackKVCache
 from nanochat.packed_training import seed_all
-from nanochat.projected_feedback import normalize_bank
+from nanochat.projected_feedback import normalize_bank,ProjectedLayerReader
+from nanochat.layer_feedback import layer_read,layer_read_reference
 from nanochat.projected_layer_read import projected_read,projected_read_reference
 from test_connection_training_resume import equal_tree
 
@@ -77,11 +78,11 @@ def test_no_cross_batch_shift_and_unused_memory_gradient():
     assert torch.count_nonzero(kv.grad[:,-1])==0
 
 
-def make(mode,backend='triton',compiled=False,perturb=True,checkpoint=False):
+def make(mode,backend='triton',compiled=False,perturb=True,checkpoint=False,order='reassociated'):
     seed_all(42)
     c=ConnectionConfig(depth=2,width=128,heads=1,sequence_length=32,vocab_size=256,
         streams=1,latent_feedback=True,feedback_source=mode,
-        feedback_attention_backend=backend,activation_checkpoint=checkpoint)
+        feedback_attention_backend=backend,activation_checkpoint=checkpoint,feedback_projection_order=order)
     m=build_connection_model(c).prepare(compile_blocks=compiled)
     if perturb:
         with torch.no_grad():
@@ -208,3 +209,55 @@ def test_parameter_and_flop_accounting(mode):
     average=model_cost(c,batch=2)['estimated_training_flops']
     p2=model_cost(c,batch=2,feedback_passes=2)['estimated_training_flops']
     assert average==pytest.approx(.15*base['estimated_training_flops']+.85*p2)
+    materialized=model_cost(replace(c,feedback_projection_order='materialized'),batch=2)
+    assert model_cost(c,batch=2)['projected_kv_saved_bytes']==0
+    assert average<materialized['estimated_training_flops']
+
+
+@pytest.mark.parametrize('shift',[False,True])
+@pytest.mark.parametrize('normalize_query',[False,True])
+def test_reassociation_double_precision_output_and_all_parameter_gradients(shift,normalize_query):
+    seed_all(61)
+    reference=ProjectedLayerReader(32,'torch','materialized').cuda().double()
+    efficient=ProjectedLayerReader(32,'torch','reassociated').cuda().double()
+    efficient.load_state_dict(reference.state_dict())
+    bank=torch.randn(2,9,5,32,device='cuda',dtype=torch.float64)
+    x=torch.randn(2,9,32,device='cuda',dtype=torch.float64,requires_grad=True)
+    go=torch.randn_like(x)
+    out=reference(x,bank,shift,normalize_query)
+    actual=efficient(x,bank,shift,normalize_query)
+    expected_grad=torch.autograd.grad(out,(x,*reference.parameters()),go)
+    actual_grad=torch.autograd.grad(actual,(x,*efficient.parameters()),go)
+    for a,b in zip((actual,*actual_grad),(out,*expected_grad)):
+        torch.testing.assert_close(a,b,rtol=1e-10,atol=1e-12)
+
+
+@pytest.mark.parametrize('shift',[False,True])
+@pytest.mark.parametrize('dtype',[torch.float32,torch.bfloat16])
+def test_pre_normalized_read_oracle(shift,dtype):
+    seed_all(14)
+    q=torch.randn(2,17,80,device='cuda',dtype=dtype,requires_grad=True)
+    bank=torch.randn(2,17,5,80,device='cuda',dtype=dtype)
+    rq=q.detach().double().requires_grad_();go=torch.randn_like(q)
+    a=layer_read(q,bank,shift=shift,normalize=False)
+    b=layer_read_reference(rq,bank.double(),shift=shift,normalize=False)
+    ga=torch.autograd.grad(a,q,go)[0];gb=torch.autograd.grad(b,rq,go.double())[0]
+    tol=.009 if dtype==torch.bfloat16 else 3e-5
+    assert relative(a,b.to(dtype))<tol and relative(ga,gb.to(dtype))<tol
+
+
+@pytest.mark.parametrize('mode',MODES)
+def test_reassociated_bf16_model_against_materialized(mode):
+    m=make(mode,compiled=True)
+    ref=make(mode,order='materialized',compiled=True);ref.load_state_dict(m.state_dict())
+    x,y=inputs();a=m(x,y,passes=2);b=ref(x,y,passes=2)
+    a.backward();b.backward()
+    torch.testing.assert_close(a,b,rtol=5e-4,atol=5e-4)
+    for (n,p),(_,r) in zip(m.named_parameters(),ref.named_parameters()):
+        assert torch.isfinite(p.grad).all(),n
+        assert relative(p.grad,r.grad)<.04,(n,relative(p.grad,r.grad))
+
+
+def test_legacy_projection_order_is_preserved():
+    c=ConnectionConfig.from_checkpoint(dict(latent_feedback=True,feedback_source='embedding_qkv'))
+    assert c.feedback_projection_order=='materialized'
