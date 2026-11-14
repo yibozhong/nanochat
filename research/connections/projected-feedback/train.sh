@@ -13,7 +13,11 @@ case "$TASK_DETACH" in
     *) exit 64 ;;
 esac
 case "$TASK_BANK" in
-    residual_update) test "$TASK_DETACH" = true;test "$TASK_MODE" = per_layer_qkv;TASK_GROUP=residual-feedback-10b-20261114 ;;
+    residual_update)
+        test "$TASK_MODE" = per_layer_qkv
+        TASK_GROUP=residual-feedback-10b-20261114
+        if [ "$TASK_DETACH" = false ]; then TASK_GROUP=residual-feedback-full-grad-10b-20261114; fi
+        ;;
     hidden) ;;
     *) exit 64 ;;
 esac

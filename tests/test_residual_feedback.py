@@ -128,7 +128,7 @@ def test_config_legacy_roundtrip_and_cost():
     m=make();c=m.config
     assert ConnectionConfig.from_checkpoint(asdict(c))==c
     legacy=asdict(c);legacy.pop('feedback_bank');assert ConnectionConfig.from_checkpoint(legacy).feedback_bank=='hidden'
-    with pytest.raises(ValueError,match='detached'):replace(c,feedback_detach=False)
+    assert not replace(c,feedback_detach=False).feedback_detach
     with pytest.raises(ValueError,match='per-layer'):replace(c,feedback_source='embedding_qkv')
     base=model_cost(replace(c,feedback_bank='hidden'),batch=2,feedback_passes=1)
     assert model_cost(c,batch=2,feedback_passes=1)['estimated_training_flops']==base['estimated_training_flops']
