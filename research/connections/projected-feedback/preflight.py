@@ -16,6 +16,7 @@ from nanochat.packed_training import PackedData,evaluate,json_write,seed_all,tra
 
 def main():
     source=json.loads(Path('source.json').read_text());mode=source['feedback_source']
+    detach=source['feedback_detach']
     assert source['formal_training'] and source['feedback_projection_order']=='reassociated'
     assert mode in ('embedding_qkv','per_layer_qkv')
     assert torch.cuda.is_available() and torch.cuda.device_count()==1
@@ -23,32 +24,41 @@ def main():
     device=dict(gpu=name,capability=cap,torch=torch.__version__,cuda=torch.version.cuda)
     json_write('results/device.json',device)
     if cap==[9,0] and any(n in name for n in ('H100','H200')):
-        gate=json.loads(Path('research/connections/projected-feedback/validation.json').read_text())
-        assert gate['complete'] and gate['gpu_tests_passed']==97
+        gate_path='projected-feedback' if detach else 'feedback-backprop'
+        gate=json.loads(Path(f'research/connections/{gate_path}/validation.json').read_text())
+        assert gate['complete']
         assert gate['model_commit']==source['validated_model_commit']
-        assert gate['variants'][mode]['resume_complete'] and gate['variants'][mode]['efficiency_review_passed']
+        if detach:
+            assert gate['gpu_tests_passed']==97
+            assert gate['variants'][mode]['resume_complete'] and gate['variants'][mode]['efficiency_review_passed']
+        else:
+            assert gate['checks']==156 and gate['resume_checks']==2 and gate['continuation_exit_code']==0
+            assert mode=='per_layer_qkv' and gate['steps_per_model']==2048
         print('Reusing completed Hopper projected-feedback validation',flush=True);return
     assert cap==[8,0] and 'A100' in name,device
     marker=Path('results/projected-feedback-sm80.json')
     if marker.exists():
         v=json.loads(marker.read_text());assert v['complete'] and v['source']==source
         print('Reusing completed A100 projected-feedback validation',flush=True);return
+    tests=['tests/test_projected_feedback.py']+([] if detach else ['tests/test_feedback_backprop.py'])
+    expected_checks=58 if detach else 117
     subprocess.run(['timeout','--signal=TERM','--kill-after=30s','900','python','-m','pytest','-q',
-        'tests/test_projected_feedback.py','--junitxml=results/projected-sm80-tests.xml'],check=True)
+        *tests,'--junitxml=results/projected-sm80-tests.xml'],check=True)
     suite=ET.parse('results/projected-sm80-tests.xml').getroot().find('testsuite')
-    assert int(suite.attrib['tests'])==58
+    assert int(suite.attrib['tests'])==expected_checks
     assert all(int(suite.attrib.get(k,0))==0 for k in ('failures','errors','skipped'))
     configure_attention('fa2');torch.set_num_threads(2);torch.backends.cuda.matmul.allow_tf32=False
     seed_all(42);data=PackedData('../data')
-    c=ConnectionConfig(streams=1,latent_feedback=True,feedback_source=mode,feedback_projection_order='reassociated')
+    c=ConnectionConfig(streams=1,latent_feedback=True,feedback_source=mode,feedback_projection_order='reassociated',feedback_detach=detach)
     model=build_connection_model(c).prepare(compile_blocks=True);opt,wd=optimizer_for(model)
     start=time.monotonic();losses=[]
     for step in range(16):
         schedule(opt,step,305176,wd);losses.append(train_step(model,opt,data,step,microbatch=16,seed=42))
         assert time.monotonic()-start<600,'A100 finite-training check exceeded its bound'
     p1=evaluate(model,data,passes=1)[0];p4=evaluate(model,data,passes=4)[0]
+    assert torch.isfinite(torch.tensor([p1,p4])).all()
     json_write(marker,dict(complete=True,formal_training=False,source=source,device=device,
-        gpu_tests_passed=58,finite_steps=16,losses=losses,dev_ce_p1=p1,dev_ce_p4=p4))
+        gpu_tests_passed=expected_checks,finite_steps=16,losses=losses,dev_ce_p1=p1,dev_ce_p4=p4))
     print('A100 validation passed; formal process initializes independently',flush=True)
 
 

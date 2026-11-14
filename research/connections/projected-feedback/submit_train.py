@@ -1,4 +1,4 @@
-"""Submit one selected, validated projected-feedback 10B run; two modes authorized."""
+"""Submit one selected, validated projected-feedback 10B run."""
 import argparse
 import fcntl
 import json
@@ -23,8 +23,11 @@ def command(args,cwd=REPO):
 def main():
     parser=argparse.ArgumentParser()
     parser.add_argument('--mode',required=True,choices=('embedding_qkv','per_layer_qkv'))
-    mode=parser.parse_args().mode
-    ROOT=HOME_ROOT/('projected-feedback-'+mode.replace('_','-')+'-10b-20261114')
+    parser.add_argument('--feedback-detach',action=argparse.BooleanOptionalAction,default=True)
+    args=parser.parse_args();mode=args.mode;detach=args.feedback_detach
+    if not detach:assert mode=='per_layer_qkv','Current full-gradient10B authorization is per-layer only'
+    suffix='' if detach else '-full-grad'
+    ROOT=HOME_ROOT/('projected-feedback-'+mode.replace('_','-')+suffix+'-10b-20261114')
     KEY=ROOT.name
     ROOT.mkdir(exist_ok=True)
     with (ROOT/'submit.lock').open('a') as lock:
@@ -37,12 +40,21 @@ def main():
         assert not active
         assert not command(['git','status','--porcelain'])
         commit=command(['git','rev-parse','HEAD'])
-        gate=json.loads((REPO/'research/connections/projected-feedback/validation.json').read_text())
-        assert gate['complete'] and gate['gpu_tests_passed']==97 and gate['exact_checkpoint_transport_and_fixed_gradient_update']
-        assert mode in gate['variants'] and gate['projection_order']=='reassociated'
-        measured=gate['variants'][mode]
-        assert measured['finite_steps']==96 and measured['all_projections_learned'] and measured['resume_complete']
-        assert measured['efficiency_review_passed']
+        if detach:
+            gate=json.loads((REPO/'research/connections/projected-feedback/validation.json').read_text())
+            assert gate['complete'] and gate['gpu_tests_passed']==97 and gate['exact_checkpoint_transport_and_fixed_gradient_update']
+            assert mode in gate['variants'] and gate['projection_order']=='reassociated'
+            measured=gate['variants'][mode]
+            assert measured['finite_steps']==96 and measured['all_projections_learned'] and measured['resume_complete']
+            assert measured['efficiency_review_passed']
+        else:
+            gate=json.loads((REPO/'research/connections/feedback-backprop/validation.json').read_text())
+            assert gate['complete'] and gate['checks']==156 and gate['resume_checks']==2
+            assert gate['finite_updates']==8192 and gate['steps_per_model']==2048
+            assert gate['continuation_exit_code']==0 and gate['projection_order']=='reassociated'
+            profile=gate['comparisons'][mode]
+            measured=dict(mean_step_seconds=profile['mean_ms'][1]/1000,
+                p2_step_seconds=profile['p2_ms'][1]/1000,peak_allocated_bytes=round(profile['peak_gib'][1]*2**30))
         assert gate['model']==dict(depth=8,width=512,heads=4,sequence_length=2048,vocab_size=32768)
         assert gate['attention_backend']=='fa2' and gate['microbatch']==16 and gate['training_pass_mix']==[.15,.85]
         # Normal Git diff, no content-hash audit. Model/runtime remain validated.
@@ -64,11 +76,12 @@ def main():
         (ROOT/'train.sh').chmod(0o755)
         run_id=uuid.uuid4().hex[:8]
         source=dict(commit=commit,formal_training=True,plan=KEY,run_id=run_id,
-            model_variant='projected_feedback',feedback_source=mode,feedback_projection_order='reassociated',
+            model_variant='projected_feedback',feedback_source=mode,feedback_projection_order='reassociated',feedback_detach=detach,
             feedback_attention_backend='triton',validated_model_commit=gate['model_commit'],validation_job=gate['job'],
             model=gate['model'],steps=STEPS,training_tokens=STEPS*32768,batch_tokens=32768,microbatch=16,
             seed=42,initialization='seed42_from_zero_no_diagnostic_weights',
-            pass_mix=[.15,.85],eval_passes=4,earlier_passes='no_grad_detached',
+            pass_mix=[.15,.85],eval_passes=4,earlier_passes='no_grad_detached' if detach else 'full_backprop',
+            loss='final-pass CE only',wandb_group='projected-feedback-10b-20261114' if detach else 'feedback-backprop-10b-20261114',
             attention_backend='fa2',data_uri=data['data_uri'],data_archive_bytes=data['archive']['bytes'],
             dataset_revision=data['manifest']['dataset_revision'],tokenizer=data['manifest']['tokenizer']['tokenizer'],
             runtime='mhc-official-runtime-7546767.tar.gz + frozen uv.lock',
@@ -84,7 +97,7 @@ def main():
             'https://developer.download.nvidia.com/compute/cuda/repos/debian12/x86_64/cuda-compat-13-1_590.48.01-1_amd64.deb']
         lines=[]
         for line in (ASSETS/'gate.sub').read_text().splitlines():
-            if line.startswith('executable ='):line=f'executable = train.sh\narguments = {run_id} {mode}'
+            if line.startswith('executable ='):line=f'executable = train.sh\narguments = {run_id} {mode} {str(detach).lower()}'
             elif line.startswith('request_disk ='):line='request_disk = 80GB'
             elif line.startswith('gpus_minimum_capability ='):line='gpus_minimum_capability = 8.0'
             elif line.startswith('require_gpus ='):line='require_gpus = '+require_gpus()
@@ -94,7 +107,7 @@ def main():
             elif line.startswith('transfer_output_remaps ='):
                 line='transfer_output_remaps = "results.tar=results/train-$(Cluster).$(Process).tar;checkpoints.tar=results/train-$(Cluster).$(Process)-checkpoints.tar"'
             elif line.startswith('queue '):continue
-            lines.append(line.replace('logs/stream.','logs/train.').replace('nanochat-depth-diagnostic','nanochat-projected-feedback-'+mode+'-10b')
+            lines.append(line.replace('logs/stream.','logs/train.').replace('nanochat-depth-diagnostic','nanochat-projected-feedback-'+mode+suffix+'-10b')
                 .replace('DepthDiagnosticKey','ProjectedFeedbackTrainKey').replace('depth-diagnostic-20261103',KEY))
         lines += ['checkpoint_exit_code = 85','transfer_checkpoint_files = checkpoints.tar,results.tar',
             'encrypt_input_files = /home/yzhong239/.netrc','+InteractiveJob = true',
@@ -111,6 +124,7 @@ def main():
         (ROOT/'state.json').write_text(json.dumps(state,indent=2)+'\n')
         ad=json.loads(command(['condor_q',job,'-json']))[0]
         assert ad['JobStatus']==5 and ad.get('NumJobStarts',0)==0
+        assert ad['Args']==f'{run_id} {mode} {str(detach).lower()}'
         assert ad['RequestGPUs']==1 and ad['RequestCpus']==2 and ad['RequestMemory']==16384
         assert ad['RequestDisk']==80*1024**2 and ad['GPUsMinCapability']==8.0
         assert 'H100|H200' in ad['RequireGPUs'] and 'A100' not in ad['RequireGPUs']
@@ -120,7 +134,7 @@ def main():
         assert set(ad['TransferOutput'].split(','))=={'results.tar','checkpoints.tar'}
         assert ad['ProjectedFeedbackTrainKey']==KEY and ad['InteractiveJob'] and ad['WantGPULab']
         assert 'backfill' in ad['Rank'] and 'countMatches' in ad['Rank']
-        keys=('ClusterId','ProcId','JobStatus','RequestGPUs','RequestCpus','RequestMemory','RequestDisk',
+        keys=('ClusterId','ProcId','JobStatus','Args','RequestGPUs','RequestCpus','RequestMemory','RequestDisk',
             'RequireGPUs','TransferInput','TransferOutput','TransferCheckpoint','SuccessCheckpointExitCode',
             'EncryptInputFiles','ContainerImage','Rank','OnExitHold')
         (ROOT/'submission-verified.json').write_text(json.dumps({k:ad.get(k) for k in keys},indent=2)+'\n')

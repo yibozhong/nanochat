@@ -3,6 +3,14 @@ set -euo pipefail
 TASK_ROOT="$PWD"
 TASK_RUN_ID="$1"
 TASK_MODE="$2"
+TASK_DETACH="$3"
+TASK_FEEDBACK_ARGS=(--feedback-detach)
+TASK_GROUP=projected-feedback-10b-20261114
+case "$TASK_DETACH" in
+    false) TASK_FEEDBACK_ARGS=(--no-feedback-detach);TASK_GROUP=feedback-backprop-10b-20261114 ;;
+    true) ;;
+    *) exit 64 ;;
+esac
 TASK_STEPS=305176
 mkdir -p checkpoints results
 if [ -f results.tar ]; then tar -xf results.tar; fi
@@ -22,13 +30,16 @@ finish() {
 }
 trap finish EXIT
 cp "$0" results/launcher.sh
-/opt/project/.venv/bin/python - "$TASK_RUN_ID" "$TASK_MODE" <<'PY'
+/opt/project/.venv/bin/python - "$TASK_RUN_ID" "$TASK_MODE" "$TASK_DETACH" "$TASK_GROUP" <<'PY'
 import json,sys
 from pathlib import Path
 s=json.loads(Path('source.json').read_text())
 assert s['formal_training'] and s['run_id']==sys.argv[1]
 assert s['feedback_source']==sys.argv[2] and sys.argv[2] in ('embedding_qkv','per_layer_qkv')
 assert s['feedback_projection_order']=='reassociated'
+assert s['feedback_detach']==(sys.argv[3]=='true') and s['wandb_group']==sys.argv[4]
+assert s['earlier_passes']==('no_grad_detached' if s['feedback_detach'] else 'full_backprop')
+assert s['loss']=='final-pass CE only'
 assert s['steps']==305176 and s['training_tokens']==10000007168
 assert s['initialization']=='seed42_from_zero_no_diagnostic_weights'
 assert s['attention_backend']=='fa2' and s['pass_mix']==[.15,.85]
@@ -93,12 +104,12 @@ cp ../source.json source.json
 ln -sfn ../results results
 # Hopper reuses the completed gate. A100 has a validated FA2/CCE runtime;
 # test this model once on that family in this same allocation before training.
-WANDB_MODE=disabled python research/connections/projected-feedback/preflight.py
+WANDB_MODE=disabled timeout --signal=TERM --kill-after=30s 1800 python research/connections/projected-feedback/preflight.py
 echo "FORMAL_TRAINING_BEGIN projected_feedback $TASK_RUN_ID"
 python -m scripts.connection_train --variant baseline --architecture vanilla --streams 1 \
-    --latent-feedback --feedback-source "$TASK_MODE" --feedback-projection-order reassociated --feedback-attention-backend triton --feedback-eval-passes 4 --attention-kernel original --attention-backend fa2 \
+    --latent-feedback --feedback-source "$TASK_MODE" "${TASK_FEEDBACK_ARGS[@]}" --feedback-projection-order reassociated --feedback-attention-backend triton --feedback-eval-passes 4 --attention-kernel original --attention-backend fa2 \
     --steps "$TASK_STEPS" --schedule-steps "$TASK_STEPS" --microbatch 16 --seed 42 \
     --no-activation-checkpoint --no-fused-connection-grad --evaluate-test \
     --data-dir ../data --output-dir results/train --checkpoint-dir ../checkpoints \
-    --formal-training --wandb-group projected-feedback-10b-20261114 --run-id "$TASK_RUN_ID" \
+    --formal-training --wandb-group "$TASK_GROUP" --run-id "$TASK_RUN_ID" \
     --resume auto --segment-seconds 1800

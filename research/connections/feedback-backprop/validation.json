@@ -96,5 +96,19 @@
     "Container has no nvidia-smi; read device metadata from Torch CUDA API.",
     "All four short runs were retained. Summary asserted bitwise equality of CE reductions; observed2.384e-7 difference. Initial tensors separately verified bitwise identical; CE agreement uses one FP32 epsilon scale."
   ],
-  "timing": "Median P2 full optimizer step; sampled mean uses original P1/P2 sequence. First128 and post-eval updates excluded. One model resident, paired arm order reversed between architectures."
+  "timing": "Median P2 full optimizer step; sampled mean uses original P1/P2 sequence. First128 and post-eval updates excluded. One model resident, paired arm order reversed between architectures.",
+  "model": {
+    "depth": 8,
+    "width": 512,
+    "heads": 4,
+    "sequence_length": 2048,
+    "vocab_size": 32768
+  },
+  "microbatch": 16,
+  "training_pass_mix": [
+    0.15,
+    0.85
+  ],
+  "attention_backend": "fa2",
+  "projection_order": "reassociated"
 }
