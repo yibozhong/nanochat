@@ -66,6 +66,39 @@ def compare_one(source,detach,data,out,steps):
     return result
 
 
+def check_initialization(source):
+    """Check actual tensors, rather than requiring bitwise-equal CE reductions."""
+    models=[]
+    for detach in (True,False):
+        seed_all(42)
+        c=ConnectionConfig(streams=1,latent_feedback=True,feedback_source=source,feedback_detach=detach)
+        models.append(build_connection_model(c).prepare())
+    left,right=[m.state_dict() for m in models]
+    assert left.keys()==right.keys()
+    assert all(torch.equal(left[name],right[name]) for name in left)
+    return dict(tensors=len(left),parameters=sum(p.numel() for p in models[0].parameters()),
+        bitwise_identical=True)
+
+
+def summarize_comparisons(result):
+    for source in ('embedding_qkv','per_layer_qkv'):
+        d=result['models'][source+'_detach'];f=result['models'][source+'_full_grad']
+        assert d['parameters']==f['parameters']
+        assert abs(d['first_loss']-f['first_loss'])<2e-4
+        for key in ('ce_p1','ce_p2','ce_p4'):
+            a,b=d['evaluations'][0][key],f['evaluations'][0][key]
+            # FP32 reduction roundoff: require agreement within one ULP scale.
+            assert abs(a-b)<=torch.finfo(torch.float32).eps*max(abs(a),abs(b),1.)
+        result['comparisons'][source]=dict(
+            p2_time_ratio=f['median_seconds_by_pass']['2']/d['median_seconds_by_pass']['2'],
+            sampled_mean_time_ratio=f['mean_step_seconds']/d['mean_step_seconds'],
+            peak_memory_ratio=f['peak_allocated_bytes']/d['peak_allocated_bytes'],
+            peak_extra_gib=(f['peak_allocated_bytes']-d['peak_allocated_bytes'])/2**30,
+            train_ce_delta=f['mean_last128_train_ce']-d['mean_last128_train_ce'],
+            dev_ce_p2_delta=f['evaluations'][-1]['ce_p2']-d['evaluations'][-1]['ce_p2'],
+            dev_ce_p4_delta=f['evaluations'][-1]['ce_p4']-d['evaluations'][-1]['ce_p4'])
+
+
 def main():
     parser=argparse.ArgumentParser()
     parser.add_argument('--data-dir',required=True);parser.add_argument('--output-dir',required=True)
@@ -83,25 +116,16 @@ def main():
         timing_note='Same GPU, one model resident at a time; identical init seed, data prefix, optimizer and sampled passes. First128 and post-eval steps excluded from latency. Counterbalanced arm order between architectures. No checkpointing, profiler or W&B. Peak memory is full training allocation.',
         gpu_info=dict(name=props.name,total_memory_bytes=props.total_memory,
             capability=[props.major,props.minor],multiprocessors=props.multi_processor_count))
+    result['initialization_checks']={source:check_initialization(source)
+        for source in ('embedding_qkv','per_layer_qkv')}
+    gc.collect();torch.cuda.empty_cache()
     # Opposite order for the second pair to reduce systematic warm-cache bias.
     settings=[('embedding_qkv',True),('embedding_qkv',False),('per_layer_qkv',False),('per_layer_qkv',True)]
     for source,detach in settings:
         label=source+('_detach' if detach else '_full_grad')
         result['models'][label]=compare_one(source,detach,data,out,a.steps)
         gc.collect();torch.cuda.empty_cache();json_write(out/'summary.json',result)
-    for source in ('embedding_qkv','per_layer_qkv'):
-        d=result['models'][source+'_detach'];f=result['models'][source+'_full_grad']
-        assert d['parameters']==f['parameters']
-        assert abs(d['first_loss']-f['first_loss'])<2e-4
-        assert d['evaluations'][0]==f['evaluations'][0]
-        result['comparisons'][source]=dict(
-            p2_time_ratio=f['median_seconds_by_pass']['2']/d['median_seconds_by_pass']['2'],
-            sampled_mean_time_ratio=f['mean_step_seconds']/d['mean_step_seconds'],
-            peak_memory_ratio=f['peak_allocated_bytes']/d['peak_allocated_bytes'],
-            peak_extra_gib=(f['peak_allocated_bytes']-d['peak_allocated_bytes'])/2**30,
-            train_ce_delta=f['mean_last128_train_ce']-d['mean_last128_train_ce'],
-            dev_ce_p2_delta=f['evaluations'][-1]['ce_p2']-d['evaluations'][-1]['ce_p2'],
-            dev_ce_p4_delta=f['evaluations'][-1]['ce_p4']-d['evaluations'][-1]['ce_p4'])
+    summarize_comparisons(result)
     result['complete']=True;json_write(out/'summary.json',result)
     print('FEEDBACK_BACKPROP_COMPARISON '+json.dumps(result['comparisons']),flush=True)
 
