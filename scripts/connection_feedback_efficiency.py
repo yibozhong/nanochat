@@ -2,6 +2,7 @@
 from collections import defaultdict
 from contextlib import contextmanager,ExitStack
 import gzip
+import json
 import shutil
 from unittest.mock import patch
 
@@ -62,6 +63,25 @@ def annotated(fn,label):
     return call
 
 
+def cuda_kernel_summary(events):
+    # CUDA device events also contain GPU user-annotation ranges in PyTorch
+    # 2.10. Only trace categories identify actual kernels and memory transfers.
+    kernels=defaultdict(lambda:dict(count=0,gpu_us=0.));spans=[]
+    for e in events:
+        if e.get('cat') not in ('kernel','gpu_memcpy','gpu_memset') or e.get('ph')!='X':continue
+        spans.append((e['ts'],e['ts']+e['dur']))
+        if e['cat']=='kernel':
+            kernels[e['name']]['count']+=1;kernels[e['name']]['gpu_us']+=e['dur']
+    union=0.;end=None
+    for start,stop in sorted(spans):
+        union+=max(0.,stop-max(start,end if end is not None else start))
+        end=max(stop,end if end is not None else stop)
+    elapsed=max(b for a,b in spans)-min(a for a,b in spans) if spans else 0.
+    return dict(top_cuda_kernels=sorted((dict(name=n,**v) for n,v in kernels.items()),key=lambda r:r['gpu_us'],reverse=True)[:40],
+        cuda_kernel_count=sum(k['count'] for k in kernels.values()),device_span_us=elapsed,
+        device_active_us=union,device_gap_fraction=(elapsed-union)/elapsed if elapsed else None)
+
+
 @contextmanager
 def profile_step(model,opt,path):
     """Wrap a warmed, ordinary training step; instrumentation stays outside graphs."""
@@ -87,27 +107,15 @@ def profile_step(model,opt,path):
     events=trace.key_averages(group_by_input_shape=True)
     rows=[dict(name=e.key,count=e.count,cpu_self_us=e.self_cpu_time_total,
         gpu_self_us=e.self_device_time_total,gpu_total_us=e.device_time_total,
-        input_shapes=e.input_shapes) for e in events]
+        input_shapes=e.input_shapes) for e in events if e.device_type==torch.autograd.DeviceType.CPU]
     (path.with_suffix('.txt')).write_text(events.table(sort_by='self_device_time_total',row_limit=40))
-    kernels=defaultdict(lambda:dict(count=0,gpu_us=0.))
-    spans=[]
-    for event in trace.events():
-        if event.device_type==torch.autograd.DeviceType.CUDA:
-            kernels[event.name]['count']+=1;kernels[event.name]['gpu_us']+=event.device_time_total
-            spans.append((event.time_range.start,event.time_range.end))
-    union=0.;end=None
-    for start,stop in sorted(spans):
-        union+=max(0.,stop-max(start,end if end is not None else start))
-        end=max(stop,end if end is not None else stop)
-    elapsed=max(b for a,b in spans)-min(a for a,b in spans) if spans else 0.
+    raw=path.with_suffix('.trace.json');trace.export_chrome_trace(str(raw))
+    cuda=cuda_kernel_summary(json.loads(raw.read_text())['traceEvents'])
     report=dict(stages=[r for r in rows if r['name'].startswith('stage/')],
         top_operators=sorted(rows,key=lambda r:r['gpu_self_us'],reverse=True)[:40],
         copies_and_allocations=[r for r in rows if any(s in r['name'] for s in ('copy','contiguous','clone','cat','empty'))],
-        top_cuda_kernels=sorted((dict(name=n,**v) for n,v in kernels.items()),key=lambda r:r['gpu_us'],reverse=True)[:40],
-        cuda_kernel_count=sum(k['count'] for k in kernels.values()),device_span_us=elapsed,
-        device_active_us=union,device_gap_fraction=(elapsed-union)/elapsed if elapsed else None,
+        **cuda,
         note='One instrumented step, excluded from throughput averages. Stage GPU times are inclusive and nested; do not sum them. Device gaps include CPU launch and synchronization stalls plus profiling overhead.')
     json_write(path.with_suffix('.json'),report)
-    raw=path.with_suffix('.trace.json');trace.export_chrome_trace(str(raw))
     with raw.open('rb') as src,gzip.open(str(raw)+'.gz','wb') as dst:shutil.copyfileobj(src,dst)
     raw.unlink()

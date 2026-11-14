@@ -68,9 +68,15 @@ def profile(source,data,out,order='reassociated',steps=96):
 
 def main():
     p=argparse.ArgumentParser();p.add_argument('--data-dir',required=True);p.add_argument('--output-dir',required=True)
+    p.add_argument('--resume-profile',action='store_true',help='Reuse completed comparator JSONs after a diagnosed profiling failure')
     a=p.parse_args();out=Path(a.output_dir);out.mkdir(parents=True,exist_ok=True)
     configure_attention('fa2');torch.set_num_threads(2);torch.backends.cuda.matmul.allow_tf32=False
-    operator=component_benchmark();json_write(out/'components.json',operator)
+    # This diagnostic intentionally compiles multiple backends, projection
+    # orders, query normalizations and grad/eval modes in one process. A
+    # single production configuration does not need this larger cache.
+    torch._dynamo.config.recompile_limit=max(32,torch._dynamo.config.recompile_limit)
+    operator=json.loads((out/'components.json').read_text()) if a.resume_profile and (out/'components.json').exists() else component_benchmark()
+    json_write(out/'components.json',operator)
     gc.collect();torch.cuda.empty_cache()
     data=PackedData(a.data_dir)
     result=dict(complete=False,formal_training=False,gpu=torch.cuda.get_device_name(),
@@ -82,7 +88,15 @@ def main():
     settings += [(s,'materialized',48) for s in ('embedding_qkv','per_layer_qkv')]
     for source,order,steps in settings:
         label=source+('_materialized' if order=='materialized' else '')
-        result['models'][label]=profile(source,data,out,order,steps)
+        completed=out/f'{label}.json'
+        if a.resume_profile and completed.exists():
+            saved=json.loads(completed.read_text())
+            assert saved['steps']==steps and saved['config']['feedback_projection_order']==order
+            assert saved['config']['feedback_source']==('top' if source=='baseline' else source)
+            assert (out/saved['cuda_profile']).is_file()
+            result['models'][label]=saved
+            print('Reusing completed comparator '+label,flush=True)
+        else:result['models'][label]=profile(source,data,out,order,steps)
         gc.collect();torch.cuda.empty_cache()
         json_write(out/'summary.json',result)
     old=result['models']['layers']['mean_step_seconds']
