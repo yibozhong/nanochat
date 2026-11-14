@@ -22,16 +22,19 @@ def command(args,cwd=REPO):
 
 def main():
     parser=argparse.ArgumentParser()
-    parser.add_argument('--mode',required=True,choices=('embedding_qkv','per_layer_qkv'))
+    parser.add_argument('--mode',required=True,choices=('top','embedding_qkv','per_layer_qkv'))
     parser.add_argument('--feedback-detach',action=argparse.BooleanOptionalAction,default=True)
     parser.add_argument('--feedback-bank',choices=('hidden','residual_update'),default='hidden')
     args=parser.parse_args();mode=args.mode;detach=args.feedback_detach;bank=args.feedback_bank
     residual=bank=='residual_update'
+    top=mode=='top';pending=residual or top
+    if top:assert not detach and bank=='hidden','Current top-feedback authorization is full-gradient only'
     if residual:assert mode=='per_layer_qkv' and detach
-    if not detach:assert mode=='per_layer_qkv','Current full-gradient10B authorization is per-layer only'
+    if not detach:assert mode in ('top','per_layer_qkv'),'Current full-gradient10B authorizations are top and per-layer'
     suffix='' if detach else '-full-grad'
     if residual:suffix='-residual-update'
-    ROOT=HOME_ROOT/('projected-feedback-'+mode.replace('_','-')+suffix+'-10b-20261114')
+    prefix='latent-feedback-' if top else 'projected-feedback-'
+    ROOT=HOME_ROOT/(prefix+mode.replace('_','-')+suffix+'-10b-20261114')
     KEY=ROOT.name
     ROOT.mkdir(exist_ok=True)
     with (ROOT/'submit.lock').open('a') as lock:
@@ -56,13 +59,13 @@ def main():
             assert gate['complete'] and gate['checks']==156 and gate['resume_checks']==2
             assert gate['finite_updates']==8192 and gate['steps_per_model']==2048
             assert gate['continuation_exit_code']==0 and gate['projection_order']=='reassociated'
-            profile=gate['comparisons'][mode];index=0 if residual else 1
+            profile=gate['comparisons']['per_layer_qkv' if top else mode];index=0 if residual else 1
             measured=dict(mean_step_seconds=profile['mean_ms'][index]/1000,
                 p2_step_seconds=profile['p2_ms'][index]/1000,peak_allocated_bytes=round(profile['peak_gib'][index]*2**30))
         assert gate['model']==dict(depth=8,width=512,heads=4,sequence_length=2048,vocab_size=32768)
         assert gate['attention_backend']=='fa2' and gate['microbatch']==16 and gate['training_pass_mix']==[.15,.85]
         # Normal Git diff, no content-hash audit. Model/runtime remain validated.
-        if not residual:
+        if not pending:
             assert not command(['git','diff','--name-only',gate['model_commit'],'HEAD','--',
                 'nanochat','scripts/connection_train.py','research/connections/runtime','research/connections/toolchain'])
         transport=json.loads((REPO/'research/checkpoint-safety/validation.json').read_text())
@@ -81,25 +84,26 @@ def main():
         (ROOT/'train.sh').chmod(0o755)
         run_id=uuid.uuid4().hex[:8]
         source=dict(commit=commit,formal_training=True,plan=KEY,run_id=run_id,
-            model_variant='projected_feedback',feedback_source=mode,feedback_projection_order='reassociated',feedback_detach=detach,
+            model_variant='latent_feedback' if top else 'projected_feedback',feedback_source=mode,feedback_projection_order='reassociated',feedback_detach=detach,
             feedback_bank=bank,feedback_attention_backend='triton',
-            validated_model_commit=None if residual else gate['model_commit'],validation_job=None if residual else gate['job'],
-            preflight_required=residual,reference_validation_job=gate['job'],
+            validated_model_commit=None if pending else gate['model_commit'],validation_job=None if pending else gate['job'],
+            preflight_required=pending,reference_validation_job=gate['job'],
             model=gate['model'],steps=STEPS,training_tokens=STEPS*32768,batch_tokens=32768,microbatch=16,
             seed=42,initialization='seed42_from_zero_no_diagnostic_weights',
             pass_mix=[.15,.85],eval_passes=4,earlier_passes='no_grad_detached' if detach else 'full_backprop',
-            loss='final-pass CE only',wandb_group='residual-feedback-10b-20261114' if residual else 'projected-feedback-10b-20261114' if detach else 'feedback-backprop-10b-20261114',
+            loss='final-pass CE only',wandb_group='top-feedback-full-grad-10b-20261114' if top else 'residual-feedback-10b-20261114' if residual else 'projected-feedback-10b-20261114' if detach else 'feedback-backprop-10b-20261114',
             attention_backend='fa2',data_uri=data['data_uri'],data_archive_bytes=data['archive']['bytes'],
             dataset_revision=data['manifest']['dataset_revision'],tokenizer=data['manifest']['tokenizer']['tokenizer'],
             runtime='mhc-official-runtime-7546767.tar.gz + frozen uv.lock',
             checkpoint_seconds=1800,evaluate_test=True,
             scheduling='H100/H200 first; A100 after 3600 continuous idle seconds, with same-allocation feedback preflight',
-            passed_families=[] if residual else [[9,0]],compatible_fallback_backend='A100 FA2/CCE runtime validated in skip-scale/validation.json',
+            passed_families=[] if pending else [[9,0]],compatible_fallback_backend='A100 FA2/CCE runtime validated in skip-scale/validation.json',
             estimated_step_seconds=measured['mean_step_seconds'],
-            timing_reference='detached hidden-bank comparator; residual-update timing pending same-allocation gate' if residual else 'validated same-configuration timing',
-            validation_step_seconds=None if residual else measured['mean_step_seconds'],
-            validation_p2_step_seconds=None if residual else measured['p2_step_seconds'],
-            validation_peak_bytes=None if residual else measured['peak_allocated_bytes'])
+            timing_reference='per-layer full-gradient comparator; top timing pending same-allocation gate' if top else 'detached hidden-bank comparator; residual-update timing pending same-allocation gate' if residual else 'validated same-configuration timing',
+            validation_step_seconds=None if pending else measured['mean_step_seconds'],
+            validation_p2_step_seconds=None if pending else measured['p2_step_seconds'],
+            validation_peak_bytes=None if pending else measured['peak_allocated_bytes'])
+        if top:source['comparison_runs']=dict(top_detach='f00f6f3f',per_layer_detach='d93f191c',per_layer_full_grad='2c8a8050')
         (bundle/'source.json').write_text(json.dumps(source,indent=2)+'\n')
         inputs=[str(p.relative_to(ROOT)) for p in bundle.iterdir()]
         inputs += [str(HOME_ROOT/'.netrc'),data['data_uri'],
@@ -117,7 +121,7 @@ def main():
             elif line.startswith('transfer_output_remaps ='):
                 line='transfer_output_remaps = "results.tar=results/train-$(Cluster).$(Process).tar;checkpoints.tar=results/train-$(Cluster).$(Process)-checkpoints.tar"'
             elif line.startswith('queue '):continue
-            lines.append(line.replace('logs/stream.','logs/train.').replace('nanochat-depth-diagnostic','nanochat-projected-feedback-'+mode+suffix+'-10b')
+            lines.append(line.replace('logs/stream.','logs/train.').replace('nanochat-depth-diagnostic','nanochat-'+prefix+mode+suffix+'-10b')
                 .replace('DepthDiagnosticKey','ProjectedFeedbackTrainKey').replace('depth-diagnostic-20261103',KEY))
         lines += ['checkpoint_exit_code = 85','transfer_checkpoint_files = checkpoints.tar,results.tar',
             'encrypt_input_files = /home/yzhong239/.netrc','+InteractiveJob = true',

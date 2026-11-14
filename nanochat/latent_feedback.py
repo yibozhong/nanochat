@@ -1,4 +1,4 @@
-"""Detached, additive latent feedback from ifm-ai/LoRM.
+"""Additive latent feedback from ifm-ai/LoRM, detached by default.
 
 The nanochat backbone, normalized input embedding and readout are retained.
 Training samples P1/P2 once per update; evaluation defaults to P4.
@@ -111,8 +111,12 @@ class LatentFeedbackModel(ConnectionModel):
         embedding = norm(self.wte(idx))
         grad_enabled = torch.is_grad_enabled()
         for index in range(passes):
-            with torch.set_grad_enabled(grad_enabled and index == passes - 1):
-                state = embedding if index == 0 else (self.compiled_mix or self.mix)(embedding, feedback.detach())
+            with torch.set_grad_enabled(grad_enabled and (index == passes - 1 or not self.config.feedback_detach)):
+                if index == 0:
+                    state = embedding
+                else:
+                    previous = feedback.detach() if self.config.feedback_detach else feedback
+                    state = (self.compiled_mix or self.mix)(embedding, previous)
                 if self.config.feedback_source == 'layers' and index < passes-1:
                     top, feedback = self.backbone(state, return_layers=True)
                 else:

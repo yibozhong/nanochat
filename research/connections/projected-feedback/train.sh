@@ -17,6 +17,10 @@ case "$TASK_BANK" in
     hidden) ;;
     *) exit 64 ;;
 esac
+if [ "$TASK_MODE" = top ]; then
+    test "$TASK_DETACH" = false;test "$TASK_BANK" = hidden
+    TASK_GROUP=top-feedback-full-grad-10b-20261114
+fi
 TASK_STEPS=305176
 mkdir -p checkpoints results
 if [ -f results.tar ]; then tar -xf results.tar; fi
@@ -41,7 +45,7 @@ import json,sys
 from pathlib import Path
 s=json.loads(Path('source.json').read_text())
 assert s['formal_training'] and s['run_id']==sys.argv[1]
-assert s['feedback_source']==sys.argv[2] and sys.argv[2] in ('embedding_qkv','per_layer_qkv')
+assert s['feedback_source']==sys.argv[2] and sys.argv[2] in ('top','embedding_qkv','per_layer_qkv')
 assert s['feedback_projection_order']=='reassociated'
 assert s['feedback_detach']==(sys.argv[3]=='true') and s['wandb_group']==sys.argv[4]
 assert s.get('feedback_bank','hidden')==sys.argv[5]
@@ -113,6 +117,8 @@ ln -sfn ../results results
 # test this model once on that family in this same allocation before training.
 if [ "$TASK_BANK" = residual_update ]; then
     WANDB_MODE=disabled timeout --signal=TERM --kill-after=30s 2400 python research/connections/residual-feedback/preflight.py
+elif [ "$TASK_MODE" = top ]; then
+    WANDB_MODE=disabled timeout --signal=TERM --kill-after=30s 2400 python research/connections/top-feedback-backprop/preflight.py
 else
     WANDB_MODE=disabled timeout --signal=TERM --kill-after=30s 1800 python research/connections/projected-feedback/preflight.py
 fi

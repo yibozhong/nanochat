@@ -65,11 +65,12 @@ def model_cost(config, batch=1, activation_bytes=2, feedback_passes=None):
             raise ValueError('Feedback passes must be >=1')
         extra=p-1
         fusion_train=2*extra if feedback_passes is None else (p if p>1 else 0)
+        if not c.feedback_detach:fusion_train=3*extra
         return dict(estimated_forward_flops=p*backbone+head+extra*fusion,
-            estimated_training_flops=(p+2)*backbone+3*head+fusion_train*fusion,
+            estimated_training_flops=((p+2) if c.feedback_detach else 3*p)*backbone+3*head+fusion_train*fusion,
             estimated_evaluation_flops=c.feedback_eval_passes*backbone+head+(c.feedback_eval_passes-1)*fusion,
-            additional_parameters=d*d, expected_training_passes=p,
-            accounting='FMA=2; only final backbone pass and head have backward. Final fusion has weight gradient only (detached input); earlier fusion passes have no backward. Default averages 15% P1 / 85% P2. Excludes elementwise work, optimizer and checkpoint recomputation.')
+            additional_parameters=d*d, expected_training_passes=p,feedback_detach=c.feedback_detach,
+            accounting='FMA=2; final-only head/CE. Detached: final backbone backward, fusion weight-only backward. Full-gradient: all backbone passes and fusion input/weight backward. Default averages 15% P1 / 85% P2. Excludes elementwise work, optimizer and checkpoint recomputation.')
     if c.variant=='skip_scale':
         # Relative to vanilla's already-present residual adds: one multiply
         # forward; dx multiply plus dscale multiply/reduction in backward.

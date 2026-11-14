@@ -50,8 +50,8 @@ class ConnectionConfig:
             raise ValueError('Unknown feedback bank content')
         if self.feedback_bank=='residual_update' and (self.feedback_source!='per_layer_qkv' or not self.feedback_detach):
             raise ValueError('Residual-update bank currently uses detached per-layer QKV feedback')
-        if not self.feedback_detach and self.feedback_source not in ('embedding_qkv','per_layer_qkv'):
-            raise ValueError('Cross-pass backpropagation currently requires projected layer feedback')
+        if not self.feedback_detach and (not self.latent_feedback or self.feedback_source not in ('top','embedding_qkv','per_layer_qkv')):
+            raise ValueError('Cross-pass backpropagation requires top or projected layer feedback')
         if self.feedback_projection_order not in ('materialized','reassociated'):
             raise ValueError('Unknown feedback projection order')
         if self.feedback_source not in ('top','layers','embedding_qkv','per_layer_qkv') or self.feedback_attention_backend not in ('torch','triton'):

@@ -85,12 +85,13 @@ def main(root):
                 lines=log.read_text(errors='replace').splitlines() if log.exists() else []
                 gate_started=False
                 for line in lines:
-                    if line.startswith('RESIDUAL_FEEDBACK_GATE_BEGIN '):gate_started=True
-                    if line.startswith('RESIDUAL_FEEDBACK_GATE_PASSED '):
+                    if line.startswith(('RESIDUAL_FEEDBACK_GATE_BEGIN ','TOP_FEEDBACK_GATE_BEGIN ')):gate_started=True
+                    if line.startswith(('RESIDUAL_FEEDBACK_GATE_PASSED ','TOP_FEEDBACK_GATE_PASSED ')):
                         report=json.loads(line.split(' ',1)[1])
                         assert report['complete'] and report['source']==training['source']
                         save(root/'preflight-validation.json',report)
-                        training['estimated_current_gpu_training_hours']=training['source']['steps']*report['residual_mean_step_seconds']/3600
+                        seconds=report.get('mean_step_seconds',report.get('residual_mean_step_seconds'))
+                        training['estimated_current_gpu_training_hours']=training['source']['steps']*seconds/3600
                         training['validation_gpu']=report['gpu']
                 latest=formal_step(lines,training['run_id'])
                 if latest:

@@ -160,6 +160,7 @@ def main():
     kwargs=dict(project='nanochat',entity='yibozhong657-none',group=a.wandb_group,
                 job_type='pretrain' if a.formal_training else 'diagnostic',
                 name=f'{a.architecture}-{a.variant}'+(f'-{c.feedback_source}-feedback' if c.latent_feedback else '')+
+                    ('-full-grad' if c.latent_feedback and not c.feedback_detach else '')+
                     ('-residual-update' if c.feedback_bank=='residual_update' else '')+
                     f'-{c.sequence_length}ctx-{a.steps}steps',id=run_id,resume='allow',config=config)
     run=training_run(formal_training=a.formal_training, local_dir=out/"diagnostics", **kwargs)
