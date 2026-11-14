@@ -1,0 +1,100 @@
+{
+  "complete": true,
+  "formal_training": false,
+  "gpu": "NVIDIA H200",
+  "job": "8679243.0",
+  "models": 4,
+  "steps_per_model": 2048,
+  "tokens_per_model": 67108864,
+  "finite_updates": 8192,
+  "checks": 156,
+  "resume_checks": 2,
+  "model_commit": "8e54d2a",
+  "diagnostic_fixes": [
+    "0c8a519",
+    "feefaa9",
+    "f893c96"
+  ],
+  "original_wrapper_exit_code": 1,
+  "continuation_exit_code": 0,
+  "comparisons": {
+    "embedding_qkv": {
+      "p2_ms": [
+        73.11544753611088,
+        87.72145118564367
+      ],
+      "mean_ms": [
+        71.93647658426103,
+        84.37228924412254
+      ],
+      "peak_gib": [
+        5.822708606719971,
+        10.571878910064697
+      ],
+      "train_ce_last128": [
+        3.9408304672688246,
+        3.9272225480526686
+      ],
+      "dev_p4": [
+        3.897738218307495,
+        3.8853988647460938
+      ],
+      "dev_p2": [
+        3.900135576725006,
+        3.8876307010650635
+      ],
+      "dev_p1": [
+        3.974423408508301,
+        3.952897846698761
+      ],
+      "p2_slowdown_percent": 19.976631671876266,
+      "sampled_slowdown_percent": 17.287214012066787,
+      "dev_p4_delta": -0.012339353561401367,
+      "train_ce_delta": -0.013607919216156006
+    },
+    "per_layer_qkv": {
+      "p2_ms": [
+        80.16236405819654,
+        96.16694506257772
+      ],
+      "mean_ms": [
+        77.94592569066603,
+        91.72398703424986
+      ],
+      "peak_gib": [
+        6.9925618171691895,
+        11.960482120513916
+      ],
+      "train_ce_last128": [
+        3.951457343995571,
+        3.9365092869848013
+      ],
+      "dev_p4": [
+        3.912912428379059,
+        3.8984830379486084
+      ],
+      "dev_p2": [
+        3.913073778152466,
+        3.897521197795868
+      ],
+      "dev_p1": [
+        3.9780179262161255,
+        3.9600982666015625
+      ],
+      "p2_slowdown_percent": 19.965205857404754,
+      "sampled_slowdown_percent": 17.67643558210219,
+      "dev_p4_delta": -0.01442939043045044,
+      "train_ce_delta": -0.014948057010769844
+    }
+  },
+  "data": "existing FineWeb-Edu sample-10BT packed2K prefix, seed42",
+  "configuration": "d8/D512/T2048, microbatch16, 32768 tokens/update, 15%P1/85%P2, final-only CE, no activation checkpointing",
+  "dependencies": "Torch2.10.0+cu130, frozen runtime, FA2, CCE, Triton; see collected/environment.txt",
+  "reports_root": "/home/yzhong239/feedback-backprop-debug-20261114/collected",
+  "failure_repairs": [
+    "Matched compiled/checkpoint Torch oracle to Triton model; same numerical and gradient thresholds.",
+    "Container has no nvidia-smi; read device metadata from Torch CUDA API.",
+    "All four short runs were retained. Summary asserted bitwise equality of CE reductions; observed2.384e-7 difference. Initial tensors separately verified bitwise identical; CE agreement uses one FP32 epsilon scale."
+  ],
+  "timing": "Median P2 full optimizer step; sampled mean uses original P1/P2 sequence. First128 and post-eval updates excluded. One model resident, paired arm order reversed between architectures."
+}
