@@ -41,13 +41,16 @@ def main():
                     summary=out/'comparison/summary.json'
                     if summary.exists():
                         value=json.loads(summary.read_text());save(ROOT/'summary.json',value)
-                        if value.get('complete') and terminal.get('ExitCode')==0:
+                        repair=out/'repair-success.json'
+                        repaired=repair.exists() and json.loads(repair.read_text()).get('continuation_exit_code')==0
+                        if value.get('complete') and (terminal.get('ExitCode')==0 or repaired):
                             tests=ET.parse(out/'tests.xml').getroot()
                             suites=[tests] if tests.tag=='testsuite' else list(tests.iter('testsuite'))
                             assert sum(int(s.attrib.get('failures',0))+int(s.attrib.get('errors',0)) for s in suites)==0
                             for source in ('embedding_qkv','per_layer_qkv'):
                                 assert json.loads((out/f'cli-resume-{source}.json').read_text())['complete']
-                            state.update(status='debug_complete',tests=sum(int(s.attrib['tests']) for s in suites),comparisons=value['comparisons'])
+                            state.update(status='debug_passed_after_in_allocation_repair' if repaired else 'debug_complete',
+                                tests=sum(int(s.attrib['tests']) for s in suites),comparisons=value['comparisons'])
                     save(ROOT/'state.json',state);print(json.dumps(state),flush=True);return
                 if ad:
                     state.update(status={1:'queued',2:'running',5:'held'}.get(ad['JobStatus'],'transferring'),queue=ad,updated_at=time.time())

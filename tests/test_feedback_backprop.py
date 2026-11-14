@@ -58,7 +58,10 @@ def connected(mode,backend='triton',compiled=False,checkpoint=False):
 def test_complete_model_gradients(mode,compiled,checkpoint,passes):
     torch._dynamo.config.recompile_limit=max(32,torch._dynamo.config.recompile_limit)
     m=connected(mode,compiled=compiled,checkpoint=checkpoint)
-    ref=connected(mode,backend='torch');ref.load_state_dict(m.state_dict())
+    # Compare the read kernels with the same compilation/rounding regime.
+    # Compiled vs eager BF16 norm/backward can differ across repeated passes.
+    ref=connected(mode,backend='torch',compiled=compiled,checkpoint=checkpoint)
+    ref.load_state_dict(m.state_dict())
     x,y=inputs();a=m(x,y,passes=passes);b=ref(x,y,passes=passes)
     a.backward();b.backward()
     torch.testing.assert_close(a,b,rtol=2e-4,atol=2e-4)
