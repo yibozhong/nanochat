@@ -5,7 +5,6 @@ import gc
 import json
 from pathlib import Path
 import statistics
-import subprocess
 import time
 
 import torch
@@ -75,13 +74,15 @@ def main():
     configure_attention('fa2');torch.set_num_threads(2);torch.backends.cuda.matmul.allow_tf32=False
     torch._dynamo.config.recompile_limit=max(32,torch._dynamo.config.recompile_limit)
     data=PackedData(a.data_dir);assert len(data.arrays['train'])>=a.steps*16
+    props=torch.cuda.get_device_properties(0)
     result=dict(complete=False,formal_training=False,gpu=torch.cuda.get_device_name(),
         torch=torch.__version__,cuda=torch.version.cuda,data_manifest=data.manifest,
         seed=42,steps_per_model=a.steps,tokens_per_model=a.steps*32768,
         batch_tokens=32768,microbatch=16,schedule_steps=305176,pass_mix=[.15,.85],
         loss='final-pass CE only in both arms',models={},comparisons={},
         timing_note='Same GPU, one model resident at a time; identical init seed, data prefix, optimizer and sampled passes. First128 and post-eval steps excluded from latency. Counterbalanced arm order between architectures. No checkpointing, profiler or W&B. Peak memory is full training allocation.',
-        gpu_info=subprocess.check_output(['nvidia-smi','--query-gpu=name,uuid,driver_version,memory.total','--format=csv,noheader'],text=True).strip())
+        gpu_info=dict(name=props.name,total_memory_bytes=props.total_memory,
+            capability=[props.major,props.minor],multiprocessors=props.multi_processor_count))
     # Opposite order for the second pair to reduce systematic warm-cache bias.
     settings=[('embedding_qkv',True),('embedding_qkv',False),('per_layer_qkv',False),('per_layer_qkv',True)]
     for source,detach in settings:
