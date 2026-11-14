@@ -72,8 +72,9 @@ def test_query_selects_layers_and_no_cross_batch_shift():
     old=layer_read(q,bank)
     bank[0,-1].fill_(100.)
     assert torch.equal(layer_read(q,bank)[1],old[1])
-    with pytest.raises(ValueError,match='detached'):
-        layer_read(q,bank.requires_grad_())
+    layer_read(q,bank.requires_grad_())[1].sum().backward()
+    assert torch.count_nonzero(bank.grad[0])==0
+    assert torch.count_nonzero(bank.grad[:,-1])==0
 
 
 def make(backend='triton',compiled=False,perturb=True,checkpoint=False):

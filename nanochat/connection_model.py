@@ -42,8 +42,11 @@ class ConnectionConfig:
     feedback_source: str = 'top'
     feedback_attention_backend: str = 'triton'
     feedback_projection_order: str = 'reassociated'
+    feedback_detach: bool = True
 
     def __post_init__(self):
+        if not self.feedback_detach and self.feedback_source not in ('embedding_qkv','per_layer_qkv'):
+            raise ValueError('Cross-pass backpropagation currently requires projected layer feedback')
         if self.feedback_projection_order not in ('materialized','reassociated'):
             raise ValueError('Unknown feedback projection order')
         if self.feedback_source not in ('top','layers','embedding_qkv','per_layer_qkv') or self.feedback_attention_backend not in ('torch','triton'):

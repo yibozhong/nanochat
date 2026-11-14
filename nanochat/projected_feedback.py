@@ -10,10 +10,10 @@ from nanochat.layer_feedback import layer_read
 from nanochat.projected_layer_read import projected_read
 
 
-def normalize_bank(bank):
-    # Only the raw previous-pass backbone state is detached. K/V projections
-    # below run under the final pass's autograd context and remain trainable.
-    return F.rms_norm(bank.detach().float(),(bank.shape[-1],),eps=1e-5).to(bank.dtype)
+def normalize_bank(bank,detach=True):
+    # Detachment controls the source backbone, never the projection weights.
+    if detach:bank=bank.detach()
+    return F.rms_norm(bank.float(),(bank.shape[-1],),eps=1e-5).to(bank.dtype)
 
 
 class ProjectedLayerReader(nn.Module):
@@ -65,7 +65,7 @@ class ProjectedFeedbackModel(ConnectionModel):
     def _pass(self,embedding,bank=None,collect=False,kv_cache=None):
         if bank is None:
             return self.backbone(embedding,kv_cache,return_layers=collect)
-        bank=(self.compiled_bank_norm if self.compiled_bank_norm is not None and kv_cache is None else normalize_bank)(bank)
+        bank=(self.compiled_bank_norm if self.compiled_bank_norm is not None and kv_cache is None else normalize_bank)(bank,self.config.feedback_detach)
         shift=kv_cache is None
         def read(i,x):
             fn=self.compiled_readers[i] if self.compiled_readers is not None and kv_cache is None else self.feedback_readers[i]
@@ -94,7 +94,7 @@ class ProjectedFeedbackModel(ConnectionModel):
         embedding=norm(self.wte(idx));bank=None;grad_enabled=torch.is_grad_enabled()
         for index in range(passes):
             final=index==passes-1
-            with torch.set_grad_enabled(grad_enabled and final):
+            with torch.set_grad_enabled(grad_enabled and (final or not self.config.feedback_detach)):
                 if final:top=self._pass(embedding,bank)
                 else:top,bank=self._pass(embedding,bank,collect=True)
         return norm(top)

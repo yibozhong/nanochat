@@ -1,10 +1,10 @@
-"""Content-conditioned attention over the previous token's detached layer bank.
+"""Content-conditioned attention over the previous token's layer bank.
 
 query: [B,T,D]; bank: [B,T,L,D], raw states after complete blocks.
 Keys and values are the same FP32 RMS-normalized states (epsilon 1e-5).
-Only query gradients are required: the preliminary pass is explicitly detached.
 One Triton program per token fuses normalization, scores, depth softmax and read.
-Backward reuses FP32 probabilities, recomputes normalization and writes only dQ.
+Backward reuses FP32 probabilities and optionally returns source-bank gradients.
+The one-token shift is bijective on used rows, so dBank needs no atomics.
 """
 import torch
 import triton
@@ -49,8 +49,9 @@ def _read_forward(Q, BANK, OUT, PROBS, T:tl.constexpr, L:tl.constexpr, D:tl.cons
 
 
 @triton.jit
-def _read_backward(GO, BANK, PROBS, GQ, T:tl.constexpr, L:tl.constexpr, D:tl.constexpr,
-                   SHIFT:tl.constexpr, NORMALIZE:tl.constexpr, BL:tl.constexpr, BD:tl.constexpr):
+def _read_backward(GO, BANK, PROBS, GQ, Q, GB, T:tl.constexpr, L:tl.constexpr, D:tl.constexpr,
+                   SHIFT:tl.constexpr, NORMALIZE:tl.constexpr, BANK_GRAD:tl.constexpr,
+                   BL:tl.constexpr, BD:tl.constexpr):
     row=tl.program_id(0)
     valid=(row%T>0) if SHIFT else True
     previous=row-1 if SHIFT else row
@@ -60,13 +61,24 @@ def _read_backward(GO, BANK, PROBS, GQ, T:tl.constexpr, L:tl.constexpr, D:tl.con
         mask=valid & (layers[:,None]<L) & (channels[None,:]<D),other=0).to(tl.float32)
     value=raw
     if NORMALIZE:
-        value=raw*tl.rsqrt(tl.sum(raw*raw,axis=1)/D+1e-5)[:,None]
+        inv=tl.rsqrt(tl.sum(raw*raw,axis=1)/D+1e-5)
+        value=raw*inv[:,None]
     prob=tl.load(PROBS+row*L+layers,mask=layers<L,other=0)
     grad=tl.load(GO+row*D+channels,mask=channels<D,other=0).to(tl.float32)
     dp=tl.sum(value*grad[None,:],axis=1)
     ds=prob*(dp-tl.sum(prob*dp,axis=0))
     dq=tl.sum(value*ds[:,None],axis=0)*(D**-.5)
     tl.store(GQ+row*D+channels,dq,mask=channels<D)
+    if BANK_GRAD:
+        query=tl.load(Q+row*D+channels,mask=channels<D,other=0).to(tl.float32)
+        dv=prob[:,None]*grad[None,:]+ds[:,None]*query[None,:]*(D**-.5)
+        if NORMALIZE:
+            dv=inv[:,None]*(dv-value*tl.sum(dv*value,axis=1)[:,None]/D)
+        # First query has no source. It writes zeros to the unused final bank
+        # row of its own sequence, avoiding both zero-fill and atomic adds.
+        destination=tl.where(valid,previous,row+T-1) if SHIFT else row
+        tl.store(GB+(destination*L+layers[:,None])*D+channels[None,:],dv,
+            mask=(layers[:,None]<L) & (channels[None,:]<D))
 
 
 class _LayerRead(torch.autograd.Function):
@@ -79,25 +91,26 @@ class _LayerRead(torch.autograd.Function):
         tile_l=triton.next_power_of_2(depth);tile_d=triton.next_power_of_2(width)
         warps=4 if tile_l*tile_d<=4096 else 8
         _read_forward[(batch*length,)](query,bank,out,probs,length,depth,width,shift,normalize,tile_l,tile_d,num_warps=warps)
-        ctx.save_for_backward(bank,probs)
+        ctx.bank_grad=ctx.needs_input_grad[1]
+        ctx.save_for_backward(bank,probs,*((query,) if ctx.bank_grad else ()))
         ctx.shape=(batch,length,width,depth,shift,normalize,tile_l,tile_d,warps)
         return out
 
     @staticmethod
     def backward(ctx,grad):
-        bank,probs=ctx.saved_tensors
+        bank,probs=ctx.saved_tensors[:2]
         batch,length,width,depth,shift,normalize,tile_l,tile_d,warps=ctx.shape
         dq=torch.empty((batch,length,width),device=grad.device,dtype=grad.dtype)
-        _read_backward[(batch*length,)](grad.contiguous(),bank,probs,dq,length,depth,width,
-            shift,normalize,tile_l,tile_d,num_warps=warps)
-        return dq,None,None,None
+        db=torch.empty_like(bank) if ctx.bank_grad else None
+        query=ctx.saved_tensors[2] if ctx.bank_grad else bank
+        _read_backward[(batch*length,)](grad.contiguous(),bank,probs,dq,query,db,length,depth,width,
+            shift,normalize,ctx.bank_grad,tile_l,tile_d,num_warps=warps)
+        return dq,db,None,None
 
 
 def layer_read(query, bank, shift=True, backend='triton', normalize=True):
     if query.ndim!=3 or bank.ndim!=4 or bank.shape[:2]!=query.shape[:2] or bank.shape[-1]!=query.shape[-1]:
         raise ValueError('Expected query[B,T,D] and bank[B,T,L,D]')
-    if bank.requires_grad:
-        raise ValueError('Layer bank must be detached; this operator computes only query gradients')
     if backend=='torch':
         return layer_read_reference(query,bank,shift,normalize)
     if backend!='triton' or not query.is_cuda or bank.device!=query.device:

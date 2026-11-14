@@ -33,6 +33,7 @@ def main():
     p.add_argument('--feedback-source', choices=('top','layers','embedding_qkv','per_layer_qkv'), default='top')
     p.add_argument('--feedback-attention-backend', choices=('torch','triton'), default='triton')
     p.add_argument('--feedback-projection-order', choices=('materialized','reassociated'), default='reassociated')
+    p.add_argument('--feedback-detach', action=argparse.BooleanOptionalAction, default=True)
     p.add_argument('--window-pattern', default='SSSL', help='Native backbone only; vanilla always uses full attention')
     p.add_argument('--formal-training', action='store_true', help='Explicitly enable W&B for a formal training run')
     p.add_argument('--wandb-group', default='mhc-official-kernels-20261030')
@@ -82,6 +83,7 @@ def main():
                        latent_feedback=a.latent_feedback, feedback_eval_passes=a.feedback_eval_passes,
                        feedback_source=a.feedback_source, feedback_attention_backend=a.feedback_attention_backend,
                        feedback_projection_order=a.feedback_projection_order,
+                       feedback_detach=a.feedback_detach,
                        activation_checkpoint=a.activation_checkpoint,
                        connection_backend=a.connection_backend, fused_connection_grad=a.fused_connection_grad)
     data=PackedData(a.data_dir)
@@ -106,7 +108,7 @@ def main():
                   evaluate_test=a.evaluate_test)
     if c.latent_feedback:
         protocol['feedback']=dict(pass_mix=[.15,.85],sampler='numpy.default_rng([seed,zero_based_step])',
-            earlier_passes='no_grad_detached',eval_passes=c.feedback_eval_passes)
+            earlier_passes='no_grad_detached' if c.feedback_detach else 'full_backprop',eval_passes=c.feedback_eval_passes)
     step=0;best=float('inf');training_seconds=0.;prior_elapsed=0.;initial_dev=None
     run_id=a.run_id or uuid.uuid4().hex[:8]
     if a.resume=='auto':
