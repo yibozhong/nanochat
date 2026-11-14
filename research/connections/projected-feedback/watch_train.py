@@ -82,7 +82,17 @@ def main(root):
                     result=command(['condor_qedit','-constraint',condition,'RequireGPUs',require_gpus(wanted)])
                     state['transitions'].append(dict(time=time.time(),fallback=wanted,result=result))
                 log=root/'logs'/f'train.{job}.out'
-                latest=formal_step(log.read_text(errors='replace').splitlines(),training['run_id']) if log.exists() else None
+                lines=log.read_text(errors='replace').splitlines() if log.exists() else []
+                gate_started=False
+                for line in lines:
+                    if line.startswith('RESIDUAL_FEEDBACK_GATE_BEGIN '):gate_started=True
+                    if line.startswith('RESIDUAL_FEEDBACK_GATE_PASSED '):
+                        report=json.loads(line.split(' ',1)[1])
+                        assert report['complete'] and report['source']==training['source']
+                        save(root/'preflight-validation.json',report)
+                        training['estimated_current_gpu_training_hours']=training['source']['steps']*report['residual_mean_step_seconds']/3600
+                        training['validation_gpu']=report['gpu']
+                latest=formal_step(lines,training['run_id'])
                 if latest:
                     state['latest_formal_step']=latest
                     if 'first_formal_step' not in state:
@@ -90,7 +100,7 @@ def main(root):
                         save(root/'startup-observation.json',dict(job=job,run_id=training['run_id'],first_formal_step=latest,observed_at=time.time()))
                     status='resume_queued' if ad['JobStatus']==1 else 'training_started'
                     training.update(status=status,latest_observed_step=latest)
-                else:training['status']='training_submitted' if ad['JobStatus']==1 else 'preparing'
+                else:training['status']='training_submitted' if ad['JobStatus']==1 else 'validating' if gate_started else 'preparing'
                 state['status']='monitoring'
                 if ad['JobStatus'] in (3,5) or ad['JobStatus']==4 and ad.get('ExitCode')!=0:
                     training.update(status='needs_attention',last_job=ad)

@@ -18,13 +18,14 @@ def model_cost(config, batch=1, activation_bytes=2, feedback_passes=None):
             # Bank normalization is shared by readers. Reassociation keeps all
             # four projection input/weight gradients for either training mode.
             bank_norm=4*batch*t*depth*d
+            bank_collection=batch*t*depth*d if c.feedback_bank=='residual_update' else 0
             read_forward=4*batch*t*depth*d
             reassociated=c.feedback_projection_order=='reassociated'
             read_backward=(10 if not c.feedback_detach else 6 if reassociated else 10)*batch*t*depth*d
             forward_gemms=4 if reassociated else 2+2*depth
             train_gemms=12 if reassociated else 6+(4 if c.feedback_detach else 6)*depth
-            mix_forward=bank_norm+readers*(forward_gemms*fusion+read_forward)
-            mix_train=(1 if c.feedback_detach else 3)*bank_norm+readers*(train_gemms*fusion+read_forward+read_backward)
+            mix_forward=bank_collection+bank_norm+readers*(forward_gemms*fusion+read_forward)
+            mix_train=bank_collection+(1 if c.feedback_detach else 3)*bank_norm+readers*(train_gemms*fusion+read_forward+read_backward)
             p=1.85 if feedback_passes is None else feedback_passes
             if p<1:raise ValueError('Feedback passes must be >=1')
             extra=.85*mix_train if feedback_passes is None else ((p-2)*mix_forward+mix_train if p>1 else 0)
@@ -36,6 +37,7 @@ def model_cost(config, batch=1, activation_bytes=2, feedback_passes=None):
                 detached_layer_bank_bytes=batch*t*depth*d*activation_bytes if c.feedback_detach else 0,
                 layer_bank_bytes=batch*t*depth*d*activation_bytes,
                 feedback_detach=c.feedback_detach,
+                feedback_bank=c.feedback_bank,
                 projected_kv_saved_bytes=0 if reassociated else 2*readers*batch*t*depth*d*activation_bytes,
                 projection_order=c.feedback_projection_order,
                 accounting='FMA=2; independent full-width Q/K/V/O per reader. Reassociated order applies K to Q and V after mixing: four tokenwise forward GEMMs. Materialized order projects every source layer. Default averages 15% P1 / 85% P2; head/CE runs only on final pass. Backbone backward is final-only when feedback_detach, otherwise every pass. Excludes scalar softmax/rsqrt, other elementwise work, optimizer and recomputation.',

@@ -63,16 +63,17 @@ class ProjectedFeedbackModel(ConnectionModel):
         return self
 
     def _pass(self,embedding,bank=None,collect=False,kv_cache=None):
+        options=dict(return_layers=collect,layer_state=self.config.feedback_bank)
         if bank is None:
-            return self.backbone(embedding,kv_cache,return_layers=collect)
+            return self.backbone(embedding,kv_cache,**options)
         bank=(self.compiled_bank_norm if self.compiled_bank_norm is not None and kv_cache is None else normalize_bank)(bank,self.config.feedback_detach)
         shift=kv_cache is None
         def read(i,x):
             fn=self.compiled_readers[i] if self.compiled_readers is not None and kv_cache is None else self.feedback_readers[i]
             return fn(x,bank,shift=shift,normalize_query=i>0)
         if self.config.feedback_source=='embedding_qkv':
-            return self.backbone(read(0,embedding),kv_cache,return_layers=collect)
-        return self.backbone(embedding,kv_cache,return_layers=collect,before_block=read)
+            return self.backbone(read(0,embedding),kv_cache,**options)
+        return self.backbone(embedding,kv_cache,before_block=read,**options)
 
     def hidden(self,idx,kv_cache=None,passes=None):
         if idx.ndim!=2 or idx.shape[1]<1:raise ValueError('Expected nonempty [batch,tokens] input')
