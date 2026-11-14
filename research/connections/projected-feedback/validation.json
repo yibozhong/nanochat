@@ -1,0 +1,264 @@
+{
+  "complete": true,
+  "job": "8623426.0",
+  "model_commit": "a5a0265dc16eb657f95115ed15ca971b0ac5d437",
+  "diagnostic_fix_commit": "f194295",
+  "gpu_tests_passed": 97,
+  "gpu": "NVIDIA H200",
+  "capability": [
+    9,
+    0
+  ],
+  "attention_backend": "fa2",
+  "microbatch": 16,
+  "training_pass_mix": [
+    0.15,
+    0.85
+  ],
+  "projection_order": "reassociated",
+  "model": {
+    "depth": 8,
+    "width": 512,
+    "heads": 4,
+    "sequence_length": 2048,
+    "vocab_size": 32768
+  },
+  "exact_checkpoint_transport_and_fixed_gradient_update": true,
+  "variants": {
+    "embedding_qkv": {
+      "finite_steps": 96,
+      "all_projections_learned": true,
+      "projection_count": 4,
+      "resume_complete": true,
+      "resume_checks": [
+        "CLI step sequence",
+        "run ID",
+        "source",
+        "config",
+        "protocol",
+        "data manifest",
+        "RNG",
+        "exact state load",
+        "exact state roundtrip",
+        "bitwise next fixed-gradient update"
+      ],
+      "mean_step_seconds": 0.07233857305402148,
+      "p2_step_seconds": 0.07398417019430781,
+      "peak_allocated_bytes": 6256280064,
+      "p2_speedup_from_reassociation": 1.004627982035722,
+      "peak_bytes_saved": 502267904,
+      "dev_ce_p1": 6.1054383516311646,
+      "dev_ce_p4": 6.01770555973053,
+      "parameters": 59768832,
+      "cuda_kernel_count": 1083,
+      "top_cuda_kernels": [
+        {
+          "name": "_cce_backward_kernel",
+          "count": 1,
+          "gpu_us": 29304.263
+        },
+        {
+          "name": "_cce_lse_forward_kernel",
+          "count": 1,
+          "gpu_us": 9223.095
+        },
+        {
+          "name": "void pytorch_flash::flash_bwd_dq_dk_dv_loop_seqk_parallel_kernel<Flash_bwd_kernel_traits<128, 64, 128, 8, 2, 4, 2, false, false, cutlass::bfloat16_t, Flash_kernel_traits<128, 64, 128, 8, cutlass::bfloat16_t> >, false, true, false, false, true, true, false>(pytorch_flash::Flash_bwd_params)",
+          "count": 8,
+          "gpu_us": 5393.26
+        },
+        {
+          "name": "nvjet_sm90_tst_256x128_64x4_1x2_h_bz_coopA_TNT",
+          "count": 105,
+          "gpu_us": 5187.662
+        },
+        {
+          "name": "void pytorch_flash::flash_fwd_kernel<Flash_fwd_kernel_traits<128, 128, 64, 4, false, false, cutlass::bfloat16_t, Flash_kernel_traits<128, 128, 64, 4, cutlass::bfloat16_t> >, false, true, false, false, true, true, false, false>(pytorch_flash::Flash_fwd_params)",
+          "count": 16,
+          "gpu_us": 4265.034
+        },
+        {
+          "name": "nvjet_sm90_tst_256x128_64x4_1x2_h_bz_coopA_NNT",
+          "count": 72,
+          "gpu_us": 2914.2180000000003
+        }
+      ],
+      "config": {
+        "variant": "baseline",
+        "depth": 8,
+        "width": 512,
+        "heads": 4,
+        "sequence_length": 2048,
+        "vocab_size": 32768,
+        "streams": 1,
+        "sinkhorn_iterations": 20,
+        "activation_checkpoint": false,
+        "connection_backend": "nvidia",
+        "fused_connection_grad": false,
+        "architecture": "vanilla",
+        "window_pattern": "SSSL",
+        "attention_kernel": "original",
+        "compact_routing": false,
+        "attnres_block_size": 2,
+        "attnres_block_size_unit": "sublayers",
+        "latent_feedback": true,
+        "feedback_eval_passes": 4,
+        "feedback_source": "embedding_qkv",
+        "feedback_attention_backend": "triton",
+        "feedback_projection_order": "reassociated"
+      },
+      "efficiency_review_passed": true,
+      "efficiency_review": "Same-H200 component, P2 and memory comparison reviewed. Full reader forward/backward is 1.59x faster; embedding whole-step is near parity with existing layer feedback. Per-block P2 is 6.8% faster than materialized K/V and saves 3.74 GiB. Remaining leading cost is unchanged CCE head; no projected-bank or dKV allocation in the selected path."
+    },
+    "per_layer_qkv": {
+      "finite_steps": 96,
+      "all_projections_learned": true,
+      "projection_count": 32,
+      "resume_complete": true,
+      "resume_checks": [
+        "CLI step sequence",
+        "run ID",
+        "source",
+        "config",
+        "protocol",
+        "data manifest",
+        "RNG",
+        "exact state load",
+        "exact state roundtrip",
+        "bitwise next fixed-gradient update"
+      ],
+      "mean_step_seconds": 0.07755538810905116,
+      "p2_step_seconds": 0.08046610363089712,
+      "peak_allocated_bytes": 7541760512,
+      "p2_speedup_from_reassociation": 1.0677356018495139,
+      "peak_bytes_saved": 4018143232,
+      "dev_ce_p1": 6.133349895477295,
+      "dev_ce_p4": 5.993921160697937,
+      "parameters": 67108864,
+      "cuda_kernel_count": 1426,
+      "top_cuda_kernels": [
+        {
+          "name": "_cce_backward_kernel",
+          "count": 1,
+          "gpu_us": 29112.85
+        },
+        {
+          "name": "_cce_lse_forward_kernel",
+          "count": 1,
+          "gpu_us": 9225.531
+        },
+        {
+          "name": "nvjet_sm90_tst_256x128_64x4_1x2_h_bz_coopA_TNT",
+          "count": 138,
+          "gpu_us": 6051.667999999996
+        },
+        {
+          "name": "void pytorch_flash::flash_bwd_dq_dk_dv_loop_seqk_parallel_kernel<Flash_bwd_kernel_traits<128, 64, 128, 8, 2, 4, 2, false, false, cutlass::bfloat16_t, Flash_kernel_traits<128, 64, 128, 8, cutlass::bfloat16_t> >, false, true, false, false, true, true, false>(pytorch_flash::Flash_bwd_params)",
+          "count": 8,
+          "gpu_us": 5378.352
+        },
+        {
+          "name": "void pytorch_flash::flash_fwd_kernel<Flash_fwd_kernel_traits<128, 128, 64, 4, false, false, cutlass::bfloat16_t, Flash_kernel_traits<128, 128, 64, 4, cutlass::bfloat16_t> >, false, true, false, false, true, true, false, false>(pytorch_flash::Flash_fwd_params)",
+          "count": 16,
+          "gpu_us": 4270.061
+        },
+        {
+          "name": "nvjet_sm90_tst_256x128_64x4_1x2_h_bz_coopA_NNT",
+          "count": 110,
+          "gpu_us": 3877.5210000000015
+        }
+      ],
+      "config": {
+        "variant": "baseline",
+        "depth": 8,
+        "width": 512,
+        "heads": 4,
+        "sequence_length": 2048,
+        "vocab_size": 32768,
+        "streams": 1,
+        "sinkhorn_iterations": 20,
+        "activation_checkpoint": false,
+        "connection_backend": "nvidia",
+        "fused_connection_grad": false,
+        "architecture": "vanilla",
+        "window_pattern": "SSSL",
+        "attention_kernel": "original",
+        "compact_routing": false,
+        "attnres_block_size": 2,
+        "attnres_block_size_unit": "sublayers",
+        "latent_feedback": true,
+        "feedback_eval_passes": 4,
+        "feedback_source": "per_layer_qkv",
+        "feedback_attention_backend": "triton",
+        "feedback_projection_order": "reassociated"
+      },
+      "efficiency_review_passed": true,
+      "efficiency_review": "Same-H200 component, P2 and memory comparison reviewed. Full reader forward/backward is 1.59x faster; embedding whole-step is near parity with existing layer feedback. Per-block P2 is 6.8% faster than materialized K/V and saves 3.74 GiB. Remaining leading cost is unchanged CCE head; no projected-bank or dKV allocation in the selected path."
+    }
+  },
+  "operator": {
+    "shape": [
+      16,
+      2048,
+      8,
+      512
+    ],
+    "components": {
+      "bank_normalization": {
+        "forward_ms": 0.13102178238701112
+      },
+      "one_tokenwise_projection": {
+        "forward_ms": 0.07996676552870552,
+        "forward_backward_ms": 0.35186552475987143
+      },
+      "reassociated_key_projection": {
+        "forward_ms": 0.08064321798965671,
+        "forward_backward_ms": 0.35253781522689415
+      },
+      "materialized_kv_projection": {
+        "forward_ms": 0.472043494672837,
+        "forward_backward_ms": 0.8887359997765585
+      },
+      "materialized_read_torch": {
+        "forward_ms": 0.5383079671859741,
+        "forward_backward_ms": 1.30932432686517
+      },
+      "reassociated_read_torch": {
+        "forward_ms": 0.535003175101583,
+        "forward_backward_ms": 0.9879188730683125
+      },
+      "materialized_read_triton": {
+        "forward_ms": 0.22179930561556008,
+        "forward_backward_ms": 0.5017944221017938
+      },
+      "reassociated_read_triton": {
+        "forward_ms": 0.20838749833324904,
+        "forward_backward_ms": 0.4078302393731831
+      },
+      "full_reader_materialized_triton": {
+        "forward_ms": 0.7933815639951954,
+        "forward_backward_ms": 1.6225203495958578
+      },
+      "full_reader_reassociated_triton": {
+        "forward_ms": 0.3750886288654408,
+        "forward_backward_ms": 1.0199967532054237
+      },
+      "full_reader_reassociated_torch": {
+        "forward_ms": 0.700222497805953,
+        "forward_backward_ms": 1.450246259109261
+      }
+    },
+    "reader_speedup": 1.5907112885378842
+  },
+  "baseline_seconds": 0.06495486034516575,
+  "unprojected_p2_seconds": 0.07474562355491798,
+  "repair": {
+    "original_error": "diagnostic mixed-config recompile_limit=8",
+    "same_allocation": true,
+    "model_unchanged": true,
+    "profile_exit_code": 0,
+    "resume_exit_code": 0
+  },
+  "formal_authorization": "User goal: after correctness and efficiency validation, submit exactly two 10B runs, embedding_qkv and per_layer_qkv.",
+  "results_root": "/home/yzhong239/projected-feedback-debug-20261114"
+}

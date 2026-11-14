@@ -39,3 +39,21 @@ Q/K/V/O remain four independent, full-width trainable matrices, including their 
 At depth 8, width 512, additional parameters are 1,048,576 (`embedding_qkv`) and 8,388,608 (`per_layer_qkv`). Materialized order uses 18 tokenwise-GEMM equivalents per reader forward; reassociated order uses 4, retaining full parameters. At B16/T2048 the latter also removes the 512 MiB projected bank per reader (4 GiB for eight readers), plus its backward buffer. These are analytic counts; `connection_cost.py` distinguishes both implementations, and debug measures actual step time and peak memory.
 
 Validation: `research/connections/projected-feedback/submit_debug.py` submits one bounded diagnostic job for both variants, with no W&B or formal training. It checks FP64 operator/reassociation oracles, all gradients, baseline identity, detach semantics, independent layer parameters, causality, cached recurrence, conditional optimizer state, production-shape finite training and real CLI exit85/resume. Four main configurations train 96 diagnostic steps each; the two materialized comparisons use 48. Component forward/backward timings separate bank normalization, projections and attention. One warmed ordinary update per configuration records a compressed CUDA trace, kernels, launch gaps, copy/allocation operators and nested backbone/reader/head/optimizer times; instrumented updates are excluded from throughput and memory peaks. P2 timing compares projection orders without differing P1 fractions. Failed checks stop the chain and retain the allocation for 900 seconds. Existing formal jobs are unaffected; no increase to the 2400-second debug time limit.
+
+## Validated H200 results (2026-11-14)
+
+Job 8623426.0 passed 97 GPU tests, 96 finite production-shape updates per main configuration, and both modes' real CLI exit85/resume checks, including exact optimizer/model/RNG transport and bitwise next fixed-gradient update. All 4 / 32 projection matrices learned. The six-configuration profiling process reached Dynamo's default eight-entry cache during its last comparator evaluation; the diagnostic-only cache was increased to 32 and unfinished work resumed in the same allocation. Model, optimizer and numerical thresholds were unchanged. CUDA event accounting excludes GPU annotation ranges from kernel counts. Details are in `validation.json` and the retained debug artifacts.
+
+| Configuration | P2 update | Training peak |
+| --- | ---: | ---: |
+| Existing unprojected layer feedback | 74.75 ms | 5.69 GiB |
+| Embedding QKV, reassociated | 73.98 ms | 5.83 GiB |
+| Embedding QKV, materialized | 74.33 ms | 6.29 GiB |
+| Per-block QKV, reassociated | 80.47 ms | 7.02 GiB |
+| Per-block QKV, materialized | 85.92 ms | 10.77 GiB |
+
+The standalone full reader's forward/backward improves from 1.623 to 1.020 ms. Whole-model speed is dominated by unchanged CCE head kernels (about 38.4 ms forward/backward); individual feedback readers take about 0.35–0.37 ms forward after optimization. These timings use the same H200, B16/T2048/D512/L8 and the existing BF16/FA2 recipe.
+
+## Authorized 10B runs
+
+`submit_train.py --mode embedding_qkv` and `submit_train.py --mode per_layer_qkv` submit the two separately identified runs, with duplicate locks, held-job auditing and the existing durable 1800-second exit85 transport. Each starts from seed 42 with the unchanged packed2K FineWeb-Edu/tokenizer recipe, 305176 updates / 10,000,007,168 tokens. H100/H200 reuse this completed validation; after one idle hour the compatible A100 backend may be used, with the new model's GPU checks and finite training in that allocation before independent formal initialization. Only formal training creates W&B runs. `watch_train.py ROOT` handles scheduling and result collection without resubmitting failed jobs.
