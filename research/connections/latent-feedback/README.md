@@ -3,7 +3,10 @@
 Port of [Latent Feedback Is a Compute and Data Amplifier](https://www.alphaxiv.org/abs/2611.latent-feedback-transformers-scaling-law),
 using the [authors' implementation](https://github.com/ifm-ai/LoRM/blob/main/lorm/model/feedback.py).
 
-Enable with `scripts.connection_train --variant baseline --latent-feedback`.
+Enable with `scripts.connection_train --variant baseline --latent-feedback --feedback-source top`.
+The two supported feedback sources are `top` (the default) and
+[`layers`](../layer-feedback/README.md) (vanilla cross-layer mix). Both detach
+the preliminary passes; there is no full-gradient or projected-feedback mode.
 Without the flag, the original baseline remains unchanged. The port retains
 nanochat's normalized input embeddings, ReLU-squared FFN, attention, softcapped
 LM head, optimizer settings, and packed FineWeb-Edu data.

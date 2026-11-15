@@ -41,32 +41,11 @@ class ConnectionConfig:
     feedback_eval_passes: int = 4
     feedback_source: str = 'top'
     feedback_attention_backend: str = 'triton'
-    feedback_projection_order: str = 'reassociated'
-    feedback_detach: bool = True
-    feedback_bank: str = 'hidden'
-    feedback_query: str = 'embedding'
 
     def __post_init__(self):
-        if self.feedback_query not in ('embedding','previous_top'):
-            raise ValueError('Unknown feedback query source')
-        if self.feedback_query!='embedding' and self.feedback_source!='history_qkv':
-            raise ValueError('Previous-top query requires history_qkv')
-        if self.feedback_bank not in ('hidden','residual_update'):
-            raise ValueError('Unknown feedback bank content')
-        if self.feedback_bank=='residual_update' and self.feedback_source!='per_layer_qkv':
-            raise ValueError('Residual-update bank uses per-layer QKV feedback')
-        if not self.feedback_detach and (not self.latent_feedback or self.feedback_source not in ('top','embedding_qkv','per_layer_qkv','history_qkv')):
-            raise ValueError('Cross-pass backpropagation requires top or projected layer feedback')
-        if self.feedback_projection_order not in ('materialized','reassociated'):
-            raise ValueError('Unknown feedback projection order')
-        if self.feedback_source not in ('top','layers','embedding_qkv','per_layer_qkv','history_qkv') or self.feedback_attention_backend not in ('torch','triton','flash'):
+        if self.feedback_source not in ('top','layers') or self.feedback_attention_backend not in ('torch','triton'):
             raise ValueError('Unknown feedback source or attention backend')
-        if self.feedback_source=='history_qkv':
-            if self.feedback_attention_backend not in ('flash','torch') or self.heads>0 and self.width//self.heads>256:
-                raise ValueError('History feedback requires flash/torch and head dimension <=256')
-        elif self.feedback_attention_backend=='flash':
-            raise ValueError('Flash feedback is for history_qkv')
-        if self.feedback_source != 'top' and not self.latent_feedback:
+        if self.feedback_source == 'layers' and not self.latent_feedback:
             raise ValueError('Layer feedback requires latent_feedback')
         if type(self.feedback_eval_passes) is not int or self.feedback_eval_passes < 1:
             raise ValueError('Feedback evaluation passes must be a positive integer')
@@ -125,8 +104,6 @@ class ConnectionConfig:
     def from_checkpoint(cls, config):
         """Read pre-cleanup NVIDIA/vanilla metadata; reject retired model weights."""
         config = dict(config)
-        if config.get('feedback_source') in ('embedding_qkv','per_layer_qkv'):
-            config.setdefault('feedback_projection_order','materialized')
         if config.pop('vocab_gate', False):
             raise ValueError('Checkpoint belongs to the retired vocabulary gate experiment')
         for name in ('vocab_gate_alpha', 'vocab_gate_backend', 'vocab_gate_chunk'):
@@ -222,18 +199,6 @@ class ConnectionBlock(Block):
     def mlp_branch(self, h):
         return self.mlp(norm(h))
 
-    def forward_with_update(self, x, cos, sin, kv_cache=None):
-        """Actual branch updates, excluding identity and any pre-block feedback.
-
-        Reading the branches directly preserves small BF16 residuals that
-        subtracting two rounded hidden states would erase. No extra GEMMs.
-        """
-        assert self.variant=='baseline'
-        attention=self.attention_branch(x,cos,sin,kv_cache)
-        middle=x+attention
-        mlp=self.mlp_branch(middle)
-        return middle+mlp,(attention.float()+mlp.float()).to(x.dtype)
-
     def forward(self, x, cos, sin, kv_cache=None):
         if self.variant == 'baseline':
             return super().forward(x, None, (cos, sin), (-1, 0), kv_cache)
@@ -291,7 +256,6 @@ class ConnectionModel(nn.Module):
         self.register_buffer('cos', freq.cos()[None, :, None, :], persistent=False)
         self.register_buffer('sin', freq.sin()[None, :, None, :], persistent=False)
         self.compiled_steps = None
-        self.compiled_update_steps = None
         if config.attention_kernel == 'fla_triton':
             from nanochat.fla_attention import FlaAttention
             for block in self.blocks:
@@ -307,8 +271,6 @@ class ConnectionModel(nn.Module):
         self.cos = self.cos.to(dtype); self.sin = self.sin.to(dtype)
         if compile_blocks and self.config.variant in ('baseline', 'skip_scale'):
             self.compiled_steps = [torch.compile(b.forward, dynamic=False, fullgraph=True) for b in self.blocks]
-            if self.config.feedback_bank=='residual_update':
-                self.compiled_update_steps=[torch.compile(b.forward_with_update,dynamic=False,fullgraph=True) for b in self.blocks]
         elif compile_blocks:
             # NVIDIA TE supplies its own kernels and custom backward.
             # Compile only the unchanged attention/MLP branches with Inductor.
@@ -320,7 +282,7 @@ class ConnectionModel(nn.Module):
     def hidden(self, idx, kv_cache=None):
         return norm(self.backbone(norm(self.wte(idx)), kv_cache))
 
-    def backbone(self, x, kv_cache=None, return_layers=False, before_block=None, layer_state='hidden'):
+    def backbone(self, x, kv_cache=None, return_layers=False):
         """Unnormalized top state, also used by detached latent feedback passes."""
         start = 0 if kv_cache is None else kv_cache.get_pos()
         if start + x.shape[1] > self.config.sequence_length:
@@ -329,25 +291,18 @@ class ConnectionModel(nn.Module):
             x = expand_streams(x, self.config.streams)
         cos, sin = self.cos[:, start:start+x.shape[1]], self.sin[:, start:start+x.shape[1]]
         states = [] if return_layers else None
-        updates=return_layers and layer_state=='residual_update'
         for i, b in enumerate(self.blocks):
-            if before_block is not None:
-                x = before_block(i, x)
             # Cache positions mutate across calls and stay outside static
             # fullgraph training capture; attention keeps its GPU kernels.
             fn = self.compiled_steps[i] if self.compiled_steps is not None and kv_cache is None else b.forward
-            if updates:
-                fn=self.compiled_update_steps[i] if self.compiled_update_steps is not None and kv_cache is None else b.forward_with_update
             if self.config.activation_checkpoint and self.training and torch.is_grad_enabled():
                 if kv_cache is not None:
                     raise ValueError('Activation checkpointing cannot mutate a KV cache')
-                result = checkpoint(fn, x, cos, sin, use_reentrant=False)
+                x = checkpoint(fn, x, cos, sin, use_reentrant=False)
             else:
-                result = fn(x, cos, sin, kv_cache)
-            if updates:x,update=result
-            else:x=result
+                x = fn(x, cos, sin, kv_cache)
             if return_layers:
-                states.append(update if updates else x)
+                states.append(x)
         if self.stream_head is not None:
             x = self.stream_head(x)
         return (x, torch.stack(states, dim=2)) if return_layers else x
@@ -400,7 +355,9 @@ def optimizer_for(model, batch_tokens=32768):
             lr=.02*batch_scale, momentum=.95, ns_steps=5, beta2=.9, weight_decay=wd))
     if c.latent_feedback:
         # Own group: single-pass updates must not advance momentum or decay W.
-        feedback_params=list(model.feedback_parameters())
+        feedback_params=[model.fusion.weight]
+        if c.feedback_source == 'layers':
+            feedback_params.append(model.feedback_query.weight)
         groups.append(dict(kind='muon', params=feedback_params, conditional=True,
             lr=.02*batch_scale, momentum=.95, ns_steps=5, beta2=.9, weight_decay=wd))
     ids = [id(p) for g in groups for p in g['params']]
@@ -420,12 +377,6 @@ def optimizer_for(model, batch_tokens=32768):
 
 
 def build_connection_model(config):
-    if config.feedback_source=='history_qkv':
-        from nanochat.history_feedback import HistoryFeedbackModel
-        return HistoryFeedbackModel(config)
-    if config.feedback_source in ('embedding_qkv','per_layer_qkv'):
-        from nanochat.projected_feedback import ProjectedFeedbackModel
-        return ProjectedFeedbackModel(config)
     if config.latent_feedback:
         from nanochat.latent_feedback import LatentFeedbackModel
         return LatentFeedbackModel(config)

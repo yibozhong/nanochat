@@ -1,7 +1,9 @@
 # Content-selected layer feedback
 
 Enable `--latent-feedback --feedback-source layers --feedback-attention-backend triton`.
-The existing `--feedback-source top` and original baseline remain available.
+The [original top feedback](../latent-feedback/README.md) (`--feedback-source top`)
+and original baseline remain available. `top` and `layers` are the only supported
+feedback sources; both detach the preliminary passes.
 
 At position t, the current normalized token embedding produces a full-width
 query. It attends over the previous position's outputs from all complete

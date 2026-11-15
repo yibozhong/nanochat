@@ -1,4 +1,4 @@
-"""Additive latent feedback from ifm-ai/LoRM, detached by default.
+"""Detached, additive latent feedback from ifm-ai/LoRM.
 
 The nanochat backbone, normalized input embedding and readout are retained.
 Training samples P1/P2 once per update; evaluation defaults to P4.
@@ -66,11 +66,6 @@ class LatentFeedbackModel(ConnectionModel):
     def training_passes(seed, step):
         return sampled_passes(seed, step)
 
-    def feedback_parameters(self):
-        yield self.fusion.weight
-        if self.config.feedback_source == 'layers':
-            yield self.feedback_query.weight
-
     def hidden(self, idx, kv_cache=None, passes=None):
         if idx.ndim != 2 or idx.shape[1] < 1:
             raise ValueError('Expected a nonempty [batch, tokens] input')
@@ -111,12 +106,8 @@ class LatentFeedbackModel(ConnectionModel):
         embedding = norm(self.wte(idx))
         grad_enabled = torch.is_grad_enabled()
         for index in range(passes):
-            with torch.set_grad_enabled(grad_enabled and (index == passes - 1 or not self.config.feedback_detach)):
-                if index == 0:
-                    state = embedding
-                else:
-                    previous = feedback.detach() if self.config.feedback_detach else feedback
-                    state = (self.compiled_mix or self.mix)(embedding, previous)
+            with torch.set_grad_enabled(grad_enabled and index == passes - 1):
+                state = embedding if index == 0 else (self.compiled_mix or self.mix)(embedding, feedback.detach())
                 if self.config.feedback_source == 'layers' and index < passes-1:
                     top, feedback = self.backbone(state, return_layers=True)
                 else:

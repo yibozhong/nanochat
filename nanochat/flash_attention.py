@@ -100,13 +100,6 @@ def _sdpa_attention(q, k, v, window_size, enable_gqa):
             v = v[:, :, start:, :]
         return F.scaled_dot_product_attention(q, k, v, is_causal=False, enable_gqa=enable_gqa)
 
-    if window < 0:
-        # Chunked full-attention prefill: retain FlashAttention with the correct
-        # cache offset instead of materializing a rectangular causal mask.
-        from torch.nn.attention.bias import causal_lower_right
-        return F.scaled_dot_product_attention(q, k, v,
-            attn_mask=causal_lower_right(Tq, Tk), enable_gqa=enable_gqa)
-
     # Need explicit mask for sliding window/chunk inference
     device = q.device
     # For chunk inference (Tq != Tk), is_causal is not aligned to cache position => build an explicit bool mask
