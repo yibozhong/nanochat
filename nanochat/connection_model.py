@@ -44,8 +44,13 @@ class ConnectionConfig:
     feedback_projection_order: str = 'reassociated'
     feedback_detach: bool = True
     feedback_bank: str = 'hidden'
+    feedback_query: str = 'embedding'
 
     def __post_init__(self):
+        if self.feedback_query not in ('embedding','previous_top'):
+            raise ValueError('Unknown feedback query source')
+        if self.feedback_query!='embedding' and self.feedback_source!='history_qkv':
+            raise ValueError('Previous-top query requires history_qkv')
         if self.feedback_bank not in ('hidden','residual_update'):
             raise ValueError('Unknown feedback bank content')
         if self.feedback_bank=='residual_update' and self.feedback_source!='per_layer_qkv':

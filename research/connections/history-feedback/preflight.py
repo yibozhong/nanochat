@@ -17,9 +17,9 @@ from nanochat.packed_training import PackedData,json_write,seed_all
 from scripts.connection_feedback_backprop_debug import compare_one
 
 
-def production_profile():
+def production_profile(query='embedding'):
     seed_all(42)
-    c=ConnectionConfig(streams=1,latent_feedback=True,feedback_source='history_qkv',feedback_attention_backend='flash')
+    c=ConnectionConfig(streams=1,latent_feedback=True,feedback_source='history_qkv',feedback_attention_backend='flash',feedback_query=query)
     m=build_connection_model(c).prepare(compile_blocks=True)
     e=torch.randn(16,2048,512,device='cuda',dtype=torch.bfloat16,requires_grad=True)
     top=torch.randn_like(e);go=torch.randn_like(e)
@@ -56,11 +56,13 @@ def main():
     assert source['feedback_source']=='history_qkv' and source['feedback_detach'] is True
     assert source['feedback_attention_backend']=='flash' and source['feedback_bank']=='hidden'
     assert source['initialization']=='seed42_from_zero_no_diagnostic_weights'
+    query=source.get('feedback_query','embedding');assert query in ('embedding','previous_top')
     assert torch.cuda.is_available() and torch.cuda.device_count()==1
     cap=list(torch.cuda.get_device_capability());name=torch.cuda.get_device_name()
     assert cap==[9,0] and any(s in name for s in ('H100','H200')) or cap==[8,0] and 'A100' in name
     family=f'sm{cap[0]}{cap[1]}'
-    out=Path('results/history-feedback-'+family);out.mkdir(parents=True,exist_ok=True);marker=out/'validation.json'
+    variant='history-feedback'+('-previous-top-query' if query=='previous_top' else '')
+    out=Path('results/'+variant+'-'+family);out.mkdir(parents=True,exist_ok=True);marker=out/'validation.json'
     if marker.exists():
         report=json.loads(marker.read_text());assert report['complete'] and report['source']==source and report['capability']==cap
         print('HISTORY_FEEDBACK_GATE_PASSED '+json.dumps(report),flush=True);return
@@ -71,21 +73,32 @@ def main():
     subprocess.run(['timeout','--signal=TERM','--kill-after=30s','900',sys.executable,'-m','pytest','-q',
         'tests/test_latent_feedback.py','tests/test_history_feedback.py','--junitxml='+str(out/'tests.xml')],check=True)
     suites=list(ET.parse(out/'tests.xml').getroot().iter('testsuite'));count=sum(int(s.attrib['tests']) for s in suites)
-    assert count==41 and all(int(s.attrib.get(k,0))==0 for s in suites for k in ('failures','errors','skipped'))
-    operator=production_profile();json_write(out/'operator-profile.json',operator)
+    assert count==64 and all(int(s.attrib.get(k,0))==0 for s in suites for k in ('failures','errors','skipped'))
+    if query=='previous_top':
+        models=[]
+        for q in ('embedding','previous_top'):
+            seed_all(42)
+            c=ConnectionConfig(streams=1,latent_feedback=True,feedback_source='history_qkv',feedback_attention_backend='flash',feedback_query=q)
+            models.append(build_connection_model(c).prepare())
+        left,right=[m.state_dict() for m in models]
+        assert left.keys()==right.keys() and all(torch.equal(left[k],right[k]) for k in left)
+        del models,left,right;gc.collect();torch.cuda.empty_cache()
+    operator=production_profile(query);json_write(out/'operator-profile.json',operator)
     gc.collect();torch.cuda.empty_cache()
     data=PackedData('../data');profiles={}
-    for mode in ('top','history_qkv'):
-        profiles[mode]=compare_one(mode,True,data,out,512)
+    settings=[('top','embedding'),('history_qkv','embedding')] if query=='embedding' else [('history_qkv','embedding'),('history_qkv','previous_top')]
+    for mode,q in settings:
+        profiles[mode+'_'+q]=compare_one(mode,True,data,out,512,query=q)
         gc.collect();torch.cuda.empty_cache();json_write(out/'profiles.json',profiles)
-    old,new=profiles['top'],profiles['history_qkv']
+    old,new=[profiles[mode+'_'+q] for mode,q in settings]
     ratio=new['median_seconds_by_pass']['2']/old['median_seconds_by_pass']['2']
-    assert ratio<1.35,('Inspect unexpected history attention overhead before training',ratio)
+    assert ratio<(1.15 if query=='previous_top' else 1.35),('Inspect unexpected history attention overhead before training',ratio)
     args=[sys.executable,'-m','scripts.connection_train','--variant','baseline','--streams','1',
         '--latent-feedback','--feedback-source','history_qkv','--feedback-detach','--feedback-attention-backend','flash',
+        '--feedback-query',query,
         '--attention-backend','fa2','--steps','3','--schedule-steps','305176','--microbatch','16','--seed','42',
-        '--data-dir','../data','--run-id','history-feedback-local-debug','--segment-seconds','1800']
-    resumed=Path('../history-feedback-resume-check');continuous=Path('../history-feedback-continuous-check')
+        '--data-dir','../data','--run-id',variant+'-local-debug','--segment-seconds','1800']
+    resumed=Path('../'+variant+'-resume-check');continuous=Path('../'+variant+'-continuous-check')
     assert not resumed.exists() and not continuous.exists(),'Inspect unfinished diagnostics before retrying'
     first=subprocess.run(args+['--output-dir',str(resumed),'--segment-steps','2']);assert first.returncode==85,first.returncode
     subprocess.run(args+['--output-dir',str(resumed),'--resume','auto'],check=True)
@@ -96,10 +109,10 @@ def main():
     shutil.rmtree(resumed);shutil.rmtree(continuous)
     report=dict(complete=True,formal_training=False,source=source,gpu=name,capability=cap,
         torch=torch.__version__,cuda=torch.version.cuda,tests=count,finite_steps_per_model=512,
-        parameters=new['parameters'],p2_time_ratio=ratio,
-        top_p2_ms=old['median_seconds_by_pass']['2']*1000,history_p2_ms=new['median_seconds_by_pass']['2']*1000,
+        parameters=new['parameters'],p2_time_ratio=ratio,feedback_query=query,reference_setting=settings[0],
+        reference_p2_ms=old['median_seconds_by_pass']['2']*1000,history_p2_ms=new['median_seconds_by_pass']['2']*1000,
         mean_step_seconds=new['mean_step_seconds'],peak_bytes=new['peak_allocated_bytes'],
-        top_dev_p4=old['evaluations'][-1]['ce_p4'],history_dev_p4=new['evaluations'][-1]['ce_p4'],
+        reference_dev_p4=old['evaluations'][-1]['ce_p4'],history_dev_p4=new['evaluations'][-1]['ce_p4'],
         cache='fixed pass count: full sequence / chunks / single tokens agree',
         operator_profile=operator,resume_complete=True,elapsed_seconds=time.monotonic()-start)
     json_write(marker,report);print('HISTORY_FEEDBACK_GATE_PASSED '+json.dumps(report),flush=True)

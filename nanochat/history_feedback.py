@@ -1,4 +1,4 @@
-"""Embedding queries over all strictly earlier, previous-pass top states.
+"""Embedding or contextual queries over strictly earlier previous-pass states.
 
 Equal-length shifted Q/KV makes the training read ordinary causal FlashAttention.
 Cached inference preserves the finite pass count, including parallel prefill.
@@ -66,24 +66,31 @@ class HistoryFeedbackModel(LatentFeedbackModel):
 
     def feedback_parameters(self):return self.history_projections.parameters()
 
-    def project_query(self,embedding,cos,sin):
-        b,t,d=embedding.shape
-        q=self.history_projections['q'](embedding).view(b,t,self.config.heads,d//self.config.heads)
+    def project_query(self,query,cos,sin):
+        b,t,d=query.shape
+        q=self.history_projections['q'](query).view(b,t,self.config.heads,d//self.config.heads)
         return apply_rotary_emb(q,cos,sin)
 
-    def project_history(self,top,cos,sin):
+    @staticmethod
+    def normalize_history(top):
+        return F.rms_norm(top.float(),(top.shape[-1],),eps=1e-5).to(top.dtype)
+
+    def project_history(self,top,cos,sin,normalized=False):
         b,t,d=top.shape
-        normalized=F.rms_norm(top.float(),(d,),eps=1e-5).to(top.dtype)
+        source=top if normalized else self.normalize_history(top)
         # Keep separate square Muon parameters; one packed KV GEMM.
         weight=torch.cat((self.history_projections['k'].weight,self.history_projections['v'].weight),0).to(top.dtype)
-        kv=F.linear(normalized,weight).view(b,t,2,self.config.heads,d//self.config.heads)
+        kv=F.linear(source,weight).view(b,t,2,self.config.heads,d//self.config.heads)
         return apply_rotary_emb(kv[:,:,0],cos,sin),kv[:,:,1]
 
     def mix(self,embedding,top):
         t=embedding.shape[1]
         if t==1:return embedding
-        q=self.project_query(embedding[:,1:],self.cos[:,1:t],self.sin[:,1:t])
-        k,v=self.project_history(top[:,:-1],self.cos[:,:t-1],self.sin[:,:t-1])
+        contextual=self.config.feedback_query=='previous_top'
+        source=self.normalize_history(top) if contextual else top
+        query=source[:,1:] if contextual else embedding[:,1:]
+        q=self.project_query(query,self.cos[:,1:t],self.sin[:,1:t])
+        k,v=self.project_history(source[:,:-1],self.cos[:,:t-1],self.sin[:,:t-1],normalized=contextual)
         read=history_read(q.transpose(1,2),k.transpose(1,2),v.transpose(1,2),self.config.feedback_attention_backend)
         projected=self.history_projections['o'](read.transpose(1,2).flatten(2))
         return torch.cat((embedding[:,:1],embedding[:,1:]+projected),1)
@@ -103,13 +110,16 @@ class HistoryFeedbackModel(LatentFeedbackModel):
         start=kv_cache.get_pos();end=start+idx.shape[1]
         if end>self.config.sequence_length or end>kv_cache.max_seq_len:raise ValueError('Context exceeded')
         if any(c.get_pos()!=start for c in kv_cache.backbones):raise ValueError('Pass caches are out of sync')
-        embedding=norm(self.wte(idx));q=None
+        embedding=norm(self.wte(idx));q=None;previous=None
+        contextual=self.config.feedback_query=='previous_top'
         # Position zero has no source keys. Every other query has >=1 past key.
         skip=1 if start==0 else 0
-        if end>1 and kv_cache.passes>1:
+        if end>1 and kv_cache.passes>1 and not contextual:
             q=self.project_query(embedding[:,skip:],self.cos[:,start+skip:end],self.sin[:,start+skip:end])
         for index,cache in enumerate(kv_cache.backbones):
             state=embedding
+            if index and end>1 and contextual:
+                q=self.project_query(previous[:,skip:],self.cos[:,start+skip:end],self.sin[:,start+skip:end])
             if index and q is not None:
                 k=kv_cache.history_k[index-1,:,:end-1];v=kv_cache.history_v[index-1,:,:end-1]
                 read=history_read(q.transpose(1,2),k.transpose(1,2),v.transpose(1,2),self.config.feedback_attention_backend)
@@ -117,7 +127,8 @@ class HistoryFeedbackModel(LatentFeedbackModel):
                 state=torch.cat((embedding[:,:skip],embedding[:,skip:]+fed),1)
             top=self.backbone(state,cache)
             if index<kv_cache.passes-1:
-                k,v=self.project_history(top,self.cos[:,start:end],self.sin[:,start:end])
+                previous=self.normalize_history(top) if contextual else top
+                k,v=self.project_history(previous,self.cos[:,start:end],self.sin[:,start:end],normalized=contextual)
                 kv_cache.history_k[index,:,start:end].copy_(k)
                 kv_cache.history_v[index,:,start:end].copy_(v)
         return norm(top)

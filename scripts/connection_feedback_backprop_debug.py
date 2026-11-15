@@ -15,11 +15,11 @@ from nanochat.connection_model import ConnectionConfig,build_connection_model,op
 from nanochat.packed_training import PackedData,evaluate,json_write,seed_all,train_step
 
 
-def compare_one(source,detach,data,out,steps,bank='hidden'):
+def compare_one(source,detach,data,out,steps,bank='hidden',query='embedding'):
     seed_all(42)
     c=ConnectionConfig(streams=1,latent_feedback=True,feedback_source=source,feedback_detach=detach,feedback_bank=bank,
-        feedback_attention_backend='flash' if source=='history_qkv' else 'triton')
-    label=source+('_detach' if detach else '_full_grad')+('' if bank=='hidden' else '_'+bank)
+        feedback_attention_backend='flash' if source=='history_qkv' else 'triton',feedback_query=query)
+    label=source+('_detach' if detach else '_full_grad')+('' if bank=='hidden' else '_'+bank)+('' if query=='embedding' else '_'+query)
     model=build_connection_model(c).prepare(compile_blocks=True)
     opt,wd=optimizer_for(model)
     log_path=out/f'{label}-steps.jsonl'

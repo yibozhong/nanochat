@@ -17,11 +17,11 @@ from test_projected_feedback import relative
 from test_connection_training_resume import equal_tree
 
 
-def make(backend='flash',compiled=False,detach=True,checkpoint=False,perturb=True):
+def make(backend='flash',compiled=False,detach=True,checkpoint=False,perturb=True,query='embedding'):
     seed_all(42)
     c=ConnectionConfig(depth=2,width=128,heads=2,sequence_length=32,vocab_size=256,
         streams=1,latent_feedback=True,feedback_source='history_qkv',feedback_attention_backend=backend,
-        feedback_detach=detach,activation_checkpoint=checkpoint)
+        feedback_detach=detach,activation_checkpoint=checkpoint,feedback_query=query)
     m=build_connection_model(c).prepare(compile_blocks=compiled)
     if perturb:
         with torch.no_grad():
@@ -44,14 +44,15 @@ def test_flash_forward_backward_oracle(shape,dtype):
         assert torch.isfinite(a).all() and relative(a,r.to(dtype))<(.009 if dtype==torch.bfloat16 else .002)
 
 
-def test_strict_past_mix_and_gradients_against_full_mask():
-    m=make();ref=make();ref.load_state_dict(m.state_dict())
+@pytest.mark.parametrize('query',['embedding','previous_top'])
+def test_strict_past_mix_and_gradients_against_full_mask(query):
+    m=make(query=query);ref=make(query=query);ref.load_state_dict(m.state_dict())
     seed_all(10)
     e=torch.randn(2,17,128,device='cuda',dtype=torch.bfloat16,requires_grad=True)
     top=torch.randn_like(e,requires_grad=True);er=e.detach().clone().requires_grad_();tr=top.detach().clone().requires_grad_()
     actual=m.mix(e,top)
     h=F.rms_norm(tr.float(),(128,),eps=1e-5).to(tr.dtype);w=ref.history_projections
-    q=apply_rotary_emb(w['q'](er).view(2,17,2,64),ref.cos[:,:17],ref.sin[:,:17]).transpose(1,2)
+    q=apply_rotary_emb(w['q'](h if query=='previous_top' else er).view(2,17,2,64),ref.cos[:,:17],ref.sin[:,:17]).transpose(1,2)
     k=apply_rotary_emb(w['k'](h).view(2,17,2,64),ref.cos[:,:17],ref.sin[:,:17]).transpose(1,2)
     v=w['v'](h).view(2,17,2,64).transpose(1,2)
     mask=torch.ones(17,17,device='cuda',dtype=torch.bool).tril(-1)
@@ -65,19 +66,24 @@ def test_strict_past_mix_and_gradients_against_full_mask():
     for a,r in ((actual,expected),(e.grad,er.grad),(top.grad,tr.grad)):
         assert relative(a,r)<.025
     for p,r in zip(m.feedback_parameters(),ref.feedback_parameters()):assert relative(p.grad,r.grad)<.025
-    assert torch.equal(actual[:,0],e[:,0]) and torch.count_nonzero(top.grad[:,-1])==0
+    assert torch.equal(actual[:,0],e[:,0])
+    if query=='embedding':assert torch.count_nonzero(top.grad[:,-1])==0
+    else:assert top.grad[:,-1].norm()>0  # Last state participates as Q, never KV.
     m.zero_grad(set_to_none=True);e.grad=None;top.grad=None
     m.mix(e,top)[:,5].float().sum().backward()
-    assert torch.count_nonzero(top.grad[:,5:])==0
+    assert torch.count_nonzero(top.grad[:,6:])==0
+    if query=='embedding':assert torch.count_nonzero(top.grad[:,5])==0
+    else:assert top.grad[:,5].norm()>0
     assert all(top.grad[:,j].norm()>0 for j in range(5))
 
 
 @pytest.mark.parametrize('detach',[True,False])
+@pytest.mark.parametrize('query',['embedding','previous_top'])
 @pytest.mark.parametrize('compiled,checkpoint,passes',[(False,False,2),(True,False,3),(True,True,2)])
-def test_complete_model_reference_gradients(detach,compiled,checkpoint,passes):
+def test_complete_model_reference_gradients(detach,compiled,checkpoint,passes,query):
     torch._dynamo.config.recompile_limit=max(32,torch._dynamo.config.recompile_limit)
-    m=make(compiled=compiled,detach=detach,checkpoint=checkpoint)
-    ref=make(backend='torch',compiled=compiled,detach=detach,checkpoint=checkpoint);ref.load_state_dict(m.state_dict())
+    m=make(compiled=compiled,detach=detach,checkpoint=checkpoint,query=query)
+    ref=make(backend='torch',compiled=compiled,detach=detach,checkpoint=checkpoint,query=query);ref.load_state_dict(m.state_dict())
     x,y=inputs();a=m(x,y,passes=passes);b=ref(x,y,passes=passes)
     a.backward();b.backward();torch.testing.assert_close(a,b,rtol=2e-4,atol=2e-4)
     for (n,p),(_,r) in zip(m.named_parameters(),ref.named_parameters()):
@@ -87,8 +93,9 @@ def test_complete_model_reference_gradients(detach,compiled,checkpoint,passes):
 
 
 @pytest.mark.parametrize('detach',[True,False])
-def test_backward_policy_and_single_head(detach):
-    m=make(detach=detach);x,y=inputs();seen=[];tops=[];fn=m.backbone
+@pytest.mark.parametrize('query',['embedding','previous_top'])
+def test_backward_policy_and_single_head(detach,query):
+    m=make(detach=detach,query=query);x,y=inputs();seen=[];tops=[];fn=m.backbone
     def observe(*args,**kwargs):
         value=fn(*args,**kwargs);seen.append(torch.is_grad_enabled())
         if value.requires_grad:value.retain_grad()
@@ -100,22 +107,25 @@ def test_backward_policy_and_single_head(detach):
         if detach:assert not top.requires_grad
         else:
             assert torch.isfinite(top.grad).all() and top.grad.norm()>0
-            assert torch.count_nonzero(top.grad[:,-1])==0
+            if query=='embedding':assert torch.count_nonzero(top.grad[:,-1])==0
+            else:assert top.grad[:,-1].norm()>0
 
 
 @pytest.mark.parametrize('passes',[1,2,4])
+@pytest.mark.parametrize('query',['embedding','previous_top'])
 @torch.no_grad()
-def test_causal_prefix_and_batch_isolation(passes):
-    m=make(compiled=True).eval();x,_=inputs();other=x.clone();other[:,7:]=(other[:,7:]+37)%256
+def test_causal_prefix_and_batch_isolation(passes,query):
+    m=make(compiled=True,query=query).eval();x,_=inputs();other=x.clone();other[:,7:]=(other[:,7:]+37)%256
     assert torch.equal(m(x,passes=passes)[:,:7],m(other,passes=passes)[:,:7])
     other=x.clone();other[0]=(other[0]+21)%256
     assert torch.equal(m(x,passes=passes)[1],m(other,passes=passes)[1])
 
 
 @pytest.mark.parametrize('passes',[1,2,4])
+@pytest.mark.parametrize('query',['embedding','previous_top'])
 @torch.no_grad()
-def test_same_pass_parallel_chunked_and_token_cached(passes):
-    m=make().eval();x,_=inputs(8);expected=m(x,passes=passes)
+def test_same_pass_parallel_chunked_and_token_cached(passes,query):
+    m=make(query=query).eval();x,_=inputs(8);expected=m(x,passes=passes)
     cache=m.make_kv_cache(2,passes);whole=m(x,kv_cache=cache)
     cache.reset();chunks=torch.cat((m(x[:,:1],kv_cache=cache),m(x[:,1:4],kv_cache=cache),m(x[:,4:],kv_cache=cache)),1)
     cache.reset();tokens=torch.cat([m(part,kv_cache=cache) for part in x.split(1,1)],1)
@@ -123,9 +133,10 @@ def test_same_pass_parallel_chunked_and_token_cached(passes):
     assert cache.get_pos()==8 and all(c.get_pos()==8 for c in cache.backbones)
 
 
+@pytest.mark.parametrize('query',['embedding','previous_top'])
 @torch.no_grad()
-def test_cache_broadcast_and_invalid_inputs():
-    m=make().eval();x,_=inputs(8);one=m.make_kv_cache(1,2);m(x[:1,:4],kv_cache=one)
+def test_cache_broadcast_and_invalid_inputs(query):
+    m=make(query=query).eval();x,_=inputs(8);one=m.make_kv_cache(1,2);m(x[:1,:4],kv_cache=one)
     many=m.make_kv_cache(2,2);many.prefill(one)
     actual=m(x[:1,4:].expand(2,-1),kv_cache=many);expected=m(x[:1,4:],kv_cache=one)
     assert relative(actual,expected.expand_as(actual))<.02
@@ -135,9 +146,10 @@ def test_cache_broadcast_and_invalid_inputs():
     with torch.enable_grad(),pytest.raises(ValueError,match='no_grad'):m(x,kv_cache=m.make_kv_cache(2,2))
 
 
-def test_baseline_initialization_p1_and_t1_identity():
-    m=make(perturb=False);seed_all(42)
-    c=replace(m.config,latent_feedback=False,feedback_source='top',feedback_attention_backend='triton')
+@pytest.mark.parametrize('query',['embedding','previous_top'])
+def test_baseline_initialization_p1_and_t1_identity(query):
+    m=make(perturb=False,query=query);seed_all(42)
+    c=replace(m.config,latent_feedback=False,feedback_source='top',feedback_attention_backend='triton',feedback_query='embedding')
     base=build_connection_model(c).prepare();x,y=inputs()
     assert all(torch.equal(v,m.state_dict()[n]) for n,v in base.state_dict().items())
     m(x,y,dense=True,passes=1).backward();base(x,y,dense=True).backward()
@@ -146,8 +158,9 @@ def test_baseline_initialization_p1_and_t1_identity():
     with torch.no_grad():assert torch.equal(m(x[:,:1],passes=4),base(x[:,:1]))
 
 
-def test_p1_keeps_feedback_optimizer_state():
-    m=make();opt,_=optimizer_for(m);x,y=inputs()
+@pytest.mark.parametrize('query',['embedding','previous_top'])
+def test_p1_keeps_feedback_optimizer_state(query):
+    m=make(query=query);opt,_=optimizer_for(m);x,y=inputs()
     m(x,y,passes=2).backward();opt.step();opt.zero_grad(set_to_none=True)
     params=list(m.feedback_parameters());weights=[p.clone() for p in params];states=[copy.deepcopy(opt.state[p]) for p in params]
     m(x,y,passes=1).backward();opt.step()
@@ -155,18 +168,33 @@ def test_p1_keeps_feedback_optimizer_state():
 
 
 @pytest.mark.parametrize('compiled',[False,True])
-def test_cce_dense_gradients(compiled):
-    m=make(compiled=compiled);ref=make(compiled=compiled);ref.load_state_dict(m.state_dict());x,y=inputs()
+@pytest.mark.parametrize('query',['embedding','previous_top'])
+def test_cce_dense_gradients(compiled,query):
+    m=make(compiled=compiled,query=query);ref=make(compiled=compiled,query=query);ref.load_state_dict(m.state_dict());x,y=inputs()
     a=m(x,y,passes=2);b=ref(x,y,dense=True,passes=2)
     a.backward();b.backward();torch.testing.assert_close(a,b,rtol=1e-4,atol=1e-4)
     for (n,p),(_,r) in zip(m.named_parameters(),ref.named_parameters()):assert relative(p.grad,r.grad)<.025,n
 
 
-def test_config_and_cost():
-    c=make().config;assert ConnectionConfig.from_checkpoint(asdict(c))==c
+@pytest.mark.parametrize('query',['embedding','previous_top'])
+def test_config_and_cost(query):
+    c=make(query=query).config;assert ConnectionConfig.from_checkpoint(asdict(c))==c
+    legacy=asdict(c);legacy.pop('feedback_query');assert ConnectionConfig.from_checkpoint(legacy).feedback_query=='embedding'
     with pytest.raises(ValueError):replace(c,feedback_bank='residual_update')
     with pytest.raises(ValueError):replace(c,feedback_attention_backend='triton')
     p1=model_cost(c,feedback_passes=1);p2=model_cost(c,feedback_passes=2)
     assert p1['additional_parameters']==4*c.width*c.width
     assert model_cost(c)['estimated_training_flops']==pytest.approx(.15*p1['estimated_training_flops']+.85*p2['estimated_training_flops'])
     assert model_cost(replace(c,feedback_detach=False),feedback_passes=2)['estimated_training_flops']>p2['estimated_training_flops']
+
+
+@pytest.mark.parametrize('query',['embedding','previous_top'])
+@torch.no_grad()
+def test_current_position_is_query_only(query):
+    m=make(query=query);seed_all(10)
+    e=torch.randn(2,17,128,device='cuda',dtype=torch.bfloat16);top=torch.randn_like(e)
+    changed=top.clone();changed[:,6]=torch.randn_like(changed[:,6])
+    a=m.mix(e,top);b=m.mix(e,changed)
+    assert torch.equal(a[:,:6],b[:,:6])
+    if query=='previous_top':assert not torch.equal(a[:,6],b[:,6])
+    else:assert torch.equal(a[:,6],b[:,6])

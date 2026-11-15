@@ -5,6 +5,12 @@ TASK_RUN_ID="$1"
 TASK_MODE="$2"
 TASK_DETACH="$3"
 TASK_BANK="${4:-hidden}"
+TASK_QUERY="${5:-embedding}"
+case "$TASK_QUERY" in
+    embedding) ;;
+    previous_top) test "$TASK_MODE" = history_qkv ;;
+    *) exit 64 ;;
+esac
 TASK_FEEDBACK_ARGS=(--feedback-detach)
 TASK_GROUP=projected-feedback-10b-20261114
 TASK_FEEDBACK_BACKEND=triton
@@ -29,6 +35,7 @@ fi
 if [ "$TASK_MODE" = history_qkv ]; then
     test "$TASK_DETACH" = true;test "$TASK_BANK" = hidden
     TASK_GROUP=history-feedback-10b-20261115
+    if [ "$TASK_QUERY" = previous_top ]; then TASK_GROUP=history-feedback-previous-top-query-10b-20261115; fi
     TASK_FEEDBACK_BACKEND=flash
 fi
 TASK_STEPS=305176
@@ -50,7 +57,7 @@ finish() {
 }
 trap finish EXIT
 cp "$0" results/launcher.sh
-/opt/project/.venv/bin/python - "$TASK_RUN_ID" "$TASK_MODE" "$TASK_DETACH" "$TASK_GROUP" "$TASK_BANK" <<'PY'
+/opt/project/.venv/bin/python - "$TASK_RUN_ID" "$TASK_MODE" "$TASK_DETACH" "$TASK_GROUP" "$TASK_BANK" "$TASK_QUERY" <<'PY'
 import json,sys
 from pathlib import Path
 s=json.loads(Path('source.json').read_text())
@@ -60,6 +67,7 @@ assert s['feedback_attention_backend']==('flash' if sys.argv[2]=='history_qkv' e
 assert s['feedback_projection_order']=='reassociated'
 assert s['feedback_detach']==(sys.argv[3]=='true') and s['wandb_group']==sys.argv[4]
 assert s.get('feedback_bank','hidden')==sys.argv[5]
+assert s.get('feedback_query','embedding')==sys.argv[6]
 assert s['earlier_passes']==('no_grad_detached' if s['feedback_detach'] else 'full_backprop')
 assert s['loss']=='final-pass CE only'
 assert s['steps']==305176 and s['training_tokens']==10000007168
@@ -137,7 +145,7 @@ else
 fi
 echo "FORMAL_TRAINING_BEGIN projected_feedback $TASK_RUN_ID"
 python -m scripts.connection_train --variant baseline --architecture vanilla --streams 1 \
-    --latent-feedback --feedback-source "$TASK_MODE" "${TASK_FEEDBACK_ARGS[@]}" --feedback-bank "$TASK_BANK" --feedback-projection-order reassociated --feedback-attention-backend "$TASK_FEEDBACK_BACKEND" --feedback-eval-passes 4 --attention-kernel original --attention-backend fa2 \
+    --latent-feedback --feedback-source "$TASK_MODE" "${TASK_FEEDBACK_ARGS[@]}" --feedback-bank "$TASK_BANK" --feedback-query "$TASK_QUERY" --feedback-projection-order reassociated --feedback-attention-backend "$TASK_FEEDBACK_BACKEND" --feedback-eval-passes 4 --attention-kernel original --attention-backend fa2 \
     --steps "$TASK_STEPS" --schedule-steps "$TASK_STEPS" --microbatch 16 --seed 42 \
     --no-activation-checkpoint --no-fused-connection-grad --evaluate-test \
     --data-dir ../data --output-dir results/train --checkpoint-dir ../checkpoints \

@@ -25,7 +25,10 @@ def main():
     parser.add_argument('--mode',required=True,choices=('top','embedding_qkv','per_layer_qkv','history_qkv'))
     parser.add_argument('--feedback-detach',action=argparse.BooleanOptionalAction,default=True)
     parser.add_argument('--feedback-bank',choices=('hidden','residual_update'),default='hidden')
+    parser.add_argument('--feedback-query',choices=('embedding','previous_top'),default='embedding')
     args=parser.parse_args();mode=args.mode;detach=args.feedback_detach;bank=args.feedback_bank
+    query=args.feedback_query
+    assert query=='embedding' or mode=='history_qkv'
     residual=bank=='residual_update'
     top=mode=='top';history=mode=='history_qkv';pending=residual or top or history
     if history:assert detach and bank=='hidden','Current history-feedback10B uses detached top history'
@@ -34,6 +37,7 @@ def main():
     if not detach:assert mode in ('top','per_layer_qkv'),'Current full-gradient10B authorizations are top and per-layer'
     suffix='' if detach else '-full-grad'
     if residual:suffix='-residual-update'+suffix
+    if query=='previous_top':suffix+='-previous-top-query'
     prefix='latent-feedback-' if top or history else 'projected-feedback-'
     date='20261115' if history else '20261114'
     ROOT=HOME_ROOT/(prefix+mode.replace('_','-')+suffix+'-10b-'+date)
@@ -88,13 +92,13 @@ def main():
         run_id=uuid.uuid4().hex[:8]
         source=dict(commit=commit,formal_training=True,plan=KEY,run_id=run_id,
             model_variant='latent_feedback' if top or history else 'projected_feedback',feedback_source=mode,feedback_projection_order='reassociated',feedback_detach=detach,
-            feedback_bank=bank,feedback_attention_backend='flash' if history else 'triton',
+            feedback_bank=bank,feedback_attention_backend='flash' if history else 'triton',feedback_query=query,
             validated_model_commit=None if pending else gate['model_commit'],validation_job=None if pending else gate['job'],
             preflight_required=pending,reference_validation_job=gate['job'],
             model=gate['model'],steps=STEPS,training_tokens=STEPS*32768,batch_tokens=32768,microbatch=16,
             seed=42,initialization='seed42_from_zero_no_diagnostic_weights',
             pass_mix=[.15,.85],eval_passes=4,earlier_passes='no_grad_detached' if detach else 'full_backprop',
-            loss='final-pass CE only',wandb_group='history-feedback-10b-20261115' if history else 'top-feedback-full-grad-10b-20261114' if top else ('residual-feedback' + ('' if detach else '-full-grad') + '-10b-20261114') if residual else 'projected-feedback-10b-20261114' if detach else 'feedback-backprop-10b-20261114',
+            loss='final-pass CE only',wandb_group=('history-feedback'+('-previous-top-query' if query=='previous_top' else '')+'-10b-20261115') if history else 'top-feedback-full-grad-10b-20261114' if top else ('residual-feedback' + ('' if detach else '-full-grad') + '-10b-20261114') if residual else 'projected-feedback-10b-20261114' if detach else 'feedback-backprop-10b-20261114',
             attention_backend='fa2',data_uri=data['data_uri'],data_archive_bytes=data['archive']['bytes'],
             dataset_revision=data['manifest']['dataset_revision'],tokenizer=data['manifest']['tokenizer']['tokenizer'],
             runtime='mhc-official-runtime-7546767.tar.gz + frozen uv.lock',
@@ -109,10 +113,11 @@ def main():
         if top:source['comparison_runs']=dict(top_detach='f00f6f3f',per_layer_detach='d93f191c',per_layer_full_grad='2c8a8050')
         if history:
             source.update(comparison_runs=dict(top_detach='f00f6f3f',embedding_layer_qkv_detach='8adc195c'),
-                history_attention=dict(query='normalized token embedding',keys_values='all strictly earlier previous-pass raw top states, FP32 RMSNorm eps1e-5',
+                history_attention=dict(query='previous-pass current-token top, FP32 RMSNorm eps1e-5' if query=='previous_top' else 'normalized token embedding',keys_values='all strictly earlier previous-pass raw top states, FP32 RMSNorm eps1e-5',
                     projections='independent full-width Q/K/V/O; packed KV GEMM; projected-layer order option unused',
                     heads=4,head_dim=128,position='backbone RoPE',mask='j < i; shifted equal-length causal FlashAttention',
                     cache='same finite pass count; per-pass backbone KV and projected history KV'))
+            if query=='previous_top':source['comparison_runs']['embedding_history_query']='1b6e0399'
         if residual and not detach:
             source['comparison_runs']=dict(hidden_detach='d93f191c',hidden_full_grad='2c8a8050',residual_detach='61b2bd0b')
         (bundle/'source.json').write_text(json.dumps(source,indent=2)+'\n')
@@ -122,7 +127,7 @@ def main():
             'https://developer.download.nvidia.com/compute/cuda/repos/debian12/x86_64/cuda-compat-13-1_590.48.01-1_amd64.deb']
         lines=[]
         for line in (ASSETS/'gate.sub').read_text().splitlines():
-            if line.startswith('executable ='):line=f'executable = train.sh\narguments = {run_id} {mode} {str(detach).lower()} {bank}'
+            if line.startswith('executable ='):line=f'executable = train.sh\narguments = {run_id} {mode} {str(detach).lower()} {bank} {query}'
             elif line.startswith('request_disk ='):line='request_disk = 80GB'
             elif line.startswith('gpus_minimum_capability ='):line='gpus_minimum_capability = 8.0'
             elif line.startswith('require_gpus ='):line='require_gpus = '+require_gpus()
@@ -149,7 +154,7 @@ def main():
         (ROOT/'state.json').write_text(json.dumps(state,indent=2)+'\n')
         ad=json.loads(command(['condor_q',job,'-json']))[0]
         assert ad['JobStatus']==5 and ad.get('NumJobStarts',0)==0
-        assert ad['Args']==f'{run_id} {mode} {str(detach).lower()} {bank}'
+        assert ad['Args']==f'{run_id} {mode} {str(detach).lower()} {bank} {query}'
         assert ad['RequestGPUs']==1 and ad['RequestCpus']==2 and ad['RequestMemory']==16384
         assert ad['RequestDisk']==80*1024**2 and ad['GPUsMinCapability']==8.0
         assert 'H100|H200' in ad['RequireGPUs'] and 'A100' not in ad['RequireGPUs']

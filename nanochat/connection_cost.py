@@ -20,14 +20,15 @@ def model_cost(config, batch=1, activation_bytes=2, feedback_passes=None):
             projection=2*batch*max(0,t-1)*d*d
             read=4*batch*d*(t*(t-1)//2)
             mix_forward=4*projection+read
-            # Detached KV inputs need weight gradients but no input gradient.
-            mix_train=(10 if c.feedback_detach else 12)*projection+3*read
+            # Detached source projections need weight gradients, no input grad.
+            train_projections=(9 if c.feedback_query=='previous_top' else 10) if c.feedback_detach else 12
+            mix_train=train_projections*projection+3*read
             extra=.85*mix_train if feedback_passes is None else ((p-2)*mix_forward+mix_train if p>1 else 0)
             if not c.feedback_detach:extra=(p-1)*mix_train
             return dict(estimated_forward_flops=p*backbone+head+(p-1)*mix_forward,
                 estimated_training_flops=((p+2) if c.feedback_detach else 3*p)*backbone+3*head+extra,
                 estimated_evaluation_flops=c.feedback_eval_passes*backbone+head+(c.feedback_eval_passes-1)*mix_forward,
-                additional_parameters=4*d*d,expected_training_passes=p,feedback_detach=c.feedback_detach,
+                additional_parameters=4*d*d,expected_training_passes=p,feedback_detach=c.feedback_detach,feedback_query=c.feedback_query,
                 history_bank_bytes=batch*t*d*activation_bytes,
                 inference_cache='One backbone KV per fixed pass; projected top KV between adjacent passes',
                 accounting='FMA=2; full-width Q/K/V/O, multihead strict-past causal attention. Final-pass-only CE. Default15%P1/85%P2. Excludes elementwise norm/RoPE/softmax, optimizer and recomputation.')

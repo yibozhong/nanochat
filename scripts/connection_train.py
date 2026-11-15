@@ -35,6 +35,7 @@ def main():
     p.add_argument('--feedback-projection-order', choices=('materialized','reassociated'), default='reassociated')
     p.add_argument('--feedback-detach', action=argparse.BooleanOptionalAction, default=True)
     p.add_argument('--feedback-bank', choices=('hidden','residual_update'), default='hidden')
+    p.add_argument('--feedback-query', choices=('embedding','previous_top'), default='embedding')
     p.add_argument('--window-pattern', default='SSSL', help='Native backbone only; vanilla always uses full attention')
     p.add_argument('--formal-training', action='store_true', help='Explicitly enable W&B for a formal training run')
     p.add_argument('--wandb-group', default='mhc-official-kernels-20261030')
@@ -86,6 +87,7 @@ def main():
                        feedback_projection_order=a.feedback_projection_order,
                        feedback_detach=a.feedback_detach,
                        feedback_bank=a.feedback_bank,
+                       feedback_query=a.feedback_query,
                        activation_checkpoint=a.activation_checkpoint,
                        connection_backend=a.connection_backend, fused_connection_grad=a.fused_connection_grad)
     data=PackedData(a.data_dir)
@@ -112,6 +114,7 @@ def main():
         protocol['feedback']=dict(pass_mix=[.15,.85],sampler='numpy.default_rng([seed,zero_based_step])',
             earlier_passes='no_grad_detached' if c.feedback_detach else 'full_backprop',eval_passes=c.feedback_eval_passes)
         if c.feedback_bank!='hidden':protocol['feedback']['bank']=c.feedback_bank
+        if c.feedback_query!='embedding':protocol['feedback']['query']=c.feedback_query
     step=0;best=float('inf');training_seconds=0.;prior_elapsed=0.;initial_dev=None
     run_id=a.run_id or uuid.uuid4().hex[:8]
     if a.resume=='auto':
@@ -162,6 +165,7 @@ def main():
                 name=f'{a.architecture}-{a.variant}'+(f'-{c.feedback_source}-feedback' if c.latent_feedback else '')+
                     ('-full-grad' if c.latent_feedback and not c.feedback_detach else '')+
                     ('-residual-update' if c.feedback_bank=='residual_update' else '')+
+                    ('-previous-top-query' if c.feedback_query=='previous_top' else '')+
                     f'-{c.sequence_length}ctx-{a.steps}steps',id=run_id,resume='allow',config=config)
     run=training_run(formal_training=a.formal_training, local_dir=out/"diagnostics", **kwargs)
     run.define_metric('tokens')
