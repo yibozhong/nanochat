@@ -50,12 +50,17 @@ class ConnectionConfig:
             raise ValueError('Unknown feedback bank content')
         if self.feedback_bank=='residual_update' and self.feedback_source!='per_layer_qkv':
             raise ValueError('Residual-update bank uses per-layer QKV feedback')
-        if not self.feedback_detach and (not self.latent_feedback or self.feedback_source not in ('top','embedding_qkv','per_layer_qkv')):
+        if not self.feedback_detach and (not self.latent_feedback or self.feedback_source not in ('top','embedding_qkv','per_layer_qkv','history_qkv')):
             raise ValueError('Cross-pass backpropagation requires top or projected layer feedback')
         if self.feedback_projection_order not in ('materialized','reassociated'):
             raise ValueError('Unknown feedback projection order')
-        if self.feedback_source not in ('top','layers','embedding_qkv','per_layer_qkv') or self.feedback_attention_backend not in ('torch','triton'):
+        if self.feedback_source not in ('top','layers','embedding_qkv','per_layer_qkv','history_qkv') or self.feedback_attention_backend not in ('torch','triton','flash'):
             raise ValueError('Unknown feedback source or attention backend')
+        if self.feedback_source=='history_qkv':
+            if self.feedback_attention_backend not in ('flash','torch') or self.heads>0 and self.width//self.heads>256:
+                raise ValueError('History feedback requires flash/torch and head dimension <=256')
+        elif self.feedback_attention_backend=='flash':
+            raise ValueError('Flash feedback is for history_qkv')
         if self.feedback_source != 'top' and not self.latent_feedback:
             raise ValueError('Layer feedback requires latent_feedback')
         if type(self.feedback_eval_passes) is not int or self.feedback_eval_passes < 1:
@@ -410,6 +415,9 @@ def optimizer_for(model, batch_tokens=32768):
 
 
 def build_connection_model(config):
+    if config.feedback_source=='history_qkv':
+        from nanochat.history_feedback import HistoryFeedbackModel
+        return HistoryFeedbackModel(config)
     if config.feedback_source in ('embedding_qkv','per_layer_qkv'):
         from nanochat.projected_feedback import ProjectedFeedbackModel
         return ProjectedFeedbackModel(config)

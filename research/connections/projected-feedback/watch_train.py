@@ -24,6 +24,8 @@ def formal_step(lines,run_id):
     formal=False;last=None
     marker='FORMAL_TRAINING_BEGIN projected_feedback '+run_id
     for line in lines:
+        if line.startswith(('HISTORY_FEEDBACK_GATE_BEGIN ','RESIDUAL_FEEDBACK_GATE_BEGIN ','TOP_FEEDBACK_GATE_BEGIN ')):
+            formal=False;last=None
         if line.startswith('FORMAL_TRAINING_BEGIN '):formal=line==marker
         if not formal or not line.startswith('{'):continue
         try:value=json.loads(line)
@@ -85,8 +87,8 @@ def main(root):
                 lines=log.read_text(errors='replace').splitlines() if log.exists() else []
                 gate_started=False
                 for line in lines:
-                    if line.startswith(('RESIDUAL_FEEDBACK_GATE_BEGIN ','TOP_FEEDBACK_GATE_BEGIN ')):gate_started=True
-                    if line.startswith(('RESIDUAL_FEEDBACK_GATE_PASSED ','TOP_FEEDBACK_GATE_PASSED ')):
+                    if line.startswith(('HISTORY_FEEDBACK_GATE_BEGIN ','RESIDUAL_FEEDBACK_GATE_BEGIN ','TOP_FEEDBACK_GATE_BEGIN ')):gate_started=True
+                    if line.startswith(('HISTORY_FEEDBACK_GATE_PASSED ','RESIDUAL_FEEDBACK_GATE_PASSED ','TOP_FEEDBACK_GATE_PASSED ')):
                         report=json.loads(line.split(' ',1)[1])
                         assert report['complete'] and report['source']==training['source']
                         save(root/'preflight-validation.json',report)

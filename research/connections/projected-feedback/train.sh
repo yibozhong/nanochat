@@ -7,6 +7,7 @@ TASK_DETACH="$3"
 TASK_BANK="${4:-hidden}"
 TASK_FEEDBACK_ARGS=(--feedback-detach)
 TASK_GROUP=projected-feedback-10b-20261114
+TASK_FEEDBACK_BACKEND=triton
 case "$TASK_DETACH" in
     false) TASK_FEEDBACK_ARGS=(--no-feedback-detach);TASK_GROUP=feedback-backprop-10b-20261114 ;;
     true) ;;
@@ -24,6 +25,11 @@ esac
 if [ "$TASK_MODE" = top ]; then
     test "$TASK_DETACH" = false;test "$TASK_BANK" = hidden
     TASK_GROUP=top-feedback-full-grad-10b-20261114
+fi
+if [ "$TASK_MODE" = history_qkv ]; then
+    test "$TASK_DETACH" = true;test "$TASK_BANK" = hidden
+    TASK_GROUP=history-feedback-10b-20261115
+    TASK_FEEDBACK_BACKEND=flash
 fi
 TASK_STEPS=305176
 mkdir -p checkpoints results
@@ -49,7 +55,8 @@ import json,sys
 from pathlib import Path
 s=json.loads(Path('source.json').read_text())
 assert s['formal_training'] and s['run_id']==sys.argv[1]
-assert s['feedback_source']==sys.argv[2] and sys.argv[2] in ('top','embedding_qkv','per_layer_qkv')
+assert s['feedback_source']==sys.argv[2] and sys.argv[2] in ('top','embedding_qkv','per_layer_qkv','history_qkv')
+assert s['feedback_attention_backend']==('flash' if sys.argv[2]=='history_qkv' else 'triton')
 assert s['feedback_projection_order']=='reassociated'
 assert s['feedback_detach']==(sys.argv[3]=='true') and s['wandb_group']==sys.argv[4]
 assert s.get('feedback_bank','hidden')==sys.argv[5]
@@ -119,7 +126,9 @@ cp ../source.json source.json
 ln -sfn ../results results
 # Hopper reuses the completed gate. A100 has a validated FA2/CCE runtime;
 # test this model once on that family in this same allocation before training.
-if [ "$TASK_BANK" = residual_update ]; then
+if [ "$TASK_MODE" = history_qkv ]; then
+    WANDB_MODE=disabled timeout --signal=TERM --kill-after=30s 2400 python research/connections/history-feedback/preflight.py
+elif [ "$TASK_BANK" = residual_update ]; then
     WANDB_MODE=disabled timeout --signal=TERM --kill-after=30s 2400 python research/connections/residual-feedback/preflight.py
 elif [ "$TASK_MODE" = top ]; then
     WANDB_MODE=disabled timeout --signal=TERM --kill-after=30s 2400 python research/connections/top-feedback-backprop/preflight.py
@@ -128,7 +137,7 @@ else
 fi
 echo "FORMAL_TRAINING_BEGIN projected_feedback $TASK_RUN_ID"
 python -m scripts.connection_train --variant baseline --architecture vanilla --streams 1 \
-    --latent-feedback --feedback-source "$TASK_MODE" "${TASK_FEEDBACK_ARGS[@]}" --feedback-bank "$TASK_BANK" --feedback-projection-order reassociated --feedback-attention-backend triton --feedback-eval-passes 4 --attention-kernel original --attention-backend fa2 \
+    --latent-feedback --feedback-source "$TASK_MODE" "${TASK_FEEDBACK_ARGS[@]}" --feedback-bank "$TASK_BANK" --feedback-projection-order reassociated --feedback-attention-backend "$TASK_FEEDBACK_BACKEND" --feedback-eval-passes 4 --attention-kernel original --attention-backend fa2 \
     --steps "$TASK_STEPS" --schedule-steps "$TASK_STEPS" --microbatch 16 --seed 42 \
     --no-activation-checkpoint --no-fused-connection-grad --evaluate-test \
     --data-dir ../data --output-dir results/train --checkpoint-dir ../checkpoints \
