@@ -59,6 +59,10 @@ def main():
     p.add_argument('--segment-steps', type=int, default=0,
                    help='Bounded restart validation; 0 uses only the time/signal limit')
     p.add_argument('--seed', type=int, default=42)
+    p.add_argument('--form', choices=('none','taylor','random'), default='none')
+    p.add_argument('--form-count', type=int, default=10)
+    p.add_argument('--form-ema-decay', type=float, default=.99)
+    p.add_argument('--form-lambda', type=float, default=1.)
     a = p.parse_args()
     if a.streams is None:
         a.streams = 1 if a.variant in ('skip_scale','attnres_scale') else 4
@@ -81,6 +85,8 @@ def main():
                        latent_feedback=a.latent_feedback, feedback_eval_passes=a.feedback_eval_passes,
                        feedback_source=a.feedback_source, feedback_attention_backend=a.feedback_attention_backend,
                        activation_checkpoint=a.activation_checkpoint,
+                       form_mode=a.form, form_count=a.form_count,
+                       form_ema_decay=a.form_ema_decay, form_lambda=a.form_lambda,
                        connection_backend=a.connection_backend, fused_connection_grad=a.fused_connection_grad)
     data=PackedData(a.data_dir)
     assert data.manifest['sequence_length']==c.sequence_length
@@ -93,10 +99,25 @@ def main():
         source=json.loads(Path('source.json').read_text())
     else:
         source=dict(commit=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip())
+    if a.resume=='auto':
+        a.resume=str(ckpt/'latest.pt') if (ckpt/'latest.pt').exists() else None
+    state=None
+    if a.resume:
+        state=torch.load(a.resume,map_location='cpu',weights_only=False)
+        restored=ConnectionConfig.from_checkpoint(state['config'])
+        expected,actual=asdict(c),asdict(restored)
+        if c.form_mode!='none':
+            expected.pop('ffn_widths');actual.pop('ffn_widths')
+        assert expected==actual
+        c=restored  # Construct actual checkpoint shapes before loading tensors.
     model=build_connection_model(c).prepare(compile_blocks=True)
     if a.matched_backbone_init:
         match_vanilla_initialization(model,a.seed)
     opt,wd=optimizer_for(model)
+    form=None
+    if c.form_mode!='none':
+        from nanochat.form import FormController
+        form=FormController(model,a.steps,a.seed)
     initial_groups=[{k:v for k,v in group.items() if k!='params'} for group in opt.param_groups]
     protocol=dict(steps=a.steps,schedule_steps=a.schedule_steps,batch_tokens=32768,
                   microbatch=a.microbatch,grad_accum=rows_per_step//a.microbatch,seed=a.seed,
@@ -105,12 +126,16 @@ def main():
     if c.latent_feedback:
         protocol['feedback']=dict(pass_mix=[.15,.85],sampler='numpy.default_rng([seed,zero_based_step])',
             earlier_passes='no_grad_detached',eval_passes=c.feedback_eval_passes)
+    if form is not None:
+        protocol['form']=dict(mode=c.form_mode,count=c.form_count,ema_decay=c.form_ema_decay,
+            curvature_lambda=c.form_lambda,schedule=form.schedule,budget=form.budget,
+            minimum_width=c.width,gradient='effective-batch mean NTP gate gradient; EMA once per update',
+            curvature='EMA of squared batch gradient, not per-token Fisher',
+            ema_bias_correction=False,growth_rounding='largest remainder in blocks of 64; ties by layer',
+            pruning='individual global channels with layer minimum',extra_scoring_passes=0)
     step=0;best=float('inf');training_seconds=0.;prior_elapsed=0.;initial_dev=None
     run_id=a.run_id or uuid.uuid4().hex[:8]
-    if a.resume=='auto':
-        a.resume=str(ckpt/'latest.pt') if (ckpt/'latest.pt').exists() else None
     if a.resume:
-        state=torch.load(a.resume,map_location='cpu',weights_only=False)
         assert asdict(ConnectionConfig.from_checkpoint(state['config']))==asdict(c) and state['protocol']==protocol
         assert state['data_manifest']==data.manifest and state['source']==source
         if a.run_id:assert state['run_id']==a.run_id
@@ -118,6 +143,8 @@ def main():
         training_seconds=state['training_seconds'];prior_elapsed=state['elapsed_seconds']
         initial_dev=state.get('initial_dev_ce')
         model.load_state_dict(state['model']);opt.load_state_dict(state['optimizer'])
+        if form is not None:
+            form.load_state_dict(state['form'],step)
         restore_rng(state['rng']);del state
         assert (ckpt/'best.pt').exists(),'Resume requires the paired dev-best checkpoint'
     start_step=step
@@ -153,10 +180,11 @@ def main():
     kwargs=dict(project='nanochat',entity='yibozhong657-none',group=a.wandb_group,
                 job_type='pretrain' if a.formal_training else 'diagnostic',
                 name=f'{a.architecture}-{a.variant}'+('-layer-feedback' if c.feedback_source=='layers' else '-feedback' if c.latent_feedback else '')+
+                    (f'-form-{c.form_mode}' if form is not None else '')+
                     f'-{c.sequence_length}ctx-{a.steps}steps',id=run_id,resume='allow',config=config)
     run=training_run(formal_training=a.formal_training, local_dir=out/"diagnostics", **kwargs)
     run.define_metric('tokens')
-    for metric in ('train/*','dev/*','perf/*'):
+    for metric in ('train/*','dev/*','perf/*','form/*'):
         run.define_metric(metric,step_metric='tokens')
     json_write(out/'config.json',config)
     stop=False;begin=time.perf_counter()
@@ -168,10 +196,12 @@ def main():
         atomic_save(snapshot(model,opt,step,config=asdict(c),protocol=protocol,source=source,
             run_id=run_id,data_manifest=data.manifest,best_dev_ce=best,
             initial_dev_ce=initial_dev,training_seconds=training_seconds,
-            elapsed_seconds=prior_elapsed+time.perf_counter()-begin),
+            elapsed_seconds=prior_elapsed+time.perf_counter()-begin,
+            **({'form':form.state_dict()} if form is not None else {})),
             ckpt/'latest.pt')
         json_write(out/'progress.json',dict(run_id=run_id,step=step,tokens=step*32768,
-            best_dev_ce=best,training_seconds=training_seconds,source=source))
+            best_dev_ce=best,training_seconds=training_seconds,source=source,
+            **(dict(form_completed=form.completed,ffn_widths=c.ffn_widths,form_seconds=form.seconds) if form is not None else {})))
     def save_best(dev):
         atomic_save(dict(model=model.state_dict(),config=asdict(c),protocol=protocol,source=source,
             run_id=run_id,step=step,dev_ce=dev,data_manifest=data.manifest),ckpt/'best.pt')
@@ -194,10 +224,48 @@ def main():
             while step<a.steps:
                 lr=schedule(opt,step,a.schedule_steps,wd)
                 torch.cuda.synchronize();start=time.perf_counter()
-                loss=train_step(model,opt,data,step,microbatch=a.microbatch,seed=a.seed)
+                loss=train_step(model,opt,data,step,microbatch=a.microbatch,seed=a.seed,form=form)
                 torch.cuda.synchronize();duration=time.perf_counter()-start
                 durations.append(duration);training_seconds+=duration;step+=1
                 row=dict(step=step,tokens=step*32768,loss=loss,seconds=duration,lr_multiplier=lr)
+                formed=False
+                if form is not None:
+                    next_loss=form.record_next_loss(step,loss)
+                    if next_loss is not None:
+                        next_loss['first_step_seconds']=duration
+                        form.history[-1]['first_step_seconds']=duration
+                        row['first_step_after_form']=True
+                        durations[-1]=None
+                        event_path=out/'form'/f'{form.completed:02d}.json'
+                        if event_path.exists():
+                            previous_report=json.loads(event_path.read_text())
+                            previous_report['event']=dict(form.history[-1])
+                            json_write(event_path,previous_report)
+                        run.log(dict(step=step,tokens=step*32768,**{
+                            'form/next_train_ce':loss,'form/next_batch_ce_delta':next_loss['next_batch_ce_delta'],
+                            'form/first_step_seconds':duration}))
+                    if form.due(step):
+                        torch.cuda.synchronize();form_begin=time.perf_counter()
+                        opt,report=form.apply(opt,step,loss)
+                        torch.cuda.synchronize();form_duration=time.perf_counter()-form_begin
+                        form.seconds+=form_duration
+                        form.history[-1]['structural_update_seconds']=form_duration
+                        report['event']=dict(form.history[-1])
+                        (out/'form').mkdir(exist_ok=True)
+                        json_write(out/'form'/f'{form.completed:02d}.json',report)
+                        metrics={'form/number':form.completed,'form/budget':form.budget,
+                            'form/total_width':sum(c.ffn_widths),'form/parameters':report['event']['parameters'],
+                            'form/structural_update_seconds':form_duration,'form/cumulative_seconds':form.seconds,
+                            'form/preceding_train_ce':loss,'form/extra_scoring_passes':0}
+                        for layer,width in enumerate(c.ffn_widths):
+                            metrics[f'form/layer_{layer}/width']=width
+                            metrics[f'form/layer_{layer}/pruned']=report['event']['pruned'][layer]
+                            metrics[f'form/layer_{layer}/grown']=report['event']['grown'][layer]
+                            for key,value in report['event']['scores'][layer].items():
+                                metrics[f'form/layer_{layer}/score_{key}']=value
+                        run.log(dict(step=step,tokens=step*32768,**metrics))
+                        print(json.dumps(dict(form_event=report['event'])),flush=True)
+                        formed=True
                 if c.latent_feedback:
                     row['passes']=model.training_passes(a.seed,step-1)
                 log.write(json.dumps(row)+'\n')
@@ -222,7 +290,7 @@ def main():
                     if dev<best:
                         best=dev;save_best(dev)
                     run.log(dict(step=step,tokens=step*32768,**dev_metrics(dev),**{'dev/tokens':dev_tokens}))
-                if step==50 or step%500==0 or step==a.steps or stop:save()
+                if formed or step==50 or step%500==0 or step==a.steps or stop:save()
                 if step<a.steps and (stop or time.perf_counter()-begin>=a.segment_seconds
                                       or a.segment_steps and step-start_step>=a.segment_steps):
                     save();run.summary.update(dict(complete=False,checkpoint_step=step))
@@ -233,21 +301,29 @@ def main():
             final_test,test_tokens=evaluate(model,data,'test',microbatch=a.microbatch)
             selected=torch.load(ckpt/'best.pt',map_location='cpu',weights_only=False)
             assert selected['source']==source and selected['run_id']==run_id
-            model.load_state_dict(selected['model'])
-            best_test,best_test_tokens=evaluate(model,data,'test',microbatch=a.microbatch)
+            best_model=model
+            if form is not None:
+                best_model=build_connection_model(ConnectionConfig.from_checkpoint(selected['config'])).prepare(compile_blocks=True)
+            best_model.load_state_dict(selected['model'])
+            best_test,best_test_tokens=evaluate(best_model,data,'test',microbatch=a.microbatch)
             assert best_test_tokens==test_tokens
             test_result=dict(final_test_ce=final_test,best_selected_test_ce=best_test,
                 best_dev_step=selected['step'],test_tokens=test_tokens)
         checkpoint_files={}
         for name in ('latest.pt','best.pt'):
             checkpoint_files[name]=dict(bytes=(ckpt/name).stat().st_size)
+        steady_durations=[d for d in durations[10:] if d is not None]
         result=dict(complete=True,variant=a.variant,run_id=run_id,steps=step,training_tokens=step*32768,
             initial_dev_ce=initial_dev,final_dev_ce=dev,best_dev_ce=best,dev_tokens=dev_tokens,
             training_seconds=training_seconds,elapsed_seconds=prior_elapsed+time.perf_counter()-begin,
-            steady_step_seconds=sum(durations[10:])/len(durations[10:]) if len(durations)>10 else None,
+            steady_step_seconds=sum(steady_durations)/len(steady_durations) if steady_durations else None,
             gpu=torch.cuda.get_device_name(),peak_allocated_bytes=torch.cuda.max_memory_allocated(),
             peak_reserved_bytes=torch.cuda.max_memory_reserved(),source=source,
             test_evaluated=a.evaluate_test,checkpoint_files=checkpoint_files,**test_result)
+        if form is not None:
+            assert form.completed==c.form_count
+            result.update(form_completed=form.completed,ffn_widths=c.ffn_widths,
+                form_seconds=form.seconds,form_history=form.history)
         json_write(out/'summary.json',result);run.summary.update(result);run.finish()
         print(json.dumps(result),flush=True);return 0
     except BaseException:
