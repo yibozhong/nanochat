@@ -9,6 +9,13 @@ On 2026-11-16 the user additionally authorized exactly three 10B runs:
 | `heavy_ball_embed` | Euclidean Heavy-Ball | Independent token embedding | 75,497,520 |
 | `sphere` | Tangent force plus radial retraction | No velocity state | 58,720,272 |
 
+The user subsequently authorized one additional 10B run, `heavy_ball_zero`:
+Euclidean Heavy-Ball with v0=0, no velocity embeddings, sphere constraint or
+transport, and 58,720,304 parameters. It uses the identical Heavy-Ball update,
+coefficient initialization and training recipe as `heavy_ball_embed`. Its
+same-allocation gate includes eight preset checks (44 including shared tests),
+512 finite training updates, same-card timing and exact CLI recovery.
+
 Each uses the same seed, backbone initialization, data, optimizer rules and
 10,000,007,168 tokens. These are token-budget-matched, not parameter-matched.
 Each embedding is V-by-D, untied, normal(0, .02), BF16 like the input embedding,
@@ -136,7 +143,7 @@ Their individual results do not measure this combined nanochat architecture.
 
 ## Submission
 
-`submit_train.py --experiment riemannian_embed`, `heavy_ball_embed`, or `sphere`
+`submit_train.py --experiment riemannian_embed`, `heavy_ball_embed`, `sphere`, or `heavy_ball_zero`
 submits exactly one held-audited job for that preset, with per-root locks and
 existing-run detection. The same GPU allocation runs the 3600-second bounded
 gate, then launches an independent seed42 formal process. Each maintains its

@@ -6,6 +6,8 @@ EXPERIMENTS = {
         root='riemannian-velocity-embedding-10b-20261116'),
     'heavy_ball_embed': dict(mode='heavy_ball', velocity_init='token',
         root='heavy-ball-velocity-embedding-10b-20261116'),
+    'heavy_ball_zero': dict(mode='heavy_ball', velocity_init='zero',
+        root='heavy-ball-zero-10b-20261116'),
     'sphere': dict(mode='sphere', velocity_init='zero',
         root='sphere-only-10b-20261116'),
 }

@@ -29,7 +29,7 @@ def main():
     subprocess.run(['timeout','--signal=TERM','--kill-after=30s','3600','bash',
         'research/connections/riemannian-momentum/check.sh'],check=True)
     suite=ET.parse('results/rmt-tests.xml').getroot().find('testsuite')
-    expected_tests=60 if source['experiment']=='riemannian_zero' else 44
+    expected_tests=68 if source['experiment']=='riemannian_zero' else 44
     assert int(suite.attrib['tests'])==expected_tests,suite.attrib
     assert all(int(suite.attrib.get(k,0))==0 for k in ('failures','errors','skipped'))
     profile=json.loads(Path('results/rmt-profile/summary.json').read_text())

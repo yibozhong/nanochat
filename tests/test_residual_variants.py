@@ -1,4 +1,4 @@
-"""GPU checks for the three authorized residual configurations."""
+"""GPU checks for the authorized residual ablation configurations."""
 from dataclasses import asdict, replace
 import os
 
@@ -13,7 +13,8 @@ from test_connection_training_resume import equal_tree
 from test_riemannian_momentum import gpu, inputs
 
 PRESETS = {'riemannian_embed': ('riemannian', 'token'),
-           'heavy_ball_embed': ('heavy_ball', 'token'), 'sphere': ('sphere', 'zero')}
+           'heavy_ball_embed': ('heavy_ball', 'token'),
+           'heavy_ball_zero': ('heavy_ball', 'zero'), 'sphere': ('sphere', 'zero')}
 SELECTED = os.environ.get('RMT_EXPERIMENT')
 
 
@@ -62,7 +63,10 @@ def test_initial_state_and_independent_update(setting):
         alpha, = update.coefficients()
         expected = sphere_project(h + alpha*tangent_project(h, force))
     elif setting.residual_mode == 'heavy_ball':
-        torch.testing.assert_close(v, model.velocity_embedding(x).float(), rtol=0, atol=0)
+        if setting.velocity_init == 'token':
+            torch.testing.assert_close(v, model.velocity_embedding(x).float(), rtol=0, atol=0)
+        else:
+            assert model.velocity_embedding is None and torch.count_nonzero(v) == 0
         beta, gamma, eta = update.coefficients()
         u = beta*v + gamma*force
         expected = h + eta*u
@@ -110,6 +114,9 @@ def test_cce_gradient_and_velocity_learning(setting):
         assert model.blocks[0].attn_residual.raw.grad[0].abs() > 0
         untouched = torch.ones(256, device='cuda', dtype=torch.bool); untouched[x.unique()] = False
         assert torch.count_nonzero(model.velocity_embedding.weight.grad[untouched]) == 0
+    elif setting.residual_mode == 'heavy_ball':
+        assert model.blocks[0].attn_residual.raw.grad[0] == 0
+        assert model.blocks[-1].mlp_residual.raw.grad.abs().sum() > 0
 
 
 @torch.no_grad()
@@ -156,6 +163,13 @@ def test_zero_embedding_limit_and_sphere_identity(setting):
         top=model.backbone(model.wte(x),token_ids=x)
         torch.testing.assert_close(top,h,rtol=2e-6,atol=2e-6)
         assert all('velocity' not in n for n,_ in model.named_parameters())
+    elif setting.velocity_init=='zero':
+        top=model.backbone(model.wte(x),token_ids=x)
+        torch.testing.assert_close(top,h,rtol=0,atol=0)
+        assert torch.count_nonzero(v)==0 and model.velocity_embedding is None
+        base=make(replace(setting,residual_dynamics='vanilla'),perturb=False).eval()
+        base.load_state_dict({n:t for n,t in model.state_dict().items() if '_residual.' not in n})
+        torch.testing.assert_close(model(x),base(x),rtol=0,atol=0)
     else:
         before=model(x)
         model.velocity_embedding.weight.zero_()
