@@ -41,24 +41,26 @@ class ConnectionConfig:
     feedback_eval_passes: int = 4
     feedback_source: str = 'top'
     feedback_attention_backend: str = 'triton'
-    riemannian_momentum: bool = False
     residual_dynamics: str = 'vanilla'
     velocity_init: str | None = None
     velocity_embedding_std: float = 0.02
     momentum_beta_init: float = 0.5
     momentum_gamma_init: float = 0.5
-    momentum_eta_init: float = 1.0
+    momentum_eta_init: float | None = None
+    an_force_rms_floor: float = 0.1
 
     def __post_init__(self):
-        if self.residual_dynamics not in ('vanilla', 'riemannian', 'heavy_ball', 'sphere'):
+        if self.residual_dynamics not in ('vanilla', 'heavy_ball', 'an_heavy_ball'):
             raise ValueError('Unknown residual dynamics')
-        if self.riemannian_momentum and self.residual_dynamics not in ('vanilla', 'riemannian'):
-            raise ValueError('Conflicting residual dynamics and legacy Riemannian flag')
+        if self.momentum_eta_init is None:
+            self.momentum_eta_init = 0.1 if self.residual_mode == 'an_heavy_ball' else 1.0
+        if not math.isfinite(self.an_force_rms_floor) or self.an_force_rms_floor <= 0:
+            raise ValueError('Approximate-normalization force RMS floor must be positive and finite')
         if self.velocity_init is None:
-            self.velocity_init = 'token' if self.residual_mode in ('riemannian', 'heavy_ball') else 'zero'
+            self.velocity_init = 'token' if self.residual_mode in ('heavy_ball', 'an_heavy_ball') else 'zero'
         if self.velocity_init not in ('zero', 'token'):
             raise ValueError('Unknown velocity initialization')
-        if self.velocity_init == 'token' and self.residual_mode not in ('riemannian', 'heavy_ball'):
+        if self.velocity_init == 'token' and self.residual_mode not in ('heavy_ball', 'an_heavy_ball'):
             raise ValueError('Velocity embeddings require a momentum stream')
         if not math.isfinite(self.velocity_embedding_std) or self.velocity_embedding_std <= 0:
             raise ValueError('Velocity embedding initialization must be positive and finite')
@@ -68,7 +70,7 @@ class ConnectionConfig:
             raise ValueError('Residual momentum gamma and eta must start positive and finite')
         if self.residual_mode != 'vanilla' and (self.architecture != 'vanilla' or self.variant != 'baseline'
                 or self.latent_feedback or self.attention_kernel != 'original' or self.fused_connection_grad):
-            raise ValueError('Riemannian momentum requires the vanilla baseline and original attention')
+            raise ValueError('Momentum residual requires the vanilla baseline and original attention')
         if self.feedback_source not in ('top','layers') or self.feedback_attention_backend not in ('torch','triton'):
             raise ValueError('Unknown feedback source or attention backend')
         if self.feedback_source == 'layers' and not self.latent_feedback:
@@ -123,8 +125,7 @@ class ConnectionConfig:
 
     @property
     def residual_mode(self):
-        # Keep old checkpoint metadata and --riemannian-momentum compatible.
-        return 'riemannian' if self.riemannian_momentum else self.residual_dynamics
+        return self.residual_dynamics
 
     @property
     def attnres_block_layers(self):
@@ -135,6 +136,8 @@ class ConnectionConfig:
     def from_checkpoint(cls, config):
         """Read pre-cleanup NVIDIA/vanilla metadata; reject retired model weights."""
         config = dict(config)
+        if config.pop('riemannian_momentum', False) or config.get('residual_dynamics') in ('riemannian', 'sphere'):
+            raise ValueError('Checkpoint belongs to the retired sphere residual route; use its archived code')
         # Historical checkpoints predating this field used v0=0. Preserve their
         # architecture while newly constructed momentum models default to tokens.
         config.setdefault('velocity_init', 'zero')
@@ -207,7 +210,7 @@ class ConnectionBlock(Block):
         self.variant = config.variant
         self.compiled_attention = self.compiled_mlp = None
         if config.residual_mode != 'vanilla':
-            from nanochat.riemannian_momentum import residual_update
+            from nanochat.momentum import residual_update
             self.attn_residual = residual_update(config)
             self.mlp_residual = residual_update(config)
         if self.variant == 'skip_scale':
@@ -238,11 +241,17 @@ class ConnectionBlock(Block):
         return self.mlp(norm(h))
 
     def momentum_forward(self, h, v, cos, sin, kv_cache=None):
-        # The state/geometry stays FP32; the original branches still use BF16.
+        # The residual state stays FP32; the original branches still use BF16.
         force = self.attention_branch(h.to(cos.dtype), cos, sin, kv_cache)
         h, v = self.attn_residual(h, v, force)
         force = self.mlp_branch(h.to(cos.dtype))
         return self.mlp_residual(h, v, force)
+
+    def an_momentum_forward(self, h, v, moments, cos, sin, kv_cache=None):
+        force = self.attention_branch(h.to(cos.dtype), cos, sin, kv_cache)
+        h, v, moments = self.attn_residual(h, v, moments, force)
+        force = self.mlp_branch(h.to(cos.dtype))
+        return self.mlp_residual(h, v, moments, force)
 
     def forward(self, x, cos, sin, kv_cache=None):
         if self.variant == 'baseline':
@@ -263,7 +272,7 @@ class ConnectionModel(nn.Module):
     def __init__(self, config):
         super().__init__()
         if config.residual_mode != 'vanilla' and type(self) is ConnectionModel:
-            raise ValueError('Use build_connection_model for Riemannian momentum')
+            raise ValueError('Use build_connection_model for momentum residuals')
         if config.variant in ('attnres','attnres_scale'):
             raise ValueError('Use build_connection_model for AttnRes')
         if config.architecture != 'vanilla':
@@ -428,8 +437,8 @@ def optimizer_for(model, batch_tokens=32768):
 
 def build_connection_model(config):
     if config.residual_mode != 'vanilla':
-        from nanochat.riemannian_momentum import RiemannianMomentumModel
-        return RiemannianMomentumModel(config)
+        from nanochat.momentum import MomentumModel
+        return MomentumModel(config)
     if config.latent_feedback:
         from nanochat.latent_feedback import LatentFeedbackModel
         return LatentFeedbackModel(config)

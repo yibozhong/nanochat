@@ -29,14 +29,15 @@ def main():
     p.add_argument('--attention-kernel', choices=('original','fla_triton'), default='original')
     p.add_argument('--architecture', choices=('vanilla', 'native'), default='vanilla')
     p.add_argument('--latent-feedback', action='store_true')
-    p.add_argument('--riemannian-momentum', action='store_true')
-    p.add_argument('--residual-dynamics', choices=('vanilla','riemannian','heavy_ball','sphere'), default='vanilla')
+    p.add_argument('--residual-dynamics', choices=('vanilla','heavy_ball','an_heavy_ball'), default='vanilla')
     p.add_argument('--velocity-init', choices=('zero','token'), default=None,
                    help='Momentum defaults to learned token velocity embeddings; zero supports legacy diagnostics')
     p.add_argument('--velocity-embedding-std', type=float, default=.02)
     p.add_argument('--momentum-beta-init', type=float, default=.5)
     p.add_argument('--momentum-gamma-init', type=float, default=.5)
-    p.add_argument('--momentum-eta-init', type=float, default=1.)
+    p.add_argument('--momentum-eta-init', type=float, default=None,
+                   help='Defaults: heavy_ball=1, an_heavy_ball=0.1')
+    p.add_argument('--an-force-rms-floor', type=float, default=.1)
     p.add_argument('--feedback-eval-passes', type=int, default=4)
     p.add_argument('--feedback-source', choices=('top','layers'), default='top')
     p.add_argument('--feedback-attention-backend', choices=('torch','triton'), default='triton')
@@ -87,11 +88,10 @@ def main():
                        attention_kernel=a.attention_kernel,
                        architecture=a.architecture, window_pattern=a.window_pattern,
                        latent_feedback=a.latent_feedback, feedback_eval_passes=a.feedback_eval_passes,
-                       riemannian_momentum=a.riemannian_momentum,
                        residual_dynamics=a.residual_dynamics, velocity_init=a.velocity_init,
                        velocity_embedding_std=a.velocity_embedding_std,
                        momentum_beta_init=a.momentum_beta_init, momentum_gamma_init=a.momentum_gamma_init,
-                       momentum_eta_init=a.momentum_eta_init,
+                       momentum_eta_init=a.momentum_eta_init, an_force_rms_floor=a.an_force_rms_floor,
                        feedback_source=a.feedback_source, feedback_attention_backend=a.feedback_attention_backend,
                        activation_checkpoint=a.activation_checkpoint,
                        connection_backend=a.connection_backend, fused_connection_grad=a.fused_connection_grad)
