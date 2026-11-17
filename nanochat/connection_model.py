@@ -48,10 +48,13 @@ class ConnectionConfig:
     momentum_gamma_init: float = 0.5
     momentum_eta_init: float | None = None
     ngpt_force_rms_floor: float = 0.1
+    ngpt_alpha_init: float = 0.05
 
     def __post_init__(self):
-        if self.residual_dynamics not in ('vanilla', 'heavy_ball', 'ngpt_heavy_ball'):
+        if self.residual_dynamics not in ('vanilla', 'heavy_ball', 'ngpt_heavy_ball', 'ngpt'):
             raise ValueError('Unknown residual dynamics')
+        if not math.isfinite(self.ngpt_alpha_init) or not 0 < self.ngpt_alpha_init < 1:
+            raise ValueError('nGPT alpha must start strictly between zero and one')
         if self.momentum_eta_init is None:
             self.momentum_eta_init = 0.1 if self.residual_mode == 'ngpt_heavy_ball' else 1.0
         if not math.isfinite(self.ngpt_force_rms_floor) or self.ngpt_force_rms_floor <= 0:
@@ -70,7 +73,7 @@ class ConnectionConfig:
             raise ValueError('Residual momentum gamma and eta must start positive and finite')
         if self.residual_mode != 'vanilla' and (self.architecture != 'vanilla' or self.variant != 'baseline'
                 or self.latent_feedback or self.attention_kernel != 'original' or self.fused_connection_grad):
-            raise ValueError('Momentum residual requires the vanilla baseline and original attention')
+            raise ValueError('Residual dynamics require the vanilla baseline and original attention')
         if self.feedback_source not in ('top','layers') or self.feedback_attention_backend not in ('torch','triton'):
             raise ValueError('Unknown feedback source or attention backend')
         if self.feedback_source == 'layers' and not self.latent_feedback:
@@ -208,6 +211,7 @@ class ConnectionBlock(Block):
         super().__init__(native, index)
         self.attn.ve_gate = None
         self.variant = config.variant
+        self.residual_mode = config.residual_mode
         self.compiled_attention = self.compiled_mlp = None
         if config.residual_mode != 'vanilla':
             from nanochat.momentum import residual_update
@@ -248,6 +252,10 @@ class ConnectionBlock(Block):
         return self.mlp_residual(h, v, force)
 
     def forward(self, x, cos, sin, kv_cache=None):
+        if self.residual_mode == 'ngpt':
+            force = self.attention_branch(x.to(cos.dtype), cos, sin, kv_cache)
+            x = self.attn_residual(x, force)
+            return self.mlp_residual(x, self.mlp_branch(x.to(cos.dtype)))
         if self.variant == 'baseline':
             return super().forward(x, None, (cos, sin), (-1, 0), kv_cache)
         if self.variant == 'skip_scale':
@@ -430,6 +438,9 @@ def optimizer_for(model, batch_tokens=32768):
 
 
 def build_connection_model(config):
+    if config.residual_mode == 'ngpt':
+        from nanochat.momentum import NormalizedResidualModel
+        return NormalizedResidualModel(config)
     if config.residual_mode != 'vanilla':
         from nanochat.momentum import MomentumModel
         return MomentumModel(config)

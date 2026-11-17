@@ -13,11 +13,16 @@ from nanochat.connection_cost import model_cost
 from nanochat.connection_experiment import configure_attention
 from nanochat.connection_model import ConnectionConfig, build_connection_model, optimizer_for, schedule
 from nanochat.packed_training import PackedData, evaluate, json_write, seed_all, train_step
+from nanochat.momentum import normalize_residual
 
 
 @torch.no_grad()
 def residual_audit(model, x):
-    h, v = model.initial_state(model.wte(x), x)
+    pure = model.config.residual_mode == 'ngpt'
+    if pure:
+        h, v = normalize_residual(model.wte(x)), None
+    else:
+        h, v = model.initial_state(model.wte(x), x)
     cos, sin = model.cos[:, :x.shape[1]], model.sin[:, :x.shape[1]]
     rows = []
     for b in model.blocks:
@@ -27,17 +32,22 @@ def residual_audit(model, x):
             force = branch(h.to(cos.dtype))
             row = dict(sublayer=len(rows), branch=name,
                        force_rms=force.float().square().mean().sqrt().item())
-            h, v = update(h, v, force)
-            if model.config.residual_mode == 'ngpt_heavy_ball':
+            if pure:
+                h = update(h, force)
+            else:
+                h, v = update(h, v, force)
+            if model.config.residual_mode in ('ngpt_heavy_ball', 'ngpt'):
                 row['hidden_rms_max_error'] = (h.square().mean(-1)-1).abs().max().item()
                 assert row['hidden_rms_max_error'] < 2e-6
-            assert torch.isfinite(h).all() and torch.isfinite(v).all()
+            assert torch.isfinite(h).all()
             row.update(hidden_rms=h.square().mean().sqrt().item(),
-                       max_token_hidden_rms=h.square().mean(-1).sqrt().max().item(),
-                       velocity_rms=v.square().mean().sqrt().item(),
-                       observed_hv_moment=(h*v).mean().item())
+                       max_token_hidden_rms=h.square().mean(-1).sqrt().max().item())
+            if v is not None:
+                assert torch.isfinite(v).all()
+                row.update(velocity_rms=v.square().mean().sqrt().item(),
+                           observed_hv_moment=(h*v).mean().item())
             # Engineering guard for this bounded check, not a mathematical bound.
-            assert row['max_token_hidden_rms'] < 10 and row['velocity_rms'] < 10, row
+            assert row['max_token_hidden_rms'] < 10 and row.get('velocity_rms', 0) < 10, row
             rows.append(row)
     return rows
 
@@ -46,6 +56,7 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument('--data-dir', required=True)
     p.add_argument('--output-dir', required=True)
+    p.add_argument('--target-mode', choices=('ngpt_heavy_ball','ngpt'), default='ngpt_heavy_ball')
     a = p.parse_args()
     out = Path(a.output_dir); out.mkdir(parents=True, exist_ok=True)
     configure_attention('fa2'); torch.set_num_threads(2)
@@ -55,13 +66,17 @@ def main():
     result = dict(complete=False, formal_training=False, gpu=torch.cuda.get_device_name(),
                   torch=torch.__version__, cuda=torch.version.cuda, attention_backend='fa2',
                   seed=42, microbatch=16, batch_tokens=32768, models={})
-    for mode, steps in [('vanilla', 32), ('heavy_ball', 32), ('ngpt_heavy_ball', 128)]:
+    modes = [('vanilla', 32)]
+    if a.target_mode == 'ngpt_heavy_ball':
+        modes.append(('heavy_ball', 32))
+    modes.append((a.target_mode, 128))
+    for mode, steps in modes:
         seed_all(42)
         c = ConnectionConfig(streams=1, residual_dynamics=mode)
         model = build_connection_model(c).prepare(compile_blocks=True)
         opt, wd = optimizer_for(model)
-        initial_dev = evaluate(model, data)[0] if mode == 'ngpt_heavy_ball' else None
-        initial_state = residual_audit(model, data.batch('dev', 0, 2)[0]) if mode == 'ngpt_heavy_ball' else None
+        initial_dev = evaluate(model, data)[0] if mode == a.target_mode else None
+        initial_state = residual_audit(model, data.batch('dev', 0, 2)[0]) if mode == a.target_mode else None
         durations, losses = [], []
         torch.cuda.reset_peak_memory_stats()
         with (out/(mode+'-steps.jsonl')).open('w', buffering=1) as log:
@@ -86,7 +101,7 @@ def main():
                     theoretical_cost=model_cost(c, batch=16))
         if mode != 'vanilla':
             info['coefficients'] = model.residual_metrics()
-        if mode == 'ngpt_heavy_ball':
+        if mode == a.target_mode:
             info.update(initial_dev_ce=initial_dev, final_dev_ce=evaluate(model, data)[0],
                         initial_residual_state=initial_state,
                         final_residual_state=residual_audit(model, data.batch('dev', 0, 2)[0]))
@@ -104,9 +119,10 @@ def main():
         del model, opt, prof
         torch._dynamo.reset(); gc.collect(); torch.cuda.empty_cache()
     m = result['models']
-    result['time_ratio_to_hb'] = m['ngpt_heavy_ball']['median_step_seconds']/m['heavy_ball']['median_step_seconds']
-    result['time_ratio_to_vanilla'] = m['ngpt_heavy_ball']['median_step_seconds']/m['vanilla']['median_step_seconds']
-    assert result['time_ratio_to_hb'] < 1.75
+    if 'heavy_ball' in m:
+        result['time_ratio_to_hb'] = m[a.target_mode]['median_step_seconds']/m['heavy_ball']['median_step_seconds']
+        assert result['time_ratio_to_hb'] < 1.75
+    result['time_ratio_to_vanilla'] = m[a.target_mode]['median_step_seconds']/m['vanilla']['median_step_seconds']
     assert result['time_ratio_to_vanilla'] < 1.75
     result['complete'] = True
     json_write(out/'summary.json', result)

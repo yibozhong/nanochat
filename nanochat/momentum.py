@@ -1,7 +1,8 @@
-"""Heavy-Ball depth streams with an optional nGPT-inspired residual update.
+"""Heavy-Ball depth streams and nGPT-inspired normalized residual interpolation.
 
-Both streams use fixed Euclidean coordinates. Only hidden is normalized; the
+Momentum streams use fixed Euclidean coordinates. Only hidden is normalized;
 velocity is never tangent-projected, normalized, detached, or transported.
+Pure nGPT uses a single hidden stream without allocating a velocity.
 """
 import math
 
@@ -73,7 +74,44 @@ class NormalizedHeavyBall(HeavyBall):
 
 
 def residual_update(config):
-    return {'heavy_ball': HeavyBall, 'ngpt_heavy_ball': NormalizedHeavyBall}[config.residual_mode](config)
+    return {'heavy_ball': HeavyBall, 'ngpt_heavy_ball': NormalizedHeavyBall,
+            'ngpt': NormalizedResidual}[config.residual_mode](config)
+
+
+class NormalizedResidual(nn.Module):
+    """Scalar nGPT normalized interpolation, with no velocity state or parameters."""
+    def __init__(self, config):
+        super().__init__()
+        self.raw = nn.Parameter(torch.tensor([inverse_softplus(config.ngpt_alpha_init)], dtype=torch.float32))
+        self.rms_floor = config.ngpt_force_rms_floor
+
+    def alpha(self):
+        return F.softplus(self.raw[0])
+
+    def forward(self, h, force):
+        h = state_dtype(h)
+        target = normalize_residual(force, self.rms_floor)
+        return normalize_residual(h + self.alpha()*(target-h))
+
+
+class NormalizedResidualModel(ConnectionModel):
+    """Single-stream implementation reusing the existing backbone and KV cache."""
+    def prepare(self, device='cuda', dtype=torch.bfloat16, compile_blocks=False):
+        super().prepare(device, dtype, compile_blocks=False)
+        if compile_blocks:
+            self.compiled_steps = [torch.compile(b.forward, dynamic=False, fullgraph=True,
+                                   options={'emulate_precision_casts': True}) for b in self.blocks]
+        return self
+
+    def hidden(self, idx, kv_cache=None):
+        h = self.backbone(normalize_residual(self.wte(idx)), kv_cache)
+        return norm(h.to(self.wte.weight.dtype))
+
+    @torch.no_grad()
+    def residual_metrics(self):
+        values = torch.stack([m.alpha() for b in self.blocks
+                              for m in (b.attn_residual, b.mlp_residual)]).cpu().tolist()
+        return {f'residual/sublayer_{i}/alpha': a for i, a in enumerate(values)}
 
 
 class MomentumModel(ConnectionModel):

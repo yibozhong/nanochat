@@ -49,7 +49,7 @@ def test_backbone_weights_and_optimizer_membership(setting):
     for name, value in base.state_dict().items():
         assert torch.equal(model.state_dict()[name], value), name
     opt, _ = optimizer_for(model)
-    if model.velocity_embedding is not None:
+    if getattr(model, 'velocity_embedding', None) is not None:
         group = next(g for g in opt.param_groups if any(p is model.velocity_embedding.weight for p in g['params']))
         assert group['kind'] == 'adamw' and group['weight_decay'] == .001
         assert any(p is model.wte.weight for p in group['params'])
@@ -110,7 +110,7 @@ def test_cce_gradient_and_velocity_learning(setting):
         assert p.grad is not None and torch.isfinite(p.grad).all()
         error = (p.grad.float()-expected[n].float()).norm()/expected[n].float().norm().clamp_min(1e-10)
         assert error < .035, (n, error.item())
-    if model.velocity_embedding is not None:
+    if getattr(model, 'velocity_embedding', None) is not None:
         assert model.velocity_embedding.weight.grad.abs().sum() > 0
         assert model.blocks[0].attn_residual.raw.grad[0].abs() > 0
         untouched = torch.ones(256, device='cuda', dtype=torch.bool); untouched[x.unique()] = False

@@ -2,6 +2,8 @@
 
 Status: bounded GPU validation **passed** on 2026-11-17, job `8837389.0`,
 H100 80GB, model commit `22023c3`. No new formal training has been started.
+The subsequently authorized pure nGPT residual run (without Heavy-Ball) is
+documented separately in [../ngpt/README.md](../ngpt/README.md).
 The user redirected this task from anGPT to nGPT before GPU tests. The pending
 anGPT debug job was held during environment preparation; no anGPT validation
 result is claimed. The interim approximate-moment implementation is archived
