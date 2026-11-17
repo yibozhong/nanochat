@@ -1,4 +1,4 @@
-"""Submit one of the three authorized nonzero-init 10B residual runs with durable restart."""
+"""Submit one named nonzero-init 10B residual run with durable restart."""
 import argparse
 import fcntl
 import json
@@ -13,7 +13,8 @@ from policy import RANK, require_gpus
 REPO=Path(__file__).resolve().parents[3]
 HOME_ROOT=Path('/home/yzhong239')
 ASSETS=HOME_ROOT/'nanochat-runtime-assets'
-PRESETS={'vanilla':'vanilla', 'ngpt':'ngpt', 'ngpt_momentum':'ngpt_heavy_ball'}
+PRESETS={'vanilla':'vanilla', 'ngpt':'ngpt', 'ngpt_momentum':'ngpt_heavy_ball',
+         'ngpt_momentum_transport_rms':'ngpt_heavy_ball'}
 STEPS=305176
 
 
@@ -72,14 +73,45 @@ def main():
             passed_families=[],compatible_fallback_backend='A100 FA2/CCE runtime validated in skip-scale/validation.json',
             prior_h100_reference_step_seconds=.06704051233828068 if mode=='vanilla' else .0756970327347517,
             timing_reference='previous zero-init H100 diagnostics, estimate only; measure all three nonzero modes in preflight')
+        if preset=='ngpt_momentum_transport_rms':
+            report_path=HOME_ROOT/'ngpt-transport-rms-debug-20261117/validation.json'
+            report=json.loads(report_path.read_text())
+            assert report['complete'] and report['exit_code']==0 and report['resume']['complete']
+            assert report['tests']==dict(tests=57, failures=0, errors=0, skipped=0)
+            profile=report['profile']
+            target=profile['models'][mode]
+            assert profile['complete'] and profile['gpu']=='NVIDIA H200' and target['steps']==128
+            validated=report['source']['commit']
+            changes=command(['git','diff','--name-only',validated,commit]).splitlines()
+            assert all(path.startswith('research/connections/ngpt/') for path in changes), changes
+            source.update(ngpt_velocity_mode='transport_rms',momentum_velocity_rms_floor=.1,
+                momentum_eta_init=.05,velocity_init='token',velocity_embedding_std=.02,
+                validation_job=report['job'],validated_model_commit=validated,passed_families=['sm90'],
+                preflight='reuse verified sm90 model and runtime; full transport checks on sm80',
+                reference_step_seconds=target['median_step_seconds'],reference_gpu=profile['gpu'],
+                timing_reference='transport_rms 16x2048 same-card H200 median over steps 17-32')
+            del source['prior_h100_reference_step_seconds']
+            config=target['config']
+            for key in ('residual_dynamics','ngpt_velocity_mode','momentum_velocity_rms_floor',
+                        'velocity_init','velocity_embedding_std','ngpt_force_rms_floor','ngpt_alpha_init',
+                        'momentum_eta_init','momentum_beta_init','momentum_gamma_init',
+                        'residual_projection_init','residual_projection_init_std'):
+                assert config[key]==source[key], key
+            assert all(config[key]==value for key,value in source['model'].items())
+            assert profile['seed']==source['seed'] and profile['microbatch']==source['microbatch']
+            assert profile['batch_tokens']==source['batch_tokens'] and profile['attention_backend']=='fa2'
+            shutil.copy2(report_path,bundle/'transport-validation.json')
         (bundle/'source.json').write_text(json.dumps(source,indent=2)+'\n')
         inputs=[str(p.relative_to(ROOT)) for p in bundle.iterdir()]
         inputs += [str(HOME_ROOT/'.netrc'),data['data_uri'],
             'osdf:///chtc/staging/y/yzhong239/mhc-official-runtime-7546767.tar.gz',
             'https://developer.download.nvidia.com/compute/cuda/repos/debian12/x86_64/cuda-compat-13-1_590.48.01-1_amd64.deb']
         lines=[]
+        job_args=f'{run_id} {mode}'
+        if source['ngpt_velocity_mode']=='transport_rms':
+            job_args+=' transport_rms'
         for line in (ASSETS/'gate.sub').read_text().splitlines():
-            if line.startswith('executable ='):line=f'executable = train.sh\narguments = {run_id} {mode}'
+            if line.startswith('executable ='):line=f'executable = train.sh\narguments = {job_args}'
             elif line.startswith('request_disk ='):line='request_disk = 80GB'
             elif line.startswith('gpus_minimum_capability ='):line='gpus_minimum_capability = 8.0'
             elif line.startswith('require_gpus ='):line='require_gpus = '+require_gpus()
@@ -98,8 +130,11 @@ def main():
         (ROOT/'train.sub').write_text('\n'.join(lines)+'\n')
         command(['condor_submit','-dry-run','dry-run.ad','train.sub'],ROOT)
         state=dict(status='submitting',run_id=run_id,source=source,formal_training=True,submitted_at=time.time(),
-            wandb_url=f'https://wandb.ai/yibozhong657-none/nanochat/runs/{run_id}',
-            estimated_h100_training_hours=STEPS*source['prior_h100_reference_step_seconds']/3600)
+            wandb_url=f'https://wandb.ai/yibozhong657-none/nanochat/runs/{run_id}')
+        if 'reference_step_seconds' in source:
+            state['estimated_h200_training_hours']=STEPS*source['reference_step_seconds']/3600
+        else:
+            state['estimated_h100_training_hours']=STEPS*source['prior_h100_reference_step_seconds']/3600
         (ROOT/'submission-intent.json').write_text(json.dumps(state,indent=2)+'\n')
         job=command(['condor_submit','-terse','train.sub'],ROOT).split()[0]
         state.update(job=job,status='held_for_audit')
@@ -111,19 +146,21 @@ def main():
         assert 'H100|H200' in ad['RequireGPUs'] and 'A100' not in ad['RequireGPUs']
         assert 'nanochat-uv-v4.sif' in ad['TransferInput'] and data['data_uri'] in ad['TransferInput']
         assert 'gate-data.tar' not in ad['TransferInput'] and '.netrc' in ad['EncryptInputFiles']
+        if preset=='ngpt_momentum_transport_rms':
+            assert 'transport-validation.json' in ad['TransferInput']
         assert ad['SuccessCheckpointExitCode']==85 and set(ad['TransferCheckpoint'].split(','))=={'results.tar','checkpoints.tar'}
         assert set(ad['TransferOutput'].split(','))=={'results.tar','checkpoints.tar'}
         assert ad['NgptTrainKey']==KEY and ad['InteractiveJob'] and ad['WantGPULab']
-        assert ad['Args']==f'{run_id} {mode}'
+        assert ad['Args']==job_args
         assert 'backfill' in ad['Rank'] and 'countMatches' in ad['Rank']
-        keys=('ClusterId','ProcId','JobStatus','RequestGPUs','RequestCpus','RequestMemory','RequestDisk',
+        keys=('ClusterId','ProcId','JobStatus','Args','RequestGPUs','RequestCpus','RequestMemory','RequestDisk',
             'RequireGPUs','TransferInput','TransferOutput','TransferCheckpoint','SuccessCheckpointExitCode',
             'EncryptInputFiles','ContainerImage','Rank','OnExitHold')
         (ROOT/'submission-verified.json').write_text(json.dumps({k:ad.get(k) for k in keys},indent=2)+'\n')
         command(['condor_release',job])
         state['status']='training_submitted'
         (ROOT/'state.json').write_text(json.dumps(state,indent=2)+'\n')
-        print(json.dumps({k:state[k] for k in ('status','job','run_id','wandb_url','estimated_h100_training_hours')},indent=2))
+        print(json.dumps({k:v for k,v in state.items() if k in ('status','job','run_id','wandb_url') or k.startswith('estimated_')},indent=2))
 
 
 if __name__=='__main__':main()

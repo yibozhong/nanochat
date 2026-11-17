@@ -3,6 +3,20 @@ set -euo pipefail
 TASK_ROOT="$PWD"
 TASK_RUN_ID="$1"
 TASK_MODE="$2"
+TASK_VELOCITY_MODE="${3:-ambient}"
+TASK_MOMENTUM_ARGS=()
+TASK_GROUP=residual-nonzero-10b-20261117
+case "$TASK_VELOCITY_MODE" in
+    ambient) ;;
+    transport_rms)
+        test "$TASK_MODE" = ngpt_heavy_ball
+        TASK_MOMENTUM_ARGS=(--velocity-init token --velocity-embedding-std .02
+            --momentum-beta-init .5 --momentum-gamma-init .5 --momentum-eta-init .05
+            --momentum-velocity-rms-floor .1)
+        TASK_GROUP=ngpt-momentum-transport-rms-10b
+        ;;
+    *) exit 64 ;;
+esac
 case "$TASK_MODE" in vanilla|ngpt|ngpt_heavy_ball) ;; *) exit 64 ;; esac
 TASK_STEPS=305176
 mkdir -p checkpoints results
@@ -23,7 +37,7 @@ finish() {
 }
 trap finish EXIT
 cp "$0" results/launcher.sh
-/opt/project/.venv/bin/python - "$TASK_RUN_ID" "$TASK_MODE" <<'PY'
+/opt/project/.venv/bin/python - "$TASK_RUN_ID" "$TASK_MODE" "$TASK_VELOCITY_MODE" <<'PY'
 import json,sys
 from pathlib import Path
 s=json.loads(Path('source.json').read_text())
@@ -35,6 +49,9 @@ assert s['model']==dict(depth=8,width=512,heads=4,sequence_length=2048,vocab_siz
 assert s['velocity_embedding']==(sys.argv[2]=='ngpt_heavy_ball') and s['ngpt_alpha_init']==.05
 assert s['residual_projection_init']=='normal' and s['residual_projection_init_std']==.02
 assert s['ngpt_force_rms_floor']==1e-6
+assert s.get('ngpt_velocity_mode','ambient')==sys.argv[3]
+if sys.argv[3]=='transport_rms':
+    assert s['momentum_eta_init']==.05 and s['momentum_velocity_rms_floor']==.1
 p=Path('results/train/progress.json')
 if p.exists():
     r=json.loads(p.read_text())
@@ -98,10 +115,10 @@ ln -sfn ../results results
 WANDB_MODE=disabled python research/connections/ngpt/preflight.py
 echo "FORMAL_TRAINING_BEGIN nonzero_residual $TASK_RUN_ID"
 python -m scripts.connection_train --variant baseline --architecture vanilla --streams 1 \
-    --residual-dynamics "$TASK_MODE" --ngpt-velocity-mode ambient --ngpt-alpha-init .05 --ngpt-force-rms-floor 1e-6 \
+    --residual-dynamics "$TASK_MODE" --ngpt-velocity-mode "$TASK_VELOCITY_MODE" "${TASK_MOMENTUM_ARGS[@]}" --ngpt-alpha-init .05 --ngpt-force-rms-floor 1e-6 \
     --residual-projection-init normal --residual-projection-init-std .02 --attention-kernel original --attention-backend fa2 \
     --steps "$TASK_STEPS" --schedule-steps "$TASK_STEPS" --microbatch 16 --seed 42 \
     --no-activation-checkpoint --no-fused-connection-grad --evaluate-test \
     --data-dir ../data --output-dir results/train --checkpoint-dir ../checkpoints \
-    --formal-training --wandb-group residual-nonzero-10b-20261117 --run-id "$TASK_RUN_ID" \
+    --formal-training --wandb-group "$TASK_GROUP" --run-id "$TASK_RUN_ID" \
     --resume auto --segment-seconds 1800

@@ -26,14 +26,31 @@ def main():
         assert result['complete'] and result['source'] == source and result['capability'] == cap
         print('NGPT_PREFLIGHT_PASSED reused exact source/family validation', flush=True)
         return
-    subprocess.run(['timeout','--signal=TERM','--kill-after=30s','2400','bash',
-                    'research/connections/ngpt/check.sh',mode], check=True)
-    suites = list(ET.parse('results/ngpt-tests.xml').getroot().iter('testsuite'))
-    tests = {k:sum(int(s.get(k,0)) for s in suites) for k in ('tests','failures','errors','skipped')}
-    assert tests == dict(tests=29, failures=0, errors=0, skipped=0), tests
-    profile = json.loads(Path('results/ngpt-profile/summary.json').read_text())
-    resume = json.loads(Path('results/ngpt-cli-resume.json').read_text())
+    transported = source.get('ngpt_velocity_mode')=='transport_rms'
+    reused = False
+    if transported:
+        assert mode=='ngpt_heavy_ball'
+        report=json.loads(Path('../transport-validation.json').read_text())
+        assert report['complete'] and report['job']==source['validation_job']
+        assert report['source']['commit']==source['validated_model_commit']
+        profile,tests,resume=report['profile'],report['tests'],report['resume']
+        reused=(cap==[9,0] and profile['gpu']=='NVIDIA H200' and
+                profile['torch']==torch.__version__ and profile['cuda']==torch.version.cuda)
+    if not reused:
+        check=(['research/connections/momentum/check.sh'] if transported else
+               ['research/connections/ngpt/check.sh',mode])
+        subprocess.run(['timeout','--signal=TERM','--kill-after=30s','2400','bash',*check],check=True)
+        prefix='momentum' if transported else 'ngpt'
+        suites=list(ET.parse(f'results/{prefix}-tests.xml').getroot().iter('testsuite'))
+        tests={k:sum(int(s.get(k,0)) for s in suites) for k in ('tests','failures','errors','skipped')}
+        profile=json.loads(Path(f'results/{prefix}-profile/summary.json').read_text())
+        resume=json.loads(Path(f'results/{prefix}-cli-resume.json').read_text())
+    assert tests == dict(tests=57 if transported else 29, failures=0, errors=0, skipped=0), tests
     assert profile['complete'] and profile['models'][mode]['steps'] == 128 and resume['complete']
+    if transported:
+        c=profile['models'][mode]['config']
+        for key in ('ngpt_velocity_mode','momentum_velocity_rms_floor','momentum_eta_init','velocity_init'):
+            assert c[key]==source[key],key
     for name, info in profile['models'].items():
         assert info['config']['residual_projection_init']=='normal'
         assert info['config']['ngpt_force_rms_floor']==1e-6
@@ -42,7 +59,7 @@ def main():
     assert not Path('../ngpt-resume-check').exists() and not Path('../ngpt-continuous-check').exists()
     result = dict(complete=True, formal_training=False, source=source, capability=cap,
                   device=device, tests=tests, profile=profile, resume=resume,
-                  evaluation_wall_seconds=time.perf_counter()-begin)
+                  reused_prior_validation=reused,evaluation_wall_seconds=time.perf_counter()-begin)
     marker.write_text(json.dumps(result, indent=2)+'\n')
     print('NGPT_PREFLIGHT_PASSED fresh formal seed42 process follows', flush=True)
 
