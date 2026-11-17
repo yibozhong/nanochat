@@ -1,8 +1,10 @@
 #!/bin/bash
 set -euo pipefail
-python -m pytest -q tests/test_riemannian_momentum.py tests/test_latent_feedback.py --junitxml=results/rmt-tests.xml
-python -m scripts.connection_riemannian_debug --data-dir ../data --output-dir results/rmt-profile
-TASK_ARGS=(--variant baseline --streams 1 --riemannian-momentum --attention-backend fa2
+TASK_RESIDUAL_TEXT=$(python research/connections/riemannian-momentum/experiments.py "$RMT_EXPERIMENT")
+mapfile -t TASK_RESIDUAL_ARGS <<< "$TASK_RESIDUAL_TEXT"
+python -m pytest -q tests/test_riemannian_momentum.py tests/test_latent_feedback.py tests/test_residual_variants.py --junitxml=results/rmt-tests.xml
+python -m scripts.connection_riemannian_debug --residual-dynamics "$TASK_RESIDUAL_MODE" --velocity-init "$TASK_VELOCITY_INIT" --data-dir ../data --output-dir results/rmt-profile
+TASK_ARGS=(--variant baseline --streams 1 "${TASK_RESIDUAL_ARGS[@]}" --attention-backend fa2
     --steps 3 --schedule-steps 305176 --microbatch 16 --seed 42 --data-dir ../data
     --run-id rmt-local-debug --segment-seconds 1800)
 set +e

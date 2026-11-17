@@ -2,6 +2,7 @@
 set -euo pipefail
 TASK_ROOT="$PWD"
 TASK_RUN_ID="$1"
+export RMT_EXPERIMENT="${2:-riemannian_zero}"
 TASK_STEPS=305176
 mkdir -p checkpoints results
 if [ -f results.tar ]; then tar -xf results.tar; fi
@@ -22,13 +23,14 @@ finish() {
 trap finish EXIT
 cp "$0" results/launcher.sh
 /opt/project/.venv/bin/python - "$TASK_RUN_ID" <<'PY'
-import json,sys
+import json,sys,os
 from pathlib import Path
 s=json.loads(Path('source.json').read_text())
 assert s['formal_training'] and s['run_id']==sys.argv[1]
 assert s['steps']==305176 and s['training_tokens']==10000007168
 assert s['initialization']=='seed42_from_zero_no_diagnostic_weights'
-assert s['attention_backend']=='fa2' and s['model_variant']=='riemannian_momentum' and s['coefficient_init']==[.5,.5,1.]
+assert s['attention_backend']=='fa2' and s['model_variant']=='riemannian_momentum'
+assert s['experiment']==os.environ['RMT_EXPERIMENT']
 p=Path('results/train/progress.json')
 if p.exists():
     r=json.loads(p.read_text())
@@ -91,11 +93,13 @@ ln -sfn ../results results
 # Validate the geometry and momentum before any formal weights are created.
 # Successful per-source/family markers survive checkpoint transfers.
 WANDB_MODE=disabled python research/connections/riemannian-momentum/preflight.py
+TASK_RESIDUAL_TEXT=$(python research/connections/riemannian-momentum/experiments.py "$RMT_EXPERIMENT")
+mapfile -t TASK_RESIDUAL_ARGS <<< "$TASK_RESIDUAL_TEXT"
 echo "FORMAL_TRAINING_BEGIN riemannian_momentum $TASK_RUN_ID"
 python -m scripts.connection_train --variant baseline --architecture vanilla --streams 1 \
-    --riemannian-momentum --momentum-beta-init .5 --momentum-gamma-init .5 --momentum-eta-init 1. --attention-kernel original --attention-backend fa2 \
+    "${TASK_RESIDUAL_ARGS[@]}" --momentum-beta-init .5 --momentum-gamma-init .5 --momentum-eta-init 1. --attention-kernel original --attention-backend fa2 \
     --steps "$TASK_STEPS" --schedule-steps "$TASK_STEPS" --microbatch 16 --seed 42 \
     --no-activation-checkpoint --no-fused-connection-grad --evaluate-test \
     --data-dir ../data --output-dir results/train --checkpoint-dir ../checkpoints \
-    --formal-training --wandb-group riemannian-momentum-10b-20261116 --run-id "$TASK_RUN_ID" \
+    --formal-training --wandb-group residual-momentum-sphere-10b-20261116 --run-id "$TASK_RUN_ID" \
     --resume auto --segment-seconds 1800

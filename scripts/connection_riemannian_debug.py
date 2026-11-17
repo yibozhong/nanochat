@@ -18,31 +18,42 @@ from nanochat.packed_training import PackedData, evaluate, json_write, seed_all,
 @torch.no_grad()
 def geometry_audit(model, x):
     from nanochat.riemannian_momentum import sphere_project, tangent_project
-    h=sphere_project(model.wte(x));v=torch.zeros_like(h);rows=[]
+    h,v=model.initial_state(model.wte(x),x);rows=[]
+    mode=model.config.residual_mode
     cos,sin=model.cos[:,:x.shape[1]],model.sin[:,:x.shape[1]]
     for b in model.blocks:
         for name,branch,update in (
             ('attention',lambda z:b.attention_branch(z,cos,sin),b.attn_residual),
             ('ffn',b.mlp_branch,b.mlp_residual)):
-            force=branch(h.to(cos.dtype));beta,gamma,eta=update.coefficients()
-            u=tangent_project(h,beta*v+gamma*force.float())
+            force=branch(h.to(cos.dtype))
             next_h,next_v=update(h,v,force)
-            radius_error=(next_h.square().mean(-1)-1).abs().max().item()
-            tangent_error=((next_h*next_v).sum(-1).abs()
-                /(next_h.norm(dim=-1)*next_v.norm(dim=-1)).clamp_min(1e-20)).max().item()
-            norm_error=((next_v.norm(dim=-1)-u.norm(dim=-1)).abs()
-                /u.norm(dim=-1).clamp_min(1e-20)).max().item()
-            cosine=(h*next_h).mean(-1).clamp(-1,1)
-            rows.append(dict(sublayer=len(rows),branch=name,radius_relative_error=radius_error,
-                tangency_cosine_error=tangent_error,transport_relative_norm_error=norm_error,
-                mean_angle_radians=cosine.acos().mean().item(),velocity_rms=next_v.square().mean().sqrt().item()))
-            assert radius_error<2e-6 and tangent_error<2e-6 and norm_error<2e-6,rows[-1]
+            assert torch.isfinite(next_h).all()
+            row=dict(sublayer=len(rows),branch=name,hidden_rms=next_h.square().mean().sqrt().item())
+            if mode != 'heavy_ball':
+                row['radius_relative_error']=(next_h.square().mean(-1)-1).abs().max().item()
+                assert row['radius_relative_error']<2e-6,row
+            if next_v is not None:
+                assert torch.isfinite(next_v).all()
+                row['velocity_rms']=next_v.square().mean().sqrt().item()
+                beta,gamma,eta=update.coefficients()
+                u=beta*v+gamma*force.float()
+                if mode=='riemannian':
+                    u=tangent_project(h,u)
+                    row['tangency_cosine_error']=((next_h*next_v).sum(-1).abs()
+                        /(next_h.norm(dim=-1)*next_v.norm(dim=-1)).clamp_min(1e-20)).max().item()
+                    assert row['tangency_cosine_error']<2e-6,row
+                row['transport_relative_norm_error']=((next_v.norm(dim=-1)-u.norm(dim=-1)).abs()
+                    /u.norm(dim=-1).clamp_min(1e-20)).max().item()
+                assert row['transport_relative_norm_error']<2e-6,row
+            rows.append(row)
             h,v=next_h,next_v
     return rows
 
 
 def main():
     p=argparse.ArgumentParser();p.add_argument('--data-dir',required=True);p.add_argument('--output-dir',required=True)
+    p.add_argument('--residual-dynamics',choices=('riemannian','heavy_ball','sphere'),default='riemannian')
+    p.add_argument('--velocity-init',choices=('zero','token'),default='zero')
     a=p.parse_args();out=Path(a.output_dir);out.mkdir(parents=True,exist_ok=True)
     configure_attention('fa2');torch.set_num_threads(2);torch.backends.cuda.matmul.allow_tf32=False
     data=PackedData(a.data_dir);assert len(data.arrays['train'])>=512*16
@@ -51,7 +62,8 @@ def main():
         stability_steps=512,microbatch=16,batch_tokens=32768,models={})
     for label,enabled,steps in [('vanilla_timing_reference',False,32),('riemannian_momentum',True,512)]:
         seed_all(42)
-        c=ConnectionConfig(streams=1,riemannian_momentum=enabled)
+        c=ConnectionConfig(streams=1,residual_dynamics=a.residual_dynamics if enabled else 'vanilla',
+            velocity_init=a.velocity_init if enabled else 'zero')
         m=build_connection_model(c).prepare(compile_blocks=True);opt,wd=optimizer_for(m)
         durations=[];losses=[]
         initial_dev=evaluate(m,data)[0] if enabled else None

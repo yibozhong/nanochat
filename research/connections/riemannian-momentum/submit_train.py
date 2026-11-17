@@ -1,4 +1,5 @@
 """Submit the single authorized 10B Riemannian momentum run with durable restart."""
+import argparse
 import fcntl
 import json
 from pathlib import Path
@@ -8,12 +9,11 @@ import time
 import uuid
 
 from policy import RANK, require_gpus
+from experiments import EXPERIMENTS
 
 REPO=Path(__file__).resolve().parents[3]
 HOME_ROOT=Path('/home/yzhong239')
 ASSETS=HOME_ROOT/'nanochat-runtime-assets'
-ROOT=HOME_ROOT/'riemannian-momentum-10b-20261116'
-KEY=ROOT.name
 STEPS=305176
 
 
@@ -22,6 +22,10 @@ def command(args,cwd=REPO):
 
 
 def main():
+    parser=argparse.ArgumentParser()
+    parser.add_argument('--experiment',choices=tuple(EXPERIMENTS),default='riemannian_zero')
+    args=parser.parse_args();experiment=EXPERIMENTS[args.experiment]
+    ROOT=HOME_ROOT/experiment['root'];KEY=ROOT.name
     ROOT.mkdir(exist_ok=True)
     with (ROOT/'submit.lock').open('a') as lock:
         fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
@@ -56,19 +60,25 @@ def main():
         (ROOT/'train.sh').chmod(0o755)
         run_id=uuid.uuid4().hex[:8]
         source=dict(commit=commit,formal_training=True,plan=KEY,run_id=run_id,
-            model_variant='riemannian_momentum',reference_model_commit=gate['model_commit'],reference_validation_job=gate['job'],
-            validation='same-allocation 36 GPU checks, 512 RMT finite updates, 32 vanilla timing-only updates, CLI recovery, then independent formal process',preflight_required=True,validated_model_commit=None,
+            model_variant='riemannian_momentum',experiment=args.experiment,
+            residual_dynamics=experiment['mode'],velocity_init=experiment['velocity_init'],velocity_embedding_std=.02,
+            reference_model_commit=gate['model_commit'],reference_validation_job=gate['job'],
+            validation='same-allocation geometry/backbone/variant GPU checks, 512 finite updates, 32 vanilla timing-only updates, exact CLI recovery, then independent formal process',preflight_required=True,validated_model_commit=None,
             model=gate['model'],steps=STEPS,training_tokens=STEPS*32768,batch_tokens=32768,microbatch=16,
             seed=42,initialization='seed42_from_zero_no_diagnostic_weights',
-            coefficient_init=[.5,.5,1.],radius='sqrt(width)',transport='exact_short_geodesic_parallel_transport',
-            geometry_dtype='float32',branch_dtype='bfloat16',ablation_runs=False,
+            coefficient_init=[.5] if experiment['mode']=='sphere' else [.5,.5,1.],
+            radius='unconstrained' if experiment['mode']=='heavy_ball' else 'sqrt(width)',
+            transport='exact_short_geodesic_parallel_transport' if experiment['mode']=='riemannian' else 'none',
+            velocity_embedding='independent_token_only_no_absolute_position' if experiment['velocity_init']=='token' else 'none',
+            additional_parameters=(16 if experiment['mode']=='sphere' else 48)+(32768*512 if experiment['velocity_init']=='token' else 0),
+            geometry_dtype='float32',branch_dtype='bfloat16',ablation_runs=args.experiment!='riemannian_zero',
             attention_backend='fa2',data_uri=data['data_uri'],data_archive_bytes=data['archive']['bytes'],
             dataset_revision=data['manifest']['dataset_revision'],tokenizer=data['manifest']['tokenizer']['tokenizer'],
             runtime='mhc-official-runtime-7546767.tar.gz + frozen uv.lock',
             checkpoint_seconds=1800,evaluate_test=True,
             scheduling='H100/H200 first; A100 after 3600 continuous idle seconds, with same-allocation RMT preflight',
             passed_families=[],compatible_fallback_backend='A100 FA2/CCE runtime validated in skip-scale/validation.json',
-            estimated_step_seconds=.10,estimate_note='Provisional H200 estimate; replace with same-card RMT gate measurement')
+            estimated_step_seconds=.085 if experiment['velocity_init']=='token' else .075,estimate_note='Provisional H200 estimate; replace with same-card RMT gate measurement')
         (bundle/'source.json').write_text(json.dumps(source,indent=2)+'\n')
         inputs=[str(p.relative_to(ROOT)) for p in bundle.iterdir()]
         inputs += [str(HOME_ROOT/'.netrc'),data['data_uri'],
@@ -76,7 +86,7 @@ def main():
             'https://developer.download.nvidia.com/compute/cuda/repos/debian12/x86_64/cuda-compat-13-1_590.48.01-1_amd64.deb']
         lines=[]
         for line in (ASSETS/'gate.sub').read_text().splitlines():
-            if line.startswith('executable ='):line=f'executable = train.sh\narguments = {run_id}'
+            if line.startswith('executable ='):line=f'executable = train.sh\narguments = {run_id} {args.experiment}'
             elif line.startswith('request_disk ='):line='request_disk = 80GB'
             elif line.startswith('gpus_minimum_capability ='):line='gpus_minimum_capability = 8.0'
             elif line.startswith('require_gpus ='):line='require_gpus = '+require_gpus()
@@ -102,6 +112,7 @@ def main():
         state.update(job=job,status='held_for_audit')
         (ROOT/'state.json').write_text(json.dumps(state,indent=2)+'\n')
         ad=json.loads(command(['condor_q',job,'-json']))[0]
+        assert ad['Args']==f'{run_id} {args.experiment}'
         assert ad['JobStatus']==5 and ad.get('NumJobStarts',0)==0
         assert ad['RequestGPUs']==1 and ad['RequestCpus']==2 and ad['RequestMemory']==16384
         assert ad['RequestDisk']==80*1024**2 and ad['GPUsMinCapability']==8.0

@@ -30,6 +30,9 @@ def main():
     p.add_argument('--architecture', choices=('vanilla', 'native'), default='vanilla')
     p.add_argument('--latent-feedback', action='store_true')
     p.add_argument('--riemannian-momentum', action='store_true')
+    p.add_argument('--residual-dynamics', choices=('vanilla','riemannian','heavy_ball','sphere'), default='vanilla')
+    p.add_argument('--velocity-init', choices=('zero','token'), default='zero')
+    p.add_argument('--velocity-embedding-std', type=float, default=.02)
     p.add_argument('--momentum-beta-init', type=float, default=.5)
     p.add_argument('--momentum-gamma-init', type=float, default=.5)
     p.add_argument('--momentum-eta-init', type=float, default=1.)
@@ -84,6 +87,8 @@ def main():
                        architecture=a.architecture, window_pattern=a.window_pattern,
                        latent_feedback=a.latent_feedback, feedback_eval_passes=a.feedback_eval_passes,
                        riemannian_momentum=a.riemannian_momentum,
+                       residual_dynamics=a.residual_dynamics, velocity_init=a.velocity_init,
+                       velocity_embedding_std=a.velocity_embedding_std,
                        momentum_beta_init=a.momentum_beta_init, momentum_gamma_init=a.momentum_gamma_init,
                        momentum_eta_init=a.momentum_eta_init,
                        feedback_source=a.feedback_source, feedback_attention_backend=a.feedback_attention_backend,
@@ -136,7 +141,7 @@ def main():
         actual_attention_backend=actual_attention_backend,
         explicit_portability_gate=os.environ.get('NANOCHAT_MHC_TEST_PORTABILITY')=='1',
         parameters=sum(p.numel() for p in model.parameters()),
-        residual_mixing=('sphere_heavy_ball_parallel_transport' if c.riemannian_momentum else
+        residual_mixing=(c.residual_mode if c.residual_mode != 'vanilla' else
                          'sinkhorn' if a.variant=='mhc' else
                          'unconstrained_raw' if a.variant=='mhc_no_sinkhorn' else
                          'local_channel_unconstrained_raw' if a.variant=='mhc_channel_no_sinkhorn' else
@@ -160,7 +165,7 @@ def main():
         config['profile_matches_current_gpu']=str(torch.cuda.get_device_properties(0).uuid)==profile_reference.get('gpu_uuid')
     kwargs=dict(project='nanochat',entity='yibozhong657-none',group=a.wandb_group,
                 job_type='pretrain' if a.formal_training else 'diagnostic',
-                name=f'{a.architecture}-{a.variant}'+('-riemannian-momentum' if c.riemannian_momentum else
+                name=f'{a.architecture}-{a.variant}'+(f'-{c.residual_mode}-v0-{c.velocity_init}' if c.residual_mode != 'vanilla' else
                     '-layer-feedback' if c.feedback_source=='layers' else '-feedback' if c.latent_feedback else '')+
                     f'-{c.sequence_length}ctx-{a.steps}steps',id=run_id,resume='allow',config=config)
     run=training_run(formal_training=a.formal_training, local_dir=out/"diagnostics", **kwargs)
@@ -186,7 +191,7 @@ def main():
             run_id=run_id,step=step,dev_ce=dev,data_manifest=data.manifest),ckpt/'best.pt')
     def dev_metrics(dev):
         metrics={'dev/ce':dev}
-        if c.riemannian_momentum:
+        if c.residual_mode != 'vanilla':
             metrics.update(model.residual_metrics())
         if c.latent_feedback:
             metrics[f'dev/ce_p{c.feedback_eval_passes}']=dev

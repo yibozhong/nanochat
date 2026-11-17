@@ -42,16 +42,29 @@ class ConnectionConfig:
     feedback_source: str = 'top'
     feedback_attention_backend: str = 'triton'
     riemannian_momentum: bool = False
+    residual_dynamics: str = 'vanilla'
+    velocity_init: str = 'zero'
+    velocity_embedding_std: float = 0.02
     momentum_beta_init: float = 0.5
     momentum_gamma_init: float = 0.5
     momentum_eta_init: float = 1.0
 
     def __post_init__(self):
+        if self.residual_dynamics not in ('vanilla', 'riemannian', 'heavy_ball', 'sphere'):
+            raise ValueError('Unknown residual dynamics')
+        if self.riemannian_momentum and self.residual_dynamics not in ('vanilla', 'riemannian'):
+            raise ValueError('Conflicting residual dynamics and legacy Riemannian flag')
+        if self.velocity_init not in ('zero', 'token'):
+            raise ValueError('Unknown velocity initialization')
+        if self.velocity_init == 'token' and self.residual_mode not in ('riemannian', 'heavy_ball'):
+            raise ValueError('Velocity embeddings require a momentum stream')
+        if not math.isfinite(self.velocity_embedding_std) or self.velocity_embedding_std <= 0:
+            raise ValueError('Velocity embedding initialization must be positive and finite')
         if not (math.isfinite(self.momentum_beta_init) and 0 < self.momentum_beta_init < 1):
             raise ValueError('Residual momentum beta must start strictly between zero and one')
         if any(not math.isfinite(x) or x <= 0 for x in (self.momentum_gamma_init, self.momentum_eta_init)):
             raise ValueError('Residual momentum gamma and eta must start positive and finite')
-        if self.riemannian_momentum and (self.architecture != 'vanilla' or self.variant != 'baseline'
+        if self.residual_mode != 'vanilla' and (self.architecture != 'vanilla' or self.variant != 'baseline'
                 or self.latent_feedback or self.attention_kernel != 'original' or self.fused_connection_grad):
             raise ValueError('Riemannian momentum requires the vanilla baseline and original attention')
         if self.feedback_source not in ('top','layers') or self.feedback_attention_backend not in ('torch','triton'):
@@ -105,6 +118,11 @@ class ConnectionConfig:
             raise ValueError('Sinkhorn needs at least one iteration')
         if self.variant not in ('baseline', 'attnres', 'attnres_scale', 'skip_scale') and (self.streams != 4 or self.width % 128):
             raise ValueError('NVIDIA mHC kernels require four streams and width divisible by 128')
+
+    @property
+    def residual_mode(self):
+        # Keep old checkpoint metadata and --riemannian-momentum compatible.
+        return 'riemannian' if self.riemannian_momentum else self.residual_dynamics
 
     @property
     def attnres_block_layers(self):
@@ -183,10 +201,10 @@ class ConnectionBlock(Block):
         self.attn.ve_gate = None
         self.variant = config.variant
         self.compiled_attention = self.compiled_mlp = None
-        if config.riemannian_momentum:
-            from nanochat.riemannian_momentum import SphereMomentum
-            self.attn_residual = SphereMomentum(config)
-            self.mlp_residual = SphereMomentum(config)
+        if config.residual_mode != 'vanilla':
+            from nanochat.riemannian_momentum import residual_update
+            self.attn_residual = residual_update(config)
+            self.mlp_residual = residual_update(config)
         if self.variant == 'skip_scale':
             self.attn_skip_scale = nn.Parameter(torch.ones(config.width))
             self.mlp_skip_scale = nn.Parameter(torch.ones(config.width))
@@ -239,7 +257,7 @@ class ConnectionBlock(Block):
 class ConnectionModel(nn.Module):
     def __init__(self, config):
         super().__init__()
-        if config.riemannian_momentum and type(self) is ConnectionModel:
+        if config.residual_mode != 'vanilla' and type(self) is ConnectionModel:
             raise ValueError('Use build_connection_model for Riemannian momentum')
         if config.variant in ('attnres','attnres_scale'):
             raise ValueError('Use build_connection_model for AttnRes')
@@ -363,6 +381,8 @@ def optimizer_for(model, batch_tokens=32768):
              betas=(.8, .96), eps=1e-10, weight_decay=.01),
         dict(kind='adamw', params=[model.wte.weight], lr=.3*batch_scale*width_scale,
              betas=(.8, .995), eps=1e-10, weight_decay=.001)]
+    if getattr(model, 'velocity_embedding', None) is not None:
+        groups[1]['params'].append(model.velocity_embedding.weight)
     matrices, routing = [], []
     for b in model.blocks:
         for name, p in b.named_parameters():
@@ -387,7 +407,7 @@ def optimizer_for(model, batch_tokens=32768):
             lr=.02*batch_scale, momentum=.95, ns_steps=5, beta2=.9, weight_decay=wd))
     ids = [id(p) for g in groups for p in g['params']]
     assert len(ids) == len(set(ids)) and set(ids) == {id(p) for p in model.parameters()}
-    if c.riemannian_momentum or c.variant in ('mhc_channel_no_sinkhorn', 'scaled_hc', 'scaled_hc_all', 'attnres_scale'):
+    if c.residual_mode != 'vanilla' or c.variant in ('mhc_channel_no_sinkhorn', 'scaled_hc', 'scaled_hc_all', 'attnres_scale'):
         # Like native.setup_optimizer: the unchanged compiled AdamW function
         # specializes once per routing shape/dtype. Local generators introduce
         # two extra tensor ranks; this is a compiler cache budget, not an LR or
@@ -402,7 +422,7 @@ def optimizer_for(model, batch_tokens=32768):
 
 
 def build_connection_model(config):
-    if config.riemannian_momentum:
+    if config.residual_mode != 'vanilla':
         from nanochat.riemannian_momentum import RiemannianMomentumModel
         return RiemannianMomentumModel(config)
     if config.latent_feedback:
