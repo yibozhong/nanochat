@@ -54,9 +54,10 @@ def main():
     data=PackedData(a.data_dir)
     equal_tree(data.manifest,left['data_manifest'])
     x,y=data.batch('train',loaded['next_data_row'],16)
-    passes=model.training_passes(left['protocol']['seed'],left['step'])
+    passes=model.training_passes(left['protocol']['seed'],left['step']) if c.latent_feedback else 1
+    options=dict(passes=passes) if c.latent_feedback else {}
     restore_rng(loaded['rng']);model.zero_grad(set_to_none=True)
-    loss=model(x,y,passes=passes);loss.backward()
+    loss=model(x,y,**options);loss.backward()
     gradients={n:p.grad.clone() for n,p in model.named_parameters() if p.grad is not None}
     assert torch.isfinite(loss) and all(torch.isfinite(g).all() for g in gradients.values())
     for target,optimizer in ((model,opt),(restored,other)):

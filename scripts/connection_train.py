@@ -29,6 +29,10 @@ def main():
     p.add_argument('--attention-kernel', choices=('original','fla_triton'), default='original')
     p.add_argument('--architecture', choices=('vanilla', 'native'), default='vanilla')
     p.add_argument('--latent-feedback', action='store_true')
+    p.add_argument('--riemannian-momentum', action='store_true')
+    p.add_argument('--momentum-beta-init', type=float, default=.5)
+    p.add_argument('--momentum-gamma-init', type=float, default=.5)
+    p.add_argument('--momentum-eta-init', type=float, default=1.)
     p.add_argument('--feedback-eval-passes', type=int, default=4)
     p.add_argument('--feedback-source', choices=('top','layers'), default='top')
     p.add_argument('--feedback-attention-backend', choices=('torch','triton'), default='triton')
@@ -79,6 +83,9 @@ def main():
                        attention_kernel=a.attention_kernel,
                        architecture=a.architecture, window_pattern=a.window_pattern,
                        latent_feedback=a.latent_feedback, feedback_eval_passes=a.feedback_eval_passes,
+                       riemannian_momentum=a.riemannian_momentum,
+                       momentum_beta_init=a.momentum_beta_init, momentum_gamma_init=a.momentum_gamma_init,
+                       momentum_eta_init=a.momentum_eta_init,
                        feedback_source=a.feedback_source, feedback_attention_backend=a.feedback_attention_backend,
                        activation_checkpoint=a.activation_checkpoint,
                        connection_backend=a.connection_backend, fused_connection_grad=a.fused_connection_grad)
@@ -129,7 +136,8 @@ def main():
         actual_attention_backend=actual_attention_backend,
         explicit_portability_gate=os.environ.get('NANOCHAT_MHC_TEST_PORTABILITY')=='1',
         parameters=sum(p.numel() for p in model.parameters()),
-        residual_mixing=('sinkhorn' if a.variant=='mhc' else
+        residual_mixing=('sphere_heavy_ball_parallel_transport' if c.riemannian_momentum else
+                         'sinkhorn' if a.variant=='mhc' else
                          'unconstrained_raw' if a.variant=='mhc_no_sinkhorn' else
                          'local_channel_unconstrained_raw' if a.variant=='mhc_channel_no_sinkhorn' else
                          'static_input_channel_scaled_shared_raw' if a.variant=='scaled_hc' else
@@ -152,11 +160,12 @@ def main():
         config['profile_matches_current_gpu']=str(torch.cuda.get_device_properties(0).uuid)==profile_reference.get('gpu_uuid')
     kwargs=dict(project='nanochat',entity='yibozhong657-none',group=a.wandb_group,
                 job_type='pretrain' if a.formal_training else 'diagnostic',
-                name=f'{a.architecture}-{a.variant}'+('-layer-feedback' if c.feedback_source=='layers' else '-feedback' if c.latent_feedback else '')+
+                name=f'{a.architecture}-{a.variant}'+('-riemannian-momentum' if c.riemannian_momentum else
+                    '-layer-feedback' if c.feedback_source=='layers' else '-feedback' if c.latent_feedback else '')+
                     f'-{c.sequence_length}ctx-{a.steps}steps',id=run_id,resume='allow',config=config)
     run=training_run(formal_training=a.formal_training, local_dir=out/"diagnostics", **kwargs)
     run.define_metric('tokens')
-    for metric in ('train/*','dev/*','perf/*'):
+    for metric in ('train/*','dev/*','perf/*','residual/*'):
         run.define_metric(metric,step_metric='tokens')
     json_write(out/'config.json',config)
     stop=False;begin=time.perf_counter()
@@ -177,6 +186,8 @@ def main():
             run_id=run_id,step=step,dev_ce=dev,data_manifest=data.manifest),ckpt/'best.pt')
     def dev_metrics(dev):
         metrics={'dev/ce':dev}
+        if c.riemannian_momentum:
+            metrics.update(model.residual_metrics())
         if c.latent_feedback:
             metrics[f'dev/ce_p{c.feedback_eval_passes}']=dev
             if c.feedback_eval_passes != 1:

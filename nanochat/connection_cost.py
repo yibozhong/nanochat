@@ -10,6 +10,22 @@ def model_cost(config, batch=1, activation_bytes=2, feedback_passes=None):
     head=2*batch*t*d*c.vocab_size
     attention=4*batch*d*depth*(t*(t+1)//2)
     forward=projections+head+attention
+    if c.riemannian_momentum:
+        # Per site, channelwise multiply/add/reductions: 21*d - 5.
+        # Includes momentum(3d), projection(6d-2), radial normalize(3d-1),
+        # transport(7d-2), plus 2d for the retraction input. Scalar divisions,
+        # rsqrt and coefficient transforms are excluded, as are the baseline
+        # residual additions in the matrix-only reference accounting.
+        sites=2*depth
+        geometry=batch*t*(sites*(21*d-5)+(3*d-1))
+        return dict(estimated_forward_flops=forward+geometry,
+            estimated_training_flops=3*(forward+geometry),
+            components_forward=dict(backbone_projections=projections,vocab_head=head,
+                attention=attention,residual_geometry=geometry),
+            additional_parameters=3*sites,
+            live_geometry_state_bytes=2*batch*t*d*4,
+            accounting='FMA=2; causal attention pairs; geometry arithmetic estimate and backward approximated as 2x forward. Scalar rsqrt/division/sigmoid/softplus, optimizer, copies and checkpoint recomputation excluded. These are not hardware-measured FLOPs.',
+            memory_note='Two live FP32 streams only; autograd intermediates and allocator peak must be measured.')
     if c.latent_feedback:
         backbone=projections+attention
         fusion=2*batch*t*d*d

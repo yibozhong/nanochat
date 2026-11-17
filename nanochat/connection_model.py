@@ -41,8 +41,19 @@ class ConnectionConfig:
     feedback_eval_passes: int = 4
     feedback_source: str = 'top'
     feedback_attention_backend: str = 'triton'
+    riemannian_momentum: bool = False
+    momentum_beta_init: float = 0.5
+    momentum_gamma_init: float = 0.5
+    momentum_eta_init: float = 1.0
 
     def __post_init__(self):
+        if not (math.isfinite(self.momentum_beta_init) and 0 < self.momentum_beta_init < 1):
+            raise ValueError('Residual momentum beta must start strictly between zero and one')
+        if any(not math.isfinite(x) or x <= 0 for x in (self.momentum_gamma_init, self.momentum_eta_init)):
+            raise ValueError('Residual momentum gamma and eta must start positive and finite')
+        if self.riemannian_momentum and (self.architecture != 'vanilla' or self.variant != 'baseline'
+                or self.latent_feedback or self.attention_kernel != 'original' or self.fused_connection_grad):
+            raise ValueError('Riemannian momentum requires the vanilla baseline and original attention')
         if self.feedback_source not in ('top','layers') or self.feedback_attention_backend not in ('torch','triton'):
             raise ValueError('Unknown feedback source or attention backend')
         if self.feedback_source == 'layers' and not self.latent_feedback:
@@ -172,6 +183,10 @@ class ConnectionBlock(Block):
         self.attn.ve_gate = None
         self.variant = config.variant
         self.compiled_attention = self.compiled_mlp = None
+        if config.riemannian_momentum:
+            from nanochat.riemannian_momentum import SphereMomentum
+            self.attn_residual = SphereMomentum(config)
+            self.mlp_residual = SphereMomentum(config)
         if self.variant == 'skip_scale':
             self.attn_skip_scale = nn.Parameter(torch.ones(config.width))
             self.mlp_skip_scale = nn.Parameter(torch.ones(config.width))
@@ -199,6 +214,13 @@ class ConnectionBlock(Block):
     def mlp_branch(self, h):
         return self.mlp(norm(h))
 
+    def momentum_forward(self, h, v, cos, sin, kv_cache=None):
+        # The state/geometry stays FP32; the original branches still use BF16.
+        force = self.attention_branch(h.to(cos.dtype), cos, sin, kv_cache)
+        h, v = self.attn_residual(h, v, force)
+        force = self.mlp_branch(h.to(cos.dtype))
+        return self.mlp_residual(h, v, force)
+
     def forward(self, x, cos, sin, kv_cache=None):
         if self.variant == 'baseline':
             return super().forward(x, None, (cos, sin), (-1, 0), kv_cache)
@@ -217,6 +239,8 @@ class ConnectionBlock(Block):
 class ConnectionModel(nn.Module):
     def __init__(self, config):
         super().__init__()
+        if config.riemannian_momentum and type(self) is ConnectionModel:
+            raise ValueError('Use build_connection_model for Riemannian momentum')
         if config.variant in ('attnres','attnres_scale'):
             raise ValueError('Use build_connection_model for AttnRes')
         if config.architecture != 'vanilla':
@@ -342,7 +366,8 @@ def optimizer_for(model, batch_tokens=32768):
     matrices, routing = [], []
     for b in model.blocks:
         for name, p in b.named_parameters():
-            (routing if '_connection.' in name or name in ('attn_skip_scale', 'mlp_skip_scale') else matrices).append(p)
+            (routing if '_connection.' in name or name.startswith(('attn_residual.', 'mlp_residual.'))
+                or name in ('attn_skip_scale', 'mlp_skip_scale') else matrices).append(p)
     if model.stream_head is not None:
         routing.extend(model.stream_head.parameters())
     if c.variant in ('attnres','attnres_scale'):
@@ -362,7 +387,7 @@ def optimizer_for(model, batch_tokens=32768):
             lr=.02*batch_scale, momentum=.95, ns_steps=5, beta2=.9, weight_decay=wd))
     ids = [id(p) for g in groups for p in g['params']]
     assert len(ids) == len(set(ids)) and set(ids) == {id(p) for p in model.parameters()}
-    if c.variant in ('mhc_channel_no_sinkhorn', 'scaled_hc', 'scaled_hc_all', 'attnres_scale'):
+    if c.riemannian_momentum or c.variant in ('mhc_channel_no_sinkhorn', 'scaled_hc', 'scaled_hc_all', 'attnres_scale'):
         # Like native.setup_optimizer: the unchanged compiled AdamW function
         # specializes once per routing shape/dtype. Local generators introduce
         # two extra tensor ranks; this is a compiler cache budget, not an LR or
@@ -377,6 +402,9 @@ def optimizer_for(model, batch_tokens=32768):
 
 
 def build_connection_model(config):
+    if config.riemannian_momentum:
+        from nanochat.riemannian_momentum import RiemannianMomentumModel
+        return RiemannianMomentumModel(config)
     if config.latent_feedback:
         from nanochat.latent_feedback import LatentFeedbackModel
         return LatentFeedbackModel(config)
