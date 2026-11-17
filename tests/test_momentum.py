@@ -8,7 +8,7 @@ from nanochat.connection_model import ConnectionConfig, build_connection_model, 
 from nanochat.engine import KVCache
 from nanochat.packed_training import seed_all, snapshot, restore_rng
 from nanochat.connection_experiment import configure_attention
-from nanochat.momentum import approximate_momentum_step
+from nanochat.momentum import ngpt_momentum_step, normalize_residual
 from test_connection_training_resume import equal_tree
 @pytest.fixture(autouse=True)
 def gpu():
@@ -25,7 +25,7 @@ def inputs():
 
 
 @pytest.fixture(params=[('heavy_ball', 'token'), ('heavy_ball', 'zero'),
-                        ('an_heavy_ball', 'token'), ('an_heavy_ball', 'zero')])
+                        ('ngpt_heavy_ball', 'token'), ('ngpt_heavy_ball', 'zero')])
 def setting(request):
     mode, init = request.param
     return ConnectionConfig(depth=2, width=128, heads=1, sequence_length=32,
@@ -74,15 +74,11 @@ def test_initial_state_and_independent_update(setting):
         u = beta*v + gamma*force
         expected = h + eta*u
     else:
-        moments = model.initial_moments(h)
-        actual, carried, next_moments = update(h, v, moments, force)
-        z = force / (force.square().mean(-1, keepdim=True) + setting.an_force_rms_floor**2).sqrt()
-        u = beta*v + gamma*z
-        qu = beta**2*moments[0] + gamma**2
-        scale = (1 + 2*eta*beta*moments[1] + eta**2*qu).sqrt()
-        expected = (h + eta*u)/scale
-        torch.testing.assert_close(next_moments[0], qu)
-        torch.testing.assert_close(next_moments[1], (beta*moments[1] + eta*qu)/scale)
+        actual, carried = update(h, v, force)
+        target = force / force.square().mean(-1, keepdim=True).clamp_min(setting.ngpt_force_rms_floor**2).sqrt()
+        u = beta*v + gamma*(target-h)
+        expected = h + eta*u
+        expected = expected / expected.square().mean(-1, keepdim=True).sqrt()
     torch.testing.assert_close(carried, u, rtol=2e-6, atol=2e-6)
     torch.testing.assert_close(actual, expected, rtol=2e-6, atol=2e-6)
 
@@ -175,84 +171,85 @@ def test_hb_zero_force_identity_and_zero_embedding():
 
 def test_defaults_and_legacy_checkpoint_retirement():
     assert ConnectionConfig().residual_mode == 'vanilla'
-    for mode in ('heavy_ball', 'an_heavy_ball'):
+    for mode in ('heavy_ball', 'ngpt_heavy_ball'):
         c = ConnectionConfig(residual_dynamics=mode)
         assert c.velocity_init == 'token'
         assert ConnectionConfig.from_checkpoint(asdict(c)) == c
     c = ConnectionConfig(residual_dynamics='heavy_ball')
     old = asdict(c); old['riemannian_momentum'] = False
-    old.pop('an_force_rms_floor'); old.pop('velocity_init')
+    old.pop('ngpt_force_rms_floor'); old.pop('velocity_init')
     assert ConnectionConfig.from_checkpoint(old).velocity_init == 'zero'
     assert ConnectionConfig.from_checkpoint(old).momentum_eta_init == 1.
     for fields in ({'riemannian_momentum': True}, {'residual_dynamics': 'sphere'},
                    {'residual_dynamics': 'riemannian'}):
         with pytest.raises(ValueError, match='retired sphere'):
             ConnectionConfig.from_checkpoint(fields)
-    for fields in ({'residual_dynamics':'sphere'}, {'an_force_rms_floor':0},
-                   {'momentum_beta_init':1}, {'an_force_rms_floor':float('nan')}):
+    for fields in ({'residual_dynamics':'sphere'}, {'ngpt_force_rms_floor':0},
+                   {'momentum_beta_init':1}, {'ngpt_force_rms_floor':float('nan')}):
         with pytest.raises(ValueError): ConnectionConfig(**fields)
 
 
 @pytest.mark.parametrize('zero', [False, True])
-def test_an_first_and_second_derivatives(zero):
+def test_ngpt_first_and_second_derivatives(zero):
     h = torch.randn(1,4,device='cuda',dtype=torch.float64,requires_grad=True)
     v = torch.randn_like(h).requires_grad_()
     f = (torch.zeros_like(h) if zero else torch.randn_like(h)).requires_grad_()
-    moments = torch.tensor([.2,.1],device='cuda',dtype=torch.float64,requires_grad=True)
     coeff = torch.tensor([.7,.3,.2],device='cuda',dtype=torch.float64,requires_grad=True)
-    def fn(h,v,m,f,coeff):
-        return approximate_momentum_step(h,v,m,f,*coeff.unbind(),.1)
-    assert torch.autograd.gradcheck(fn,(h,v,moments,f,coeff),eps=1e-6,atol=2e-6,rtol=1e-4)
-    assert torch.autograd.gradgradcheck(fn,(h,v,moments,f,coeff),eps=1e-6,atol=4e-6,rtol=1e-4)
+    def fn(h,v,f,coeff):
+        return ngpt_momentum_step(normalize_residual(h),v,f,*coeff.unbind(),.1)
+    assert torch.autograd.gradcheck(fn,(h,v,f,coeff),eps=1e-6,atol=2e-6,rtol=1e-4)
+    assert torch.autograd.gradgradcheck(fn,(h,v,f,coeff),eps=1e-6,atol=4e-6,rtol=1e-4)
 
 
-def test_independent_basis_second_moment_oracle():
-    # Deterministic orthogonal innovations: moment assumptions hold exactly.
-    d = 128
-    basis = torch.eye(d,device='cuda',dtype=torch.float64)*d**.5
-    h, v = basis[0:1], .02*basis[1:2]
-    moments = h.new_tensor([.02**2,0.])
-    coeff = h.new_tensor([.8,.5,.4])
-    naive_h, naive_v = h.clone(), v.clone()
-    naive_q = moments[0]
-    for i in range(64):
-        force = basis[i+2:i+3]
-        h, v, moments = approximate_momentum_step(h,v,moments,force,*coeff.unbind(),0.)
-        observed = torch.stack((v.square().mean(),(h*v).mean()))
-        torch.testing.assert_close(moments,observed,rtol=2e-12,atol=2e-12)
-        torch.testing.assert_close(h.square().mean(),h.new_tensor(1.),rtol=2e-12,atol=2e-12)
-        beta,gamma,eta = coeff
-        naive_q = beta**2*naive_q+gamma**2
-        naive_v = beta*naive_v+gamma*force
-        naive_h = (naive_h+eta*naive_v)/torch.sqrt(1+eta**2*naive_q)
-    # Confirms that dropping h-v covariance is a substantive mathematical error.
-    assert naive_h.square().mean() > 2
-
-
-def test_an_zero_momentum_matches_scalar_lerp_correction():
+@pytest.mark.parametrize('alpha', [.01,.05,.3,.8])
+def test_zero_momentum_matches_official_ngpt_scalar_lerp(alpha):
+    # Independent transcription of official NVIDIA/ngpt Block.forward:
+    # normalize(normalize(h)+alpha*(normalize(F)-normalize(h))).
     h, f = [torch.randn(4,128,device='cuda',dtype=torch.float64) for _ in range(2)]
-    eta = h.new_tensor(.3); gamma = h.new_tensor(1.)
-    y, _, _ = approximate_momentum_step(h,torch.zeros_like(h),h.new_zeros(2),
-                                       f,h.new_tensor(0.),gamma,eta,.1)
-    z = f/(f.square().mean(-1,keepdim=True)+.01).sqrt()
-    alpha = eta/(1+eta)
-    expected = ((1-alpha)*h+alpha*z)/torch.sqrt((1-alpha)**2+alpha**2)
+    h = h/h.norm(dim=-1,keepdim=True)*128**.5
+    y, _ = ngpt_momentum_step(h,torch.zeros_like(h),f,h.new_tensor(0.),
+                             h.new_tensor(.5),h.new_tensor(2*alpha),.1)
+    a = h/h.norm(dim=-1,keepdim=True)
+    b = f/f.norm(dim=-1,keepdim=True)
+    expected = a+alpha*(b-a)
+    expected = expected/expected.norm(dim=-1,keepdim=True)*128**.5
     torch.testing.assert_close(y,expected,rtol=1e-12,atol=1e-12)
 
 
-def test_an_keeps_velocity_and_does_not_force_hidden_onto_sphere():
+def test_velocity_is_ambient_unscaled_and_retains_radial_component():
     h = torch.ones(2,128,device='cuda',dtype=torch.float64)
     v = .2*h; coeff = h.new_tensor([.7,.5,.3])
-    y, u, _ = approximate_momentum_step(h,v,h.new_tensor([.04,.2]),h,*coeff.unbind(),.1)
-    expected_u = .7*v+.5*h/(1.01**.5)
+    y, u = ngpt_momentum_step(h,v,torch.zeros_like(h),*coeff.unbind(),.1)
+    expected_u = .7*v-.5*h
     torch.testing.assert_close(u,expected_u,rtol=1e-12,atol=1e-12)
     assert not torch.allclose(u, (y-h)/.3)
-    assert not torch.allclose(y.square().mean(-1),h.new_ones(2))
+    assert (h*u).abs().sum() > 0
+    torch.testing.assert_close(y,h,rtol=1e-12,atol=1e-12)
+
+
+def test_zero_force_normalizer_has_bounded_derivative():
+    force = torch.zeros(2,128,device='cuda',dtype=torch.float64,requires_grad=True)
+    normalized = normalize_residual(force,.1)
+    gradient, = torch.autograd.grad(normalized.sum(),force,create_graph=True)
+    torch.testing.assert_close(gradient,torch.full_like(force,10.),rtol=1e-12,atol=1e-12)
+    curvature, = torch.autograd.grad(gradient.sum(),force)
+    assert torch.count_nonzero(curvature) == 0
+
+
+def test_long_fp32_normalized_recurrence():
+    h = normalize_residual(torch.randn(4,128,device='cuda'))
+    v = .02*torch.randn_like(h)
+    coeff = h.new_tensor([.5,.5,.1])
+    for i in range(256):
+        f = torch.zeros_like(h) if i % 7 == 0 else torch.randn_like(h)
+        h,v = ngpt_momentum_step(h,v,f,*coeff.unbind(),.1)
+        assert torch.isfinite(v).all()
+        torch.testing.assert_close(h.square().mean(-1),h.new_ones(4),atol=5e-7,rtol=0)
 
 
 def test_32_layer_finite_forward_backward():
     c = ConnectionConfig(depth=32,width=128,heads=1,sequence_length=32,vocab_size=256,
-                         streams=1,residual_dynamics='an_heavy_ball')
+                         streams=1,residual_dynamics='ngpt_heavy_ball')
     model = make(c); x,y = inputs()
     loss = model(x,y,dense=True); loss.backward()
     assert torch.isfinite(loss)

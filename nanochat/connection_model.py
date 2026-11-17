@@ -47,20 +47,20 @@ class ConnectionConfig:
     momentum_beta_init: float = 0.5
     momentum_gamma_init: float = 0.5
     momentum_eta_init: float | None = None
-    an_force_rms_floor: float = 0.1
+    ngpt_force_rms_floor: float = 0.1
 
     def __post_init__(self):
-        if self.residual_dynamics not in ('vanilla', 'heavy_ball', 'an_heavy_ball'):
+        if self.residual_dynamics not in ('vanilla', 'heavy_ball', 'ngpt_heavy_ball'):
             raise ValueError('Unknown residual dynamics')
         if self.momentum_eta_init is None:
-            self.momentum_eta_init = 0.1 if self.residual_mode == 'an_heavy_ball' else 1.0
-        if not math.isfinite(self.an_force_rms_floor) or self.an_force_rms_floor <= 0:
-            raise ValueError('Approximate-normalization force RMS floor must be positive and finite')
+            self.momentum_eta_init = 0.1 if self.residual_mode == 'ngpt_heavy_ball' else 1.0
+        if not math.isfinite(self.ngpt_force_rms_floor) or self.ngpt_force_rms_floor <= 0:
+            raise ValueError('Normalized-target force RMS floor must be positive and finite')
         if self.velocity_init is None:
-            self.velocity_init = 'token' if self.residual_mode in ('heavy_ball', 'an_heavy_ball') else 'zero'
+            self.velocity_init = 'token' if self.residual_mode in ('heavy_ball', 'ngpt_heavy_ball') else 'zero'
         if self.velocity_init not in ('zero', 'token'):
             raise ValueError('Unknown velocity initialization')
-        if self.velocity_init == 'token' and self.residual_mode not in ('heavy_ball', 'an_heavy_ball'):
+        if self.velocity_init == 'token' and self.residual_mode not in ('heavy_ball', 'ngpt_heavy_ball'):
             raise ValueError('Velocity embeddings require a momentum stream')
         if not math.isfinite(self.velocity_embedding_std) or self.velocity_embedding_std <= 0:
             raise ValueError('Velocity embedding initialization must be positive and finite')
@@ -246,12 +246,6 @@ class ConnectionBlock(Block):
         h, v = self.attn_residual(h, v, force)
         force = self.mlp_branch(h.to(cos.dtype))
         return self.mlp_residual(h, v, force)
-
-    def an_momentum_forward(self, h, v, moments, cos, sin, kv_cache=None):
-        force = self.attention_branch(h.to(cos.dtype), cos, sin, kv_cache)
-        h, v, moments = self.attn_residual(h, v, moments, force)
-        force = self.mlp_branch(h.to(cos.dtype))
-        return self.mlp_residual(h, v, moments, force)
 
     def forward(self, x, cos, sin, kv_cache=None):
         if self.variant == 'baseline':

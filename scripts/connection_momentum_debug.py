@@ -18,7 +18,6 @@ from nanochat.packed_training import PackedData, evaluate, json_write, seed_all,
 @torch.no_grad()
 def residual_audit(model, x):
     h, v = model.initial_state(model.wte(x), x)
-    moments = model.initial_moments(h)
     cos, sin = model.cos[:, :x.shape[1]], model.sin[:, :x.shape[1]]
     rows = []
     for b in model.blocks:
@@ -28,12 +27,10 @@ def residual_audit(model, x):
             force = branch(h.to(cos.dtype))
             row = dict(sublayer=len(rows), branch=name,
                        force_rms=force.float().square().mean().sqrt().item())
-            if model.config.residual_mode == 'an_heavy_ball':
-                h, v, moments = update(h, v, moments, force)
-                row.update(nominal_velocity_second_moment=moments[0].item(),
-                           nominal_hv_moment=moments[1].item())
-            else:
-                h, v = update(h, v, force)
+            h, v = update(h, v, force)
+            if model.config.residual_mode == 'ngpt_heavy_ball':
+                row['hidden_rms_max_error'] = (h.square().mean(-1)-1).abs().max().item()
+                assert row['hidden_rms_max_error'] < 2e-6
             assert torch.isfinite(h).all() and torch.isfinite(v).all()
             row.update(hidden_rms=h.square().mean().sqrt().item(),
                        max_token_hidden_rms=h.square().mean(-1).sqrt().max().item(),
@@ -58,13 +55,13 @@ def main():
     result = dict(complete=False, formal_training=False, gpu=torch.cuda.get_device_name(),
                   torch=torch.__version__, cuda=torch.version.cuda, attention_backend='fa2',
                   seed=42, microbatch=16, batch_tokens=32768, models={})
-    for mode, steps in [('vanilla', 32), ('heavy_ball', 32), ('an_heavy_ball', 128)]:
+    for mode, steps in [('vanilla', 32), ('heavy_ball', 32), ('ngpt_heavy_ball', 128)]:
         seed_all(42)
         c = ConnectionConfig(streams=1, residual_dynamics=mode)
         model = build_connection_model(c).prepare(compile_blocks=True)
         opt, wd = optimizer_for(model)
-        initial_dev = evaluate(model, data)[0] if mode == 'an_heavy_ball' else None
-        initial_state = residual_audit(model, data.batch('dev', 0, 2)[0]) if mode == 'an_heavy_ball' else None
+        initial_dev = evaluate(model, data)[0] if mode == 'ngpt_heavy_ball' else None
+        initial_state = residual_audit(model, data.batch('dev', 0, 2)[0]) if mode == 'ngpt_heavy_ball' else None
         durations, losses = [], []
         torch.cuda.reset_peak_memory_stats()
         with (out/(mode+'-steps.jsonl')).open('w', buffering=1) as log:
@@ -89,7 +86,7 @@ def main():
                     theoretical_cost=model_cost(c, batch=16))
         if mode != 'vanilla':
             info['coefficients'] = model.residual_metrics()
-        if mode == 'an_heavy_ball':
+        if mode == 'ngpt_heavy_ball':
             info.update(initial_dev_ce=initial_dev, final_dev_ce=evaluate(model, data)[0],
                         initial_residual_state=initial_state,
                         final_residual_state=residual_audit(model, data.batch('dev', 0, 2)[0]))
@@ -107,8 +104,8 @@ def main():
         del model, opt, prof
         torch._dynamo.reset(); gc.collect(); torch.cuda.empty_cache()
     m = result['models']
-    result['time_ratio_to_hb'] = m['an_heavy_ball']['median_step_seconds']/m['heavy_ball']['median_step_seconds']
-    result['time_ratio_to_vanilla'] = m['an_heavy_ball']['median_step_seconds']/m['vanilla']['median_step_seconds']
+    result['time_ratio_to_hb'] = m['ngpt_heavy_ball']['median_step_seconds']/m['heavy_ball']['median_step_seconds']
+    result['time_ratio_to_vanilla'] = m['ngpt_heavy_ball']['median_step_seconds']/m['vanilla']['median_step_seconds']
     assert result['time_ratio_to_hb'] < 1.75
     assert result['time_ratio_to_vanilla'] < 1.75
     result['complete'] = True

@@ -12,10 +12,10 @@ def model_cost(config, batch=1, activation_bytes=2, feedback_passes=None):
     forward=projections+head+attention
     if c.residual_mode != 'vanilla':
         # Matrix-only reference plus residual multiply/add/reduction arithmetic.
-        # Approximate mode: force RMS normalization (3d-1), HB (5d), scale (d).
-        # Coefficient/moment scalar work and sqrt/division are excluded here.
+        # Normalized mode: target norm (3d-1), target-h (d), HB (5d), hidden norm (3d-1).
+        # Coefficient scalar work and sqrt/division are excluded here.
         sites=2*depth
-        per_site={'heavy_ball':5*d, 'an_heavy_ball':9*d-1}[c.residual_mode]
+        per_site={'heavy_ball':5*d, 'ngpt_heavy_ball':12*d-2}[c.residual_mode]
         residual=batch*t*(sites*per_site+3*d-1)
         embedding_parameters=c.vocab_size*d if c.velocity_init=='token' else 0
         return dict(estimated_forward_flops=forward+residual,
@@ -24,9 +24,9 @@ def model_cost(config, batch=1, activation_bytes=2, feedback_passes=None):
                 attention=attention,residual_arithmetic=residual),
             additional_parameters=3*sites+embedding_parameters,
             velocity_embedding_parameters=embedding_parameters,
-            live_residual_state_bytes=2*batch*t*d*4+(8 if c.residual_mode=='an_heavy_ball' else 0),
-            accounting='FMA=2; causal attention pairs; residual arithmetic estimate and backward approximated as 2x forward. Scalar moment/rsqrt/division/sigmoid/softplus, optimizer, copies and checkpoint recomputation excluded. Not hardware-measured FLOPs.',
-            memory_note='Live FP32 hidden and velocity plus two nominal scalar moments. Autograd intermediates, embedding/optimizer bandwidth and allocator peak must be measured.')
+            live_residual_state_bytes=2*batch*t*d*4,
+            accounting='FMA=2; causal attention pairs; residual arithmetic estimate and backward approximated as 2x forward. Scalar rsqrt/division/sigmoid/softplus, optimizer, copies and checkpoint recomputation excluded. Not hardware-measured FLOPs.',
+            memory_note='Live FP32 hidden and velocity. Autograd intermediates, embedding/optimizer bandwidth and allocator peak must be measured.')
     if c.latent_feedback:
         backbone=projections+attention
         fusion=2*batch*t*d*d

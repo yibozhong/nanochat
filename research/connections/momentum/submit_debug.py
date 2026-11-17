@@ -36,12 +36,12 @@ def main():
             target=ASSETS/'bundles'/name
             assert target.is_file()
             (bundle/name).symlink_to(target)
-        source=dict(commit=commit,formal_training=False,purpose='anGPT-inspired Heavy-Ball residual correctness, stability and timing',
-            training_steps_by_mode={'vanilla':32,'heavy_ball':32,'an_heavy_ball':128},cli_steps=3,
+        source=dict(commit=commit,formal_training=False,purpose='nGPT-inspired Heavy-Ball residual correctness, stability and timing',
+            training_steps_by_mode={'vanilla':32,'heavy_ball':32,'ngpt_heavy_ball':128},cli_steps=3,
             data='existing packed2K prefix from FineWeb-Edu sample-10BT',
             data_archive_bytes=(bundle/'gate-data.tar').stat().st_size,
             runtime='mhc-official-runtime-7546767.tar.gz + frozen uv.lock',
-            gpu_backend='H100/H200 + FA2',seed=42,velocity_init='token',new_mode='an_heavy_ball',
+            gpu_backend='H100/H200 + FA2',seed=42,velocity_init='token',new_mode='ngpt_heavy_ball',
             timeout_seconds=2400,failure_debug_seconds=900)
         (bundle/'source.json').write_text(json.dumps(source,indent=2)+'\n')
         shutil.copy2(REPO/'research/connections/momentum/debug.sh',ROOT/'debug.sh')
@@ -58,7 +58,7 @@ def main():
                 line=line.replace('(Capability == 9.0)','(Capability == 9.0 && regexp("H100|H200",DeviceName))')
             elif line.startswith('queue '):continue
             lines.append(line.replace('DepthDiagnosticKey','MomentumDebugKey')
-                .replace('depth-diagnostic-20261103',KEY).replace('nanochat-depth-diagnostic','nanochat-an-momentum-debug'))
+                .replace('depth-diagnostic-20261103',KEY).replace('nanochat-depth-diagnostic','nanochat-ngpt-momentum-debug'))
         lines += ['+InteractiveJob = true','hold = true',
             'periodic_hold = (JobStatus == 2) && (time() - JobCurrentStartDate > 5400)',
             'on_exit_hold = (ExitBySignal == true) || (ExitCode != 0)','queue 1']
