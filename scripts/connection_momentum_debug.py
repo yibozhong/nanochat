@@ -21,7 +21,7 @@ from nanochat.gpt import norm
 def residual_audit(model, x, require_unit_target=False):
     pure = model.config.residual_mode == 'ngpt'
     vanilla = model.config.residual_mode == 'vanilla'
-    transported = model.config.residual_mode == 'ngpt_heavy_ball' and model.config.ngpt_velocity_mode == 'transport_rms'
+    transported = model.config.residual_mode in ('ngpt_heavy_ball', 'ngpt_hbformer') and model.config.ngpt_velocity_mode == 'transport_rms'
     if vanilla:
         h, v = norm(model.wte(x)), None
     elif pure:
@@ -39,7 +39,7 @@ def residual_audit(model, x, require_unit_target=False):
             row = dict(sublayer=len(rows), branch=name,
                        force_rms=force.float().square().mean().sqrt().item(),
                        min_token_force_rms=force_rms.min().item())
-            if model.config.residual_mode in ('ngpt', 'ngpt_heavy_ball'):
+            if model.config.residual_mode in ('ngpt', 'ngpt_heavy_ball', 'ngpt_hbformer'):
                 row['force_floor_fraction'] = (force_rms < model.config.ngpt_force_rms_floor).float().mean().item()
                 z = normalize_residual(force, model.config.ngpt_force_rms_floor)
                 row['target_rms_max_error'] = (z.square().mean(-1)-1).abs().max().item()
@@ -60,7 +60,7 @@ def residual_audit(model, x, require_unit_target=False):
                     row['discarded_radial_energy_fraction'] = ((h*raw).mean(-1).square()/raw_rms2.clamp_min(1e-12)).mean().item()
                     row['velocity_floor_fraction'] = (tangent.square().mean(-1) < model.config.momentum_velocity_rms_floor**2).float().mean().item()
                 h, v = update(h, v, force)
-            if model.config.residual_mode in ('ngpt_heavy_ball', 'ngpt'):
+            if model.config.residual_mode in ('ngpt_heavy_ball', 'ngpt_hbformer', 'ngpt'):
                 row['hidden_rms_max_error'] = (h.square().mean(-1)-1).abs().max().item()
                 assert row['hidden_rms_max_error'] < 2e-6
             assert torch.isfinite(h).all()
@@ -87,7 +87,7 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument('--data-dir', required=True)
     p.add_argument('--output-dir', required=True)
-    p.add_argument('--target-mode', choices=('ngpt_heavy_ball','ngpt','vanilla','heavy_ball_rms'), default='ngpt_heavy_ball')
+    p.add_argument('--target-mode', choices=('ngpt_heavy_ball','ngpt','vanilla','heavy_ball_rms','ngpt_hbformer'), default='ngpt_heavy_ball')
     p.add_argument('--nonzero-init', action='store_true')
     p.add_argument('--transport-rms', action='store_true')
     a = p.parse_args()
@@ -99,9 +99,9 @@ def main():
     result = dict(complete=False, formal_training=False, gpu=torch.cuda.get_device_name(),
                   torch=torch.__version__, cuda=torch.version.cuda, attention_backend='fa2',
                   seed=42, microbatch=16, batch_tokens=32768, models={})
-    if a.target_mode == 'heavy_ball_rms':
+    if a.target_mode in ('heavy_ball_rms', 'ngpt_hbformer'):
         assert a.nonzero_init and not a.transport_rms
-        modes = [('vanilla', 32), ('ngpt_heavy_ball', 32), ('heavy_ball_rms', 128)]
+        modes = [('vanilla', 32), ('ngpt_heavy_ball', 32), (a.target_mode, 128)]
     elif a.nonzero_init:
         modes = [(m, 128 if m == a.target_mode else 32) for m in ('vanilla','ngpt','ngpt_heavy_ball')]
     else:
@@ -116,7 +116,8 @@ def main():
     for mode, steps in modes:
         seed_all(42)
         c = ConnectionConfig(streams=1, residual_dynamics='ngpt_heavy_ball' if mode == 'ngpt_ambient' else mode,
-                             ngpt_velocity_mode='transport_rms' if mode == 'ngpt_heavy_ball' and (a.transport_rms or a.target_mode == 'heavy_ball_rms') else 'ambient',
+                             ngpt_velocity_mode='transport_rms' if (mode == 'ngpt_hbformer' or mode == 'ngpt_heavy_ball'
+                                 and (a.transport_rms or a.target_mode in ('ngpt_hbformer', 'heavy_ball_rms'))) else 'ambient',
                              residual_projection_init='normal' if a.nonzero_init else 'zero',
                              ngpt_force_rms_floor=1e-6 if a.nonzero_init else .1)
         model = build_connection_model(c).prepare(compile_blocks=True)

@@ -45,16 +45,19 @@ class ConnectionConfig:
     velocity_init: str | None = None
     velocity_embedding_std: float = 0.02
     momentum_beta_init: float = 0.5
-    momentum_gamma_init: float = 0.5
+    momentum_gamma_init: float | None = None
     momentum_eta_init: float | None = None
     ngpt_force_rms_floor: float = 0.1
     ngpt_alpha_init: float = 0.05
     ngpt_velocity_mode: str | None = None
     momentum_velocity_rms_floor: float = 0.1
-    residual_projection_init: str = 'zero'
+    residual_projection_init: str | None = None
     residual_projection_init_std: float = 0.02
 
     def __post_init__(self):
+        hbformer = self.residual_mode == 'ngpt_hbformer'
+        if self.residual_projection_init is None:
+            self.residual_projection_init = 'normal' if hbformer else 'zero'
         if self.residual_projection_init not in ('zero', 'normal'):
             raise ValueError('Unknown residual output projection initialization')
         if not math.isfinite(self.residual_projection_init_std) or self.residual_projection_init_std <= 0:
@@ -62,12 +65,14 @@ class ConnectionConfig:
         if self.residual_projection_init != 'zero' and (self.architecture != 'vanilla'
                 or self.variant != 'baseline' or self.latent_feedback):
             raise ValueError('Random residual output initialization is scoped to the vanilla baseline backbone')
-        if self.residual_dynamics not in ('vanilla', 'heavy_ball', 'heavy_ball_rms', 'ngpt_heavy_ball', 'ngpt'):
+        if self.residual_dynamics not in ('vanilla', 'heavy_ball', 'heavy_ball_rms', 'ngpt_heavy_ball', 'ngpt_hbformer', 'ngpt'):
             raise ValueError('Unknown residual dynamics')
         if not math.isfinite(self.ngpt_alpha_init) or not 0 < self.ngpt_alpha_init < 1:
             raise ValueError('nGPT alpha must start strictly between zero and one')
+        if self.momentum_gamma_init is None:
+            self.momentum_gamma_init = math.log(2.) if hbformer else 0.5
         if self.ngpt_velocity_mode is None:
-            self.ngpt_velocity_mode = 'transport_rms' if self.residual_mode == 'ngpt_heavy_ball' else 'ambient'
+            self.ngpt_velocity_mode = 'transport_rms' if self.residual_mode == 'ngpt_heavy_ball' or hbformer else 'ambient'
         if self.momentum_eta_init is None:
             if self.residual_mode == 'ngpt_heavy_ball':
                 self.momentum_eta_init = 0.05 if self.ngpt_velocity_mode == 'transport_rms' else 0.1
@@ -80,8 +85,16 @@ class ConnectionConfig:
         if not math.isfinite(self.ngpt_force_rms_floor) or self.ngpt_force_rms_floor <= 0:
             raise ValueError('Normalized-target force RMS floor must be positive and finite')
         if self.velocity_init is None:
-            self.velocity_init = 'token' if self.residual_mode in ('heavy_ball', 'heavy_ball_rms', 'ngpt_heavy_ball') else 'zero'
-        if self.velocity_init not in ('zero', 'token'):
+            if hbformer:
+                self.velocity_init = 'token_position'
+            else:
+                self.velocity_init = 'token' if self.residual_mode in ('heavy_ball', 'heavy_ball_rms', 'ngpt_heavy_ball') else 'zero'
+        if hbformer and (self.velocity_init != 'token_position' or self.ngpt_velocity_mode != 'transport_rms'
+                         or self.momentum_eta_init != 1 or self.residual_projection_init != 'normal'):
+            raise ValueError('ngpt_hbformer requires token_position velocity, transport_rms, fixed unit step and nonzero projections')
+        if self.velocity_init == 'token_position' and not hbformer:
+            raise ValueError('Token plus position velocity is supported by ngpt_hbformer')
+        if self.velocity_init not in ('zero', 'token', 'token_position'):
             raise ValueError('Unknown velocity initialization')
         if self.velocity_init == 'token' and self.residual_mode not in ('heavy_ball', 'heavy_ball_rms', 'ngpt_heavy_ball'):
             raise ValueError('Velocity embeddings require a momentum stream')
@@ -427,6 +440,8 @@ def optimizer_for(model, batch_tokens=32768):
              betas=(.8, .995), eps=1e-10, weight_decay=.001)]
     if getattr(model, 'velocity_embedding', None) is not None:
         groups[1]['params'].append(model.velocity_embedding.weight)
+    if getattr(model, 'velocity_position_embedding', None) is not None:
+        groups[1]['params'].append(model.velocity_position_embedding.weight)
     matrices, routing = [], []
     for b in model.blocks:
         for name, p in b.named_parameters():
@@ -460,6 +475,8 @@ def optimizer_for(model, batch_tokens=32768):
         signatures = {(tuple(p.shape), p.dtype) for g in groups if g['kind'] == 'adamw' for p in g['params']}
         compiler_config.recompile_limit = max(compiler_config.recompile_limit, 2*len(signatures))
     opt = MuonAdamW(groups)
+    if c.residual_mode == 'ngpt_hbformer':
+        opt.register_step_post_hook(lambda opt, args, kwargs: model.normalize_backbone_weights())
     for g in opt.param_groups:
         g['initial_lr'] = g['lr']
     return opt, wd

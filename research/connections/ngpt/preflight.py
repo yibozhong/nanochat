@@ -12,7 +12,7 @@ def main():
     begin = time.perf_counter()
     source = json.loads(Path('source.json').read_text())
     mode = source['residual_dynamics']
-    assert source['formal_training'] and mode in ('vanilla','ngpt','ngpt_heavy_ball','heavy_ball_rms')
+    assert source['formal_training'] and mode in ('vanilla','ngpt','ngpt_heavy_ball','heavy_ball_rms','ngpt_hbformer')
     assert source['residual_projection_init']=='normal' and source['ngpt_force_rms_floor']==1e-6
     assert torch.cuda.is_available() and torch.cuda.device_count() == 1
     cap = list(torch.cuda.get_device_capability())
@@ -26,7 +26,7 @@ def main():
         assert result['complete'] and result['source'] == source and result['capability'] == cap
         print('NGPT_PREFLIGHT_PASSED reused exact source/family validation', flush=True)
         return
-    transported = source.get('ngpt_velocity_mode')=='transport_rms'
+    transported = mode=='ngpt_heavy_ball' and source.get('ngpt_velocity_mode')=='transport_rms'
     reused = False
     if transported:
         assert mode=='ngpt_heavy_ball'
@@ -45,12 +45,13 @@ def main():
         tests={k:sum(int(s.get(k,0)) for s in suites) for k in ('tests','failures','errors','skipped')}
         profile=json.loads(Path(f'results/{prefix}-profile/summary.json').read_text())
         resume=json.loads(Path(f'results/{prefix}-cli-resume.json').read_text())
-    expected_tests = 9 if mode == 'heavy_ball_rms' else (57 if transported else 29)
+    expected_tests = {'heavy_ball_rms':9, 'ngpt_hbformer':8}.get(mode, 57 if transported else 29)
     assert tests == dict(tests=expected_tests, failures=0, errors=0, skipped=0), tests
     assert profile['complete'] and profile['models'][mode]['steps'] == 128 and resume['complete']
-    if transported or mode == 'heavy_ball_rms':
+    if transported or mode in ('ngpt_hbformer', 'heavy_ball_rms'):
         c=profile['models'][mode]['config']
-        for key in ('ngpt_velocity_mode','momentum_velocity_rms_floor','momentum_eta_init','velocity_init'):
+        for key in ('ngpt_velocity_mode','momentum_velocity_rms_floor','momentum_eta_init','velocity_init',
+                    'momentum_beta_init','momentum_gamma_init','velocity_embedding_std'):
             assert c[key]==source[key],key
     for name, info in profile['models'].items():
         assert info['config']['residual_projection_init']=='normal'

@@ -2,6 +2,7 @@
 import argparse
 import fcntl
 import json
+import math
 from pathlib import Path
 import shutil
 import subprocess
@@ -14,7 +15,8 @@ REPO=Path(__file__).resolve().parents[3]
 HOME_ROOT=Path('/home/yzhong239')
 ASSETS=HOME_ROOT/'nanochat-runtime-assets'
 PRESETS={'vanilla':'vanilla', 'ngpt':'ngpt', 'ngpt_momentum':'ngpt_heavy_ball',
-         'ngpt_momentum_transport_rms':'ngpt_heavy_ball', 'heavy_ball_rms':'heavy_ball_rms'}
+         'ngpt_momentum_transport_rms':'ngpt_heavy_ball', 'heavy_ball_rms':'heavy_ball_rms',
+         'ngpt_hbformer':'ngpt_hbformer'}
 STEPS=305176
 
 
@@ -56,7 +58,7 @@ def main():
         (ROOT/'train.sh').chmod(0o755)
         run_id=uuid.uuid4().hex[:8]
         source=dict(commit=commit,formal_training=True,plan=KEY,run_id=run_id,
-            model_variant=preset,preset=preset,residual_dynamics=mode,velocity_embedding=mode in ('ngpt_heavy_ball','heavy_ball_rms'),
+            model_variant=preset,preset=preset,residual_dynamics=mode,velocity_embedding=mode in ('ngpt_heavy_ball','heavy_ball_rms','ngpt_hbformer'),
             ngpt_alpha_init=.05,ngpt_force_rms_floor=1e-6,ngpt_velocity_mode='ambient',
             residual_projection_init='normal',residual_projection_init_std=.02,
             output_projection_actual_std=.005,momentum_beta_init=.5,momentum_gamma_init=.5,
@@ -73,6 +75,14 @@ def main():
             passed_families=[],compatible_fallback_backend='A100 FA2/CCE runtime validated in skip-scale/validation.json',
             prior_h100_reference_step_seconds=.06704051233828068 if mode=='vanilla' else .0756970327347517,
             timing_reference='previous zero-init H100 diagnostics, estimate only; measure all three nonzero modes in preflight')
+        if mode=='ngpt_hbformer':
+            source.pop('output_projection_actual_std')
+            source.update(velocity_init='token_position', velocity_embedding_std=.02, momentum_eta_init=1.,
+                          momentum_eta_trainable=False, momentum_gamma_init=math.log(2.), ngpt_velocity_mode='transport_rms',
+                          momentum_velocity_rms_floor=.1, backbone_weight_constraint='ngpt_unit_l2_init_and_post_step',
+                          output_projection_std_before_normalization=.005,
+                          preflight='HBFormer velocity/step, unit weight axes and post-step projection, cache, gradients, exact resume; target128 and two controls32',
+                          timing_reference='prior H100 diagnostics, excludes new post-step weight normalization overhead')
         if mode=='heavy_ball_rms':
             source.update(velocity_init='token', velocity_embedding_std=.02,
                           momentum_eta_init=.05, momentum_velocity_rms_floor=.1,

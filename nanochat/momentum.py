@@ -83,12 +83,15 @@ class HeavyBall(nn.Module):
         self.speed_floor = config.momentum_velocity_rms_floor if config.residual_mode == 'heavy_ball_rms' else None
         b = config.momentum_beta_init
         # Preserve the existing Heavy-Ball parameter names/shapes and optimizer.
-        self.raw = nn.Parameter(torch.tensor([
-            math.log(b / (1 - b)), inverse_softplus(config.momentum_gamma_init),
-            inverse_softplus(config.momentum_eta_init)], dtype=torch.float32))
+        self.fixed_step = config.residual_mode == 'ngpt_hbformer'
+        raw = [math.log(b / (1 - b)), inverse_softplus(config.momentum_gamma_init)]
+        if not self.fixed_step:
+            raw.append(inverse_softplus(config.momentum_eta_init))
+        self.raw = nn.Parameter(torch.tensor(raw, dtype=torch.float32))
 
     def coefficients(self):
-        return self.raw[0].sigmoid(), F.softplus(self.raw[1]), F.softplus(self.raw[2])
+        eta = self.raw.new_ones(()) if self.fixed_step else F.softplus(self.raw[2])
+        return self.raw[0].sigmoid(), F.softplus(self.raw[1]), eta
 
     def forward(self, h, v, force):
         beta, gamma, eta = self.coefficients()
@@ -114,7 +117,7 @@ class NormalizedHeavyBall(HeavyBall):
 
 def residual_update(config):
     return {'heavy_ball': HeavyBall, 'heavy_ball_rms': HeavyBall, 'ngpt_heavy_ball': NormalizedHeavyBall,
-            'ngpt': NormalizedResidual}[config.residual_mode](config)
+            'ngpt_hbformer': NormalizedHeavyBall, 'ngpt': NormalizedResidual}[config.residual_mode](config)
 
 
 class NormalizedResidual(nn.Module):
@@ -158,14 +161,36 @@ class MomentumModel(ConnectionModel):
         super().__init__(config)
         # Allocate after the backbone to preserve seed-matched initialization.
         self.velocity_embedding = None
-        if config.velocity_init == 'token':
+        self.velocity_position_embedding = None
+        if config.velocity_init in ('token', 'token_position'):
             self.velocity_embedding = nn.Embedding(config.vocab_size, config.width)
             nn.init.normal_(self.velocity_embedding.weight, std=config.velocity_embedding_std)
+        if config.velocity_init == 'token_position':
+            self.velocity_position_embedding = nn.Embedding(config.sequence_length, config.width)
+            nn.init.normal_(self.velocity_position_embedding.weight, std=config.velocity_embedding_std)
+            self.normalize_backbone_weights()
+
+    @torch.no_grad()
+    def normalize_backbone_weights(self):
+        """Project nGPT backbone vectors onto the unit sphere, including the untied head."""
+        def project(weight, dim):
+            lengths = torch.linalg.vector_norm(weight, dim=dim, keepdim=True, dtype=torch.float32)
+            weight.div_(lengths.clamp_min_(1e-12))
+
+        project(self.wte.weight, 1)
+        project(self.lm_head.weight, 1)
+        for b in self.blocks:
+            for layer in (b.attn.c_q, b.attn.c_k, b.attn.c_v, b.mlp.c_fc):
+                project(layer.weight, 1)
+            for layer in (b.attn.c_proj, b.mlp.c_proj):
+                project(layer.weight, 0)
 
     def prepare(self, device='cuda', dtype=torch.bfloat16, compile_blocks=False):
         super().prepare(device, dtype, compile_blocks=False)
         if self.velocity_embedding is not None:
             self.velocity_embedding.to(dtype=dtype)
+        if self.velocity_position_embedding is not None:
+            self.velocity_position_embedding.to(dtype=dtype)
         if compile_blocks:
             # Preserve BF16 branch rounding at the FP32 residual boundary.
             self.compiled_steps = [torch.compile(b.momentum_forward, dynamic=False, fullgraph=True,
@@ -176,14 +201,18 @@ class MomentumModel(ConnectionModel):
         h = self.backbone(self.wte(idx), kv_cache, token_ids=idx)
         return norm(h.to(self.wte.weight.dtype))
 
-    def initial_state(self, x, token_ids=None):
-        h = normalize_residual(x) if self.config.residual_mode == 'ngpt_heavy_ball' else state_dtype(norm(x))
+    def initial_state(self, x, token_ids=None, start=0):
+        h = normalize_residual(x) if self.config.residual_mode in ('ngpt_heavy_ball', 'ngpt_hbformer') else state_dtype(norm(x))
         if self.velocity_embedding is None:
             return h, torch.zeros_like(h)
         if token_ids is None:
             raise ValueError('Token IDs are required for velocity embeddings')
         v = state_dtype(self.velocity_embedding(token_ids))
-        if self.config.residual_mode == 'ngpt_heavy_ball' and self.config.ngpt_velocity_mode == 'transport_rms':
+        if self.velocity_position_embedding is not None:
+            # The first sublayer projects the mixture. Keep HBFormer's raw v0 here.
+            positions = self.velocity_position_embedding.weight[start:start+x.shape[1]]
+            v = v + state_dtype(positions)
+        elif self.config.residual_mode == 'ngpt_heavy_ball' and self.config.ngpt_velocity_mode == 'transport_rms':
             v = normalize_residual(tangent_project(h, v), self.config.momentum_velocity_rms_floor)
         elif self.config.residual_mode == 'heavy_ball_rms':
             v = normalize_residual(v, self.config.momentum_velocity_rms_floor)
@@ -193,7 +222,7 @@ class MomentumModel(ConnectionModel):
         start = 0 if kv_cache is None else kv_cache.get_pos()
         if start + x.shape[1] > self.config.sequence_length:
             raise ValueError('Input exceeds configured context length')
-        h, v = self.initial_state(x, token_ids)
+        h, v = self.initial_state(x, token_ids, start)
         state = (h, v)
         cos, sin = self.cos[:, start:start+x.shape[1]], self.sin[:, start:start+x.shape[1]]
         states = [] if return_layers else None
@@ -224,4 +253,6 @@ class MomentumModel(ConnectionModel):
                 result[f'residual/sublayer_{i}/alpha'] = row[1]*row[2]
         if self.velocity_embedding is not None:
             result['residual/velocity_embedding_rms'] = self.velocity_embedding.weight.float().square().mean().sqrt().item()
+        if self.velocity_position_embedding is not None:
+            result['residual/velocity_position_embedding_rms'] = self.velocity_position_embedding.weight.float().square().mean().sqrt().item()
         return result

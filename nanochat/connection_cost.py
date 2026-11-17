@@ -15,7 +15,7 @@ def model_cost(config, batch=1, activation_bytes=2, feedback_passes=None):
         # Normalized mode: target norm (3d-1), target-h (d), HB (5d), hidden norm (3d-1).
         # Coefficient scalar work and sqrt/division are excluded here.
         sites=2*depth
-        per_site={'heavy_ball':5*d, 'heavy_ball_rms':8*d-1, 'ngpt_heavy_ball':12*d-2, 'ngpt':9*d-2}[c.residual_mode]
+        per_site={'heavy_ball':5*d, 'heavy_ball_rms':8*d-1, 'ngpt_heavy_ball':12*d-2, 'ngpt_hbformer':25*d-6, 'ngpt':9*d-2}[c.residual_mode]
         initial=3*d-1
         if c.residual_mode == 'heavy_ball_rms' and c.velocity_init == 'token':
             initial += 3*d-1
@@ -26,14 +26,18 @@ def model_cost(config, batch=1, activation_bytes=2, feedback_passes=None):
                 initial += 7*d-2  # initial embedding tangent projection and RMS norm
         residual=batch*t*(sites*per_site+initial)
         embedding_parameters=c.vocab_size*d if c.velocity_init=='token' else 0
+        if c.residual_mode == 'ngpt_hbformer':
+            residual += batch*t*d  # v0 = token + position
+            embedding_parameters = (c.vocab_size+c.sequence_length)*d
+        scalars_per_site = {'ngpt':1, 'ngpt_hbformer':2}.get(c.residual_mode, 3)
         return dict(estimated_forward_flops=forward+residual,
             estimated_training_flops=3*(forward+residual),
             components_forward=dict(backbone_projections=projections,vocab_head=head,
                 attention=attention,residual_arithmetic=residual),
-            additional_parameters=(1 if c.residual_mode=='ngpt' else 3)*sites+embedding_parameters,
+            additional_parameters=scalars_per_site*sites+embedding_parameters,
             velocity_embedding_parameters=embedding_parameters,
             live_residual_state_bytes=(1 if c.residual_mode=='ngpt' else 2)*batch*t*d*4,
-            accounting='FMA=2; causal attention pairs; residual arithmetic estimate and backward approximated as 2x forward. Scalar rsqrt/division/sigmoid/softplus, optimizer, copies and checkpoint recomputation excluded. Not hardware-measured FLOPs.',
+            accounting='FMA=2; causal attention pairs; residual arithmetic estimate and backward approximated as 2x forward. Scalar rsqrt/division/sigmoid/softplus, optimizer (including post-step weight normalization), copies and checkpoint recomputation excluded. Not hardware-measured FLOPs.',
             memory_note='Live FP32 hidden (plus velocity for Heavy-Ball). Autograd intermediates, embedding/optimizer bandwidth and allocator peak must be measured.')
     if c.latent_feedback:
         backbone=projections+attention
