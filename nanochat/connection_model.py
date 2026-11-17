@@ -62,14 +62,17 @@ class ConnectionConfig:
         if self.residual_projection_init != 'zero' and (self.architecture != 'vanilla'
                 or self.variant != 'baseline' or self.latent_feedback):
             raise ValueError('Random residual output initialization is scoped to the vanilla baseline backbone')
-        if self.residual_dynamics not in ('vanilla', 'heavy_ball', 'ngpt_heavy_ball', 'ngpt'):
+        if self.residual_dynamics not in ('vanilla', 'heavy_ball', 'heavy_ball_rms', 'ngpt_heavy_ball', 'ngpt'):
             raise ValueError('Unknown residual dynamics')
         if not math.isfinite(self.ngpt_alpha_init) or not 0 < self.ngpt_alpha_init < 1:
             raise ValueError('nGPT alpha must start strictly between zero and one')
         if self.ngpt_velocity_mode is None:
             self.ngpt_velocity_mode = 'transport_rms' if self.residual_mode == 'ngpt_heavy_ball' else 'ambient'
         if self.momentum_eta_init is None:
-            self.momentum_eta_init = (0.05 if self.ngpt_velocity_mode == 'transport_rms' else 0.1) if self.residual_mode == 'ngpt_heavy_ball' else 1.0
+            if self.residual_mode == 'ngpt_heavy_ball':
+                self.momentum_eta_init = 0.05 if self.ngpt_velocity_mode == 'transport_rms' else 0.1
+            else:
+                self.momentum_eta_init = 0.05 if self.residual_mode == 'heavy_ball_rms' else 1.0
         if self.ngpt_velocity_mode not in ('ambient', 'transport_rms'):
             raise ValueError('Unknown nGPT velocity mode')
         if not math.isfinite(self.momentum_velocity_rms_floor) or self.momentum_velocity_rms_floor <= 0:
@@ -77,10 +80,10 @@ class ConnectionConfig:
         if not math.isfinite(self.ngpt_force_rms_floor) or self.ngpt_force_rms_floor <= 0:
             raise ValueError('Normalized-target force RMS floor must be positive and finite')
         if self.velocity_init is None:
-            self.velocity_init = 'token' if self.residual_mode in ('heavy_ball', 'ngpt_heavy_ball') else 'zero'
+            self.velocity_init = 'token' if self.residual_mode in ('heavy_ball', 'heavy_ball_rms', 'ngpt_heavy_ball') else 'zero'
         if self.velocity_init not in ('zero', 'token'):
             raise ValueError('Unknown velocity initialization')
-        if self.velocity_init == 'token' and self.residual_mode not in ('heavy_ball', 'ngpt_heavy_ball'):
+        if self.velocity_init == 'token' and self.residual_mode not in ('heavy_ball', 'heavy_ball_rms', 'ngpt_heavy_ball'):
             raise ValueError('Velocity embeddings require a momentum stream')
         if not math.isfinite(self.velocity_embedding_std) or self.velocity_embedding_std <= 0:
             raise ValueError('Velocity embedding initialization must be positive and finite')

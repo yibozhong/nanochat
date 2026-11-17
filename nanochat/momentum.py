@@ -80,6 +80,7 @@ def transported_momentum_step(h, v, force, beta, gamma, eta, force_floor, veloci
 class HeavyBall(nn.Module):
     def __init__(self, config):
         super().__init__()
+        self.speed_floor = config.momentum_velocity_rms_floor if config.residual_mode == 'heavy_ball_rms' else None
         b = config.momentum_beta_init
         # Preserve the existing Heavy-Ball parameter names/shapes and optimizer.
         self.raw = nn.Parameter(torch.tensor([
@@ -92,6 +93,8 @@ class HeavyBall(nn.Module):
     def forward(self, h, v, force):
         beta, gamma, eta = self.coefficients()
         u = beta * state_dtype(v) + gamma * state_dtype(force)
+        if self.speed_floor is not None:
+            u = normalize_residual(u, self.speed_floor)
         return state_dtype(h) + eta * u, u
 
 
@@ -110,7 +113,7 @@ class NormalizedHeavyBall(HeavyBall):
 
 
 def residual_update(config):
-    return {'heavy_ball': HeavyBall, 'ngpt_heavy_ball': NormalizedHeavyBall,
+    return {'heavy_ball': HeavyBall, 'heavy_ball_rms': HeavyBall, 'ngpt_heavy_ball': NormalizedHeavyBall,
             'ngpt': NormalizedResidual}[config.residual_mode](config)
 
 
@@ -182,6 +185,8 @@ class MomentumModel(ConnectionModel):
         v = state_dtype(self.velocity_embedding(token_ids))
         if self.config.residual_mode == 'ngpt_heavy_ball' and self.config.ngpt_velocity_mode == 'transport_rms':
             v = normalize_residual(tangent_project(h, v), self.config.momentum_velocity_rms_floor)
+        elif self.config.residual_mode == 'heavy_ball_rms':
+            v = normalize_residual(v, self.config.momentum_velocity_rms_floor)
         return h, v
 
     def backbone(self, x, kv_cache=None, return_layers=False, token_ids=None):

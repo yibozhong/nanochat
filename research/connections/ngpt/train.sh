@@ -17,7 +17,17 @@ case "$TASK_VELOCITY_MODE" in
         ;;
     *) exit 64 ;;
 esac
-case "$TASK_MODE" in vanilla|ngpt|ngpt_heavy_ball) ;; *) exit 64 ;; esac
+case "$TASK_MODE" in
+    heavy_ball_rms)
+        test "$TASK_VELOCITY_MODE" = ambient
+        TASK_MOMENTUM_ARGS=(--velocity-init token --velocity-embedding-std .02
+            --momentum-beta-init .5 --momentum-gamma-init .5 --momentum-eta-init .05
+            --momentum-velocity-rms-floor .1)
+        TASK_GROUP=heavy-ball-rms-10b
+        ;;
+    vanilla|ngpt|ngpt_heavy_ball) ;;
+    *) exit 64 ;;
+esac
 TASK_STEPS=305176
 mkdir -p checkpoints results
 if [ -f results.tar ]; then tar -xf results.tar; fi
@@ -46,11 +56,11 @@ assert s['steps']==305176 and s['training_tokens']==10000007168
 assert s['initialization']=='seed42_from_scratch_no_diagnostic_weights'
 assert s['attention_backend']=='fa2' and s['residual_dynamics']==sys.argv[2]
 assert s['model']==dict(depth=8,width=512,heads=4,sequence_length=2048,vocab_size=32768)
-assert s['velocity_embedding']==(sys.argv[2]=='ngpt_heavy_ball') and s['ngpt_alpha_init']==.05
+assert s['velocity_embedding']==(sys.argv[2] in ('ngpt_heavy_ball','heavy_ball_rms')) and s['ngpt_alpha_init']==.05
 assert s['residual_projection_init']=='normal' and s['residual_projection_init_std']==.02
 assert s['ngpt_force_rms_floor']==1e-6
 assert s.get('ngpt_velocity_mode','ambient')==sys.argv[3]
-if sys.argv[3]=='transport_rms':
+if sys.argv[3]=='transport_rms' or sys.argv[2]=='heavy_ball_rms':
     assert s['momentum_eta_init']==.05 and s['momentum_velocity_rms_floor']==.1
 p=Path('results/train/progress.json')
 if p.exists():

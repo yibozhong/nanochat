@@ -70,6 +70,9 @@ def residual_audit(model, x, require_unit_target=False):
                 assert torch.isfinite(v).all()
                 row.update(velocity_rms=v.square().mean().sqrt().item(),
                            observed_hv_moment=(h*v).mean().item())
+                if model.config.residual_mode == 'heavy_ball_rms':
+                    row['velocity_rms_max'] = v.square().mean(-1).sqrt().max().item()
+                    assert row['velocity_rms_max'] < 1+2e-6, row
                 if transported:
                     row['velocity_rms_max'] = v.square().mean(-1).sqrt().max().item()
                     row['tangent_error_max'] = (h*v).mean(-1).abs().max().item()
@@ -84,7 +87,7 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument('--data-dir', required=True)
     p.add_argument('--output-dir', required=True)
-    p.add_argument('--target-mode', choices=('ngpt_heavy_ball','ngpt','vanilla'), default='ngpt_heavy_ball')
+    p.add_argument('--target-mode', choices=('ngpt_heavy_ball','ngpt','vanilla','heavy_ball_rms'), default='ngpt_heavy_ball')
     p.add_argument('--nonzero-init', action='store_true')
     p.add_argument('--transport-rms', action='store_true')
     a = p.parse_args()
@@ -96,7 +99,10 @@ def main():
     result = dict(complete=False, formal_training=False, gpu=torch.cuda.get_device_name(),
                   torch=torch.__version__, cuda=torch.version.cuda, attention_backend='fa2',
                   seed=42, microbatch=16, batch_tokens=32768, models={})
-    if a.nonzero_init:
+    if a.target_mode == 'heavy_ball_rms':
+        assert a.nonzero_init and not a.transport_rms
+        modes = [('vanilla', 32), ('ngpt_heavy_ball', 32), ('heavy_ball_rms', 128)]
+    elif a.nonzero_init:
         modes = [(m, 128 if m == a.target_mode else 32) for m in ('vanilla','ngpt','ngpt_heavy_ball')]
     else:
         assert a.target_mode != 'vanilla'
@@ -110,7 +116,7 @@ def main():
     for mode, steps in modes:
         seed_all(42)
         c = ConnectionConfig(streams=1, residual_dynamics='ngpt_heavy_ball' if mode == 'ngpt_ambient' else mode,
-                             ngpt_velocity_mode='transport_rms' if a.transport_rms and mode == a.target_mode else 'ambient',
+                             ngpt_velocity_mode='transport_rms' if mode == 'ngpt_heavy_ball' and (a.transport_rms or a.target_mode == 'heavy_ball_rms') else 'ambient',
                              residual_projection_init='normal' if a.nonzero_init else 'zero',
                              ngpt_force_rms_floor=1e-6 if a.nonzero_init else .1)
         model = build_connection_model(c).prepare(compile_blocks=True)

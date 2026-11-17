@@ -29,14 +29,14 @@ def main():
     p.add_argument('--attention-kernel', choices=('original','fla_triton'), default='original')
     p.add_argument('--architecture', choices=('vanilla', 'native'), default='vanilla')
     p.add_argument('--latent-feedback', action='store_true')
-    p.add_argument('--residual-dynamics', choices=('vanilla','heavy_ball','ngpt_heavy_ball','ngpt'), default='vanilla')
+    p.add_argument('--residual-dynamics', choices=('vanilla','heavy_ball','heavy_ball_rms','ngpt_heavy_ball','ngpt'), default='vanilla')
     p.add_argument('--velocity-init', choices=('zero','token'), default=None,
                    help='Momentum defaults to learned token velocity embeddings; zero supports legacy diagnostics')
     p.add_argument('--velocity-embedding-std', type=float, default=.02)
     p.add_argument('--momentum-beta-init', type=float, default=.5)
     p.add_argument('--momentum-gamma-init', type=float, default=.5)
     p.add_argument('--momentum-eta-init', type=float, default=None,
-                   help='Defaults: heavy_ball=1, ngpt transport_rms=0.05, ambient=0.1')
+                   help='Defaults: heavy_ball=1, heavy_ball_rms=0.05, ngpt transport_rms=0.05, ambient=0.1')
     p.add_argument('--ngpt-velocity-mode', choices=('ambient','transport_rms'), default=None,
                    help='New nGPT momentum defaults to transport_rms; old checkpoints require ambient')
     p.add_argument('--momentum-velocity-rms-floor', type=float, default=.1)

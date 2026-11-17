@@ -15,8 +15,10 @@ def model_cost(config, batch=1, activation_bytes=2, feedback_passes=None):
         # Normalized mode: target norm (3d-1), target-h (d), HB (5d), hidden norm (3d-1).
         # Coefficient scalar work and sqrt/division are excluded here.
         sites=2*depth
-        per_site={'heavy_ball':5*d, 'ngpt_heavy_ball':12*d-2, 'ngpt':9*d-2}[c.residual_mode]
+        per_site={'heavy_ball':5*d, 'heavy_ball_rms':8*d-1, 'ngpt_heavy_ball':12*d-2, 'ngpt':9*d-2}[c.residual_mode]
         initial=3*d-1
+        if c.residual_mode == 'heavy_ball_rms' and c.velocity_init == 'token':
+            initial += 3*d-1
         if c.residual_mode == 'ngpt_heavy_ball' and c.ngpt_velocity_mode == 'transport_rms':
             # Target norm + projected mixture + speed norm + retraction + transport.
             per_site=25*d-6
