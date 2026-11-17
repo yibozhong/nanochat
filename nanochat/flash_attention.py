@@ -100,6 +100,14 @@ def _sdpa_attention(q, k, v, window_size, enable_gqa):
             v = v[:, :, start:, :]
         return F.scaled_dot_product_attention(q, k, v, is_causal=False, enable_gqa=enable_gqa)
 
+    if window < 0 and Tq < Tk:
+        # Cached multi-token chunks need bottom-right causality. The structured
+        # bias dispatches to Flash SDPA without a dense mask (unsupported when
+        # only the Flash backend is enabled).
+        from torch.nn.attention.bias import causal_lower_right
+        return F.scaled_dot_product_attention(q, k, v,
+            attn_mask=causal_lower_right(Tq, Tk), enable_gqa=enable_gqa)
+
     # Need explicit mask for sliding window/chunk inference
     device = q.device
     # For chunk inference (Tq != Tk), is_causal is not aligned to cache position => build an explicit bool mask

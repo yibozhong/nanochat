@@ -75,7 +75,11 @@ class RiemannianMomentumModel(ConnectionModel):
     def prepare(self, device='cuda', dtype=torch.bfloat16, compile_blocks=False):
         super().prepare(device, dtype, compile_blocks=False)
         if compile_blocks:
-            self.compiled_steps = [torch.compile(b.momentum_forward, dynamic=False, fullgraph=True)
+            # Preserve the original BF16 branch rounding at the FP32 geometry
+            # boundary. Removing intermediate casts amplifies cancellation in
+            # the small scalar-coefficient gradients (even when CE matches).
+            self.compiled_steps = [torch.compile(b.momentum_forward, dynamic=False, fullgraph=True,
+                                   options={'emulate_precision_casts': True})
                                    for b in self.blocks]
         return self
 

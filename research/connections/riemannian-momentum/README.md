@@ -57,6 +57,14 @@ helpers support independent gradcheck. KV caching remains the original cache;
 velocity is local across depth, never carried between tokens or batches.
 Both states are supplied to activation checkpointing if it is enabled.
 
+Block compilation uses `emulate_precision_casts=True` to preserve the BF16
+branch rounding at the FP32 geometry boundary. Default cast elimination caused
+an 8.9% relative error in a small scalar-gradient vector despite near-identical
+loss; preserving casts reduced the observed maximum parameter-gradient error
+below 0.5%, within the unchanged 4% BF16 check. Cached multi-token chunks use
+PyTorch's structured `causal_lower_right` bias so Flash SDPA handles the correct
+cache-offset causality without materializing an unsupported dense mask.
+
 Cost is O(B*T*d) per sublayer, versus O(B*T*d²) projections. For one site the
 geometry has approximately 21*d-5 channelwise FLOPs, plus scalar operations.
 Two live FP32 states use 8*B*T*d bytes; saved backward intermediates are extra.
