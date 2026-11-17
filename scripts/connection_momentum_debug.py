@@ -14,12 +14,16 @@ from nanochat.connection_experiment import configure_attention
 from nanochat.connection_model import ConnectionConfig, build_connection_model, optimizer_for, schedule
 from nanochat.packed_training import PackedData, evaluate, json_write, seed_all, train_step
 from nanochat.momentum import normalize_residual
+from nanochat.gpt import norm
 
 
 @torch.no_grad()
-def residual_audit(model, x):
+def residual_audit(model, x, require_unit_target=False):
     pure = model.config.residual_mode == 'ngpt'
-    if pure:
+    vanilla = model.config.residual_mode == 'vanilla'
+    if vanilla:
+        h, v = norm(model.wte(x)), None
+    elif pure:
         h, v = normalize_residual(model.wte(x)), None
     else:
         h, v = model.initial_state(model.wte(x), x)
@@ -27,12 +31,22 @@ def residual_audit(model, x):
     rows = []
     for b in model.blocks:
         for name, branch, update in (
-            ('attention', lambda z: b.attention_branch(z, cos, sin), b.attn_residual),
-            ('ffn', b.mlp_branch, b.mlp_residual)):
+            ('attention', lambda z: b.attention_branch(z, cos, sin), getattr(b, 'attn_residual', None)),
+            ('ffn', b.mlp_branch, getattr(b, 'mlp_residual', None))):
             force = branch(h.to(cos.dtype))
+            force_rms = force.float().square().mean(-1).sqrt()
             row = dict(sublayer=len(rows), branch=name,
-                       force_rms=force.float().square().mean().sqrt().item())
-            if pure:
+                       force_rms=force.float().square().mean().sqrt().item(),
+                       min_token_force_rms=force_rms.min().item())
+            if model.config.residual_mode in ('ngpt', 'ngpt_heavy_ball'):
+                row['force_floor_fraction'] = (force_rms < model.config.ngpt_force_rms_floor).float().mean().item()
+                z = normalize_residual(force, model.config.ngpt_force_rms_floor)
+                row['target_rms_max_error'] = (z.square().mean(-1)-1).abs().max().item()
+                if require_unit_target:
+                    assert row['force_floor_fraction'] == 0 and row['target_rms_max_error'] < 2e-6, row
+            if vanilla:
+                h = h + force
+            elif pure:
                 h = update(h, force)
             else:
                 h, v = update(h, v, force)
@@ -40,8 +54,8 @@ def residual_audit(model, x):
                 row['hidden_rms_max_error'] = (h.square().mean(-1)-1).abs().max().item()
                 assert row['hidden_rms_max_error'] < 2e-6
             assert torch.isfinite(h).all()
-            row.update(hidden_rms=h.square().mean().sqrt().item(),
-                       max_token_hidden_rms=h.square().mean(-1).sqrt().max().item())
+            row.update(hidden_rms=h.float().square().mean().sqrt().item(),
+                       max_token_hidden_rms=h.float().square().mean(-1).sqrt().max().item())
             if v is not None:
                 assert torch.isfinite(v).all()
                 row.update(velocity_rms=v.square().mean().sqrt().item(),
@@ -56,7 +70,8 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument('--data-dir', required=True)
     p.add_argument('--output-dir', required=True)
-    p.add_argument('--target-mode', choices=('ngpt_heavy_ball','ngpt'), default='ngpt_heavy_ball')
+    p.add_argument('--target-mode', choices=('ngpt_heavy_ball','ngpt','vanilla'), default='ngpt_heavy_ball')
+    p.add_argument('--nonzero-init', action='store_true')
     a = p.parse_args()
     out = Path(a.output_dir); out.mkdir(parents=True, exist_ok=True)
     configure_attention('fa2'); torch.set_num_threads(2)
@@ -66,17 +81,23 @@ def main():
     result = dict(complete=False, formal_training=False, gpu=torch.cuda.get_device_name(),
                   torch=torch.__version__, cuda=torch.version.cuda, attention_backend='fa2',
                   seed=42, microbatch=16, batch_tokens=32768, models={})
-    modes = [('vanilla', 32)]
-    if a.target_mode == 'ngpt_heavy_ball':
-        modes.append(('heavy_ball', 32))
-    modes.append((a.target_mode, 128))
+    if a.nonzero_init:
+        modes = [(m, 128 if m == a.target_mode else 32) for m in ('vanilla','ngpt','ngpt_heavy_ball')]
+    else:
+        assert a.target_mode != 'vanilla'
+        modes = [('vanilla', 32)]
+        if a.target_mode == 'ngpt_heavy_ball':
+            modes.append(('heavy_ball', 32))
+        modes.append((a.target_mode, 128))
     for mode, steps in modes:
         seed_all(42)
-        c = ConnectionConfig(streams=1, residual_dynamics=mode)
+        c = ConnectionConfig(streams=1, residual_dynamics=mode,
+                             residual_projection_init='normal' if a.nonzero_init else 'zero',
+                             ngpt_force_rms_floor=1e-6 if a.nonzero_init else .1)
         model = build_connection_model(c).prepare(compile_blocks=True)
         opt, wd = optimizer_for(model)
         initial_dev = evaluate(model, data)[0] if mode == a.target_mode else None
-        initial_state = residual_audit(model, data.batch('dev', 0, 2)[0]) if mode == a.target_mode else None
+        initial_state = residual_audit(model, data.batch('dev', 0, 2)[0], require_unit_target=a.nonzero_init) if mode == a.target_mode or a.nonzero_init else None
         durations, losses = [], []
         torch.cuda.reset_peak_memory_stats()
         with (out/(mode+'-steps.jsonl')).open('w', buffering=1) as log:
@@ -98,13 +119,13 @@ def main():
                     first_loss=losses[0], last_loss=losses[-1],
                     peak_allocated_bytes=torch.cuda.max_memory_allocated(),
                     peak_reserved_bytes=torch.cuda.max_memory_reserved(),
+                    initial_residual_state=initial_state,
                     theoretical_cost=model_cost(c, batch=16))
         if mode != 'vanilla':
             info['coefficients'] = model.residual_metrics()
         if mode == a.target_mode:
             info.update(initial_dev_ce=initial_dev, final_dev_ce=evaluate(model, data)[0],
-                        initial_residual_state=initial_state,
-                        final_residual_state=residual_audit(model, data.batch('dev', 0, 2)[0]))
+                        final_residual_state=residual_audit(model, data.batch('dev', 0, 2)[0], require_unit_target=a.nonzero_init))
             assert statistics.mean(losses[-32:]) < statistics.mean(losses[:32]) and max(losses) < 20
             assert info['final_dev_ce'] < initial_dev
             assert info['peak_allocated_bytes'] < .9*torch.cuda.get_device_properties(0).total_memory
@@ -124,6 +145,10 @@ def main():
         assert result['time_ratio_to_hb'] < 1.75
     result['time_ratio_to_vanilla'] = m[a.target_mode]['median_step_seconds']/m['vanilla']['median_step_seconds']
     assert result['time_ratio_to_vanilla'] < 1.75
+    if a.nonzero_init:
+        result['time_ratios_to_vanilla'] = {name: info['median_step_seconds']/m['vanilla']['median_step_seconds'] for name, info in m.items()}
+        assert all(ratio < 1.75 for ratio in result['time_ratios_to_vanilla'].values())
+    result['diagnostic_training_tokens'] = sum(steps+1 for _, steps in modes)*32768
     result['complete'] = True
     json_write(out/'summary.json', result)
     print('MOMENTUM_PROFILE_COMPLETE', flush=True)

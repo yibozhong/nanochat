@@ -2,6 +2,8 @@
 set -euo pipefail
 TASK_ROOT="$PWD"
 TASK_RUN_ID="$1"
+TASK_MODE="$2"
+case "$TASK_MODE" in vanilla|ngpt|ngpt_heavy_ball) ;; *) exit 64 ;; esac
 TASK_STEPS=305176
 mkdir -p checkpoints results
 if [ -f results.tar ]; then tar -xf results.tar; fi
@@ -21,16 +23,18 @@ finish() {
 }
 trap finish EXIT
 cp "$0" results/launcher.sh
-/opt/project/.venv/bin/python - "$TASK_RUN_ID" <<'PY'
+/opt/project/.venv/bin/python - "$TASK_RUN_ID" "$TASK_MODE" <<'PY'
 import json,sys
 from pathlib import Path
 s=json.loads(Path('source.json').read_text())
 assert s['formal_training'] and s['run_id']==sys.argv[1]
 assert s['steps']==305176 and s['training_tokens']==10000007168
-assert s['initialization']=='seed42_from_zero_no_diagnostic_weights'
-assert s['attention_backend']=='fa2' and s['residual_dynamics']=='ngpt'
+assert s['initialization']=='seed42_from_scratch_no_diagnostic_weights'
+assert s['attention_backend']=='fa2' and s['residual_dynamics']==sys.argv[2]
 assert s['model']==dict(depth=8,width=512,heads=4,sequence_length=2048,vocab_size=32768)
-assert s['velocity_embedding'] is False and s['ngpt_alpha_init']==.05
+assert s['velocity_embedding']==(sys.argv[2]=='ngpt_heavy_ball') and s['ngpt_alpha_init']==.05
+assert s['residual_projection_init']=='normal' and s['residual_projection_init_std']==.02
+assert s['ngpt_force_rms_floor']==1e-6
 p=Path('results/train/progress.json')
 if p.exists():
     r=json.loads(p.read_text())
@@ -92,11 +96,12 @@ cp ../source.json source.json
 ln -sfn ../results results
 # Validate this source once per GPU family, then start a fresh formal process.
 WANDB_MODE=disabled python research/connections/ngpt/preflight.py
-echo "FORMAL_TRAINING_BEGIN ngpt $TASK_RUN_ID"
+echo "FORMAL_TRAINING_BEGIN nonzero_residual $TASK_RUN_ID"
 python -m scripts.connection_train --variant baseline --architecture vanilla --streams 1 \
-    --residual-dynamics ngpt --ngpt-alpha-init .05 --ngpt-force-rms-floor .1 --attention-kernel original --attention-backend fa2 \
+    --residual-dynamics "$TASK_MODE" --ngpt-alpha-init .05 --ngpt-force-rms-floor 1e-6 \
+    --residual-projection-init normal --residual-projection-init-std .02 --attention-kernel original --attention-backend fa2 \
     --steps "$TASK_STEPS" --schedule-steps "$TASK_STEPS" --microbatch 16 --seed 42 \
     --no-activation-checkpoint --no-fused-connection-grad --evaluate-test \
     --data-dir ../data --output-dir results/train --checkpoint-dir ../checkpoints \
-    --formal-training --wandb-group ngpt-residual-10b-20261117 --run-id "$TASK_RUN_ID" \
+    --formal-training --wandb-group residual-nonzero-10b-20261117 --run-id "$TASK_RUN_ID" \
     --resume auto --segment-seconds 1800

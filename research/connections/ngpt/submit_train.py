@@ -1,4 +1,5 @@
-"""Submit the single authorized 10B pure nGPT residual run with durable restart."""
+"""Submit one of the three authorized nonzero-init 10B residual runs with durable restart."""
+import argparse
 import fcntl
 import json
 from pathlib import Path
@@ -12,8 +13,7 @@ from policy import RANK, require_gpus
 REPO=Path(__file__).resolve().parents[3]
 HOME_ROOT=Path('/home/yzhong239')
 ASSETS=HOME_ROOT/'nanochat-runtime-assets'
-ROOT=HOME_ROOT/'ngpt-residual-10b-20261117'
-KEY=ROOT.name
+PRESETS={'vanilla':'vanilla', 'ngpt':'ngpt', 'ngpt_momentum':'ngpt_heavy_ball'}
 STEPS=305176
 
 
@@ -22,6 +22,12 @@ def command(args,cwd=REPO):
 
 
 def main():
+    parser=argparse.ArgumentParser()
+    parser.add_argument('preset',choices=PRESETS)
+    preset=parser.parse_args().preset
+    mode=PRESETS[preset]
+    ROOT=HOME_ROOT/f'residual-nonzero-{preset}-10b-20261117'
+    KEY=ROOT.name
     ROOT.mkdir(exist_ok=True)
     with (ROOT/'submit.lock').open('a') as lock:
         fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
@@ -49,11 +55,14 @@ def main():
         (ROOT/'train.sh').chmod(0o755)
         run_id=uuid.uuid4().hex[:8]
         source=dict(commit=commit,formal_training=True,plan=KEY,run_id=run_id,
-            model_variant='ngpt_residual',residual_dynamics='ngpt',velocity_embedding=False,
-            ngpt_alpha_init=.05,ngpt_force_rms_floor=.1,
+            model_variant=preset,preset=preset,residual_dynamics=mode,velocity_embedding=mode=='ngpt_heavy_ball',
+            ngpt_alpha_init=.05,ngpt_force_rms_floor=1e-6,
+            residual_projection_init='normal',residual_projection_init_std=.02,
+            output_projection_actual_std=.005,momentum_beta_init=.5,momentum_gamma_init=.5,
+            momentum_eta_init=.1 if mode=='ngpt_heavy_ball' else 1.,
             model=dict(depth=8,width=512,heads=4,sequence_length=2048,vocab_size=32768),steps=STEPS,training_tokens=STEPS*32768,batch_tokens=32768,microbatch=16,
-            seed=42,initialization='seed42_from_zero_no_diagnostic_weights',
-            preflight='same-allocation tests + 128 finite updates + exact CLI resume; fresh formal initialization',
+            seed=42,initialization='seed42_from_scratch_no_diagnostic_weights',
+            preflight='29 tests; target128 + other two modes32 updates each; initial unit targets; exact CLI resume; fresh seed42 formal',
             gate_timeout_seconds=2400,failure_debug_seconds=900,
             attention_backend='fa2',data_uri=data['data_uri'],data_archive_bytes=data['archive']['bytes'],
             dataset_revision=data['manifest']['dataset_revision'],tokenizer=data['manifest']['tokenizer']['tokenizer'],
@@ -61,8 +70,8 @@ def main():
             checkpoint_seconds=1800,evaluate_test=True,
             scheduling='H100/H200 first; A100 after 3600 continuous idle seconds, with same-allocation nGPT preflight',
             passed_families=[],compatible_fallback_backend='A100 FA2/CCE runtime validated in skip-scale/validation.json',
-            prior_h100_reference_step_seconds=.0756970327347517,
-            timing_reference='previous nGPT+HB H100 diagnostic, estimate only; measure pure nGPT in preflight')
+            prior_h100_reference_step_seconds=.06704051233828068 if mode=='vanilla' else .0756970327347517,
+            timing_reference='previous zero-init H100 diagnostics, estimate only; measure all three nonzero modes in preflight')
         (bundle/'source.json').write_text(json.dumps(source,indent=2)+'\n')
         inputs=[str(p.relative_to(ROOT)) for p in bundle.iterdir()]
         inputs += [str(HOME_ROOT/'.netrc'),data['data_uri'],
@@ -70,7 +79,7 @@ def main():
             'https://developer.download.nvidia.com/compute/cuda/repos/debian12/x86_64/cuda-compat-13-1_590.48.01-1_amd64.deb']
         lines=[]
         for line in (ASSETS/'gate.sub').read_text().splitlines():
-            if line.startswith('executable ='):line=f'executable = train.sh\narguments = {run_id}'
+            if line.startswith('executable ='):line=f'executable = train.sh\narguments = {run_id} {mode}'
             elif line.startswith('request_disk ='):line='request_disk = 80GB'
             elif line.startswith('gpus_minimum_capability ='):line='gpus_minimum_capability = 8.0'
             elif line.startswith('require_gpus ='):line='require_gpus = '+require_gpus()
@@ -80,7 +89,7 @@ def main():
             elif line.startswith('transfer_output_remaps ='):
                 line='transfer_output_remaps = "results.tar=results/train-$(Cluster).$(Process).tar;checkpoints.tar=results/train-$(Cluster).$(Process)-checkpoints.tar"'
             elif line.startswith('queue '):continue
-            lines.append(line.replace('logs/stream.','logs/train.').replace('nanochat-depth-diagnostic','nanochat-ngpt-residual-10b')
+            lines.append(line.replace('logs/stream.','logs/train.').replace('nanochat-depth-diagnostic',f'nanochat-nonzero-residual-10b-{preset}')
                 .replace('DepthDiagnosticKey','NgptTrainKey').replace('depth-diagnostic-20261103',KEY))
         lines += ['checkpoint_exit_code = 85','transfer_checkpoint_files = checkpoints.tar,results.tar',
             'encrypt_input_files = /home/yzhong239/.netrc','+InteractiveJob = true',
@@ -105,6 +114,7 @@ def main():
         assert ad['SuccessCheckpointExitCode']==85 and set(ad['TransferCheckpoint'].split(','))=={'results.tar','checkpoints.tar'}
         assert set(ad['TransferOutput'].split(','))=={'results.tar','checkpoints.tar'}
         assert ad['NgptTrainKey']==KEY and ad['InteractiveJob'] and ad['WantGPULab']
+        assert ad['Args']==f'{run_id} {mode}'
         assert 'backfill' in ad['Rank'] and 'countMatches' in ad['Rank']
         keys=('ClusterId','ProcId','JobStatus','RequestGPUs','RequestCpus','RequestMemory','RequestDisk',
             'RequireGPUs','TransferInput','TransferOutput','TransferCheckpoint','SuccessCheckpointExitCode',

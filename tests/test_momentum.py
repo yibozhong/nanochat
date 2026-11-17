@@ -34,7 +34,8 @@ def setting(request):
 
 def make(c, compiled=False, checkpoint=False, perturb=True):
     model = build_connection_model(replace(c, activation_checkpoint=checkpoint)).prepare(compile_blocks=compiled)
-    if perturb:
+    # Normal initialization already exercises nonzero production branches.
+    if perturb and c.residual_projection_init == 'zero':
         with torch.no_grad():
             for b in model.blocks:
                 b.attn.c_proj.weight.normal_(std=.02)

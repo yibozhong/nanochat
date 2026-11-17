@@ -1,4 +1,4 @@
-"""Same-allocation gate for pure nGPT residual; diagnostics never create W&B."""
+"""Same-allocation gate for nonzero-init residual configurations; diagnostics never create W&B."""
 import json
 from pathlib import Path
 import subprocess
@@ -11,7 +11,9 @@ import torch
 def main():
     begin = time.perf_counter()
     source = json.loads(Path('source.json').read_text())
-    assert source['formal_training'] and source['residual_dynamics'] == 'ngpt'
+    mode = source['residual_dynamics']
+    assert source['formal_training'] and mode in ('vanilla','ngpt','ngpt_heavy_ball')
+    assert source['residual_projection_init']=='normal' and source['ngpt_force_rms_floor']==1e-6
     assert torch.cuda.is_available() and torch.cuda.device_count() == 1
     cap = list(torch.cuda.get_device_capability())
     name = torch.cuda.get_device_name()
@@ -25,13 +27,18 @@ def main():
         print('NGPT_PREFLIGHT_PASSED reused exact source/family validation', flush=True)
         return
     subprocess.run(['timeout','--signal=TERM','--kill-after=30s','2400','bash',
-                    'research/connections/ngpt/check.sh'], check=True)
+                    'research/connections/ngpt/check.sh',mode], check=True)
     suites = list(ET.parse('results/ngpt-tests.xml').getroot().iter('testsuite'))
     tests = {k:sum(int(s.get(k,0)) for s in suites) for k in ('tests','failures','errors','skipped')}
-    assert tests == dict(tests=66, failures=0, errors=0, skipped=0), tests
+    assert tests == dict(tests=29, failures=0, errors=0, skipped=0), tests
     profile = json.loads(Path('results/ngpt-profile/summary.json').read_text())
     resume = json.loads(Path('results/ngpt-cli-resume.json').read_text())
-    assert profile['complete'] and profile['models']['ngpt']['steps'] == 128 and resume['complete']
+    assert profile['complete'] and profile['models'][mode]['steps'] == 128 and resume['complete']
+    for name, info in profile['models'].items():
+        assert info['config']['residual_projection_init']=='normal'
+        assert info['config']['ngpt_force_rms_floor']==1e-6
+        if name != 'vanilla':
+            assert all(row['force_floor_fraction']==0 for row in info['initial_residual_state'])
     assert not Path('../ngpt-resume-check').exists() and not Path('../ngpt-continuous-check').exists()
     result = dict(complete=True, formal_training=False, source=source, capability=cap,
                   device=device, tests=tests, profile=profile, resume=resume,

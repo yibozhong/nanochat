@@ -49,8 +49,17 @@ class ConnectionConfig:
     momentum_eta_init: float | None = None
     ngpt_force_rms_floor: float = 0.1
     ngpt_alpha_init: float = 0.05
+    residual_projection_init: str = 'zero'
+    residual_projection_init_std: float = 0.02
 
     def __post_init__(self):
+        if self.residual_projection_init not in ('zero', 'normal'):
+            raise ValueError('Unknown residual output projection initialization')
+        if not math.isfinite(self.residual_projection_init_std) or self.residual_projection_init_std <= 0:
+            raise ValueError('Residual output projection initialization std must be positive and finite')
+        if self.residual_projection_init != 'zero' and (self.architecture != 'vanilla'
+                or self.variant != 'baseline' or self.latent_feedback):
+            raise ValueError('Random residual output initialization is scoped to the vanilla baseline backbone')
         if self.residual_dynamics not in ('vanilla', 'heavy_ball', 'ngpt_heavy_ball', 'ngpt'):
             raise ValueError('Unknown residual dynamics')
         if not math.isfinite(self.ngpt_alpha_init) or not 0 < self.ngpt_alpha_init < 1:
@@ -292,9 +301,15 @@ class ConnectionModel(nn.Module):
         for b in self.blocks:
             for p in (b.attn.c_q.weight, b.attn.c_k.weight, b.attn.c_v.weight):
                 nn.init.uniform_(p, -s, s)
-            nn.init.zeros_(b.attn.c_proj.weight)
+            if config.residual_projection_init == 'normal':
+                nn.init.normal_(b.attn.c_proj.weight, std=config.residual_projection_init_std/math.sqrt(2*config.depth))
+            else:
+                nn.init.zeros_(b.attn.c_proj.weight)
             nn.init.uniform_(b.mlp.c_fc.weight, -s*.4, s*.4)
-            nn.init.zeros_(b.mlp.c_proj.weight)
+            if config.residual_projection_init == 'normal':
+                nn.init.normal_(b.mlp.c_proj.weight, std=config.residual_projection_init_std/math.sqrt(2*config.depth))
+            else:
+                nn.init.zeros_(b.mlp.c_proj.weight)
         if config.variant not in ('baseline', 'skip_scale'):
             for b in self.blocks:
                 b.attn_connection.reset_parameters(); b.mlp_connection.reset_parameters()

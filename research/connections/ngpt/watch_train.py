@@ -22,7 +22,7 @@ def command(args):
 
 def formal_step(lines,run_id):
     formal=False;last=None
-    marker='FORMAL_TRAINING_BEGIN ngpt '+run_id
+    marker='FORMAL_TRAINING_BEGIN nonzero_residual '+run_id
     for line in lines:
         if line.startswith('FORMAL_TRAINING_BEGIN '):formal=line==marker
         if not formal or not line.startswith('{'):continue
