@@ -66,13 +66,11 @@ def evaluate(model,data,split='dev',microbatch=16,max_rows=None,**forward_option
     return total/count,count
 
 
-def train_step(model,opt,data,step,microbatch=16,batch_tokens=32768,seed=42,form=None):
+def train_step(model,opt,data,step,microbatch=16,batch_tokens=32768,seed=42):
     T=model.config.sequence_length
     rows=batch_tokens//T
     assert rows % microbatch == 0
     opt.zero_grad(set_to_none=True)
-    if form is not None:
-        form.begin_step()
     total=torch.zeros((),device='cuda')
     options = dict(passes=model.training_passes(seed, step)) if model.config.latent_feedback else {}
     for start in range(0,rows,microbatch):
@@ -85,8 +83,6 @@ def train_step(model,opt,data,step,microbatch=16,batch_tokens=32768,seed=42,form
     finite=torch.stack([torch.isfinite(g).all() for g in grads]).all()
     if not bool(finite) or not torch.isfinite(total):
         raise FloatingPointError('Nonfinite loss/gradient before optimizer update')
-    if form is not None:
-        form.observe()
     opt.step()
     return total.item()
 

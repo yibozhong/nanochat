@@ -377,10 +377,10 @@ class MuonAdamW(torch.optim.Optimizer):
         state = self.state[p]
         if "momentum_buffer" not in state:
             state["momentum_buffer"] = torch.zeros(chunk_size, *shape, dtype=dtype, device=device)
-        red_dim = group.get('variance_reduce_dim', -1 if shape[-2] >= shape[-1] else -2)
         if "second_momentum_buffer" not in state:
-            state_shape = (chunk_size, shape[-2], 1) if red_dim == -1 else (chunk_size, 1, shape[-1])
+            state_shape = (chunk_size, shape[-2], 1) if shape[-2] >= shape[-1] else (chunk_size, 1, shape[-1])
             state["second_momentum_buffer"] = torch.zeros(state_shape, dtype=dtype, device=device)
+        red_dim = -1 if shape[-2] >= shape[-1] else -2
 
         stacked_owned = None
         if num_owned > 0:

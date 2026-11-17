@@ -6,8 +6,7 @@ def model_cost(config, batch=1, activation_bytes=2, feedback_passes=None):
     if c.architecture!='vanilla' or c.variant not in ('baseline','attnres','attnres_scale','skip_scale'):
         return None
     t,d,depth=c.sequence_length,c.width,c.depth
-    ffn_total=sum(c.ffn_widths) if c.ffn_widths is not None else 4*depth*d
-    projections=batch*t*(8*depth*d*d+4*d*ffn_total)
+    projections=24*batch*t*depth*d*d
     head=2*batch*t*d*c.vocab_size
     attention=4*batch*d*depth*(t*(t+1)//2)
     forward=projections+head+attention

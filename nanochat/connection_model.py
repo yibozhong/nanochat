@@ -11,7 +11,7 @@ from torch import nn
 from torch.nn import functional as F
 from torch.utils.checkpoint import checkpoint
 
-from nanochat.gpt import Block, GPTConfig, Linear, MLP, norm
+from nanochat.gpt import Block, GPTConfig, Linear, norm
 from nanochat.nvidia_connections import NvidiaHyperConnection, NvidiaHyperHead, expand_streams, check_nvidia_device
 from nanochat.optim import MuonAdamW
 
@@ -41,32 +41,8 @@ class ConnectionConfig:
     feedback_eval_passes: int = 4
     feedback_source: str = 'top'
     feedback_attention_backend: str = 'triton'
-    form_mode: str = 'none'
-    form_count: int = 10
-    form_ema_decay: float = .99
-    form_lambda: float = 1.
-    ffn_widths: list[int] | None = None
 
     def __post_init__(self):
-        if self.form_mode not in ('none', 'taylor', 'random'):
-            raise ValueError('Unknown Form mode')
-        if self.form_mode != 'none':
-            if self.architecture != 'vanilla' or self.variant != 'baseline' or self.latent_feedback:
-                raise ValueError('Form uses the existing single-pass vanilla baseline')
-            if type(self.form_count) is not int or self.form_count < 1:
-                raise ValueError('Form count must be a positive integer')
-            if not 0 <= self.form_ema_decay < 1 or not math.isfinite(self.form_lambda) or self.form_lambda < 0:
-                raise ValueError('Invalid Form EMA decay or curvature coefficient')
-            if self.ffn_widths is None:
-                self.ffn_widths = [4 * self.width] * self.depth
-            else:
-                self.ffn_widths = list(self.ffn_widths)
-            if (len(self.ffn_widths) != self.depth or
-                any(type(m) is not int or m < self.width for m in self.ffn_widths) or
-                sum(self.ffn_widths) != 4 * self.width * self.depth):
-                raise ValueError('Form widths must respect hidden_dim minimum and constant total width')
-        elif self.ffn_widths is not None:
-            raise ValueError('Dynamic FFN widths require Form')
         if self.feedback_source not in ('top','layers') or self.feedback_attention_backend not in ('torch','triton'):
             raise ValueError('Unknown feedback source or attention backend')
         if self.feedback_source == 'layers' and not self.latent_feedback:
@@ -193,8 +169,6 @@ class ConnectionConfig:
 class ConnectionBlock(Block):
     def __init__(self, native, index, config):
         super().__init__(native, index)
-        if config.ffn_widths is not None and config.ffn_widths[index] != 4 * config.width:
-            self.mlp = MLP(native, config.ffn_widths[index])
         self.attn.ve_gate = None
         self.variant = config.variant
         self.compiled_attention = self.compiled_mlp = None
@@ -263,10 +237,6 @@ class ConnectionModel(nn.Module):
             nn.init.zeros_(b.attn.c_proj.weight)
             nn.init.uniform_(b.mlp.c_fc.weight, -s*.4, s*.4)
             nn.init.zeros_(b.mlp.c_proj.weight)
-        if config.form_mode != 'none':
-            from nanochat.form import FormMLP
-            for b in self.blocks:
-                b.mlp = FormMLP(b.mlp)
         if config.variant not in ('baseline', 'skip_scale'):
             for b in self.blocks:
                 b.attn_connection.reset_parameters(); b.mlp_connection.reset_parameters()
@@ -292,11 +262,6 @@ class ConnectionModel(nn.Module):
                 block.attn = FlaAttention(block.attn)
 
     def prepare(self, device='cuda', dtype=torch.bfloat16, compile_blocks=False):
-        if self.config.form_mode != 'none' and compile_blocks:
-            from torch._dynamo import config as compiler_config
-            # Distinct widths specialize both block and optimizer graphs. Form
-            # resets captured graphs on surgery, so this remains bounded.
-            compiler_config.recompile_limit = max(compiler_config.recompile_limit, 4 * self.config.depth + 16)
         if self.config.variant not in ('baseline', 'skip_scale'):
             check_nvidia_device(device)
             if dtype != torch.bfloat16:
@@ -385,20 +350,9 @@ def optimizer_for(model, batch_tokens=32768):
     if routing:
         groups.append(dict(kind='adamw', params=routing, lr=.008*batch_scale*width_scale,
                            betas=(.8, .96), eps=1e-10, weight_decay=0.))
-    if c.form_mode != 'none':
-        # Preserve FFN channel-wise variance slots at the square down-projection
-        # boundary (m == hidden_dim); do not change their axis or discard history.
-        down_ids = {id(b.mlp.c_proj.weight) for b in model.blocks}
-        def signature(p):
-            axis = -2 if id(p) in down_ids else (-1 if p.shape[0] >= p.shape[1] else -2)
-            return tuple(p.shape), axis
-        for shape, axis in sorted({signature(p) for p in matrices}):
-            groups.append(dict(kind='muon', params=[p for p in matrices if signature(p) == (shape, axis)],
-                variance_reduce_dim=axis, lr=.02*batch_scale, momentum=.95, ns_steps=5, beta2=.9, weight_decay=wd))
-    else:
-        for shape in sorted({p.shape for p in matrices}):
-            groups.append(dict(kind='muon', params=[p for p in matrices if p.shape == shape],
-                lr=.02*batch_scale, momentum=.95, ns_steps=5, beta2=.9, weight_decay=wd))
+    for shape in sorted({p.shape for p in matrices}):
+        groups.append(dict(kind='muon', params=[p for p in matrices if p.shape == shape],
+            lr=.02*batch_scale, momentum=.95, ns_steps=5, beta2=.9, weight_decay=wd))
     if c.latent_feedback:
         # Own group: single-pass updates must not advance momentum or decay W.
         feedback_params=[model.fusion.weight]

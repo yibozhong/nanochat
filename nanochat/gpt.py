@@ -142,11 +142,10 @@ class CausalSelfAttention(nn.Module):
 
 
 class MLP(nn.Module):
-    def __init__(self, config, intermediate_width=None):
+    def __init__(self, config):
         super().__init__()
-        width = 4 * config.n_embd if intermediate_width is None else intermediate_width
-        self.c_fc = Linear(config.n_embd, width, bias=False)
-        self.c_proj = Linear(width, config.n_embd, bias=False)
+        self.c_fc = Linear(config.n_embd, 4 * config.n_embd, bias=False)
+        self.c_proj = Linear(4 * config.n_embd, config.n_embd, bias=False)
 
     def forward(self, x):
         x = self.c_fc(x)
