@@ -53,7 +53,7 @@ def geometry_audit(model, x):
 def main():
     p=argparse.ArgumentParser();p.add_argument('--data-dir',required=True);p.add_argument('--output-dir',required=True)
     p.add_argument('--residual-dynamics',choices=('riemannian','heavy_ball','sphere'),default='riemannian')
-    p.add_argument('--velocity-init',choices=('zero','token'),default='zero')
+    p.add_argument('--velocity-init',choices=('zero','token'),default=None)
     a=p.parse_args();out=Path(a.output_dir);out.mkdir(parents=True,exist_ok=True)
     configure_attention('fa2');torch.set_num_threads(2);torch.backends.cuda.matmul.allow_tf32=False
     data=PackedData(a.data_dir);assert len(data.arrays['train'])>=512*16

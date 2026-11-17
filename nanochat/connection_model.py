@@ -43,7 +43,7 @@ class ConnectionConfig:
     feedback_attention_backend: str = 'triton'
     riemannian_momentum: bool = False
     residual_dynamics: str = 'vanilla'
-    velocity_init: str = 'zero'
+    velocity_init: str | None = None
     velocity_embedding_std: float = 0.02
     momentum_beta_init: float = 0.5
     momentum_gamma_init: float = 0.5
@@ -54,6 +54,8 @@ class ConnectionConfig:
             raise ValueError('Unknown residual dynamics')
         if self.riemannian_momentum and self.residual_dynamics not in ('vanilla', 'riemannian'):
             raise ValueError('Conflicting residual dynamics and legacy Riemannian flag')
+        if self.velocity_init is None:
+            self.velocity_init = 'token' if self.residual_mode in ('riemannian', 'heavy_ball') else 'zero'
         if self.velocity_init not in ('zero', 'token'):
             raise ValueError('Unknown velocity initialization')
         if self.velocity_init == 'token' and self.residual_mode not in ('riemannian', 'heavy_ball'):
@@ -133,6 +135,9 @@ class ConnectionConfig:
     def from_checkpoint(cls, config):
         """Read pre-cleanup NVIDIA/vanilla metadata; reject retired model weights."""
         config = dict(config)
+        # Historical checkpoints predating this field used v0=0. Preserve their
+        # architecture while newly constructed momentum models default to tokens.
+        config.setdefault('velocity_init', 'zero')
         if config.pop('vocab_gate', False):
             raise ValueError('Checkpoint belongs to the retired vocabulary gate experiment')
         for name in ('vocab_gate_alpha', 'vocab_gate_backend', 'vocab_gate_chunk'):

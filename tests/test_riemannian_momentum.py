@@ -23,7 +23,7 @@ def gpu():
 
 def make(compiled=False, checkpoint=False, perturb=True):
     c=ConnectionConfig(depth=2,width=128,heads=1,sequence_length=32,vocab_size=256,
-        streams=1,riemannian_momentum=True,activation_checkpoint=checkpoint)
+        streams=1,riemannian_momentum=True,velocity_init='zero',activation_checkpoint=checkpoint)
     model=build_connection_model(c).prepare(compile_blocks=compiled)
     if perturb:
         with torch.no_grad():

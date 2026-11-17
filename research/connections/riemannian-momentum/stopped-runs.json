@@ -1,0 +1,33 @@
+{
+  "status": "stopped_by_user",
+  "stopped_at": "2026-11-17T05:44:01.299947+00:00",
+  "summary": "/home/yzhong239/nanochat-residual-runs-stopped-20261116.json",
+  "new_training_authorized": false,
+  "plans": {
+    "riemannian-momentum-10b-20261116": {
+      "job": "8798794.0",
+      "run_id": "c8245dc3",
+      "experiment": "riemannian_zero"
+    },
+    "riemannian-velocity-embedding-10b-20261116": {
+      "job": "8818000.0",
+      "run_id": "e722f7c0",
+      "experiment": "riemannian_embed"
+    },
+    "heavy-ball-velocity-embedding-10b-20261116": {
+      "job": "8818001.0",
+      "run_id": "dbaaf979",
+      "experiment": "heavy_ball_embed"
+    },
+    "sphere-only-10b-20261116": {
+      "job": "8818002.0",
+      "run_id": "700d73e4",
+      "experiment": "sphere"
+    },
+    "heavy-ball-zero-10b-20261116": {
+      "job": "8820888.0",
+      "run_id": "9f567d99",
+      "experiment": "heavy_ball_zero"
+    }
+  }
+}

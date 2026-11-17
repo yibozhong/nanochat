@@ -31,7 +31,8 @@ def main():
     p.add_argument('--latent-feedback', action='store_true')
     p.add_argument('--riemannian-momentum', action='store_true')
     p.add_argument('--residual-dynamics', choices=('vanilla','riemannian','heavy_ball','sphere'), default='vanilla')
-    p.add_argument('--velocity-init', choices=('zero','token'), default='zero')
+    p.add_argument('--velocity-init', choices=('zero','token'), default=None,
+                   help='Momentum defaults to learned token velocity embeddings; zero supports legacy diagnostics')
     p.add_argument('--velocity-embedding-std', type=float, default=.02)
     p.add_argument('--momentum-beta-init', type=float, default=.5)
     p.add_argument('--momentum-gamma-init', type=float, default=.5)

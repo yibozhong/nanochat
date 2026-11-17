@@ -1,20 +1,30 @@
 # Riemannian momentum residual stream
 
-The original zero-velocity Riemannian 10B run remains frozen and running.
-On 2026-11-16 the user additionally authorized exactly three 10B runs:
+All five 8-layer runs were stopped and their run-specific home artifacts
+removed at the user's request on 2026-11-16. The implementation is retained.
+`stopped-runs.json` records their immutable plan/run IDs and prevents the old
+submitter from recreating them after cleanup. No deeper training run has been
+submitted or authorized with a concrete configuration yet. A compact result
+and stop summary is kept at
+`/home/yzhong239/nanochat-residual-runs-stopped-20261116.json`.
+
+Future momentum models default to an independent learned token velocity
+embedding. Both `--riemannian-momentum` and `--residual-dynamics heavy_ball`
+select it when `--velocity-init` is omitted. Vanilla and sphere-only have no
+velocity embedding. Explicit zero initialization remains for mathematical
+checks and legacy checkpoint loading; it is not the default for future runs.
+Checkpoint metadata predating the velocity field retains its original zero
+initialization when loaded.
+
+## Historical configurations (stopped)
 
 | Preset | Residual update | Initial velocity | Total parameters (d8/D512) |
 | --- | --- | --- | --- |
+| `riemannian_zero` | Heavy-Ball, sphere, exact parallel transport | Zero | 58,720,304 |
 | `riemannian_embed` | Heavy-Ball, sphere, exact parallel transport | Independent token embedding, tangent-projected | 75,497,520 |
 | `heavy_ball_embed` | Euclidean Heavy-Ball | Independent token embedding | 75,497,520 |
+| `heavy_ball_zero` | Euclidean Heavy-Ball | Zero | 58,720,304 |
 | `sphere` | Tangent force plus radial retraction | No velocity state | 58,720,272 |
-
-The user subsequently authorized one additional 10B run, `heavy_ball_zero`:
-Euclidean Heavy-Ball with v0=0, no velocity embeddings, sphere constraint or
-transport, and 58,720,304 parameters. It uses the identical Heavy-Ball update,
-coefficient initialization and training recipe as `heavy_ball_embed`. Its
-same-allocation gate includes eight preset checks (44 including shared tests),
-512 finite training updates, same-card timing and exact CLI recovery.
 
 Each uses the same seed, backbone initialization, data, optimizer rules and
 10,000,007,168 tokens. These are token-budget-matched, not parameter-matched.
@@ -34,9 +44,9 @@ Heavy-Ball retains beta/gamma/eta=(.5,.5,1), u=beta*v+gamma*F(h),
 h_new=h+eta*u, v_new=u, with FP32 residual accumulation and unchanged pre-norm.
 The full combined option retains the exact transport described below.
 
-Default configuration retains vanilla. `--riemannian-momentum` still loads
-legacy zero-velocity checkpoints; new flags are `--residual-dynamics` and
-`--velocity-init`. No running source bundle or checkpoint is modified.
+Default architecture remains vanilla. `ConnectionConfig.from_checkpoint`
+preserves historical initialization; newly constructed momentum models use
+token velocity embeddings by default.
 
 The backbone is the existing full-attention vanilla d8/D512 model, not the
 native SSSL/extras model. Attention, ReLU-squared FFN, NTP/CCE, optimizer rules,
@@ -45,8 +55,9 @@ data order, LR schedule and head are unchanged.
 ## Geometry and the momentum consistency issue
 
 At each Attention and FFN site, r = sqrt(d), h lies on the sphere, and v is a
-tangent vector at h. Input embeddings are projected to that sphere; v starts
-at zero independently for every token's traversal of depth.
+tangent vector at h. Input embeddings are projected to that sphere; the
+default initial velocity is P_h(E_v[token]). Velocity is initialized
+independently for every token's traversal of depth.
 
     g = F(h) - h * dot(h, F(h)) / r²
     u = beta * v + gamma * g
@@ -72,8 +83,9 @@ eta=softplus(e), initially (0.5, 0.5, 1). This starts with unit steady-state
 gain gamma/(1-beta), rather than amplifying a constant force. Gamma and eta
 are partly redundant in their scale; their values are logged by sublayer.
 They use the existing connector AdamW group with no weight decay. There are
-48 additional scalar parameters at depth 8 for either momentum variant. The original zero output-projection
-initialization makes the initial stream an identity on the sphere.
+48 additional scalar parameters at depth 8 for either momentum variant. With the historical v0=0 setting, zero output projections make the initial
+stream an identity on the sphere. Learned velocity embeddings introduce a
+small initial motion even while the branch output projections are zero.
 
 This is a coherent geometric feature-update mechanism, not an exact optimizer
 of NTP loss with respect to hidden states: F is a learned feature map, not an
@@ -141,12 +153,10 @@ a bounded debug allocation; it does not submit another training run.
 
 Their individual results do not measure this combined nanochat architecture.
 
-## Submission
+## Submission policy
 
-`submit_train.py --experiment riemannian_embed`, `heavy_ball_embed`, `sphere`, or `heavy_ball_zero`
-submits exactly one held-audited job for that preset, with per-root locks and
-existing-run detection. The same GPU allocation runs the 3600-second bounded
-gate, then launches an independent seed42 formal process. Each maintains its
-own run ID, checkpoints, source metadata and W&B run. H100/H200 first, A100
-after one continuous idle hour with the same gate; no automatic failed-run
-resubmission. The source bundle is frozen at submission.
+The historical `submit_train.py` plans are all blocked by `stopped-runs.json`;
+this guard runs before creating any job directory or contacting Condor.
+A future experiment requires a newly authorized plan and configuration.
+Keep the existing same-allocation validation, independent seed reset,
+checkpoint transport and failure-stop workflow when preparing that plan.

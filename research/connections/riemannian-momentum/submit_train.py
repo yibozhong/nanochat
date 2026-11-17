@@ -23,9 +23,12 @@ def command(args,cwd=REPO):
 
 def main():
     parser=argparse.ArgumentParser()
-    parser.add_argument('--experiment',choices=tuple(EXPERIMENTS),default='riemannian_zero')
+    parser.add_argument('--experiment',choices=tuple(EXPERIMENTS),default='riemannian_embed')
     args=parser.parse_args();experiment=EXPERIMENTS[args.experiment]
     ROOT=HOME_ROOT/experiment['root'];KEY=ROOT.name
+    retired=json.loads(Path(__file__).with_name('stopped-runs.json').read_text())
+    if KEY in retired['plans']:
+        raise SystemExit('This run was stopped by the user. Define a newly authorized plan before submitting.')
     ROOT.mkdir(exist_ok=True)
     with (ROOT/'submit.lock').open('a') as lock:
         fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
