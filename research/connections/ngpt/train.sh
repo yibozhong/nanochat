@@ -98,7 +98,7 @@ ln -sfn ../results results
 WANDB_MODE=disabled python research/connections/ngpt/preflight.py
 echo "FORMAL_TRAINING_BEGIN nonzero_residual $TASK_RUN_ID"
 python -m scripts.connection_train --variant baseline --architecture vanilla --streams 1 \
-    --residual-dynamics "$TASK_MODE" --ngpt-alpha-init .05 --ngpt-force-rms-floor 1e-6 \
+    --residual-dynamics "$TASK_MODE" --ngpt-velocity-mode ambient --ngpt-alpha-init .05 --ngpt-force-rms-floor 1e-6 \
     --residual-projection-init normal --residual-projection-init-std .02 --attention-kernel original --attention-backend fa2 \
     --steps "$TASK_STEPS" --schedule-steps "$TASK_STEPS" --microbatch 16 --seed 42 \
     --no-activation-checkpoint --no-fused-connection-grad --evaluate-test \

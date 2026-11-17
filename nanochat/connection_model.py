@@ -49,6 +49,8 @@ class ConnectionConfig:
     momentum_eta_init: float | None = None
     ngpt_force_rms_floor: float = 0.1
     ngpt_alpha_init: float = 0.05
+    ngpt_velocity_mode: str | None = None
+    momentum_velocity_rms_floor: float = 0.1
     residual_projection_init: str = 'zero'
     residual_projection_init_std: float = 0.02
 
@@ -64,8 +66,14 @@ class ConnectionConfig:
             raise ValueError('Unknown residual dynamics')
         if not math.isfinite(self.ngpt_alpha_init) or not 0 < self.ngpt_alpha_init < 1:
             raise ValueError('nGPT alpha must start strictly between zero and one')
+        if self.ngpt_velocity_mode is None:
+            self.ngpt_velocity_mode = 'transport_rms' if self.residual_mode == 'ngpt_heavy_ball' else 'ambient'
         if self.momentum_eta_init is None:
-            self.momentum_eta_init = 0.1 if self.residual_mode == 'ngpt_heavy_ball' else 1.0
+            self.momentum_eta_init = (0.05 if self.ngpt_velocity_mode == 'transport_rms' else 0.1) if self.residual_mode == 'ngpt_heavy_ball' else 1.0
+        if self.ngpt_velocity_mode not in ('ambient', 'transport_rms'):
+            raise ValueError('Unknown nGPT velocity mode')
+        if not math.isfinite(self.momentum_velocity_rms_floor) or self.momentum_velocity_rms_floor <= 0:
+            raise ValueError('Velocity RMS floor must be positive and finite')
         if not math.isfinite(self.ngpt_force_rms_floor) or self.ngpt_force_rms_floor <= 0:
             raise ValueError('Normalized-target force RMS floor must be positive and finite')
         if self.velocity_init is None:
@@ -153,6 +161,8 @@ class ConnectionConfig:
         # Historical checkpoints predating this field used v0=0. Preserve their
         # architecture while newly constructed momentum models default to tokens.
         config.setdefault('velocity_init', 'zero')
+        # Never reinterpret an ambient checkpoint as tangent/normalized momentum.
+        config.setdefault('ngpt_velocity_mode', 'ambient')
         if config.pop('vocab_gate', False):
             raise ValueError('Checkpoint belongs to the retired vocabulary gate experiment')
         for name in ('vocab_gate_alpha', 'vocab_gate_backend', 'vocab_gate_chunk'):

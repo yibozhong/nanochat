@@ -36,7 +36,10 @@ def main():
     p.add_argument('--momentum-beta-init', type=float, default=.5)
     p.add_argument('--momentum-gamma-init', type=float, default=.5)
     p.add_argument('--momentum-eta-init', type=float, default=None,
-                   help='Defaults: heavy_ball=1, ngpt_heavy_ball=0.1')
+                   help='Defaults: heavy_ball=1, ngpt transport_rms=0.05, ambient=0.1')
+    p.add_argument('--ngpt-velocity-mode', choices=('ambient','transport_rms'), default=None,
+                   help='New nGPT momentum defaults to transport_rms; old checkpoints require ambient')
+    p.add_argument('--momentum-velocity-rms-floor', type=float, default=.1)
     p.add_argument('--ngpt-force-rms-floor', type=float, default=.1)
     p.add_argument('--ngpt-alpha-init', type=float, default=.05)
     p.add_argument('--residual-projection-init', choices=('zero','normal'), default='zero')
@@ -97,6 +100,8 @@ def main():
                        momentum_beta_init=a.momentum_beta_init, momentum_gamma_init=a.momentum_gamma_init,
                        momentum_eta_init=a.momentum_eta_init, ngpt_force_rms_floor=a.ngpt_force_rms_floor,
                        ngpt_alpha_init=a.ngpt_alpha_init,
+                       ngpt_velocity_mode=a.ngpt_velocity_mode,
+                       momentum_velocity_rms_floor=a.momentum_velocity_rms_floor,
                        residual_projection_init=a.residual_projection_init,
                        residual_projection_init_std=a.residual_projection_init_std,
                        feedback_source=a.feedback_source, feedback_attention_backend=a.feedback_attention_backend,

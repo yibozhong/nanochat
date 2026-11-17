@@ -29,7 +29,7 @@ def inputs():
 def setting(request):
     mode, init = request.param
     return ConnectionConfig(depth=2, width=128, heads=1, sequence_length=32,
-        vocab_size=256, streams=1, residual_dynamics=mode, velocity_init=init)
+        vocab_size=256, streams=1, residual_dynamics=mode, velocity_init=init, ngpt_velocity_mode='ambient')
 
 
 def make(c, compiled=False, checkpoint=False, perturb=True):
@@ -250,7 +250,7 @@ def test_long_fp32_normalized_recurrence():
 
 def test_32_layer_finite_forward_backward():
     c = ConnectionConfig(depth=32,width=128,heads=1,sequence_length=32,vocab_size=256,
-                         streams=1,residual_dynamics='ngpt_heavy_ball')
+                         streams=1,residual_dynamics='ngpt_heavy_ball',ngpt_velocity_mode='ambient')
     model = make(c); x,y = inputs()
     loss = model(x,y,dense=True); loss.backward()
     assert torch.isfinite(loss)

@@ -16,7 +16,13 @@ def model_cost(config, batch=1, activation_bytes=2, feedback_passes=None):
         # Coefficient scalar work and sqrt/division are excluded here.
         sites=2*depth
         per_site={'heavy_ball':5*d, 'ngpt_heavy_ball':12*d-2, 'ngpt':9*d-2}[c.residual_mode]
-        residual=batch*t*(sites*per_site+3*d-1)
+        initial=3*d-1
+        if c.residual_mode == 'ngpt_heavy_ball' and c.ngpt_velocity_mode == 'transport_rms':
+            # Target norm + projected mixture + speed norm + retraction + transport.
+            per_site=25*d-6
+            if c.velocity_init == 'token':
+                initial += 7*d-2  # initial embedding tangent projection and RMS norm
+        residual=batch*t*(sites*per_site+initial)
         embedding_parameters=c.vocab_size*d if c.velocity_init=='token' else 0
         return dict(estimated_forward_flops=forward+residual,
             estimated_training_flops=3*(forward+residual),

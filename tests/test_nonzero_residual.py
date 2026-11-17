@@ -25,7 +25,7 @@ def setting(request):
     return ConnectionConfig(depth=2, width=128, heads=1, sequence_length=32,
         vocab_size=256, streams=1, residual_dynamics=request.param,
         residual_projection_init='normal', residual_projection_init_std=.02,
-        ngpt_force_rms_floor=1e-6)
+        ngpt_force_rms_floor=1e-6, ngpt_velocity_mode='ambient')
 
 
 def test_initialization_and_first_step_gradients(setting):

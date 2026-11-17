@@ -8,7 +8,7 @@ import time
 
 REPO=Path(__file__).resolve().parents[3]
 ASSETS=Path('/home/yzhong239/nanochat-runtime-assets')
-ROOT=Path('/home/yzhong239/an-momentum-debug-20261117')
+ROOT=Path('/home/yzhong239/ngpt-transport-rms-debug-20261117')
 KEY=ROOT.name
 
 
@@ -20,7 +20,7 @@ def main():
     ROOT.mkdir(exist_ok=True)
     with (ROOT/'submit.lock').open('a') as lock:
         fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
-        assert not (ROOT/'STOPPED').exists()
+        assert not any((ROOT/n).exists() for n in ('STOPPED','STOPPED.json'))
         if (ROOT/'state.json').exists():
             print((ROOT/'state.json').read_text());return
         assert not (ROOT/'submission-intent.json').exists(), 'Recover previous submission first'
@@ -36,12 +36,16 @@ def main():
             target=ASSETS/'bundles'/name
             assert target.is_file()
             (bundle/name).symlink_to(target)
-        source=dict(commit=commit,formal_training=False,purpose='nGPT-inspired Heavy-Ball residual correctness, stability and timing',
-            training_steps_by_mode={'vanilla':32,'heavy_ball':32,'ngpt_heavy_ball':128},cli_steps=3,
+        source=dict(commit=commit,formal_training=False,purpose='Tangent normalized velocity and exact parallel transport correctness, stability and timing',
+            training_steps_by_mode={'vanilla':32,'ngpt':32,'ngpt_ambient':32,'ngpt_heavy_ball':128},cli_steps=3,
             data='existing packed2K prefix from FineWeb-Edu sample-10BT',
             data_archive_bytes=(bundle/'gate-data.tar').stat().st_size,
             runtime='mhc-official-runtime-7546767.tar.gz + frozen uv.lock',
             gpu_backend='H100/H200 + FA2',seed=42,velocity_init='token',new_mode='ngpt_heavy_ball',
+            ngpt_velocity_mode='transport_rms',momentum_velocity_rms_floor=.1,
+            residual_projection_init='normal',ngpt_force_rms_floor=1e-6,
+            coefficient_init=[.5,.5,.05],
+            expected_tests=57,
             timeout_seconds=2400,failure_debug_seconds=900)
         (bundle/'source.json').write_text(json.dumps(source,indent=2)+'\n')
         shutil.copy2(REPO/'research/connections/momentum/debug.sh',ROOT/'debug.sh')
@@ -58,7 +62,7 @@ def main():
                 line=line.replace('(Capability == 9.0)','(Capability == 9.0 && regexp("H100|H200",DeviceName))')
             elif line.startswith('queue '):continue
             lines.append(line.replace('DepthDiagnosticKey','MomentumDebugKey')
-                .replace('depth-diagnostic-20261103',KEY).replace('nanochat-depth-diagnostic','nanochat-ngpt-momentum-debug'))
+                .replace('depth-diagnostic-20261103',KEY).replace('nanochat-depth-diagnostic','nanochat-transport-rms-debug'))
         lines += ['+InteractiveJob = true','hold = true',
             'periodic_hold = (JobStatus == 2) && (time() - JobCurrentStartDate > 5400)',
             'on_exit_hold = (ExitBySignal == true) || (ExitCode != 0)','queue 1']
@@ -80,6 +84,10 @@ def main():
         command(['condor_release',job])
         state['status']='debug_submitted'
         (ROOT/'state.json').write_text(json.dumps(state,indent=2)+'\n')
+        with (ROOT/'collector.log').open('a') as log:
+            proc=subprocess.Popen(['python3',str(REPO/'research/connections/momentum/collect_debug.py'),str(ROOT)],
+                                  stdin=subprocess.DEVNULL,stdout=log,stderr=subprocess.STDOUT,start_new_session=True)
+        (ROOT/'collector.pid').write_text(str(proc.pid)+'\n')
         print(json.dumps(state,indent=2))
 
 

@@ -1,5 +1,9 @@
 # Nonzero-initialized vanilla and nGPT residual comparisons
 
+These fixed historical recipes explicitly use `--ngpt-velocity-mode ambient`.
+The subsequent transport/RMS correction is documented in
+[../momentum/README.md](../momentum/README.md) and does not change these runs.
+
 On 2026-11-17 the user stopped the zero-output-init run `8841886.0/c600d3b7`
 and authorized three new runs, each 10B tokens:
 

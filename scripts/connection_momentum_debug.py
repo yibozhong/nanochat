@@ -13,7 +13,7 @@ from nanochat.connection_cost import model_cost
 from nanochat.connection_experiment import configure_attention
 from nanochat.connection_model import ConnectionConfig, build_connection_model, optimizer_for, schedule
 from nanochat.packed_training import PackedData, evaluate, json_write, seed_all, train_step
-from nanochat.momentum import normalize_residual
+from nanochat.momentum import normalize_residual, tangent_project
 from nanochat.gpt import norm
 
 
@@ -21,6 +21,7 @@ from nanochat.gpt import norm
 def residual_audit(model, x, require_unit_target=False):
     pure = model.config.residual_mode == 'ngpt'
     vanilla = model.config.residual_mode == 'vanilla'
+    transported = model.config.residual_mode == 'ngpt_heavy_ball' and model.config.ngpt_velocity_mode == 'transport_rms'
     if vanilla:
         h, v = norm(model.wte(x)), None
     elif pure:
@@ -49,6 +50,15 @@ def residual_audit(model, x, require_unit_target=False):
             elif pure:
                 h = update(h, force)
             else:
+                if transported:
+                    beta, gamma, eta = update.coefficients()
+                    raw = beta*v + gamma*z
+                    tangent = tangent_project(h, raw)
+                    raw_rms2 = raw.square().mean(-1)
+                    row['incoming_velocity_rms_max'] = v.square().mean(-1).sqrt().max().item()
+                    row['incoming_tangent_error_max'] = (h*v).mean(-1).abs().max().item()
+                    row['discarded_radial_energy_fraction'] = ((h*raw).mean(-1).square()/raw_rms2.clamp_min(1e-12)).mean().item()
+                    row['velocity_floor_fraction'] = (tangent.square().mean(-1) < model.config.momentum_velocity_rms_floor**2).float().mean().item()
                 h, v = update(h, v, force)
             if model.config.residual_mode in ('ngpt_heavy_ball', 'ngpt'):
                 row['hidden_rms_max_error'] = (h.square().mean(-1)-1).abs().max().item()
@@ -60,6 +70,10 @@ def residual_audit(model, x, require_unit_target=False):
                 assert torch.isfinite(v).all()
                 row.update(velocity_rms=v.square().mean().sqrt().item(),
                            observed_hv_moment=(h*v).mean().item())
+                if transported:
+                    row['velocity_rms_max'] = v.square().mean(-1).sqrt().max().item()
+                    row['tangent_error_max'] = (h*v).mean(-1).abs().max().item()
+                    assert row['velocity_rms_max'] < 1+2e-6 and row['tangent_error_max'] < 2e-6, row
             # Engineering guard for this bounded check, not a mathematical bound.
             assert row['max_token_hidden_rms'] < 10 and row.get('velocity_rms', 0) < 10, row
             rows.append(row)
@@ -72,6 +86,7 @@ def main():
     p.add_argument('--output-dir', required=True)
     p.add_argument('--target-mode', choices=('ngpt_heavy_ball','ngpt','vanilla'), default='ngpt_heavy_ball')
     p.add_argument('--nonzero-init', action='store_true')
+    p.add_argument('--transport-rms', action='store_true')
     a = p.parse_args()
     out = Path(a.output_dir); out.mkdir(parents=True, exist_ok=True)
     configure_attention('fa2'); torch.set_num_threads(2)
@@ -89,9 +104,13 @@ def main():
         if a.target_mode == 'ngpt_heavy_ball':
             modes.append(('heavy_ball', 32))
         modes.append((a.target_mode, 128))
+    if a.transport_rms:
+        assert a.nonzero_init and a.target_mode == 'ngpt_heavy_ball'
+        modes.insert(-1, ('ngpt_ambient', 32))
     for mode, steps in modes:
         seed_all(42)
-        c = ConnectionConfig(streams=1, residual_dynamics=mode,
+        c = ConnectionConfig(streams=1, residual_dynamics='ngpt_heavy_ball' if mode == 'ngpt_ambient' else mode,
+                             ngpt_velocity_mode='transport_rms' if a.transport_rms and mode == a.target_mode else 'ambient',
                              residual_projection_init='normal' if a.nonzero_init else 'zero',
                              ngpt_force_rms_floor=1e-6 if a.nonzero_init else .1)
         model = build_connection_model(c).prepare(compile_blocks=True)
@@ -148,6 +167,9 @@ def main():
     if a.nonzero_init:
         result['time_ratios_to_vanilla'] = {name: info['median_step_seconds']/m['vanilla']['median_step_seconds'] for name, info in m.items()}
         assert all(ratio < 1.75 for ratio in result['time_ratios_to_vanilla'].values())
+    if a.transport_rms:
+        result['time_ratio_to_ambient'] = m[a.target_mode]['median_step_seconds']/m['ngpt_ambient']['median_step_seconds']
+        assert result['time_ratio_to_ambient'] < 1.35
     result['diagnostic_training_tokens'] = sum(steps+1 for _, steps in modes)*32768
     result['complete'] = True
     json_write(out/'summary.json', result)

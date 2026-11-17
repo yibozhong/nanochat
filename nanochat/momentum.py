@@ -1,8 +1,8 @@
 """Heavy-Ball depth streams and nGPT-inspired normalized residual interpolation.
 
-Momentum streams use fixed Euclidean coordinates. Only hidden is normalized;
-velocity is never tangent-projected, normalized, detached, or transported.
-Pure nGPT uses a single hidden stream without allocating a velocity.
+New normalized momentum uses tangent velocities, scalar RMS normalization and
+short-arc parallel transport. The ambient recurrence remains explicit for old
+checkpoints. Pure nGPT uses one hidden stream without allocating a velocity.
 """
 import math
 
@@ -46,6 +46,37 @@ def ngpt_momentum_step(h, v, force, beta, gamma, eta, rms_floor):
     return normalize_residual(h + eta*u), u
 
 
+def tangent_project(h, x):
+    """Project onto T_h S with radius sqrt(d); h must already have RMS=1."""
+    return x - (h*x).mean(-1, keepdim=True)*h
+
+
+def sphere_transport(h, new_h, v):
+    """Exact short-arc parallel transport of tangent v, with O(d) work/storage.
+
+    Our tangent retraction has dot(h,new_h)>=0, so the denominator is >=1;
+    an antipodal fallback or denominator clipping is neither needed nor used.
+    """
+    scale = (v*new_h).mean(-1, keepdim=True) / (1 + (h*new_h).mean(-1, keepdim=True))
+    return v - scale*(h+new_h)
+
+
+def transported_momentum_step(h, v, force, beta, gamma, eta, force_floor, velocity_floor):
+    """Normalized-target Riemannian HB; carry the normalized, transported speed.
+
+    P_h(z-h)=P_h(z). Projecting the combined update also removes FP32 drift
+    from the incoming tangent velocity. Scalar RMS normalization preserves
+    tangency (unlike centered or affine LayerNorm); its floor bounds the
+    derivative at zero and keeps a zero update exactly zero.
+    """
+    h, v = state_dtype(h), state_dtype(v)
+    target = normalize_residual(force, force_floor)
+    u = tangent_project(h, beta*v + gamma*target)
+    speed = normalize_residual(u, velocity_floor)
+    new_h = normalize_residual(h + eta*speed)
+    return new_h, sphere_transport(h, new_h, speed)
+
+
 class HeavyBall(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -68,8 +99,13 @@ class NormalizedHeavyBall(HeavyBall):
     def __init__(self, config):
         super().__init__(config)
         self.rms_floor = config.ngpt_force_rms_floor
+        self.velocity_mode = config.ngpt_velocity_mode
+        self.velocity_floor = config.momentum_velocity_rms_floor
 
     def forward(self, h, v, force):
+        if self.velocity_mode == 'transport_rms':
+            return transported_momentum_step(h, v, force, *self.coefficients(),
+                                             self.rms_floor, self.velocity_floor)
         return ngpt_momentum_step(h, v, force, *self.coefficients(), self.rms_floor)
 
 
@@ -143,7 +179,10 @@ class MomentumModel(ConnectionModel):
             return h, torch.zeros_like(h)
         if token_ids is None:
             raise ValueError('Token IDs are required for velocity embeddings')
-        return h, state_dtype(self.velocity_embedding(token_ids))
+        v = state_dtype(self.velocity_embedding(token_ids))
+        if self.config.residual_mode == 'ngpt_heavy_ball' and self.config.ngpt_velocity_mode == 'transport_rms':
+            v = normalize_residual(tangent_project(h, v), self.config.momentum_velocity_rms_floor)
+        return h, v
 
     def backbone(self, x, kv_cache=None, return_layers=False, token_ids=None):
         start = 0 if kv_cache is None else kv_cache.get_pos()
@@ -176,7 +215,7 @@ class MomentumModel(ConnectionModel):
         for i, row in enumerate(values.tolist()):
             for name, value in zip(('beta', 'gamma', 'eta'), row):
                 result[f'residual/sublayer_{i}/{name}'] = value
-            if self.config.residual_mode == 'ngpt_heavy_ball':
+            if self.config.residual_mode == 'ngpt_heavy_ball' and self.config.ngpt_velocity_mode == 'ambient':
                 result[f'residual/sublayer_{i}/alpha'] = row[1]*row[2]
         if self.velocity_embedding is not None:
             result['residual/velocity_embedding_rms'] = self.velocity_embedding.weight.float().square().mean().sqrt().item()

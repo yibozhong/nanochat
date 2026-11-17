@@ -56,7 +56,7 @@ def main():
         run_id=uuid.uuid4().hex[:8]
         source=dict(commit=commit,formal_training=True,plan=KEY,run_id=run_id,
             model_variant=preset,preset=preset,residual_dynamics=mode,velocity_embedding=mode=='ngpt_heavy_ball',
-            ngpt_alpha_init=.05,ngpt_force_rms_floor=1e-6,
+            ngpt_alpha_init=.05,ngpt_force_rms_floor=1e-6,ngpt_velocity_mode='ambient',
             residual_projection_init='normal',residual_projection_init_std=.02,
             output_projection_actual_std=.005,momentum_beta_init=.5,momentum_gamma_init=.5,
             momentum_eta_init=.1 if mode=='ngpt_heavy_ball' else 1.,
