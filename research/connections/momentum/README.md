@@ -1,6 +1,7 @@
 # Heavy-Ball with nGPT-inspired residual interpolation
 
-Status: implementation and bounded GPU validation only; no new formal training.
+Status: bounded GPU validation **passed** on 2026-11-17, job `8837389.0`,
+H100 80GB, model commit `22023c3`. No new formal training has been started.
 The user redirected this task from anGPT to nGPT before GPU tests. The pending
 anGPT debug job was held during environment preparation; no anGPT validation
 result is claimed. The interim approximate-moment implementation is archived
@@ -96,3 +97,25 @@ chunk/token KV decoding, a 32-layer model, optimizer/RNG roundtrip and CLI exit8
 recovery. Same-card measurements: 32 vanilla steps, 32 HB steps, 128 new-mode steps,
 actual hidden/velocity scales, CE, throughput and peak memory. Local JSON/XML only.
 Profiler FLOPs are partial; analytic FLOPs exclude scalar special functions.
+
+## Validated result (2026-11-17)
+
+[Machine-readable report](validation.json): 52 GPU tests passed, no failures or
+skips. New mode completed 128 updates / 4,194,304 training tokens with finite
+loss/gradients; dev CE 10.398012 -> 5.901073. The 32-layer test, cache/causality,
+compile/checkpoint, scalar nGPT limit and zero-force derivative checks passed.
+CLI exit85 resume preserved optimizer/model/RNG/config/data position and passed
+the exact fixed-gradient next-update check. Independent FA2/CCE backward runs
+are not bitwise deterministic; this is recorded separately in the report.
+
+Same H100, batch 16 x 2048, compiled steady steps 17–32:
+
+| Mode | Median step | Peak allocated | Parameters |
+|---|---:|---:|---:|
+| Vanilla | 67.04 ms | 5.37 GiB | 58,720,256 |
+| Heavy-Ball + token velocity | 72.69 ms | 6.53 GiB | 75,497,520 |
+| nGPT residual + Heavy-Ball + token velocity | 75.70 ms | 7.79 GiB | 75,497,520 |
+
+The new residual adds 4.14% step time versus HB and 12.91% versus vanilla in this
+measurement. The bounded diagnostic is an engineering check; it is not a trained
+quality comparison. No formal run or W&B was created.
