@@ -2,10 +2,14 @@
 set -euo pipefail
 TASK_MODE="$1"
 TASK_ARGS_EXTRA=()
+TASK_WEIGHT_ARGS=("${@:2}")
 TASK_VELOCITY_MODE=ambient
 case "$TASK_MODE" in
     ngpt_hbformer)
         TASK_TESTS=tests/test_ngpt_hbformer.py
+        if [[ "${2:-}" == --no-ngpt-weight-norm ]]; then
+            TASK_TESTS=tests/test_ngpt_hbformer_no_wn.py
+        fi
         TASK_VELOCITY_MODE=transport_rms
         TASK_ARGS_EXTRA=(--velocity-init token_position --momentum-eta-init 1 --momentum-velocity-rms-floor .1)
         ;;
@@ -17,9 +21,9 @@ case "$TASK_MODE" in
     *) exit 64 ;;
 esac
 python -m pytest -q "$TASK_TESTS" --junitxml=results/ngpt-tests.xml
-python -m scripts.connection_momentum_debug --data-dir ../data --output-dir results/ngpt-profile --target-mode "$TASK_MODE" --nonzero-init
+python -m scripts.connection_momentum_debug --data-dir ../data --output-dir results/ngpt-profile --target-mode "$TASK_MODE" --nonzero-init "${TASK_WEIGHT_ARGS[@]}"
 TASK_ARGS=(--variant baseline --streams 1 --residual-dynamics "$TASK_MODE"
-    --ngpt-velocity-mode "$TASK_VELOCITY_MODE" "${TASK_ARGS_EXTRA[@]}"
+    --ngpt-velocity-mode "$TASK_VELOCITY_MODE" "${TASK_ARGS_EXTRA[@]}" "${TASK_WEIGHT_ARGS[@]}"
     --residual-projection-init normal --residual-projection-init-std .02 --ngpt-force-rms-floor 1e-6
     --attention-backend fa2 --steps 3 --schedule-steps 305176
     --microbatch 16 --seed 42 --data-dir ../data --run-id ngpt-local-debug --segment-seconds 1800)

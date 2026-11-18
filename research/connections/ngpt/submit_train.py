@@ -1,4 +1,4 @@
-"""Submit one named nonzero-init 10B residual run with durable restart."""
+"""Submit one named nonzero-init residual run with durable restart."""
 import argparse
 import fcntl
 import json
@@ -16,7 +16,7 @@ HOME_ROOT=Path('/home/yzhong239')
 ASSETS=HOME_ROOT/'nanochat-runtime-assets'
 PRESETS={'vanilla':'vanilla', 'ngpt':'ngpt', 'ngpt_momentum':'ngpt_heavy_ball',
          'ngpt_momentum_transport_rms':'ngpt_heavy_ball', 'heavy_ball_rms':'heavy_ball_rms',
-         'ngpt_hbformer':'ngpt_hbformer'}
+         'ngpt_hbformer':'ngpt_hbformer', 'ngpt_hbformer_no_wn':'ngpt_hbformer'}
 STEPS=305176
 
 
@@ -29,7 +29,10 @@ def main():
     parser.add_argument('preset',choices=PRESETS)
     preset=parser.parse_args().preset
     mode=PRESETS[preset]
-    ROOT=HOME_ROOT/f'residual-nonzero-{preset}-10b-20261117'
+    short_control = preset == 'ngpt_hbformer_no_wn'
+    steps = 5000 if short_control else STEPS
+    budget = '5k-steps' if short_control else '10b'
+    ROOT=HOME_ROOT/f'residual-nonzero-{preset}-{budget}-20261117'
     KEY=ROOT.name
     ROOT.mkdir(exist_ok=True)
     with (ROOT/'submit.lock').open('a') as lock:
@@ -63,7 +66,7 @@ def main():
             residual_projection_init='normal',residual_projection_init_std=.02,
             output_projection_actual_std=.005,momentum_beta_init=.5,momentum_gamma_init=.5,
             momentum_eta_init=.1 if mode=='ngpt_heavy_ball' else 1.,
-            model=dict(depth=8,width=512,heads=4,sequence_length=2048,vocab_size=32768),steps=STEPS,training_tokens=STEPS*32768,batch_tokens=32768,microbatch=16,
+            model=dict(depth=8,width=512,heads=4,sequence_length=2048,vocab_size=32768),steps=steps,training_tokens=steps*32768,batch_tokens=32768,microbatch=16,
             seed=42,initialization='seed42_from_scratch_no_diagnostic_weights',
             preflight='29 tests; target128 + other two modes32 updates each; initial unit targets; exact CLI resume; fresh seed42 formal',
             gate_timeout_seconds=2400,failure_debug_seconds=900,
@@ -83,6 +86,10 @@ def main():
                           output_projection_std_before_normalization=.005,
                           preflight='HBFormer velocity/step, unit weight axes and post-step projection, cache, gradients, exact resume; target128 and two controls32',
                           timing_reference='prior H100 diagnostics, excludes new post-step weight normalization overhead')
+        if short_control:
+            source.update(ngpt_weight_norm=False, backbone_weight_constraint='none', schedule_steps=STEPS,
+                          preflight='Unprojected initialization and optimizer, same-card 128 steps, cache/gradients and exact CLI resume',
+                          timing_reference='prior H100 residual diagnostics, confirm same-card speed in preflight')
         if mode=='heavy_ball_rms':
             source.update(velocity_init='token', velocity_embedding_std=.02,
                           momentum_eta_init=.05, momentum_velocity_rms_floor=.1,
@@ -125,6 +132,8 @@ def main():
         job_args=f'{run_id} {mode}'
         if source['ngpt_velocity_mode']=='transport_rms':
             job_args+=' transport_rms'
+        if short_control:
+            job_args+=' --no-ngpt-weight-norm'
         for line in (ASSETS/'gate.sub').read_text().splitlines():
             if line.startswith('executable ='):line=f'executable = train.sh\narguments = {job_args}'
             elif line.startswith('request_disk ='):line='request_disk = 80GB'
@@ -136,7 +145,7 @@ def main():
             elif line.startswith('transfer_output_remaps ='):
                 line='transfer_output_remaps = "results.tar=results/train-$(Cluster).$(Process).tar;checkpoints.tar=results/train-$(Cluster).$(Process)-checkpoints.tar"'
             elif line.startswith('queue '):continue
-            lines.append(line.replace('logs/stream.','logs/train.').replace('nanochat-depth-diagnostic',f'nanochat-nonzero-residual-10b-{preset}')
+            lines.append(line.replace('logs/stream.','logs/train.').replace('nanochat-depth-diagnostic',f'nanochat-nonzero-residual-{budget}-{preset}')
                 .replace('DepthDiagnosticKey','NgptTrainKey').replace('depth-diagnostic-20261103',KEY))
         lines += ['checkpoint_exit_code = 85','transfer_checkpoint_files = checkpoints.tar,results.tar',
             'encrypt_input_files = /home/yzhong239/.netrc','+InteractiveJob = true',
@@ -147,9 +156,9 @@ def main():
         state=dict(status='submitting',run_id=run_id,source=source,formal_training=True,submitted_at=time.time(),
             wandb_url=f'https://wandb.ai/yibozhong657-none/nanochat/runs/{run_id}')
         if 'reference_step_seconds' in source:
-            state['estimated_h200_training_hours']=STEPS*source['reference_step_seconds']/3600
+            state['estimated_h200_training_hours']=steps*source['reference_step_seconds']/3600
         else:
-            state['estimated_h100_training_hours']=STEPS*source['prior_h100_reference_step_seconds']/3600
+            state['estimated_h100_training_hours']=steps*source['prior_h100_reference_step_seconds']/3600
         (ROOT/'submission-intent.json').write_text(json.dumps(state,indent=2)+'\n')
         job=command(['condor_submit','-terse','train.sub'],ROOT).split()[0]
         state.update(job=job,status='held_for_audit')

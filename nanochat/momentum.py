@@ -168,6 +168,7 @@ class MomentumModel(ConnectionModel):
         if config.velocity_init == 'token_position':
             self.velocity_position_embedding = nn.Embedding(config.sequence_length, config.width)
             nn.init.normal_(self.velocity_position_embedding.weight, std=config.velocity_embedding_std)
+        if config.ngpt_weight_norm:
             self.normalize_backbone_weights()
 
     @torch.no_grad()

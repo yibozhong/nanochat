@@ -49,6 +49,7 @@ class ConnectionConfig:
     momentum_eta_init: float | None = None
     ngpt_force_rms_floor: float = 0.1
     ngpt_alpha_init: float = 0.05
+    ngpt_weight_norm: bool | None = None
     ngpt_velocity_mode: str | None = None
     momentum_velocity_rms_floor: float = 0.1
     residual_projection_init: str | None = None
@@ -56,6 +57,10 @@ class ConnectionConfig:
 
     def __post_init__(self):
         hbformer = self.residual_mode == 'ngpt_hbformer'
+        if self.ngpt_weight_norm is None:
+            self.ngpt_weight_norm = hbformer  # historical HBFormer checkpoints always projected
+        if self.ngpt_weight_norm and not hbformer:
+            raise ValueError('nGPT weight projection is supported with ngpt_hbformer')
         if self.residual_projection_init is None:
             self.residual_projection_init = 'normal' if hbformer else 'zero'
         if self.residual_projection_init not in ('zero', 'normal'):
@@ -475,7 +480,7 @@ def optimizer_for(model, batch_tokens=32768):
         signatures = {(tuple(p.shape), p.dtype) for g in groups if g['kind'] == 'adamw' for p in g['params']}
         compiler_config.recompile_limit = max(compiler_config.recompile_limit, 2*len(signatures))
     opt = MuonAdamW(groups)
-    if c.residual_mode == 'ngpt_hbformer':
+    if c.ngpt_weight_norm:
         opt.register_step_post_hook(lambda opt, args, kwargs: model.normalize_backbone_weights())
     for g in opt.param_groups:
         g['initial_lr'] = g['lr']

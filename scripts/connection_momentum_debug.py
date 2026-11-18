@@ -88,6 +88,7 @@ def main():
     p.add_argument('--data-dir', required=True)
     p.add_argument('--output-dir', required=True)
     p.add_argument('--target-mode', choices=('ngpt_heavy_ball','ngpt','vanilla','heavy_ball_rms','ngpt_hbformer'), default='ngpt_heavy_ball')
+    p.add_argument('--ngpt-weight-norm', action=argparse.BooleanOptionalAction, default=None)
     p.add_argument('--nonzero-init', action='store_true')
     p.add_argument('--transport-rms', action='store_true')
     a = p.parse_args()
@@ -118,6 +119,7 @@ def main():
         c = ConnectionConfig(streams=1, residual_dynamics='ngpt_heavy_ball' if mode == 'ngpt_ambient' else mode,
                              ngpt_velocity_mode='transport_rms' if (mode == 'ngpt_hbformer' or mode == 'ngpt_heavy_ball'
                                  and (a.transport_rms or a.target_mode in ('ngpt_hbformer', 'heavy_ball_rms'))) else 'ambient',
+                             ngpt_weight_norm=a.ngpt_weight_norm if mode == a.target_mode else None,
                              residual_projection_init='normal' if a.nonzero_init else 'zero',
                              ngpt_force_rms_floor=1e-6 if a.nonzero_init else .1)
         model = build_connection_model(c).prepare(compile_blocks=True)

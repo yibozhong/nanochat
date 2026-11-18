@@ -39,6 +39,8 @@ def main():
     if not reused:
         check=(['research/connections/momentum/check.sh'] if transported else
                ['research/connections/ngpt/check.sh',mode])
+        if source.get('ngpt_weight_norm') is False:
+            check.append('--no-ngpt-weight-norm')
         subprocess.run(['timeout','--signal=TERM','--kill-after=30s','2400','bash',*check],check=True)
         prefix='momentum' if transported else 'ngpt'
         suites=list(ET.parse(f'results/{prefix}-tests.xml').getroot().iter('testsuite'))
@@ -46,6 +48,8 @@ def main():
         profile=json.loads(Path(f'results/{prefix}-profile/summary.json').read_text())
         resume=json.loads(Path(f'results/{prefix}-cli-resume.json').read_text())
     expected_tests = {'heavy_ball_rms':9, 'ngpt_hbformer':8}.get(mode, 57 if transported else 29)
+    if mode == 'ngpt_hbformer':
+        assert profile['models'][mode]['config']['ngpt_weight_norm'] == source.get('ngpt_weight_norm',True)
     assert tests == dict(tests=expected_tests, failures=0, errors=0, skipped=0), tests
     assert profile['complete'] and profile['models'][mode]['steps'] == 128 and resume['complete']
     if transported or mode in ('ngpt_hbformer', 'heavy_ball_rms'):

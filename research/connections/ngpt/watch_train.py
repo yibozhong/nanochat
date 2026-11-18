@@ -60,6 +60,13 @@ def collect(root,training):
         value=json.loads(summary.read_text())
         assert value['complete'] and value['steps']==training['source']['steps']
         assert value['training_tokens']==training['source']['training_tokens']
+        ref_path = root/'comparison-reference.json'
+        if ref_path.exists():
+            reference = json.loads(ref_path.read_text())
+            assert reference['step'] == value['steps'] and reference['dev_tokens'] == value['dev_tokens']
+            save(root/'comparison.json', dict(reference=reference, run_id=value['run_id'],
+                step=value['steps'], dev_ce=value['final_dev_ce'],
+                delta_dev_ce=value['final_dev_ce']-reference['dev_ce']))
         return True
     return False
 

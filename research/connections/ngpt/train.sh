@@ -26,7 +26,14 @@ case "$TASK_MODE/$TASK_VELOCITY_MODE" in
     vanilla/ambient|ngpt/ambient|ngpt_heavy_ball/ambient) ;;
     *) exit 64 ;;
 esac
-TASK_STEPS=305176
+TASK_SCHEDULE_STEPS=305176
+TASK_STEPS=$TASK_SCHEDULE_STEPS
+if [ "$#" -gt 3 ]; then
+    [[ "$#" == 4 && "$TASK_MODE" == ngpt_hbformer && "$4" == --no-ngpt-weight-norm ]]
+    TASK_MOMENTUM_ARGS+=("$4")
+    TASK_STEPS=5000
+    TASK_GROUP=ngpt-hbformer-no-weight-norm-5k
+fi
 mkdir -p checkpoints results
 if [ -f results.tar ]; then tar -xf results.tar; fi
 if [ -f checkpoints.tar ]; then tar -xf checkpoints.tar; fi
@@ -45,12 +52,13 @@ finish() {
 }
 trap finish EXIT
 cp "$0" results/launcher.sh
-/opt/project/.venv/bin/python - "$TASK_RUN_ID" "$TASK_MODE" "$TASK_VELOCITY_MODE" <<'PY'
+/opt/project/.venv/bin/python - "$TASK_RUN_ID" "$TASK_MODE" "$TASK_VELOCITY_MODE" "$TASK_STEPS" "$TASK_SCHEDULE_STEPS" "${4:-}" <<'PY'
 import json,sys
 from pathlib import Path
 s=json.loads(Path('source.json').read_text())
 assert s['formal_training'] and s['run_id']==sys.argv[1]
-assert s['steps']==305176 and s['training_tokens']==10000007168
+assert s['steps']==int(sys.argv[4]) and s['training_tokens']==s['steps']*32768
+assert s.get('schedule_steps',305176)==int(sys.argv[5])==305176
 assert s['initialization']=='seed42_from_scratch_no_diagnostic_weights'
 assert s['attention_backend']=='fa2' and s['residual_dynamics']==sys.argv[2]
 assert s['model']==dict(depth=8,width=512,heads=4,sequence_length=2048,vocab_size=32768)
@@ -63,7 +71,10 @@ if sys.argv[2]=='ngpt_hbformer':
     assert s['momentum_eta_init']==1 and not s['momentum_eta_trainable'] and s['ngpt_velocity_mode']=='transport_rms'
     assert s['velocity_init']=='token_position' and s['velocity_embedding_std']==.02
     assert s['momentum_beta_init']==.5 and s['momentum_gamma_init']==math.log(2.)
-    assert s['backbone_weight_constraint']=='ngpt_unit_l2_init_and_post_step'
+    normalized = sys.argv[6] != '--no-ngpt-weight-norm'
+    assert s.get('ngpt_weight_norm',True) == normalized
+    assert s['backbone_weight_constraint']==('ngpt_unit_l2_init_and_post_step' if normalized else 'none')
+    assert s['steps']==(305176 if normalized else 5000)
 elif sys.argv[3]=='transport_rms' or sys.argv[2]=='heavy_ball_rms':
     assert s['momentum_eta_init']==.05 and s['momentum_velocity_rms_floor']==.1
 p=Path('results/train/progress.json')
@@ -131,7 +142,7 @@ echo "FORMAL_TRAINING_BEGIN nonzero_residual $TASK_RUN_ID"
 python -m scripts.connection_train --variant baseline --architecture vanilla --streams 1 \
     --residual-dynamics "$TASK_MODE" --ngpt-velocity-mode "$TASK_VELOCITY_MODE" "${TASK_MOMENTUM_ARGS[@]}" --ngpt-alpha-init .05 --ngpt-force-rms-floor 1e-6 \
     --residual-projection-init normal --residual-projection-init-std .02 --attention-kernel original --attention-backend fa2 \
-    --steps "$TASK_STEPS" --schedule-steps "$TASK_STEPS" --microbatch 16 --seed 42 \
+    --steps "$TASK_STEPS" --schedule-steps "$TASK_SCHEDULE_STEPS" --microbatch 16 --seed 42 \
     --no-activation-checkpoint --no-fused-connection-grad --evaluate-test \
     --data-dir ../data --output-dir results/train --checkpoint-dir ../checkpoints \
     --formal-training --wandb-group "$TASK_GROUP" --run-id "$TASK_RUN_ID" \

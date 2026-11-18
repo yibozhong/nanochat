@@ -41,6 +41,8 @@ def main():
                    help='New nGPT momentum defaults to transport_rms; old checkpoints require ambient')
     p.add_argument('--momentum-velocity-rms-floor', type=float, default=.1)
     p.add_argument('--ngpt-force-rms-floor', type=float, default=.1)
+    p.add_argument('--ngpt-weight-norm', action=argparse.BooleanOptionalAction, default=None,
+                   help='Project backbone weights at initialization and after optimizer steps (HBFormer default)')
     p.add_argument('--ngpt-alpha-init', type=float, default=.05)
     p.add_argument('--residual-projection-init', choices=('zero','normal'), default=None)
     p.add_argument('--residual-projection-init-std', type=float, default=.02,
@@ -99,7 +101,7 @@ def main():
                        velocity_embedding_std=a.velocity_embedding_std,
                        momentum_beta_init=a.momentum_beta_init, momentum_gamma_init=a.momentum_gamma_init,
                        momentum_eta_init=a.momentum_eta_init, ngpt_force_rms_floor=a.ngpt_force_rms_floor,
-                       ngpt_alpha_init=a.ngpt_alpha_init,
+                       ngpt_alpha_init=a.ngpt_alpha_init, ngpt_weight_norm=a.ngpt_weight_norm,
                        ngpt_velocity_mode=a.ngpt_velocity_mode,
                        momentum_velocity_rms_floor=a.momentum_velocity_rms_floor,
                        residual_projection_init=a.residual_projection_init,
@@ -181,6 +183,7 @@ def main():
                 name=f'{a.architecture}-{a.variant}'+('-ngpt' if c.residual_mode == 'ngpt' else
                     f'-{c.residual_mode}-v0-{c.velocity_init}' if c.residual_mode != 'vanilla' else
                     '-layer-feedback' if c.feedback_source=='layers' else '-feedback' if c.latent_feedback else '')+
+                    ('-no-weight-norm' if c.residual_mode=='ngpt_hbformer' and not c.ngpt_weight_norm else '')+
                     (f'-init-{c.residual_projection_init}' if c.residual_projection_init != 'zero' else '')+
                     f'-{c.sequence_length}ctx-{a.steps}steps',id=run_id,resume='allow',config=config)
     run=training_run(formal_training=a.formal_training, local_dir=out/"diagnostics", **kwargs)
