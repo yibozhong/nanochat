@@ -204,9 +204,9 @@ class MomentumModel(ConnectionModel):
         self.compiled_steps = None
         if compile_blocks:
             options = dict(dynamic=False, fullgraph=True, options={'emulate_precision_casts': True})
-            if self.config.ngpt_velocity_mode == 'transport_layernorm':
-                # Keep the reference BF16 attention/FFN kernels and their backward
-                # rounding. Compile the FP32 momentum, retraction and transport only.
+            if self.config.ngpt_velocity_mode == 'transport_layernorm' or self.config.residual_mode == 'lookahead_only':
+                # Keep branch reads and BF16 attention/FFN backward at reference
+                # precision. Compile only each site's residual and velocity update.
                 self.compiled_steps = [partial(b.momentum_forward,
                     attn_update=torch.compile(b.attn_residual.forward, **options),
                     mlp_update=torch.compile(b.mlp_residual.forward, **options)) for b in self.blocks]
