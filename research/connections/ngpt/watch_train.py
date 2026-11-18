@@ -20,9 +20,9 @@ def command(args):
     return subprocess.check_output(args,text=True,timeout=45).strip()
 
 
-def formal_step(lines,run_id):
+def formal_step(lines,run_id,experiment='nonzero_residual'):
     formal=False;last=None
-    marker='FORMAL_TRAINING_BEGIN nonzero_residual '+run_id
+    marker=f'FORMAL_TRAINING_BEGIN {experiment} {run_id}'
     for line in lines:
         if line.startswith('FORMAL_TRAINING_BEGIN '):formal=line==marker
         if not formal or not line.startswith('{'):continue
@@ -50,7 +50,7 @@ def collect(root,training):
             save(root/filename,value)
     with tarfile.open(archive) as tar:
         for member in tar.getmembers():
-            if member.name.startswith('results/ngpt-sm') and member.name.endswith('.json'):
+            if member.name.startswith(('results/ngpt-sm', 'results/arc-sm')) and member.name.endswith('.json'):
                 assert member.isfile() and member.size<4*1024*1024
                 gate=json.load(tar.extractfile(member))
                 assert gate['complete'] and gate['source']==training['source']
@@ -104,7 +104,8 @@ def main(root):
                     result=command(['condor_qedit','-constraint',condition,'RequireGPUs',require_gpus(wanted)])
                     state['transitions'].append(dict(time=time.time(),fallback=wanted,result=result))
                 log=root/'logs'/f'train.{job}.out'
-                latest=formal_step(log.read_text(errors='replace').splitlines(),training['run_id']) if log.exists() else None
+                experiment = 'arc_optimizer' if training['source'].get('matrix_optimizer') == 'arc' else 'nonzero_residual'
+                latest=formal_step(log.read_text(errors='replace').splitlines(),training['run_id'],experiment) if log.exists() else None
                 if latest:
                     state['latest_formal_step']=latest
                     if 'first_formal_step' not in state:

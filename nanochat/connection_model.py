@@ -445,8 +445,14 @@ class ConnectionModel(nn.Module):
             accum_e_fp32=True, accum_c_fp32=True)
 
 
-def optimizer_for(model, batch_tokens=32768):
+def optimizer_for(model, batch_tokens=32768, *, matrix_optimizer='muon', arc_mu=1., arc_beta=.5):
     """Same backbone native LR rules; connector parameters get separate AdamW."""
+    if matrix_optimizer not in ('muon', 'arc'):
+        raise ValueError(f'Unknown matrix optimizer {matrix_optimizer}')
+    if matrix_optimizer == 'arc' and (model.config.architecture != 'vanilla' or
+            model.config.variant != 'baseline' or model.config.residual_mode != 'vanilla'
+            or model.config.latent_feedback or model.config.ngpt_weight_norm):
+        raise ValueError('Arc pilot requires the vanilla baseline')
     if model.config.architecture == 'native':
         return model.setup_optimizer(batch_tokens)
     c = model.config
@@ -496,7 +502,11 @@ def optimizer_for(model, batch_tokens=32768):
         from torch._dynamo import config as compiler_config
         signatures = {(tuple(p.shape), p.dtype) for g in groups if g['kind'] == 'adamw' for p in g['params']}
         compiler_config.recompile_limit = max(compiler_config.recompile_limit, 2*len(signatures))
-    opt = MuonAdamW(groups)
+    if matrix_optimizer == 'arc':
+        from nanochat.arc import ArcAdamW
+        opt = ArcAdamW(groups, mu=arc_mu, beta=arc_beta)
+    else:
+        opt = MuonAdamW(groups)
     if c.ngpt_weight_norm:
         opt.register_step_post_hook(lambda opt, args, kwargs: model.normalize_backbone_weights())
     for g in opt.param_groups:

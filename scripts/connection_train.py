@@ -45,6 +45,9 @@ def main():
     p.add_argument('--architecture', choices=('vanilla', 'native'), default='vanilla')
     p.add_argument('--latent-feedback', action='store_true')
     p.add_argument('--residual-dynamics', choices=('vanilla','heavy_ball','heavy_ball_rms','ngpt_heavy_ball','ngpt_hbformer','ngpt','ngpt_lookahead','lookahead_only'), default='vanilla')
+    p.add_argument('--matrix-optimizer', choices=('muon', 'arc'), default='muon')
+    p.add_argument('--arc-mu', type=float, default=1., help='Lookahead in units of the displacement EMA')
+    p.add_argument('--arc-beta', type=float, default=.5, help='Transported displacement EMA decay')
     p.add_argument('--velocity-init', choices=('zero','token','token_position'), default=None,
                    help='HBFormer and lookahead use token plus position velocity, other momentum modes default to token velocity')
     p.add_argument('--velocity-embedding-std', type=float, default=.02)
@@ -139,12 +142,15 @@ def main():
     model=build_connection_model(c).prepare(compile_blocks=True)
     if a.matched_backbone_init:
         match_vanilla_initialization(model,a.seed)
-    opt,wd=optimizer_for(model)
+    opt,wd=optimizer_for(model, matrix_optimizer=a.matrix_optimizer, arc_mu=a.arc_mu, arc_beta=a.arc_beta)
     initial_groups=[{k:v for k,v in group.items() if k!='params'} for group in opt.param_groups]
     protocol=dict(steps=a.steps,schedule_steps=a.schedule_steps,batch_tokens=32768,
                   microbatch=a.microbatch,grad_accum=rows_per_step//a.microbatch,seed=a.seed,
                   attention_backend=a.attention_backend,matched_backbone_init=a.matched_backbone_init,
                   evaluate_test=a.evaluate_test)
+    if a.matrix_optimizer == 'arc':
+        protocol['matrix_optimizer'] = dict(name='arc', mu=a.arc_mu, beta=a.arc_beta,
+            sphere='initial_frobenius_per_matrix', step_length='scheduled_matrix_lr * sqrt(fan_out)')
     if c.latent_feedback:
         protocol['feedback']=dict(pass_mix=[.15,.85],sampler='numpy.default_rng([seed,zero_based_step])',
             earlier_passes='no_grad_detached',eval_passes=c.feedback_eval_passes)
@@ -187,7 +193,8 @@ def main():
                          'static_per_channel_identity_skip_scale' if a.variant=='skip_scale' else
                          'additive'),
         applied_sinkhorn_iterations=c.sinkhorn_iterations if a.variant=='mhc' else 0,
-        optimizer='native MuonAdamW; connector AdamW at native unembedding LR, no decay',
+        optimizer=('Arc matrix updates + native AdamW' if a.matrix_optimizer == 'arc' else
+                   'native MuonAdamW; connector AdamW at native unembedding LR, no decay'),
         optimizer_groups=initial_groups,
         loss='full-token full-vocabulary CCE; no gradient filtering',
         references='research/connections/references.json')
@@ -205,6 +212,7 @@ def main():
                     '-layer-feedback' if c.feedback_source=='layers' else '-feedback' if c.latent_feedback else '')+
                     ('-velocity-ln' if c.ngpt_velocity_mode == 'transport_layernorm' else '')+
                     ('-no-weight-norm' if c.residual_mode=='ngpt_hbformer' and not c.ngpt_weight_norm else '')+
+                    ('-arc' if a.matrix_optimizer == 'arc' else '')+
                     (f'-init-{c.residual_projection_init}' if c.residual_projection_init != 'zero' else '')+
                     f'-{c.sequence_length}ctx-{a.steps}steps',id=run_id,resume='allow',config=config)
     run=training_run(formal_training=a.formal_training, local_dir=out/"diagnostics", **kwargs)
@@ -216,6 +224,8 @@ def main():
     run.define_metric('tokens')
     for metric in ('train/*','dev/*','perf/*','residual/*'):
         run.define_metric(metric,step_metric='tokens')
+    if a.matrix_optimizer == 'arc':
+        run.define_metric('optimizer/*', step_metric='tokens')
     json_write(out/'config.json',config)
     stop=False;begin=time.perf_counter()
     def interrupted(signum,frame):
@@ -235,6 +245,8 @@ def main():
             run_id=run_id,step=step,dev_ce=dev,data_manifest=data.manifest),ckpt/'best.pt')
     def dev_metrics(dev):
         metrics={'dev/ce':dev}
+        if a.matrix_optimizer == 'arc':
+            metrics.update(opt.metrics())
         if c.residual_mode != 'vanilla':
             metrics.update(model.residual_metrics())
         if c.latent_feedback:

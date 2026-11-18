@@ -1,4 +1,5 @@
 """Frozen packed-data utilities for single-GPU connection experiments."""
+from contextlib import nullcontext
 import copy
 import json
 from pathlib import Path
@@ -73,11 +74,12 @@ def train_step(model,opt,data,step,microbatch=16,batch_tokens=32768,seed=42):
     opt.zero_grad(set_to_none=True)
     total=torch.zeros((),device='cuda')
     options = dict(passes=model.training_passes(seed, step)) if model.config.latent_feedback else {}
-    for start in range(0,rows,microbatch):
-        x,y=data.batch('train',step*rows+start,microbatch)
-        loss=model(x,y,**options)
-        (loss/(rows//microbatch)).backward()
-        total += loss.detach()/(rows//microbatch)
+    with opt.gradient_point() if hasattr(opt, 'gradient_point') else nullcontext():
+        for start in range(0,rows,microbatch):
+            x,y=data.batch('train',step*rows+start,microbatch)
+            loss=model(x,y,**options)
+            (loss/(rows//microbatch)).backward()
+            total += loss.detach()/(rows//microbatch)
     # Preserve nanochat's lack of clipping, but stop before a nonfinite update.
     grads=[p.grad for p in model.parameters() if p.grad is not None]
     finite=torch.stack([torch.isfinite(g).all() for g in grads]).all()

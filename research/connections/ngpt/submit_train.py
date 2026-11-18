@@ -15,7 +15,7 @@ from policy import RANK, require_gpus
 REPO=Path(__file__).resolve().parents[3]
 HOME_ROOT=Path('/home/yzhong239')
 ASSETS=HOME_ROOT/'nanochat-runtime-assets'
-PRESETS={'vanilla':'vanilla', 'ngpt':'ngpt', 'ngpt_momentum':'ngpt_heavy_ball',
+PRESETS={'arc':'vanilla', 'vanilla':'vanilla', 'ngpt':'ngpt', 'ngpt_momentum':'ngpt_heavy_ball',
          'ngpt_momentum_transport_rms':'ngpt_heavy_ball', 'heavy_ball_rms':'heavy_ball_rms',
          'ngpt_hbformer':'ngpt_hbformer', 'ngpt_hbformer_no_wn':'ngpt_hbformer',
          'ngpt_hbformer_velocity_ln':'ngpt_hbformer', 'ngpt_lookahead':'ngpt_lookahead', 'lookahead_only':'lookahead_only'}
@@ -44,6 +44,8 @@ def main():
     if args.fresh_10b:
         budget='10b-from-scratch'
     ROOT=HOME_ROOT/f'residual-nonzero-{preset}-{budget}-20261117'
+    if preset == 'arc':
+        ROOT = HOME_ROOT/'optimizer-arc-10b-20261118'
     KEY=ROOT.name
     ROOT.mkdir(exist_ok=True)
     with (ROOT/'submit.lock').open('a') as lock:
@@ -89,6 +91,19 @@ def main():
             passed_families=[],compatible_fallback_backend='A100 FA2/CCE runtime validated in skip-scale/validation.json',
             prior_h100_reference_step_seconds=.06704051233828068 if mode=='vanilla' else .0756970327347517,
             timing_reference='previous zero-init H100 diagnostics, estimate only; measure all three nonzero modes in preflight')
+        if preset == 'arc':
+            base = json.loads((HOME_ROOT/'residual-nonzero-vanilla-10b-20261117/summary.json').read_text())
+            assert base['complete'] and base['run_id'] == '2eac64db' and base['steps'] == steps
+            for key in ('model', 'seed', 'batch_tokens', 'microbatch', 'residual_projection_init',
+                        'residual_projection_init_std', 'dataset_revision', 'residual_dynamics'):
+                assert source[key] == base['source'][key], key
+            source.update(matrix_optimizer='arc', arc_mu=1., arc_beta=.5, schedule_steps=STEPS,
+                          arc_radius='initial matrix Frobenius norm', arc_step='matrix_lr * sqrt(fan_out)',
+                          reference_run=base['run_id'], reference_initial_dev_ce=base['initial_dev_ce'],
+                          preflight='Analytical update and restart, accumulated query gradients, production CLI exit85, matched Muon speed',
+                          timing_reference='Vanilla reference only; same-card Arc timing measured in preflight')
+            (ROOT/'comparison-reference.json').write_text(json.dumps(dict(run_id=base['run_id'],
+                dev_ce=base['final_dev_ce'], dev_tokens=base['dev_tokens'], step=steps), indent=2)+'\n')
         if mode in ('ngpt_lookahead', 'lookahead_only'):
             del source['momentum_gamma_init'], source['momentum_eta_init']
             source.update(velocity_init='token_position', velocity_embedding_std=.02, momentum_beta_trainable=False,
@@ -188,9 +203,12 @@ def main():
             'osdf:///chtc/staging/y/yzhong239/mhc-official-runtime-7546767.tar.gz',
             'https://developer.download.nvidia.com/compute/cuda/repos/debian12/x86_64/cuda-compat-13-1_590.48.01-1_amd64.deb']
         lines=[]
+        batch_name = 'nanochat-arc-10b' if preset == 'arc' else f'nanochat-nonzero-residual-{budget}-{preset}'
         job_args=f'{run_id} {mode}'
         if source['ngpt_velocity_mode'] != 'ambient':
             job_args+=' '+source['ngpt_velocity_mode']
+        if preset == 'arc':
+            job_args += ' ambient --arc'
         if args.fresh_10b:
             job_args+=' --fresh-10b'
         if args.extend_to_schedule:
@@ -208,7 +226,7 @@ def main():
             elif line.startswith('transfer_output_remaps ='):
                 line='transfer_output_remaps = "results.tar=results/train-$(Cluster).$(Process).tar;checkpoints.tar=results/train-$(Cluster).$(Process)-checkpoints.tar"'
             elif line.startswith('queue '):continue
-            lines.append(line.replace('logs/stream.','logs/train.').replace('nanochat-depth-diagnostic',f'nanochat-nonzero-residual-{budget}-{preset}')
+            lines.append(line.replace('logs/stream.','logs/train.').replace('nanochat-depth-diagnostic',batch_name)
                 .replace('DepthDiagnosticKey','NgptTrainKey').replace('depth-diagnostic-20261103',KEY))
         lines += ['checkpoint_exit_code = 85','transfer_checkpoint_files = checkpoints.tar,results.tar',
             'encrypt_input_files = /home/yzhong239/.netrc','+InteractiveJob = true',
@@ -239,7 +257,7 @@ def main():
         assert set(ad['TransferOutput'].split(','))=={'results.tar','checkpoints.tar'}
         assert ad['NgptTrainKey']==KEY and ad['InteractiveJob'] and ad['WantGPULab']
         assert ad['Args']==job_args
-        if mode == 'lookahead_only':
+        if mode == 'lookahead_only' or preset == 'arc':
             assert not any(name in ad['TransferInput'] for name in ('parent-', 'checkpoints.tar', 'results.tar'))
         if args.fresh_10b:
             assert 'lookahead-validation.json' in ad['TransferInput'] and 'continuation' not in source
