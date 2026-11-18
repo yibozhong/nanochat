@@ -21,7 +21,7 @@ from research.connections.ngpt.lookahead_read_triton import fused_read
 REPORT = Path('results/lookahead-compiler.json')
 OPTIONS = dict(dynamic=False, fullgraph=True, options={'emulate_precision_casts': True})
 MODES = ('current', 'full', 'attention_eager', 'ffn_eager', 'compiled_read', 'triton_read',
-         'triton_branches')
+         'triton_branches', 'compiled_branches')
 
 
 def read(h, v, mu):
@@ -38,6 +38,10 @@ def sublayer(block, attention, h, v, cos, sin, cache):
 def install(model, mode):
     if mode == 'current':
         return
+    if mode == 'aot_eager':
+        model.compiled_steps = [torch.compile(b.momentum_forward, backend='aot_eager', dynamic=False, fullgraph=True)
+                                for b in model.blocks]
+        return
     if mode == 'full':
         model.compiled_steps = [torch.compile(b.momentum_forward, **OPTIONS) for b in model.blocks]
         return
@@ -46,8 +50,8 @@ def install(model, mode):
         attn_update = torch.compile(b.attn_residual.forward, **OPTIONS)
         ffn_update = torch.compile(b.mlp_residual.forward, **OPTIONS)
         query = fused_read if mode.startswith('triton_') else torch.compile(read, **OPTIONS)
-        attn_branch = torch.compile(b.attention_branch, **OPTIONS) if mode == 'triton_branches' else b.attention_branch
-        ffn_branch = torch.compile(b.mlp_branch, **OPTIONS) if mode == 'triton_branches' else b.mlp_branch
+        attn_branch = torch.compile(b.attention_branch, **OPTIONS) if mode.endswith('_branches') else b.attention_branch
+        ffn_branch = torch.compile(b.mlp_branch, **OPTIONS) if mode.endswith('_branches') else b.mlp_branch
         attn = torch.compile(partial(sublayer, b, True), **OPTIONS) if mode == 'ffn_eager' else None
         ffn = torch.compile(partial(sublayer, b, False), **OPTIONS) if mode == 'attention_eager' else None
         def step(h, v, cos, sin, cache=None):
@@ -212,6 +216,7 @@ def main():
     persist()
     info['triton_unit'] = read_checks()
     info['local'] = local_vjp()
+    info['aot_eager'] = parity('aot_eager', 42, False)
     persist()
     for mode in MODES:
         torch._dynamo.reset()
