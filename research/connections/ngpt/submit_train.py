@@ -17,7 +17,7 @@ ASSETS=HOME_ROOT/'nanochat-runtime-assets'
 PRESETS={'vanilla':'vanilla', 'ngpt':'ngpt', 'ngpt_momentum':'ngpt_heavy_ball',
          'ngpt_momentum_transport_rms':'ngpt_heavy_ball', 'heavy_ball_rms':'heavy_ball_rms',
          'ngpt_hbformer':'ngpt_hbformer', 'ngpt_hbformer_no_wn':'ngpt_hbformer',
-         'ngpt_hbformer_velocity_ln':'ngpt_hbformer'}
+         'ngpt_hbformer_velocity_ln':'ngpt_hbformer', 'ngpt_lookahead':'ngpt_lookahead'}
 STEPS=305176
 
 
@@ -31,8 +31,8 @@ def main():
     preset=parser.parse_args().preset
     mode=PRESETS[preset]
     short_control = preset == 'ngpt_hbformer_no_wn'
-    steps = 5000 if short_control else STEPS
-    budget = '5k-steps' if short_control else '10b'
+    steps = 5000 if short_control or mode == 'ngpt_lookahead' else STEPS
+    budget = '5k-steps' if steps == 5000 else '10b'
     ROOT=HOME_ROOT/f'residual-nonzero-{preset}-{budget}-20261117'
     KEY=ROOT.name
     ROOT.mkdir(exist_ok=True)
@@ -62,7 +62,7 @@ def main():
         (ROOT/'train.sh').chmod(0o755)
         run_id=uuid.uuid4().hex[:8]
         source=dict(commit=commit,formal_training=True,plan=KEY,run_id=run_id,
-            model_variant=preset,preset=preset,residual_dynamics=mode,velocity_embedding=mode in ('ngpt_heavy_ball','heavy_ball_rms','ngpt_hbformer'),
+            model_variant=preset,preset=preset,residual_dynamics=mode,velocity_embedding=mode in ('ngpt_heavy_ball','heavy_ball_rms','ngpt_hbformer','ngpt_lookahead'),
             ngpt_alpha_init=.05,ngpt_force_rms_floor=1e-6,ngpt_velocity_mode='ambient',
             residual_projection_init='normal',residual_projection_init_std=.02,
             output_projection_actual_std=.005,momentum_beta_init=.5,momentum_gamma_init=.5,
@@ -79,6 +79,12 @@ def main():
             passed_families=[],compatible_fallback_backend='A100 FA2/CCE runtime validated in skip-scale/validation.json',
             prior_h100_reference_step_seconds=.06704051233828068 if mode=='vanilla' else .0756970327347517,
             timing_reference='previous zero-init H100 diagnostics, estimate only; measure all three nonzero modes in preflight')
+        if mode == 'ngpt_lookahead':
+            del source['momentum_gamma_init'], source['momentum_eta_init']
+            source.update(velocity_init='token_position', velocity_embedding_std=.02, momentum_beta_trainable=False,
+                          lookahead_mu_init=0., ngpt_velocity_mode='lookahead_transport', ngpt_weight_norm=False, schedule_steps=STEPS,
+                          reference_run='d065c132', backbone_weight_constraint='none',
+                          preflight='Zero-gate equality with nGPT, trainable lookahead, tangent geometry, causal KV, gradients, exact resume and same-GPU speed')
         if mode=='ngpt_hbformer':
             source.pop('output_projection_actual_std')
             source.update(velocity_init='token_position', velocity_embedding_std=.02, momentum_eta_init=1.,
@@ -137,7 +143,7 @@ def main():
         job_args=f'{run_id} {mode}'
         if source['ngpt_velocity_mode'] != 'ambient':
             job_args+=' '+source['ngpt_velocity_mode']
-        if source.get('ngpt_weight_norm') is False:
+        if mode == 'ngpt_hbformer' and source.get('ngpt_weight_norm') is False:
             job_args+=' --no-ngpt-weight-norm'
         for line in (ASSETS/'gate.sub').read_text().splitlines():
             if line.startswith('executable ='):line=f'executable = train.sh\narguments = {job_args}'

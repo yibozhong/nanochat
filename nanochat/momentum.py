@@ -119,6 +119,9 @@ class NormalizedHeavyBall(HeavyBall):
 
 
 def residual_update(config):
+    if config.residual_mode == 'ngpt_lookahead':
+        from nanochat.lookahead import LookaheadResidual
+        return LookaheadResidual(config)
     return {'heavy_ball': HeavyBall, 'heavy_ball_rms': HeavyBall, 'ngpt_heavy_ball': NormalizedHeavyBall,
             'ngpt_hbformer': NormalizedHeavyBall, 'ngpt': NormalizedResidual}[config.residual_mode](config)
 
@@ -213,7 +216,7 @@ class MomentumModel(ConnectionModel):
         return norm(h.to(self.wte.weight.dtype))
 
     def initial_state(self, x, token_ids=None, start=0):
-        h = normalize_residual(x) if self.config.residual_mode in ('ngpt_heavy_ball', 'ngpt_hbformer') else state_dtype(norm(x))
+        h = normalize_residual(x) if self.config.residual_mode in ('ngpt_heavy_ball', 'ngpt_hbformer', 'ngpt_lookahead') else state_dtype(norm(x))
         if self.velocity_embedding is None:
             return h, torch.zeros_like(h)
         if token_ids is None:

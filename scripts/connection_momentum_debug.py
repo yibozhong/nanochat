@@ -20,6 +20,7 @@ from nanochat.gpt import norm
 @torch.no_grad()
 def residual_audit(model, x, require_unit_target=False):
     pure = model.config.residual_mode == 'ngpt'
+    lookahead = model.config.residual_mode == 'ngpt_lookahead'
     vanilla = model.config.residual_mode == 'vanilla'
     learned_norm = model.config.ngpt_velocity_mode == 'transport_layernorm'
     transported = model.config.residual_mode in ('ngpt_heavy_ball', 'ngpt_hbformer') and model.config.ngpt_velocity_mode != 'ambient'
@@ -35,12 +36,18 @@ def residual_audit(model, x, require_unit_target=False):
         for name, branch, update in (
             ('attention', lambda z: b.attention_branch(z, cos, sin), getattr(b, 'attn_residual', None)),
             ('ffn', b.mlp_branch, getattr(b, 'mlp_residual', None))):
-            force = branch(h.to(cos.dtype))
+            query = update.query(h, v) if lookahead else h
+            force = branch(query.to(cos.dtype))
             force_rms = force.float().square().mean(-1).sqrt()
             row = dict(sublayer=len(rows), branch=name,
                        force_rms=force.float().square().mean().sqrt().item(),
                        min_token_force_rms=force_rms.min().item())
-            if model.config.residual_mode in ('ngpt', 'ngpt_heavy_ball', 'ngpt_hbformer'):
+            if lookahead:
+                row['mu'] = update.mu.item()
+                row['lookahead_displacement_rms'] = (query-h).square().mean().sqrt().item()
+                row['incoming_tangent_error_max'] = (h*v).mean(-1).abs().max().item()
+                assert row['incoming_tangent_error_max'] < 2e-6
+            if model.config.residual_mode in ('ngpt', 'ngpt_heavy_ball', 'ngpt_hbformer', 'ngpt_lookahead'):
                 row['force_floor_fraction'] = (force_rms < model.config.ngpt_force_rms_floor).float().mean().item()
                 z = normalize_residual(force, model.config.ngpt_force_rms_floor)
                 row['target_rms_max_error'] = (z.square().mean(-1)-1).abs().max().item()
@@ -65,7 +72,7 @@ def residual_audit(model, x, require_unit_target=False):
                     if not learned_norm:
                         row['velocity_floor_fraction'] = (tangent.square().mean(-1) < model.config.momentum_velocity_rms_floor**2).float().mean().item()
                 h, v = update(h, v, force)
-            if model.config.residual_mode in ('ngpt_heavy_ball', 'ngpt_hbformer', 'ngpt'):
+            if model.config.residual_mode in ('ngpt_heavy_ball', 'ngpt_hbformer', 'ngpt', 'ngpt_lookahead'):
                 row['hidden_rms_max_error'] = (h.square().mean(-1)-1).abs().max().item()
                 assert row['hidden_rms_max_error'] < 2e-6
             assert torch.isfinite(h).all()
@@ -97,7 +104,7 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument('--data-dir', required=True)
     p.add_argument('--output-dir', required=True)
-    p.add_argument('--target-mode', choices=('ngpt_heavy_ball','ngpt','vanilla','heavy_ball_rms','ngpt_hbformer'), default='ngpt_heavy_ball')
+    p.add_argument('--target-mode', choices=('ngpt_heavy_ball','ngpt','vanilla','heavy_ball_rms','ngpt_hbformer','ngpt_lookahead'), default='ngpt_heavy_ball')
     p.add_argument('--ngpt-velocity-mode', choices=('transport_rms','transport_layernorm'))
     p.add_argument('--ngpt-weight-norm', action=argparse.BooleanOptionalAction, default=None)
     p.add_argument('--nonzero-init', action='store_true')
@@ -111,7 +118,10 @@ def main():
     result = dict(complete=False, formal_training=False, gpu=torch.cuda.get_device_name(),
                   torch=torch.__version__, cuda=torch.version.cuda, attention_backend='fa2',
                   seed=42, microbatch=16, batch_tokens=32768, models={})
-    if a.target_mode in ('heavy_ball_rms', 'ngpt_hbformer'):
+    if a.target_mode == 'ngpt_lookahead':
+        assert a.nonzero_init and not a.transport_rms
+        modes = [('vanilla', 32), ('ngpt', 32), (a.target_mode, 128)]
+    elif a.target_mode in ('heavy_ball_rms', 'ngpt_hbformer'):
         assert a.nonzero_init and not a.transport_rms
         control = 'hbformer_rms' if a.ngpt_velocity_mode == 'transport_layernorm' else 'ngpt_heavy_ball'
         modes = [('vanilla', 32), (control, 32), (a.target_mode, 128)]
@@ -129,7 +139,7 @@ def main():
     for mode, steps in modes:
         seed_all(42)
         dynamics = {'ngpt_ambient':'ngpt_heavy_ball', 'hbformer_rms':'ngpt_hbformer'}.get(mode, mode)
-        velocity_mode = 'ambient'
+        velocity_mode = 'lookahead_transport' if dynamics == 'ngpt_lookahead' else 'ambient'
         if dynamics == 'ngpt_hbformer' or (mode == 'ngpt_heavy_ball' and
                 (a.transport_rms or a.target_mode in ('ngpt_hbformer', 'heavy_ball_rms'))):
             velocity_mode = 'transport_rms'
@@ -141,7 +151,8 @@ def main():
                              ngpt_force_rms_floor=1e-6 if a.nonzero_init else .1)
         model = build_connection_model(c).prepare(compile_blocks=True)
         opt, wd = optimizer_for(model)
-        initial_dev = evaluate(model, data)[0] if mode == a.target_mode else None
+        paired_control = mode == 'ngpt' and a.target_mode == 'ngpt_lookahead'
+        initial_dev = evaluate(model, data)[0] if mode == a.target_mode or paired_control else None
         initial_state = residual_audit(model, data.batch('dev', 0, 2)[0], require_unit_target=a.nonzero_init) if mode == a.target_mode or a.nonzero_init else None
         durations, losses = [], []
         torch.cuda.reset_peak_memory_stats()
@@ -166,6 +177,8 @@ def main():
                     peak_reserved_bytes=torch.cuda.max_memory_reserved(),
                     initial_residual_state=initial_state,
                     theoretical_cost=model_cost(c, batch=16))
+        if paired_control:
+            info['initial_dev_ce'] = initial_dev
         if mode != 'vanilla':
             info['coefficients'] = model.residual_metrics()
         if mode == a.target_mode:
@@ -185,6 +198,11 @@ def main():
         del model, opt, prof
         torch._dynamo.reset(); gc.collect(); torch.cuda.empty_cache()
     m = result['models']
+    if a.target_mode == 'ngpt_lookahead':
+        initial_delta = m[a.target_mode]['initial_dev_ce'] - m['ngpt']['initial_dev_ce']
+        assert abs(initial_delta) < 1e-3, initial_delta
+        result['initial_dev_ce_delta_to_ngpt'] = initial_delta
+        result['time_ratio_to_ngpt'] = m[a.target_mode]['median_step_seconds']/m['ngpt']['median_step_seconds']
     if 'heavy_ball' in m:
         result['time_ratio_to_hb'] = m[a.target_mode]['median_step_seconds']/m['heavy_ball']['median_step_seconds']
         assert result['time_ratio_to_hb'] < 1.75

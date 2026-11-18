@@ -23,11 +23,16 @@ case "$TASK_MODE/$TASK_VELOCITY_MODE" in
             TASK_GROUP=ngpt-momentum-transport-rms-10b
         fi
         ;;
+    ngpt_lookahead/lookahead_transport)
+        TASK_MOMENTUM_ARGS=(--velocity-init token_position --velocity-embedding-std .02 --momentum-beta-init .5 --lookahead-mu-init 0)
+        TASK_GROUP=ngpt-lookahead-5k
+        ;;
     vanilla/ambient|ngpt/ambient|ngpt_heavy_ball/ambient) ;;
     *) exit 64 ;;
 esac
 TASK_SCHEDULE_STEPS=305176
 TASK_STEPS=$TASK_SCHEDULE_STEPS
+if [[ "$TASK_MODE" == ngpt_lookahead ]]; then TASK_STEPS=5000; fi
 if [ "$#" -gt 3 ]; then
     [[ "$#" == 4 && "$TASK_MODE" == ngpt_hbformer && "$4" == --no-ngpt-weight-norm ]]
     TASK_MOMENTUM_ARGS+=("$4")
@@ -66,11 +71,15 @@ assert s.get('schedule_steps',305176)==int(sys.argv[5])==305176
 assert s['initialization']=='seed42_from_scratch_no_diagnostic_weights'
 assert s['attention_backend']=='fa2' and s['residual_dynamics']==sys.argv[2]
 assert s['model']==dict(depth=8,width=512,heads=4,sequence_length=2048,vocab_size=32768)
-assert s['velocity_embedding']==(sys.argv[2] in ('ngpt_heavy_ball','heavy_ball_rms','ngpt_hbformer')) and s['ngpt_alpha_init']==.05
+assert s['velocity_embedding']==(sys.argv[2] in ('ngpt_heavy_ball','heavy_ball_rms','ngpt_hbformer','ngpt_lookahead')) and s['ngpt_alpha_init']==.05
 assert s['residual_projection_init']=='normal' and s['residual_projection_init_std']==.02
 assert s['ngpt_force_rms_floor']==1e-6
 assert s.get('ngpt_velocity_mode','ambient')==sys.argv[3]
-if sys.argv[2]=='ngpt_hbformer':
+if sys.argv[2]=='ngpt_lookahead':
+    assert s['steps']==5000 and not s['ngpt_weight_norm']
+    assert s['lookahead_mu_init']==0 and s['momentum_beta_init']==.5 and not s['momentum_beta_trainable']
+    assert s['velocity_init']=='token_position' and s['velocity_embedding_std']==.02
+elif sys.argv[2]=='ngpt_hbformer':
     import math
     assert s['momentum_eta_init']==1 and not s['momentum_eta_trainable']
     assert s['ngpt_velocity_mode'] in ('transport_rms','transport_layernorm')

@@ -29,20 +29,21 @@ def main():
     p.add_argument('--attention-kernel', choices=('original','fla_triton'), default='original')
     p.add_argument('--architecture', choices=('vanilla', 'native'), default='vanilla')
     p.add_argument('--latent-feedback', action='store_true')
-    p.add_argument('--residual-dynamics', choices=('vanilla','heavy_ball','heavy_ball_rms','ngpt_heavy_ball','ngpt_hbformer','ngpt'), default='vanilla')
+    p.add_argument('--residual-dynamics', choices=('vanilla','heavy_ball','heavy_ball_rms','ngpt_heavy_ball','ngpt_hbformer','ngpt','ngpt_lookahead'), default='vanilla')
     p.add_argument('--velocity-init', choices=('zero','token','token_position'), default=None,
-                   help='HBFormer uses token plus position velocity, other momentum modes default to token velocity')
+                   help='HBFormer and lookahead use token plus position velocity, other momentum modes default to token velocity')
     p.add_argument('--velocity-embedding-std', type=float, default=.02)
     p.add_argument('--momentum-beta-init', type=float, default=.5)
     p.add_argument('--momentum-gamma-init', type=float, default=None)
     p.add_argument('--momentum-eta-init', type=float, default=None,
                    help='HBFormer fixes eta=1. Other modes learn eta from their configured initial value.')
-    p.add_argument('--ngpt-velocity-mode', choices=('ambient','transport_rms','transport_layernorm'), default=None,
+    p.add_argument('--ngpt-velocity-mode', choices=('ambient','transport_rms','transport_layernorm','lookahead_transport'), default=None,
                    help='New nGPT momentum defaults to transport_rms; old checkpoints require ambient')
     p.add_argument('--momentum-velocity-rms-floor', type=float, default=.1)
     p.add_argument('--ngpt-force-rms-floor', type=float, default=.1)
     p.add_argument('--ngpt-weight-norm', action=argparse.BooleanOptionalAction, default=None,
                    help='Project backbone weights at initialization and after optimizer steps (HBFormer default)')
+    p.add_argument('--lookahead-mu-init', type=float, default=0.)
     p.add_argument('--ngpt-alpha-init', type=float, default=.05)
     p.add_argument('--residual-projection-init', choices=('zero','normal'), default=None)
     p.add_argument('--residual-projection-init-std', type=float, default=.02,
@@ -101,7 +102,7 @@ def main():
                        velocity_embedding_std=a.velocity_embedding_std,
                        momentum_beta_init=a.momentum_beta_init, momentum_gamma_init=a.momentum_gamma_init,
                        momentum_eta_init=a.momentum_eta_init, ngpt_force_rms_floor=a.ngpt_force_rms_floor,
-                       ngpt_alpha_init=a.ngpt_alpha_init, ngpt_weight_norm=a.ngpt_weight_norm,
+                       lookahead_mu_init=a.lookahead_mu_init, ngpt_alpha_init=a.ngpt_alpha_init, ngpt_weight_norm=a.ngpt_weight_norm,
                        ngpt_velocity_mode=a.ngpt_velocity_mode,
                        momentum_velocity_rms_floor=a.momentum_velocity_rms_floor,
                        residual_projection_init=a.residual_projection_init,

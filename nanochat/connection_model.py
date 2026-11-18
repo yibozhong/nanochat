@@ -49,6 +49,7 @@ class ConnectionConfig:
     momentum_eta_init: float | None = None
     ngpt_force_rms_floor: float = 0.1
     ngpt_alpha_init: float = 0.05
+    lookahead_mu_init: float = 0.0
     ngpt_weight_norm: bool | None = None
     ngpt_velocity_mode: str | None = None
     momentum_velocity_rms_floor: float = 0.1
@@ -57,12 +58,15 @@ class ConnectionConfig:
 
     def __post_init__(self):
         hbformer = self.residual_mode == 'ngpt_hbformer'
+        lookahead = self.residual_mode == 'ngpt_lookahead'
+        if not math.isfinite(self.lookahead_mu_init):
+            raise ValueError('Lookahead must start at a finite value')
         if self.ngpt_weight_norm is None:
             self.ngpt_weight_norm = hbformer and self.ngpt_velocity_mode != 'transport_layernorm'
         if self.ngpt_weight_norm and not hbformer:
             raise ValueError('nGPT weight projection is supported with ngpt_hbformer')
         if self.residual_projection_init is None:
-            self.residual_projection_init = 'normal' if hbformer else 'zero'
+            self.residual_projection_init = 'normal' if hbformer or lookahead else 'zero'
         if self.residual_projection_init not in ('zero', 'normal'):
             raise ValueError('Unknown residual output projection initialization')
         if not math.isfinite(self.residual_projection_init_std) or self.residual_projection_init_std <= 0:
@@ -70,14 +74,17 @@ class ConnectionConfig:
         if self.residual_projection_init != 'zero' and (self.architecture != 'vanilla'
                 or self.variant != 'baseline' or self.latent_feedback):
             raise ValueError('Random residual output initialization is scoped to the vanilla baseline backbone')
-        if self.residual_dynamics not in ('vanilla', 'heavy_ball', 'heavy_ball_rms', 'ngpt_heavy_ball', 'ngpt_hbformer', 'ngpt'):
+        if self.residual_dynamics not in ('vanilla', 'heavy_ball', 'heavy_ball_rms', 'ngpt_heavy_ball', 'ngpt_hbformer', 'ngpt', 'ngpt_lookahead'):
             raise ValueError('Unknown residual dynamics')
         if not math.isfinite(self.ngpt_alpha_init) or not 0 < self.ngpt_alpha_init < 1:
             raise ValueError('nGPT alpha must start strictly between zero and one')
         if self.momentum_gamma_init is None:
             self.momentum_gamma_init = math.log(2.) if hbformer else 0.5
         if self.ngpt_velocity_mode is None:
-            self.ngpt_velocity_mode = 'transport_rms' if self.residual_mode == 'ngpt_heavy_ball' or hbformer else 'ambient'
+            if lookahead:
+                self.ngpt_velocity_mode = 'lookahead_transport'
+            else:
+                self.ngpt_velocity_mode = 'transport_rms' if self.residual_mode == 'ngpt_heavy_ball' or hbformer else 'ambient'
         if self.momentum_eta_init is None:
             if self.residual_mode == 'ngpt_heavy_ball':
                 self.momentum_eta_init = 0.05 if self.ngpt_velocity_mode == 'transport_rms' else 0.1
@@ -85,22 +92,26 @@ class ConnectionConfig:
                 self.momentum_eta_init = 0.05 if self.residual_mode == 'heavy_ball_rms' else 1.0
         if self.ngpt_velocity_mode == 'transport_layernorm' and not hbformer:
             raise ValueError('Transported velocity LayerNorm requires the unit-step HBFormer')
-        if self.ngpt_velocity_mode not in ('ambient', 'transport_rms', 'transport_layernorm'):
+        if lookahead != (self.ngpt_velocity_mode == 'lookahead_transport'):
+            raise ValueError('Lookahead requires a transported velocity for branch reads')
+        if self.ngpt_velocity_mode not in ('ambient', 'transport_rms', 'transport_layernorm', 'lookahead_transport'):
             raise ValueError('Unknown nGPT velocity mode')
         if not math.isfinite(self.momentum_velocity_rms_floor) or self.momentum_velocity_rms_floor <= 0:
             raise ValueError('Velocity RMS floor must be positive and finite')
         if not math.isfinite(self.ngpt_force_rms_floor) or self.ngpt_force_rms_floor <= 0:
             raise ValueError('Normalized-target force RMS floor must be positive and finite')
         if self.velocity_init is None:
-            if hbformer:
+            if hbformer or lookahead:
                 self.velocity_init = 'token_position'
             else:
                 self.velocity_init = 'token' if self.residual_mode in ('heavy_ball', 'heavy_ball_rms', 'ngpt_heavy_ball') else 'zero'
         if hbformer and (self.velocity_init != 'token_position' or self.ngpt_velocity_mode == 'ambient'
                          or self.momentum_eta_init != 1 or self.residual_projection_init != 'normal'):
             raise ValueError('ngpt_hbformer requires token_position velocity, parallel transport, fixed unit step and nonzero projections')
-        if self.velocity_init == 'token_position' and not hbformer:
-            raise ValueError('Token plus position velocity is supported by ngpt_hbformer')
+        if lookahead and self.velocity_init != 'token_position':
+            raise ValueError('Lookahead uses independent token and position velocity embeddings')
+        if self.velocity_init == 'token_position' and not (hbformer or lookahead):
+            raise ValueError('Token plus position velocity requires HBFormer or lookahead')
         if self.velocity_init not in ('zero', 'token', 'token_position'):
             raise ValueError('Unknown velocity initialization')
         if self.velocity_init == 'token' and self.residual_mode not in ('heavy_ball', 'heavy_ball_rms', 'ngpt_heavy_ball'):
@@ -288,9 +299,11 @@ class ConnectionBlock(Block):
 
     def momentum_forward(self, h, v, cos, sin, kv_cache=None, *, attn_update=None, mlp_update=None):
         # The residual state stays FP32; the original branches still use BF16.
-        force = self.attention_branch(h.to(cos.dtype), cos, sin, kv_cache)
+        query = self.attn_residual.query(h, v) if self.residual_mode == 'ngpt_lookahead' else h
+        force = self.attention_branch(query.to(cos.dtype), cos, sin, kv_cache)
         h, v = (attn_update or self.attn_residual)(h, v, force)
-        force = self.mlp_branch(h.to(cos.dtype))
+        query = self.mlp_residual.query(h, v) if self.residual_mode == 'ngpt_lookahead' else h
+        force = self.mlp_branch(query.to(cos.dtype))
         return (mlp_update or self.mlp_residual)(h, v, force)
 
     def forward(self, x, cos, sin, kv_cache=None):
@@ -490,6 +503,9 @@ def optimizer_for(model, batch_tokens=32768):
 
 
 def build_connection_model(config):
+    if config.residual_mode == 'ngpt_lookahead':
+        from nanochat.lookahead import LookaheadModel
+        return LookaheadModel(config)
     if config.residual_mode == 'ngpt':
         from nanochat.momentum import NormalizedResidualModel
         return NormalizedResidualModel(config)

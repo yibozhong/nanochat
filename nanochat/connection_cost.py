@@ -15,8 +15,10 @@ def model_cost(config, batch=1, activation_bytes=2, feedback_passes=None):
         # Normalized mode: target norm (3d-1), target-h (d), HB (5d), hidden norm (3d-1).
         # Coefficient scalar work and sqrt/division are excluded here.
         sites=2*depth
-        per_site={'heavy_ball':5*d, 'heavy_ball_rms':8*d-1, 'ngpt_heavy_ball':12*d-2, 'ngpt_hbformer':25*d-6, 'ngpt':9*d-2}[c.residual_mode]
+        per_site={'heavy_ball':5*d, 'heavy_ball_rms':8*d-1, 'ngpt_heavy_ball':12*d-2, 'ngpt_hbformer':25*d-6, 'ngpt':9*d-2, 'ngpt_lookahead':29*d-6}[c.residual_mode]
         initial=3*d-1
+        if c.residual_mode == 'ngpt_lookahead':
+            initial += 4*d-1  # v0 tangent projection
         if c.residual_mode == 'heavy_ball_rms' and c.velocity_init == 'token':
             initial += 3*d-1
         if c.residual_mode == 'ngpt_heavy_ball' and c.ngpt_velocity_mode == 'transport_rms':
@@ -31,10 +33,10 @@ def model_cost(config, batch=1, activation_bytes=2, feedback_passes=None):
             gain_parameters = d*sites
         residual=batch*t*(sites*per_site+initial)
         embedding_parameters=c.vocab_size*d if c.velocity_init=='token' else 0
-        if c.residual_mode == 'ngpt_hbformer':
+        if c.velocity_init == 'token_position':
             residual += batch*t*d  # v0 = token + position
             embedding_parameters = (c.vocab_size+c.sequence_length)*d
-        scalars_per_site = {'ngpt':1, 'ngpt_hbformer':2}.get(c.residual_mode, 3)
+        scalars_per_site = {'ngpt':1, 'ngpt_hbformer':2, 'ngpt_lookahead':2}.get(c.residual_mode, 3)
         return dict(estimated_forward_flops=forward+residual,
             estimated_training_flops=3*(forward+residual),
             components_forward=dict(backbone_projections=projections,vocab_head=head,

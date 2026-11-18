@@ -12,7 +12,7 @@ def main():
     begin = time.perf_counter()
     source = json.loads(Path('source.json').read_text())
     mode = source['residual_dynamics']
-    assert source['formal_training'] and mode in ('vanilla','ngpt','ngpt_heavy_ball','heavy_ball_rms','ngpt_hbformer')
+    assert source['formal_training'] and mode in ('vanilla','ngpt','ngpt_heavy_ball','heavy_ball_rms','ngpt_hbformer','ngpt_lookahead')
     assert source['residual_projection_init']=='normal' and source['ngpt_force_rms_floor']==1e-6
     assert torch.cuda.is_available() and torch.cuda.device_count() == 1
     cap = list(torch.cuda.get_device_capability())
@@ -39,7 +39,7 @@ def main():
     if not reused:
         check=(['research/connections/momentum/check.sh'] if transported else
                ['research/connections/ngpt/check.sh',mode])
-        if source.get('ngpt_weight_norm') is False:
+        if mode == 'ngpt_hbformer' and source.get('ngpt_weight_norm') is False:
             check.append('--no-ngpt-weight-norm')
         if source.get('ngpt_velocity_mode') == 'transport_layernorm':
             check.append('transport_layernorm')
@@ -49,13 +49,19 @@ def main():
         tests={k:sum(int(s.get(k,0)) for s in suites) for k in ('tests','failures','errors','skipped')}
         profile=json.loads(Path(f'results/{prefix}-profile/summary.json').read_text())
         resume=json.loads(Path(f'results/{prefix}-cli-resume.json').read_text())
-    expected_tests = {'heavy_ball_rms':9, 'ngpt_hbformer':8}.get(mode, 57 if transported else 29)
+    expected_tests = {'heavy_ball_rms':9, 'ngpt_hbformer':8, 'ngpt_lookahead':8}.get(mode, 57 if transported else 29)
     if source.get('ngpt_velocity_mode') == 'transport_layernorm':
         expected_tests = 9
         control = profile['models']['hbformer_rms']['config']
         target = profile['models'][mode]['config']
         assert control['ngpt_velocity_mode'] == 'transport_rms'
         assert {k for k in target if target[k] != control[k]} == {'ngpt_velocity_mode'}
+    if mode == 'ngpt_lookahead':
+        target = profile['models'][mode]
+        for key in ('ngpt_velocity_mode', 'ngpt_weight_norm', 'lookahead_mu_init', 'velocity_init', 'velocity_embedding_std', 'momentum_beta_init'):
+            assert target['config'][key] == source[key], key
+        assert all(row['lookahead_displacement_rms'] == 0 for row in target['initial_residual_state'])
+        assert any(row['lookahead_displacement_rms'] > 0 for row in target['final_residual_state'])
     if mode == 'ngpt_hbformer':
         assert profile['models'][mode]['config']['ngpt_weight_norm'] == source.get('ngpt_weight_norm',True)
     assert tests == dict(tests=expected_tests, failures=0, errors=0, skipped=0), tests

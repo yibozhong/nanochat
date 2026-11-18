@@ -19,6 +19,11 @@ case "$TASK_MODE" in
         fi
         TASK_ARGS_EXTRA=(--velocity-init token_position --momentum-eta-init 1 --momentum-velocity-rms-floor .1)
         ;;
+    ngpt_lookahead)
+        TASK_TESTS=tests/test_ngpt_lookahead.py
+        TASK_VELOCITY_MODE=lookahead_transport
+        TASK_ARGS_EXTRA=(--velocity-init token_position --momentum-beta-init .5 --lookahead-mu-init 0)
+        ;;
     heavy_ball_rms)
         TASK_TESTS=tests/test_heavy_ball_rms.py
         TASK_ARGS_EXTRA=(--velocity-init token --momentum-eta-init .05 --momentum-velocity-rms-floor .1)
