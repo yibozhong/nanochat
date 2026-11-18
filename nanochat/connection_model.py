@@ -286,12 +286,12 @@ class ConnectionBlock(Block):
     def mlp_branch(self, h):
         return self.mlp(norm(h))
 
-    def momentum_forward(self, h, v, cos, sin, kv_cache=None):
+    def momentum_forward(self, h, v, cos, sin, kv_cache=None, *, attn_update=None, mlp_update=None):
         # The residual state stays FP32; the original branches still use BF16.
         force = self.attention_branch(h.to(cos.dtype), cos, sin, kv_cache)
-        h, v = self.attn_residual(h, v, force)
+        h, v = (attn_update or self.attn_residual)(h, v, force)
         force = self.mlp_branch(h.to(cos.dtype))
-        return self.mlp_residual(h, v, force)
+        return (mlp_update or self.mlp_residual)(h, v, force)
 
     def forward(self, x, cos, sin, kv_cache=None):
         if self.residual_mode == 'ngpt':
