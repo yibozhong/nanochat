@@ -195,7 +195,9 @@ class MomentumModel(ConnectionModel):
             for layer in (b.attn.c_proj, b.mlp.c_proj):
                 project(layer.weight, 0)
 
-    def prepare(self, device='cuda', dtype=torch.bfloat16, compile_blocks=False):
+    def prepare(self, device='cuda', dtype=torch.bfloat16, compile_blocks=False, *, compile_lookahead_branches=False):
+        if compile_lookahead_branches and self.config.residual_mode != 'lookahead_only':
+            raise ValueError('Separate lookahead branch compilation requires lookahead_only')
         super().prepare(device, dtype, compile_blocks=False)
         if self.velocity_embedding is not None:
             self.velocity_embedding.to(dtype=dtype)
@@ -204,7 +206,10 @@ class MomentumModel(ConnectionModel):
         self.compiled_steps = None
         if compile_blocks:
             options = dict(dynamic=False, fullgraph=True, options={'emulate_precision_casts': True})
-            if self.config.ngpt_velocity_mode == 'transport_layernorm' or self.config.residual_mode == 'lookahead_only':
+            if compile_lookahead_branches:
+                from nanochat.lookahead import compile_additive_step
+                self.compiled_steps = [compile_additive_step(b, options) for b in self.blocks]
+            elif self.config.ngpt_velocity_mode == 'transport_layernorm' or self.config.residual_mode == 'lookahead_only':
                 # Keep branch reads and BF16 attention/FFN backward at reference
                 # precision. Compile only each site's residual and velocity update.
                 self.compiled_steps = [partial(b.momentum_forward,

@@ -61,6 +61,8 @@ def main():
     p.add_argument('--ngpt-force-rms-floor', type=float, default=.1)
     p.add_argument('--ngpt-weight-norm', action=argparse.BooleanOptionalAction, default=None,
                    help='Project backbone weights at initialization and after optimizer steps (HBFormer default)')
+    p.add_argument('--compile-lookahead-branches', action='store_true',
+                   help='Compile additive lookahead reads, backbone branches and residual writes separately')
     p.add_argument('--lookahead-mu-init', type=float, default=0.)
     p.add_argument('--ngpt-alpha-init', type=float, default=.05)
     p.add_argument('--residual-projection-init', choices=('zero','normal'), default=None)
@@ -139,7 +141,12 @@ def main():
         source=json.loads(Path('source.json').read_text())
     else:
         source=dict(commit=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip())
-    model=build_connection_model(c).prepare(compile_blocks=True)
+    prepare_options = dict(compile_blocks=True)
+    if a.compile_lookahead_branches:
+        if c.residual_mode != 'lookahead_only':
+            p.error('--compile-lookahead-branches requires --residual-dynamics lookahead_only')
+        prepare_options['compile_lookahead_branches'] = True
+    model=build_connection_model(c).prepare(**prepare_options)
     if a.matched_backbone_init:
         match_vanilla_initialization(model,a.seed)
     opt,wd=optimizer_for(model, matrix_optimizer=a.matrix_optimizer, arc_mu=a.arc_mu, arc_beta=a.arc_beta)
@@ -148,6 +155,8 @@ def main():
                   microbatch=a.microbatch,grad_accum=rows_per_step//a.microbatch,seed=a.seed,
                   attention_backend=a.attention_backend,matched_backbone_init=a.matched_backbone_init,
                   evaluate_test=a.evaluate_test)
+    if a.compile_lookahead_branches:
+        protocol['lookahead_compilation'] = 'separate_branches'
     if a.matrix_optimizer == 'arc':
         protocol['matrix_optimizer'] = dict(name='arc', mu=a.arc_mu, beta=a.arc_beta,
             sphere='initial_frobenius_per_matrix', step_length='scheduled_matrix_lr * sqrt(fan_out)')

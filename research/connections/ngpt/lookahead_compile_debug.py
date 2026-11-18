@@ -14,7 +14,7 @@ import torch
 
 from nanochat.connection_experiment import configure_attention
 from nanochat.connection_model import ConnectionConfig, build_connection_model, optimizer_for, schedule
-from nanochat.lookahead import LookaheadModel
+from nanochat.lookahead import LookaheadModel, additive_branch_input as read, compile_additive_step
 from nanochat.packed_training import PackedData, json_write, seed_all, train_step
 from research.connections.ngpt.lookahead_read_triton import fused_read
 
@@ -22,10 +22,6 @@ REPORT = Path('results/lookahead-compiler.json')
 OPTIONS = dict(dynamic=False, fullgraph=True, options={'emulate_precision_casts': True})
 MODES = ('current', 'full', 'attention_eager', 'ffn_eager', 'compiled_read', 'triton_read',
          'triton_branches', 'compiled_branches')
-
-
-def read(h, v, mu):
-    return (h.float() + mu[0] * v).to(h.dtype)
 
 
 def sublayer(block, attention, h, v, cos, sin, cache):
@@ -37,6 +33,9 @@ def sublayer(block, attention, h, v, cos, sin, cache):
 
 def install(model, mode):
     if mode == 'current':
+        return
+    if mode == 'compiled_branches':
+        model.compiled_steps = [compile_additive_step(b, OPTIONS) for b in model.blocks]
         return
     if mode == 'aot_eager':
         model.compiled_steps = [torch.compile(b.momentum_forward, backend='aot_eager', dynamic=False, fullgraph=True)
@@ -72,6 +71,8 @@ def pytest_configure(config):
     mode = os.environ['LOOKAHEAD_DIAGNOSTIC_MODE']
     original = LookaheadModel.prepare
     def prepare(model, *args, **kwargs):
+        if mode == 'compiled_branches' and model.config.residual_mode == 'lookahead_only':
+            return original(model, *args, **kwargs, compile_lookahead_branches=True)
         value = original(model, *args, **kwargs)
         if model.compiled_steps is not None and model.config.residual_mode == 'lookahead_only':
             install(model, mode)

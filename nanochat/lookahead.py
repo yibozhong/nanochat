@@ -28,6 +28,26 @@ class LookaheadResidual(NormalizedResidual):
         return new_h, v
 
 
+def additive_branch_input(h, v, mu):
+    # Keep the BF16 query boundary visible to the branch backward.
+    return (state_dtype(h) + mu[0] * v).to(h.dtype)
+
+
+def compile_additive_step(block, options):
+    read = torch.compile(additive_branch_input, **options)
+    attention = torch.compile(block.attention_branch, **options)
+    ffn = torch.compile(block.mlp_branch, **options)
+    attention_write = torch.compile(block.attn_residual.forward, **options)
+    ffn_write = torch.compile(block.mlp_residual.forward, **options)
+
+    def step(h, v, cos, sin, cache=None):
+        q = read(h, v, block.attn_residual.mu)
+        h, v = attention_write(h, v, attention(q, cos, sin, cache))
+        q = read(h, v, block.mlp_residual.mu)
+        return ffn_write(h, v, ffn(q))
+    return step
+
+
 class AdditiveLookaheadResidual(nn.Module):
     """Read ahead in Euclidean space and write through the vanilla residual."""
     def __init__(self, config):
