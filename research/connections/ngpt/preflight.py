@@ -36,9 +36,14 @@ def main():
         profile,tests,resume=report['profile'],report['tests'],report['resume']
         reused=(cap==[9,0] and profile['gpu']=='NVIDIA H200' and
                 profile['torch']==torch.__version__ and profile['cuda']==torch.version.cuda)
-    if 'continuation' in source:
-        prior=json.loads(Path('../parent-validation.json').read_text())
-        assert prior['complete'] and prior['source']==source['continuation']['source']
+    if mode=='ngpt_lookahead' and ('continuation' in source or 'validation_job' in source):
+        if 'continuation' in source:
+            prior=json.loads(Path('../parent-validation.json').read_text())
+            assert prior['source']==source['continuation']['source']
+        else:
+            prior=json.loads(Path('../lookahead-validation.json').read_text())
+            assert prior['source']['commit']==source['validated_model_commit'] and prior['source']['run_id']!=source['run_id']
+        assert prior['complete']
         if (cap==prior['capability'] and prior['device']['torch']==torch.__version__
                 and prior['device']['cuda']==torch.version.cuda):
             profile,tests,resume=prior['profile'],prior['tests'],prior['resume']

@@ -29,15 +29,20 @@ def command(args,cwd=REPO):
 def main():
     parser=argparse.ArgumentParser()
     parser.add_argument('preset',choices=PRESETS)
-    parser.add_argument('--extend-to-schedule', action='store_true', help='Continue the completed lookahead pilot to its original 10B schedule')
+    start=parser.add_mutually_exclusive_group()
+    start.add_argument('--fresh-10b', action='store_true', help='Start an independent 10B lookahead run at step zero')
+    start.add_argument('--extend-to-schedule', action='store_true', help='Continue the completed lookahead pilot to its original 10B schedule')
     args=parser.parse_args()
     preset=args.preset
-    if args.extend_to_schedule and preset != 'ngpt_lookahead':
-        parser.error('Only the lookahead pilot has a continuation preset')
+    full_lookahead=args.fresh_10b or args.extend_to_schedule
+    if full_lookahead and preset != 'ngpt_lookahead':
+        parser.error('The lookahead start options require ngpt_lookahead')
     mode=PRESETS[preset]
     short_control = preset == 'ngpt_hbformer_no_wn'
-    steps = 5000 if short_control or (mode == 'ngpt_lookahead' and not args.extend_to_schedule) else STEPS
+    steps = 5000 if short_control or (mode == 'ngpt_lookahead' and not full_lookahead) else STEPS
     budget = '5k-steps' if steps == 5000 else '10b'
+    if args.fresh_10b:
+        budget='10b-from-scratch'
     ROOT=HOME_ROOT/f'residual-nonzero-{preset}-{budget}-20261117'
     KEY=ROOT.name
     ROOT.mkdir(exist_ok=True)
@@ -139,7 +144,7 @@ def main():
             assert profile['seed']==source['seed'] and profile['microbatch']==source['microbatch']
             assert profile['batch_tokens']==source['batch_tokens'] and profile['attention_backend']=='fa2'
             shutil.copy2(report_path,bundle/'transport-validation.json')
-        if args.extend_to_schedule:
+        if full_lookahead:
             parent=HOME_ROOT/f'residual-nonzero-{preset}-5k-steps-20261117'
             summary=json.loads((parent/'summary.json').read_text())
             previous=json.loads((parent/'state.json').read_text())
@@ -148,11 +153,21 @@ def main():
             assert previous['source']==old and summary['run_id']==previous['run_id']==old['run_id']
             assert not json.loads(command(['condor_q',previous['job'],'-json']) or '[]')
             assert old['schedule_steps']==steps and old['steps']==summary['steps']
-            run_id=source['run_id']=summary['run_id']
-            metadata={'plan','commit','steps','training_tokens'}
+            metadata={'plan','commit','steps','training_tokens','run_id'}
             assert {k:v for k,v in old.items() if k not in metadata} == {k:v for k,v in source.items() if k not in metadata}
             changed=command(['git','diff','--name-only',old['commit'],commit]).splitlines()
             assert all(p.startswith('research/connections/ngpt/') or p=='scripts/connection_train.py' for p in changed),changed
+            source['reference_step_seconds']=summary['steady_step_seconds']
+            source['reference_gpu']=summary['gpu']
+        if args.fresh_10b:
+            assert run_id!=summary['run_id']
+            gate=parent/'ngpt-sm90.json'
+            report=json.loads(gate.read_text())
+            assert report['complete'] and report['source']==old and report['resume']['complete']
+            source.update(validation_job=previous['job'],validated_model_commit=old['commit'])
+            shutil.copy2(gate,bundle/'lookahead-validation.json')
+        if args.extend_to_schedule:
+            run_id=source['run_id']=summary['run_id']
             archives=parent/'results'
             checkpoints=archives/f"train-{previous['job']}-checkpoints.tar"
             with tarfile.open(checkpoints,'r:') as tar:
@@ -163,8 +178,6 @@ def main():
             (bundle/'parent-results.tar').symlink_to(archives/f"train-{previous['job']}.tar")
             source['continuation']=dict(source=old,job=previous['job'],step=summary['steps'],dev_ce=summary['final_dev_ce'],
                                         checkpoint_files=summary['checkpoint_files'])
-            source['reference_step_seconds']=summary['steady_step_seconds']
-            source['reference_gpu']=summary['gpu']
         (bundle/'source.json').write_text(json.dumps(source,indent=2)+'\n')
         inputs=[str(p.relative_to(ROOT)) for p in bundle.iterdir()]
         inputs += [str(HOME_ROOT/'.netrc'),data['data_uri'],
@@ -174,6 +187,8 @@ def main():
         job_args=f'{run_id} {mode}'
         if source['ngpt_velocity_mode'] != 'ambient':
             job_args+=' '+source['ngpt_velocity_mode']
+        if args.fresh_10b:
+            job_args+=' --fresh-10b'
         if args.extend_to_schedule:
             job_args+=' --extend-to-schedule'
         if mode == 'ngpt_hbformer' and source.get('ngpt_weight_norm') is False:
@@ -220,6 +235,9 @@ def main():
         assert set(ad['TransferOutput'].split(','))=={'results.tar','checkpoints.tar'}
         assert ad['NgptTrainKey']==KEY and ad['InteractiveJob'] and ad['WantGPULab']
         assert ad['Args']==job_args
+        if args.fresh_10b:
+            assert 'lookahead-validation.json' in ad['TransferInput'] and 'continuation' not in source
+            assert not any(x in ad['TransferInput'] for x in ('checkpoints.tar','results.tar','.pt,'))
         if args.extend_to_schedule:
             assert 'parent-checkpoints.tar' in ad['TransferInput'] and 'parent-results.tar' in ad['TransferInput']
         assert 'backfill' in ad['Rank'] and 'countMatches' in ad['Rank']

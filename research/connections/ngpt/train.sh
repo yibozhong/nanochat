@@ -33,7 +33,7 @@ esac
 TASK_SCHEDULE_STEPS=305176
 TASK_STEPS=$TASK_SCHEDULE_STEPS
 if [[ "$TASK_MODE" == ngpt_lookahead ]]; then TASK_STEPS=5000; fi
-if [[ "${4:-}" == --extend-to-schedule ]]; then
+if [[ "${4:-}" == --extend-to-schedule || "${4:-}" == --fresh-10b ]]; then
     [[ "$#" == 4 && "$TASK_MODE" == ngpt_lookahead ]]
     TASK_GROUP=ngpt-lookahead-10b
     TASK_STEPS=$TASK_SCHEDULE_STEPS
@@ -91,7 +91,7 @@ assert s.get('ngpt_velocity_mode','ambient')==sys.argv[3]
 if sys.argv[2]=='ngpt_lookahead':
     extended = sys.argv[6]=='--extend-to-schedule'
     assert extended == ('continuation' in s)
-    assert s['steps']==(305176 if extended else 5000) and not s['ngpt_weight_norm']
+    assert s['steps']==(305176 if extended or sys.argv[6]=='--fresh-10b' else 5000) and not s['ngpt_weight_norm']
     assert s['lookahead_mu_init']==0 and s['momentum_beta_init']==.5 and not s['momentum_beta_trainable']
     assert s['velocity_init']=='token_position' and s['velocity_embedding_std']==.02
 elif sys.argv[2]=='ngpt_hbformer':
