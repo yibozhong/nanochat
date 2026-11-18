@@ -64,9 +64,17 @@ def collect(root,training):
         if ref_path.exists():
             reference = json.loads(ref_path.read_text())
             assert reference['step'] == value['steps'] and reference['dev_tokens'] == value['dev_tokens']
-            save(root/'comparison.json', dict(reference=reference, run_id=value['run_id'],
-                step=value['steps'], dev_ce=value['final_dev_ce'],
-                delta_dev_ce=value['final_dev_ce']-reference['dev_ce']))
+            comparison=dict(reference=reference, run_id=value['run_id'], step=value['steps'],
+                            dev_ce=value['final_dev_ce'], delta_dev_ce=value['final_dev_ce']-reference['dev_ce'])
+            if 'ngpt_lookahead' in reference:
+                ngpt, combined = reference['ngpt'], reference['ngpt_lookahead']
+                for control in (ngpt, combined):
+                    assert control['step']==value['steps'] and control['dev_tokens']==value['dev_tokens']
+                vanilla_gain = reference['dev_ce'] - value['final_dev_ce']
+                ngpt_gain = ngpt['dev_ce'] - combined['dev_ce']
+                comparison.update(lookahead_gain_on_vanilla=vanilla_gain, lookahead_gain_on_ngpt=ngpt_gain,
+                                  additional_gain_with_ngpt=ngpt_gain-vanilla_gain)
+            save(root/'comparison.json', comparison)
         return True
     return False
 

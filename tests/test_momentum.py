@@ -113,7 +113,9 @@ def test_cce_gradient_and_velocity_learning(setting):
         assert error < .035, (n, error.item())
     if getattr(model, 'velocity_embedding', None) is not None:
         assert model.velocity_embedding.weight.grad.abs().sum() > 0
-        assert model.blocks[0].attn_residual.raw.grad[0].abs() > 0
+        site = model.blocks[0].attn_residual
+        coefficient = site.mu if setting.residual_mode == 'lookahead_only' else site.raw
+        assert coefficient.grad[0].abs() > 0
         untouched = torch.ones(256, device='cuda', dtype=torch.bool); untouched[x.unique()] = False
         assert torch.count_nonzero(model.velocity_embedding.weight.grad[untouched]) == 0
     elif setting.residual_mode == 'heavy_ball':

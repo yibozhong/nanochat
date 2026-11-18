@@ -119,6 +119,9 @@ class NormalizedHeavyBall(HeavyBall):
 
 
 def residual_update(config):
+    if config.residual_mode == 'lookahead_only':
+        from nanochat.lookahead import AdditiveLookaheadResidual
+        return AdditiveLookaheadResidual(config)
     if config.residual_mode == 'ngpt_lookahead':
         from nanochat.lookahead import LookaheadResidual
         return LookaheadResidual(config)

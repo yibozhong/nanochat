@@ -44,7 +44,7 @@ def main():
     p.add_argument('--attention-kernel', choices=('original','fla_triton'), default='original')
     p.add_argument('--architecture', choices=('vanilla', 'native'), default='vanilla')
     p.add_argument('--latent-feedback', action='store_true')
-    p.add_argument('--residual-dynamics', choices=('vanilla','heavy_ball','heavy_ball_rms','ngpt_heavy_ball','ngpt_hbformer','ngpt','ngpt_lookahead'), default='vanilla')
+    p.add_argument('--residual-dynamics', choices=('vanilla','heavy_ball','heavy_ball_rms','ngpt_heavy_ball','ngpt_hbformer','ngpt','ngpt_lookahead','lookahead_only'), default='vanilla')
     p.add_argument('--velocity-init', choices=('zero','token','token_position'), default=None,
                    help='HBFormer and lookahead use token plus position velocity, other momentum modes default to token velocity')
     p.add_argument('--velocity-embedding-std', type=float, default=.02)

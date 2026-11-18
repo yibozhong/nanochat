@@ -18,7 +18,7 @@ ASSETS=HOME_ROOT/'nanochat-runtime-assets'
 PRESETS={'vanilla':'vanilla', 'ngpt':'ngpt', 'ngpt_momentum':'ngpt_heavy_ball',
          'ngpt_momentum_transport_rms':'ngpt_heavy_ball', 'heavy_ball_rms':'heavy_ball_rms',
          'ngpt_hbformer':'ngpt_hbformer', 'ngpt_hbformer_no_wn':'ngpt_hbformer',
-         'ngpt_hbformer_velocity_ln':'ngpt_hbformer', 'ngpt_lookahead':'ngpt_lookahead'}
+         'ngpt_hbformer_velocity_ln':'ngpt_hbformer', 'ngpt_lookahead':'ngpt_lookahead', 'lookahead_only':'lookahead_only'}
 STEPS=305176
 
 
@@ -72,7 +72,7 @@ def main():
         (ROOT/'train.sh').chmod(0o755)
         run_id=uuid.uuid4().hex[:8]
         source=dict(commit=commit,formal_training=True,plan=KEY,run_id=run_id,
-            model_variant=preset,preset=preset,residual_dynamics=mode,velocity_embedding=mode in ('ngpt_heavy_ball','heavy_ball_rms','ngpt_hbformer','ngpt_lookahead'),
+            model_variant=preset,preset=preset,residual_dynamics=mode,velocity_embedding=mode in ('ngpt_heavy_ball','heavy_ball_rms','ngpt_hbformer','ngpt_lookahead','lookahead_only'),
             ngpt_alpha_init=.05,ngpt_force_rms_floor=1e-6,ngpt_velocity_mode='ambient',
             residual_projection_init='normal',residual_projection_init_std=.02,
             output_projection_actual_std=.005,momentum_beta_init=.5,momentum_gamma_init=.5,
@@ -89,12 +89,16 @@ def main():
             passed_families=[],compatible_fallback_backend='A100 FA2/CCE runtime validated in skip-scale/validation.json',
             prior_h100_reference_step_seconds=.06704051233828068 if mode=='vanilla' else .0756970327347517,
             timing_reference='previous zero-init H100 diagnostics, estimate only; measure all three nonzero modes in preflight')
-        if mode == 'ngpt_lookahead':
+        if mode in ('ngpt_lookahead', 'lookahead_only'):
             del source['momentum_gamma_init'], source['momentum_eta_init']
             source.update(velocity_init='token_position', velocity_embedding_std=.02, momentum_beta_trainable=False,
-                          lookahead_mu_init=0., ngpt_velocity_mode='lookahead_transport', ngpt_weight_norm=False, schedule_steps=STEPS,
+                          lookahead_mu_init=0., ngpt_velocity_mode='lookahead_transport' if mode=='ngpt_lookahead' else 'ambient', ngpt_weight_norm=False, schedule_steps=STEPS,
                           reference_run='d065c132', backbone_weight_constraint='none',
                           preflight='Zero-gate equality with nGPT, trainable lookahead, tangent geometry, causal KV, gradients, exact resume and same-GPU speed')
+        if mode == 'lookahead_only':
+            source.update(reference_run='2eac64db', combined_reference_run='d4293868',
+                          residual_write='vanilla_addition', velocity_observation='realized_displacement',
+                          preflight='Zero-gate parity with vanilla, finite active-gate gradients, KV cache, exact resume; 128 steps and matched vanilla/combined timing')
         if mode=='ngpt_hbformer':
             source.pop('output_projection_actual_std')
             source.update(velocity_init='token_position', velocity_embedding_std=.02, momentum_eta_init=1.,
@@ -235,6 +239,8 @@ def main():
         assert set(ad['TransferOutput'].split(','))=={'results.tar','checkpoints.tar'}
         assert ad['NgptTrainKey']==KEY and ad['InteractiveJob'] and ad['WantGPULab']
         assert ad['Args']==job_args
+        if mode == 'lookahead_only':
+            assert not any(name in ad['TransferInput'] for name in ('parent-', 'checkpoints.tar', 'results.tar'))
         if args.fresh_10b:
             assert 'lookahead-validation.json' in ad['TransferInput'] and 'continuation' not in source
             assert not any(x in ad['TransferInput'] for x in ('checkpoints.tar','results.tar','.pt,'))

@@ -19,9 +19,9 @@ case "$TASK_MODE" in
         fi
         TASK_ARGS_EXTRA=(--velocity-init token_position --momentum-eta-init 1 --momentum-velocity-rms-floor .1)
         ;;
-    ngpt_lookahead)
-        TASK_TESTS=tests/test_ngpt_lookahead.py
-        TASK_VELOCITY_MODE=lookahead_transport
+    ngpt_lookahead|lookahead_only)
+        TASK_TESTS="tests/test_${TASK_MODE}.py"
+        if [[ "$TASK_MODE" == ngpt_lookahead ]]; then TASK_VELOCITY_MODE=lookahead_transport; fi
         TASK_ARGS_EXTRA=(--velocity-init token_position --momentum-beta-init .5 --lookahead-mu-init 0)
         ;;
     heavy_ball_rms)

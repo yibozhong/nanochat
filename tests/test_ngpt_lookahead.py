@@ -24,10 +24,11 @@ def setting():
                             residual_projection_init='normal', ngpt_force_rms_floor=1e-6)
 
 
-def test_zero_lookahead_matches_ngpt_and_learns(setting):
+def test_zero_lookahead_matches_baseline_and_learns(setting):
     config = replace(setting, lookahead_mu_init=0.)
     seed_all(42)
-    reference = make(replace(config, residual_dynamics='ngpt', velocity_init='zero', ngpt_velocity_mode=None))
+    baseline = 'vanilla' if setting.residual_mode == 'lookahead_only' else 'ngpt'
+    reference = make(replace(config, residual_dynamics=baseline, velocity_init='zero', ngpt_velocity_mode=None))
     seed_all(42)
     model = make(config)
     params = dict(model.named_parameters())
