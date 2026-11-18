@@ -57,7 +57,7 @@ def main():
                              median_step_seconds=statistics.median(r['seconds'] for r in rows[16:32]),
                              peak_allocated_bytes=info['peak_allocated_bytes'])
         if name == 'arc':
-            events = [json.loads(line) for line in (out/'diagnostics/arc-local-debug/events.jsonl').read_text().splitlines()]
+            events = [json.loads(line)['values'] for line in (out/'diagnostics/arc-local-debug/events.jsonl').read_text().splitlines()]
             last = next(e for e in reversed(events) if e.get('step') == steps and 'dev/ce' in e)
             assert 0 < last['optimizer/mean_query_degrees'] < 90
             assert last['optimizer/max_relative_radius_error'] < 1e-5
