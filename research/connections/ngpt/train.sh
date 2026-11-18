@@ -33,7 +33,11 @@ esac
 TASK_SCHEDULE_STEPS=305176
 TASK_STEPS=$TASK_SCHEDULE_STEPS
 if [[ "$TASK_MODE" == ngpt_lookahead ]]; then TASK_STEPS=5000; fi
-if [ "$#" -gt 3 ]; then
+if [[ "${4:-}" == --extend-to-schedule ]]; then
+    [[ "$#" == 4 && "$TASK_MODE" == ngpt_lookahead ]]
+    TASK_GROUP=ngpt-lookahead-10b
+    TASK_STEPS=$TASK_SCHEDULE_STEPS
+elif [ "$#" -gt 3 ]; then
     [[ "$#" == 4 && "$TASK_MODE" == ngpt_hbformer && "$4" == --no-ngpt-weight-norm ]]
     TASK_MOMENTUM_ARGS+=("$4")
     if [[ "$TASK_VELOCITY_MODE" == transport_layernorm ]]; then
@@ -60,6 +64,15 @@ finish() {
     exit "$TASK_STATUS"
 }
 trap finish EXIT
+if [[ "${4:-}" == --extend-to-schedule ]]; then
+    if [[ -f checkpoints.tar || -f results.tar ]]; then
+        [[ -f checkpoints.tar && -f results.tar ]]
+    else
+        tar -xf parent-checkpoints.tar checkpoints/latest.pt checkpoints/best.pt
+        tar -xf parent-results.tar results/train/progress.json results/train/steps.jsonl
+    fi
+    tar -xOf parent-results.tar results/ngpt-sm90.json > parent-validation.json
+fi
 cp "$0" results/launcher.sh
 /opt/project/.venv/bin/python - "$TASK_RUN_ID" "$TASK_MODE" "$TASK_VELOCITY_MODE" "$TASK_STEPS" "$TASK_SCHEDULE_STEPS" "${4:-}" <<'PY'
 import json,sys
@@ -76,7 +89,9 @@ assert s['residual_projection_init']=='normal' and s['residual_projection_init_s
 assert s['ngpt_force_rms_floor']==1e-6
 assert s.get('ngpt_velocity_mode','ambient')==sys.argv[3]
 if sys.argv[2]=='ngpt_lookahead':
-    assert s['steps']==5000 and not s['ngpt_weight_norm']
+    extended = sys.argv[6]=='--extend-to-schedule'
+    assert extended == ('continuation' in s)
+    assert s['steps']==(305176 if extended else 5000) and not s['ngpt_weight_norm']
     assert s['lookahead_mu_init']==0 and s['momentum_beta_init']==.5 and not s['momentum_beta_trainable']
     assert s['velocity_init']=='token_position' and s['velocity_embedding_std']==.02
 elif sys.argv[2]=='ngpt_hbformer':
@@ -98,9 +113,16 @@ elif sys.argv[3]=='transport_rms' or sys.argv[2]=='heavy_ball_rms':
 p=Path('results/train/progress.json')
 if p.exists():
     r=json.loads(p.read_text())
-    assert r['run_id']==s['run_id'] and r['source']==s
+    assert r['run_id']==s['run_id']
+    if r['source'] != s:
+        parent=s['continuation']
+        assert r['source']==parent['source'] and r['step']==parent['step'] and r['tokens']==32768*r['step']
+        for name, meta in parent['checkpoint_files'].items():
+            assert Path('checkpoints',name).stat().st_size==meta['bytes']
+        r['source']=s
+        p.write_text(json.dumps(r,indent=2)+'\n')
     assert Path('checkpoints/latest.pt').is_file() and Path('checkpoints/best.pt').is_file()
-elif any(Path('checkpoints').iterdir()):
+elif 'continuation' in s or any(Path('checkpoints').iterdir()):
     raise RuntimeError('Checkpoint without run progress; inspect transport before restarting')
 PY
 if [ -f results/train/summary.json ]; then

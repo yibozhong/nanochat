@@ -22,6 +22,21 @@ from nanochat.packed_training import PackedData, seed_all, evaluate, train_step,
 from nanochat.connection_experiment import configure_attention, match_vanilla_initialization
 
 
+def check_resume_protocol(state, source, protocol, *, latest):
+    if state['source'] == source:
+        assert state['protocol'] == protocol
+        return False
+    parent = source.get('continuation')
+    assert parent and state['source'] == parent['source']
+    assert state['run_id'] == source['run_id'] == parent['source']['run_id']
+    assert parent['step'] == parent['source']['steps'] < protocol['steps'] == protocol['schedule_steps']
+    assert state['protocol'] == dict(protocol, steps=parent['step'])
+    assert 0 < state['step'] <= parent['step']
+    if latest:
+        assert state['step'] == parent['step']
+    return True
+
+
 def main():
     p = argparse.ArgumentParser()
     p.add_argument('--variant', choices=CONNECTION_VARIANTS, required=True)
@@ -137,10 +152,14 @@ def main():
     run_id=a.run_id or uuid.uuid4().hex[:8]
     if a.resume=='auto':
         a.resume=str(ckpt/'latest.pt') if (ckpt/'latest.pt').exists() else None
+    resuming_parent=False
+    if a.formal_training and 'continuation' in source:
+        assert a.resume, 'The continuation requires its latest checkpoint'
     if a.resume:
         state=torch.load(a.resume,map_location='cpu',weights_only=False)
-        assert asdict(ConnectionConfig.from_checkpoint(state['config']))==asdict(c) and state['protocol']==protocol
-        assert state['data_manifest']==data.manifest and state['source']==source
+        assert asdict(ConnectionConfig.from_checkpoint(state['config']))==asdict(c)
+        assert state['data_manifest']==data.manifest
+        resuming_parent=check_resume_protocol(state,source,protocol,latest=True)
         if a.run_id:assert state['run_id']==a.run_id
         run_id=state['run_id'];step=state['step'];best=state['best_dev_ce']
         training_seconds=state['training_seconds'];prior_elapsed=state['elapsed_seconds']
@@ -189,6 +208,11 @@ def main():
                     (f'-init-{c.residual_projection_init}' if c.residual_projection_init != 'zero' else '')+
                     f'-{c.sequence_length}ctx-{a.steps}steps',id=run_id,resume='allow',config=config)
     run=training_run(formal_training=a.formal_training, local_dir=out/"diagnostics", **kwargs)
+    if a.formal_training and resuming_parent:
+        run.config.update({'source':source, 'protocol':protocol}, allow_val_change=True)
+        run.name=kwargs['name']
+        run.summary.update(dict(complete=False, checkpoint_step=step, source=source, test_evaluated=False,
+                                final_dev_ce=None, final_test_ce=None, best_selected_test_ce=None))
     run.define_metric('tokens')
     for metric in ('train/*','dev/*','perf/*','residual/*'):
         run.define_metric(metric,step_metric='tokens')
@@ -224,7 +248,12 @@ def main():
         if initial_dev is None:initial_dev=dev
         if step==0:
             best=dev;save_best(dev);save()
-        run.log(dict(step=step,tokens=step*32768,**dev_metrics(dev)))
+        if resuming_parent:
+            expected=source['continuation']['dev_ce']
+            assert abs(dev-expected)<1e-3, (step,dev,expected)
+            print(f'RESUMED_PARENT step={step} dev_ce={dev:.8f}',flush=True)
+        else:
+            run.log(dict(step=step,tokens=step*32768,**dev_metrics(dev)))
         durations=[]
         with (out/'steps.jsonl').open('a',buffering=1) as log:
             while step<a.steps:
@@ -268,7 +297,8 @@ def main():
         if a.evaluate_test:
             final_test,test_tokens=evaluate(model,data,'test',microbatch=a.microbatch)
             selected=torch.load(ckpt/'best.pt',map_location='cpu',weights_only=False)
-            assert selected['source']==source and selected['run_id']==run_id
+            assert selected['run_id']==run_id and selected['data_manifest']==data.manifest
+            check_resume_protocol(selected,source,protocol,latest=False)
             model.load_state_dict(selected['model'])
             best_test,best_test_tokens=evaluate(model,data,'test',microbatch=a.microbatch)
             assert best_test_tokens==test_tokens

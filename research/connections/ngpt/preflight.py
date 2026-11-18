@@ -36,6 +36,13 @@ def main():
         profile,tests,resume=report['profile'],report['tests'],report['resume']
         reused=(cap==[9,0] and profile['gpu']=='NVIDIA H200' and
                 profile['torch']==torch.__version__ and profile['cuda']==torch.version.cuda)
+    if 'continuation' in source:
+        prior=json.loads(Path('../parent-validation.json').read_text())
+        assert prior['complete'] and prior['source']==source['continuation']['source']
+        if (cap==prior['capability'] and prior['device']['torch']==torch.__version__
+                and prior['device']['cuda']==torch.version.cuda):
+            profile,tests,resume=prior['profile'],prior['tests'],prior['resume']
+            reused=True
     if not reused:
         check=(['research/connections/momentum/check.sh'] if transported else
                ['research/connections/ngpt/check.sh',mode])
@@ -84,7 +91,7 @@ def main():
                   device=device, tests=tests, profile=profile, resume=resume,
                   reused_prior_validation=reused,evaluation_wall_seconds=time.perf_counter()-begin)
     marker.write_text(json.dumps(result, indent=2)+'\n')
-    print('NGPT_PREFLIGHT_PASSED fresh formal seed42 process follows', flush=True)
+    print('NGPT_PREFLIGHT_PASSED starting formal training process', flush=True)
 
 
 if __name__ == '__main__':
