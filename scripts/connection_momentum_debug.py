@@ -21,7 +21,8 @@ from nanochat.gpt import norm
 def residual_audit(model, x, require_unit_target=False):
     pure = model.config.residual_mode == 'ngpt'
     vanilla = model.config.residual_mode == 'vanilla'
-    transported = model.config.residual_mode in ('ngpt_heavy_ball', 'ngpt_hbformer') and model.config.ngpt_velocity_mode == 'transport_rms'
+    learned_norm = model.config.ngpt_velocity_mode == 'transport_layernorm'
+    transported = model.config.residual_mode in ('ngpt_heavy_ball', 'ngpt_hbformer') and model.config.ngpt_velocity_mode != 'ambient'
     if vanilla:
         h, v = norm(model.wte(x)), None
     elif pure:
@@ -53,12 +54,16 @@ def residual_audit(model, x, require_unit_target=False):
                 if transported:
                     beta, gamma, eta = update.coefficients()
                     raw = beta*v + gamma*z
+                    if learned_norm:
+                        raw = update.velocity_norm(raw)
+                        previous_h = h
                     tangent = tangent_project(h, raw)
                     raw_rms2 = raw.square().mean(-1)
                     row['incoming_velocity_rms_max'] = v.square().mean(-1).sqrt().max().item()
                     row['incoming_tangent_error_max'] = (h*v).mean(-1).abs().max().item()
                     row['discarded_radial_energy_fraction'] = ((h*raw).mean(-1).square()/raw_rms2.clamp_min(1e-12)).mean().item()
-                    row['velocity_floor_fraction'] = (tangent.square().mean(-1) < model.config.momentum_velocity_rms_floor**2).float().mean().item()
+                    if not learned_norm:
+                        row['velocity_floor_fraction'] = (tangent.square().mean(-1) < model.config.momentum_velocity_rms_floor**2).float().mean().item()
                 h, v = update(h, v, force)
             if model.config.residual_mode in ('ngpt_heavy_ball', 'ngpt_hbformer', 'ngpt'):
                 row['hidden_rms_max_error'] = (h.square().mean(-1)-1).abs().max().item()
@@ -76,7 +81,12 @@ def residual_audit(model, x, require_unit_target=False):
                 if transported:
                     row['velocity_rms_max'] = v.square().mean(-1).sqrt().max().item()
                     row['tangent_error_max'] = (h*v).mean(-1).abs().max().item()
-                    assert row['velocity_rms_max'] < 1+2e-6 and row['tangent_error_max'] < 2e-6, row
+                    if learned_norm:
+                        cosine = (previous_h*h).mean(-1).clamp(-1, 1)
+                        row['mean_turn_degrees'] = cosine.acos().rad2deg().mean().item()
+                    else:
+                        assert row['velocity_rms_max'] < 1+2e-6, row
+                    assert row['tangent_error_max'] < 2e-6, row
             # Engineering guard for this bounded check, not a mathematical bound.
             assert row['max_token_hidden_rms'] < 10 and row.get('velocity_rms', 0) < 10, row
             rows.append(row)
@@ -88,6 +98,7 @@ def main():
     p.add_argument('--data-dir', required=True)
     p.add_argument('--output-dir', required=True)
     p.add_argument('--target-mode', choices=('ngpt_heavy_ball','ngpt','vanilla','heavy_ball_rms','ngpt_hbformer'), default='ngpt_heavy_ball')
+    p.add_argument('--ngpt-velocity-mode', choices=('transport_rms','transport_layernorm'))
     p.add_argument('--ngpt-weight-norm', action=argparse.BooleanOptionalAction, default=None)
     p.add_argument('--nonzero-init', action='store_true')
     p.add_argument('--transport-rms', action='store_true')
@@ -102,7 +113,8 @@ def main():
                   seed=42, microbatch=16, batch_tokens=32768, models={})
     if a.target_mode in ('heavy_ball_rms', 'ngpt_hbformer'):
         assert a.nonzero_init and not a.transport_rms
-        modes = [('vanilla', 32), ('ngpt_heavy_ball', 32), (a.target_mode, 128)]
+        control = 'hbformer_rms' if a.ngpt_velocity_mode == 'transport_layernorm' else 'ngpt_heavy_ball'
+        modes = [('vanilla', 32), (control, 32), (a.target_mode, 128)]
     elif a.nonzero_init:
         modes = [(m, 128 if m == a.target_mode else 32) for m in ('vanilla','ngpt','ngpt_heavy_ball')]
     else:
@@ -116,10 +128,15 @@ def main():
         modes.insert(-1, ('ngpt_ambient', 32))
     for mode, steps in modes:
         seed_all(42)
-        c = ConnectionConfig(streams=1, residual_dynamics='ngpt_heavy_ball' if mode == 'ngpt_ambient' else mode,
-                             ngpt_velocity_mode='transport_rms' if (mode == 'ngpt_hbformer' or mode == 'ngpt_heavy_ball'
-                                 and (a.transport_rms or a.target_mode in ('ngpt_hbformer', 'heavy_ball_rms'))) else 'ambient',
-                             ngpt_weight_norm=a.ngpt_weight_norm if mode == a.target_mode else None,
+        dynamics = {'ngpt_ambient':'ngpt_heavy_ball', 'hbformer_rms':'ngpt_hbformer'}.get(mode, mode)
+        velocity_mode = 'ambient'
+        if dynamics == 'ngpt_hbformer' or (mode == 'ngpt_heavy_ball' and
+                (a.transport_rms or a.target_mode in ('ngpt_hbformer', 'heavy_ball_rms'))):
+            velocity_mode = 'transport_rms'
+        if mode == a.target_mode and a.ngpt_velocity_mode:
+            velocity_mode = a.ngpt_velocity_mode
+        c = ConnectionConfig(streams=1, residual_dynamics=dynamics, ngpt_velocity_mode=velocity_mode,
+                             ngpt_weight_norm=a.ngpt_weight_norm if mode in (a.target_mode, 'hbformer_rms') else None,
                              residual_projection_init='normal' if a.nonzero_init else 'zero',
                              ngpt_force_rms_floor=1e-6 if a.nonzero_init else .1)
         model = build_connection_model(c).prepare(compile_blocks=True)

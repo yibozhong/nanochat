@@ -24,6 +24,11 @@ def model_cost(config, batch=1, activation_bytes=2, feedback_passes=None):
             per_site=25*d-6
             if c.velocity_init == 'token':
                 initial += 7*d-2  # initial embedding tangent projection and RMS norm
+        gain_parameters = 0
+        if c.ngpt_velocity_mode == 'transport_layernorm':
+            # Centering (mean + subtract) and per-channel affine gain vs. RMS.
+            per_site += 3*d-1
+            gain_parameters = d*sites
         residual=batch*t*(sites*per_site+initial)
         embedding_parameters=c.vocab_size*d if c.velocity_init=='token' else 0
         if c.residual_mode == 'ngpt_hbformer':
@@ -34,7 +39,7 @@ def model_cost(config, batch=1, activation_bytes=2, feedback_passes=None):
             estimated_training_flops=3*(forward+residual),
             components_forward=dict(backbone_projections=projections,vocab_head=head,
                 attention=attention,residual_arithmetic=residual),
-            additional_parameters=scalars_per_site*sites+embedding_parameters,
+            additional_parameters=scalars_per_site*sites+embedding_parameters+gain_parameters,
             velocity_embedding_parameters=embedding_parameters,
             live_residual_state_bytes=(1 if c.residual_mode=='ngpt' else 2)*batch*t*d*4,
             accounting='FMA=2; causal attention pairs; residual arithmetic estimate and backward approximated as 2x forward. Scalar rsqrt/division/sigmoid/softplus, optimizer (including post-step weight normalization), copies and checkpoint recomputation excluded. Not hardware-measured FLOPs.',

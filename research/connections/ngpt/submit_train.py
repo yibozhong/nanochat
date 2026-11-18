@@ -16,7 +16,8 @@ HOME_ROOT=Path('/home/yzhong239')
 ASSETS=HOME_ROOT/'nanochat-runtime-assets'
 PRESETS={'vanilla':'vanilla', 'ngpt':'ngpt', 'ngpt_momentum':'ngpt_heavy_ball',
          'ngpt_momentum_transport_rms':'ngpt_heavy_ball', 'heavy_ball_rms':'heavy_ball_rms',
-         'ngpt_hbformer':'ngpt_hbformer', 'ngpt_hbformer_no_wn':'ngpt_hbformer'}
+         'ngpt_hbformer':'ngpt_hbformer', 'ngpt_hbformer_no_wn':'ngpt_hbformer',
+         'ngpt_hbformer_velocity_ln':'ngpt_hbformer'}
 STEPS=305176
 
 
@@ -86,10 +87,14 @@ def main():
                           output_projection_std_before_normalization=.005,
                           preflight='HBFormer velocity/step, unit weight axes and post-step projection, cache, gradients, exact resume; target128 and two controls32',
                           timing_reference='prior H100 diagnostics, excludes new post-step weight normalization overhead')
-        if short_control:
+        if short_control or preset == 'ngpt_hbformer_velocity_ln':
             source.update(ngpt_weight_norm=False, backbone_weight_constraint='none', schedule_steps=STEPS,
                           preflight='Unprojected initialization and optimizer, same-card 128 steps, cache/gradients and exact CLI resume',
                           timing_reference='prior H100 residual diagnostics, confirm same-card speed in preflight')
+        if preset == 'ngpt_hbformer_velocity_ln':
+            source.update(ngpt_velocity_mode='transport_layernorm', velocity_layernorm_eps=1e-5,
+                          velocity_gain_init=1., velocity_layernorm_bias=False,
+                          preflight='Affine velocity LayerNorm before projection, geometric and gradient tests, exact resume; target128, vanilla and matched RMS 32 each')
         if mode=='heavy_ball_rms':
             source.update(velocity_init='token', velocity_embedding_std=.02,
                           momentum_eta_init=.05, momentum_velocity_rms_floor=.1,
@@ -130,9 +135,9 @@ def main():
             'https://developer.download.nvidia.com/compute/cuda/repos/debian12/x86_64/cuda-compat-13-1_590.48.01-1_amd64.deb']
         lines=[]
         job_args=f'{run_id} {mode}'
-        if source['ngpt_velocity_mode']=='transport_rms':
-            job_args+=' transport_rms'
-        if short_control:
+        if source['ngpt_velocity_mode'] != 'ambient':
+            job_args+=' '+source['ngpt_velocity_mode']
+        if source.get('ngpt_weight_norm') is False:
             job_args+=' --no-ngpt-weight-norm'
         for line in (ASSETS/'gate.sub').read_text().splitlines():
             if line.startswith('executable ='):line=f'executable = train.sh\narguments = {job_args}'

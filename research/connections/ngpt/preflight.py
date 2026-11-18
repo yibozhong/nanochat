@@ -41,6 +41,8 @@ def main():
                ['research/connections/ngpt/check.sh',mode])
         if source.get('ngpt_weight_norm') is False:
             check.append('--no-ngpt-weight-norm')
+        if source.get('ngpt_velocity_mode') == 'transport_layernorm':
+            check.append('transport_layernorm')
         subprocess.run(['timeout','--signal=TERM','--kill-after=30s','2400','bash',*check],check=True)
         prefix='momentum' if transported else 'ngpt'
         suites=list(ET.parse(f'results/{prefix}-tests.xml').getroot().iter('testsuite'))
@@ -48,6 +50,12 @@ def main():
         profile=json.loads(Path(f'results/{prefix}-profile/summary.json').read_text())
         resume=json.loads(Path(f'results/{prefix}-cli-resume.json').read_text())
     expected_tests = {'heavy_ball_rms':9, 'ngpt_hbformer':8}.get(mode, 57 if transported else 29)
+    if source.get('ngpt_velocity_mode') == 'transport_layernorm':
+        expected_tests = 9
+        control = profile['models']['hbformer_rms']['config']
+        target = profile['models'][mode]['config']
+        assert control['ngpt_velocity_mode'] == 'transport_rms'
+        assert {k for k in target if target[k] != control[k]} == {'ngpt_velocity_mode'}
     if mode == 'ngpt_hbformer':
         assert profile['models'][mode]['config']['ngpt_weight_norm'] == source.get('ngpt_weight_norm',True)
     assert tests == dict(tests=expected_tests, failures=0, errors=0, skipped=0), tests

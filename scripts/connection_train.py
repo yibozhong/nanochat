@@ -37,7 +37,7 @@ def main():
     p.add_argument('--momentum-gamma-init', type=float, default=None)
     p.add_argument('--momentum-eta-init', type=float, default=None,
                    help='HBFormer fixes eta=1. Other modes learn eta from their configured initial value.')
-    p.add_argument('--ngpt-velocity-mode', choices=('ambient','transport_rms'), default=None,
+    p.add_argument('--ngpt-velocity-mode', choices=('ambient','transport_rms','transport_layernorm'), default=None,
                    help='New nGPT momentum defaults to transport_rms; old checkpoints require ambient')
     p.add_argument('--momentum-velocity-rms-floor', type=float, default=.1)
     p.add_argument('--ngpt-force-rms-floor', type=float, default=.1)
@@ -183,6 +183,7 @@ def main():
                 name=f'{a.architecture}-{a.variant}'+('-ngpt' if c.residual_mode == 'ngpt' else
                     f'-{c.residual_mode}-v0-{c.velocity_init}' if c.residual_mode != 'vanilla' else
                     '-layer-feedback' if c.feedback_source=='layers' else '-feedback' if c.latent_feedback else '')+
+                    ('-velocity-ln' if c.ngpt_velocity_mode == 'transport_layernorm' else '')+
                     ('-no-weight-norm' if c.residual_mode=='ngpt_hbformer' and not c.ngpt_weight_norm else '')+
                     (f'-init-{c.residual_projection_init}' if c.residual_projection_init != 'zero' else '')+
                     f'-{c.sequence_length}ctx-{a.steps}steps',id=run_id,resume='allow',config=config)

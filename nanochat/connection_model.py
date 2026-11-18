@@ -58,7 +58,7 @@ class ConnectionConfig:
     def __post_init__(self):
         hbformer = self.residual_mode == 'ngpt_hbformer'
         if self.ngpt_weight_norm is None:
-            self.ngpt_weight_norm = hbformer  # historical HBFormer checkpoints always projected
+            self.ngpt_weight_norm = hbformer and self.ngpt_velocity_mode != 'transport_layernorm'
         if self.ngpt_weight_norm and not hbformer:
             raise ValueError('nGPT weight projection is supported with ngpt_hbformer')
         if self.residual_projection_init is None:
@@ -83,7 +83,9 @@ class ConnectionConfig:
                 self.momentum_eta_init = 0.05 if self.ngpt_velocity_mode == 'transport_rms' else 0.1
             else:
                 self.momentum_eta_init = 0.05 if self.residual_mode == 'heavy_ball_rms' else 1.0
-        if self.ngpt_velocity_mode not in ('ambient', 'transport_rms'):
+        if self.ngpt_velocity_mode == 'transport_layernorm' and not hbformer:
+            raise ValueError('Transported velocity LayerNorm requires the unit-step HBFormer')
+        if self.ngpt_velocity_mode not in ('ambient', 'transport_rms', 'transport_layernorm'):
             raise ValueError('Unknown nGPT velocity mode')
         if not math.isfinite(self.momentum_velocity_rms_floor) or self.momentum_velocity_rms_floor <= 0:
             raise ValueError('Velocity RMS floor must be positive and finite')
@@ -94,9 +96,9 @@ class ConnectionConfig:
                 self.velocity_init = 'token_position'
             else:
                 self.velocity_init = 'token' if self.residual_mode in ('heavy_ball', 'heavy_ball_rms', 'ngpt_heavy_ball') else 'zero'
-        if hbformer and (self.velocity_init != 'token_position' or self.ngpt_velocity_mode != 'transport_rms'
+        if hbformer and (self.velocity_init != 'token_position' or self.ngpt_velocity_mode == 'ambient'
                          or self.momentum_eta_init != 1 or self.residual_projection_init != 'normal'):
-            raise ValueError('ngpt_hbformer requires token_position velocity, transport_rms, fixed unit step and nonzero projections')
+            raise ValueError('ngpt_hbformer requires token_position velocity, parallel transport, fixed unit step and nonzero projections')
         if self.velocity_init == 'token_position' and not hbformer:
             raise ValueError('Token plus position velocity is supported by ngpt_hbformer')
         if self.velocity_init not in ('zero', 'token', 'token_position'):

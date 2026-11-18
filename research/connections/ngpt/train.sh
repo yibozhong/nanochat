@@ -7,7 +7,7 @@ TASK_VELOCITY_MODE="${3:-ambient}"
 TASK_MOMENTUM_ARGS=()
 TASK_GROUP=residual-nonzero-10b-20261117
 case "$TASK_MODE/$TASK_VELOCITY_MODE" in
-    ngpt_hbformer/transport_rms)
+    ngpt_hbformer/transport_rms|ngpt_hbformer/transport_layernorm)
         TASK_MOMENTUM_ARGS=(--velocity-init token_position --velocity-embedding-std .02
             --momentum-beta-init .5 --momentum-gamma-init 0.6931471805599453 --momentum-eta-init 1
             --momentum-velocity-rms-floor .1)
@@ -31,8 +31,12 @@ TASK_STEPS=$TASK_SCHEDULE_STEPS
 if [ "$#" -gt 3 ]; then
     [[ "$#" == 4 && "$TASK_MODE" == ngpt_hbformer && "$4" == --no-ngpt-weight-norm ]]
     TASK_MOMENTUM_ARGS+=("$4")
-    TASK_STEPS=5000
-    TASK_GROUP=ngpt-hbformer-no-weight-norm-5k
+    if [[ "$TASK_VELOCITY_MODE" == transport_layernorm ]]; then
+        TASK_GROUP=ngpt-hbformer-velocity-layernorm-10b
+    else
+        TASK_STEPS=5000
+        TASK_GROUP=ngpt-hbformer-no-weight-norm-5k
+    fi
 fi
 mkdir -p checkpoints results
 if [ -f results.tar ]; then tar -xf results.tar; fi
@@ -68,13 +72,18 @@ assert s['ngpt_force_rms_floor']==1e-6
 assert s.get('ngpt_velocity_mode','ambient')==sys.argv[3]
 if sys.argv[2]=='ngpt_hbformer':
     import math
-    assert s['momentum_eta_init']==1 and not s['momentum_eta_trainable'] and s['ngpt_velocity_mode']=='transport_rms'
+    assert s['momentum_eta_init']==1 and not s['momentum_eta_trainable']
+    assert s['ngpt_velocity_mode'] in ('transport_rms','transport_layernorm')
     assert s['velocity_init']=='token_position' and s['velocity_embedding_std']==.02
     assert s['momentum_beta_init']==.5 and s['momentum_gamma_init']==math.log(2.)
     normalized = sys.argv[6] != '--no-ngpt-weight-norm'
     assert s.get('ngpt_weight_norm',True) == normalized
     assert s['backbone_weight_constraint']==('ngpt_unit_l2_init_and_post_step' if normalized else 'none')
-    assert s['steps']==(305176 if normalized else 5000)
+    if s['ngpt_velocity_mode']=='transport_layernorm':
+        assert not normalized and s['steps']==305176
+        assert not s['velocity_layernorm_bias'] and s['velocity_layernorm_eps']==1e-5 and s['velocity_gain_init']==1
+    else:
+        assert s['steps']==(305176 if normalized else 5000)
 elif sys.argv[3]=='transport_rms' or sys.argv[2]=='heavy_ball_rms':
     assert s['momentum_eta_init']==.05 and s['momentum_velocity_rms_floor']==.1
 p=Path('results/train/progress.json')

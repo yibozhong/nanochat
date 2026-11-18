@@ -2,7 +2,9 @@
 set -euo pipefail
 TASK_MODE="$1"
 TASK_ARGS_EXTRA=()
-TASK_WEIGHT_ARGS=("${@:2}")
+TASK_WEIGHT_ARGS=()
+if [[ "${2:-}" == --no-ngpt-weight-norm ]]; then TASK_WEIGHT_ARGS+=("$2"); fi
+TASK_PROFILE_ARGS=()
 TASK_VELOCITY_MODE=ambient
 case "$TASK_MODE" in
     ngpt_hbformer)
@@ -10,7 +12,11 @@ case "$TASK_MODE" in
         if [[ "${2:-}" == --no-ngpt-weight-norm ]]; then
             TASK_TESTS=tests/test_ngpt_hbformer_no_wn.py
         fi
-        TASK_VELOCITY_MODE=transport_rms
+        TASK_VELOCITY_MODE=${3:-transport_rms}
+        if [[ "$TASK_VELOCITY_MODE" == transport_layernorm ]]; then
+            TASK_TESTS=tests/test_ngpt_velocity_layernorm.py
+            TASK_PROFILE_ARGS=(--ngpt-velocity-mode "$TASK_VELOCITY_MODE")
+        fi
         TASK_ARGS_EXTRA=(--velocity-init token_position --momentum-eta-init 1 --momentum-velocity-rms-floor .1)
         ;;
     heavy_ball_rms)
@@ -21,7 +27,7 @@ case "$TASK_MODE" in
     *) exit 64 ;;
 esac
 python -m pytest -q "$TASK_TESTS" --junitxml=results/ngpt-tests.xml
-python -m scripts.connection_momentum_debug --data-dir ../data --output-dir results/ngpt-profile --target-mode "$TASK_MODE" --nonzero-init "${TASK_WEIGHT_ARGS[@]}"
+python -m scripts.connection_momentum_debug --data-dir ../data --output-dir results/ngpt-profile --target-mode "$TASK_MODE" --nonzero-init "${TASK_WEIGHT_ARGS[@]}" "${TASK_PROFILE_ARGS[@]}"
 TASK_ARGS=(--variant baseline --streams 1 --residual-dynamics "$TASK_MODE"
     --ngpt-velocity-mode "$TASK_VELOCITY_MODE" "${TASK_ARGS_EXTRA[@]}" "${TASK_WEIGHT_ARGS[@]}"
     --residual-projection-init normal --residual-projection-init-std .02 --ngpt-force-rms-floor 1e-6

@@ -61,18 +61,18 @@ def sphere_transport(h, new_h, v):
     return v - scale*(h+new_h)
 
 
-def transported_momentum_step(h, v, force, beta, gamma, eta, force_floor, velocity_floor):
-    """Normalized-target Riemannian HB; carry the normalized, transported speed.
-
-    P_h(z-h)=P_h(z). Projecting the combined update also removes FP32 drift
-    from the incoming tangent velocity. Scalar RMS normalization preserves
-    tangency (unlike centered or affine LayerNorm); its floor bounds the
-    derivative at zero and keeps a zero update exactly zero.
-    """
+def transported_momentum_step(h, v, force, beta, gamma, eta, force_floor, velocity_floor,
+                              velocity_norm=None):
+    """Retract with a tangent velocity and transport that same velocity to the new point."""
     h, v = state_dtype(h), state_dtype(v)
     target = normalize_residual(force, force_floor)
-    u = tangent_project(h, beta*v + gamma*target)
-    speed = normalize_residual(u, velocity_floor)
+    mixed = beta*v + gamma*target
+    if velocity_norm is None:
+        speed = normalize_residual(tangent_project(h, mixed), velocity_floor)
+    else:
+        # Centering and channel gains can introduce a radial component.
+        # Project last so tangency and the learned step magnitude both survive.
+        speed = tangent_project(h, velocity_norm(mixed))
     new_h = normalize_residual(h + eta*speed)
     return new_h, sphere_transport(h, new_h, speed)
 
@@ -107,11 +107,13 @@ class NormalizedHeavyBall(HeavyBall):
         self.rms_floor = config.ngpt_force_rms_floor
         self.velocity_mode = config.ngpt_velocity_mode
         self.velocity_floor = config.momentum_velocity_rms_floor
+        self.velocity_norm = (nn.LayerNorm(config.width, eps=1e-5, bias=False)
+                              if self.velocity_mode == 'transport_layernorm' else None)
 
     def forward(self, h, v, force):
-        if self.velocity_mode == 'transport_rms':
+        if self.velocity_mode in ('transport_rms', 'transport_layernorm'):
             return transported_momentum_step(h, v, force, *self.coefficients(),
-                                             self.rms_floor, self.velocity_floor)
+                                             self.rms_floor, self.velocity_floor, self.velocity_norm)
         return ngpt_momentum_step(h, v, force, *self.coefficients(), self.rms_floor)
 
 
@@ -252,6 +254,13 @@ class MomentumModel(ConnectionModel):
                 result[f'residual/sublayer_{i}/{name}'] = value
             if self.config.residual_mode == 'ngpt_heavy_ball' and self.config.ngpt_velocity_mode == 'ambient':
                 result[f'residual/sublayer_{i}/alpha'] = row[1]*row[2]
+        if self.config.ngpt_velocity_mode == 'transport_layernorm':
+            gains = torch.stack([m.velocity_norm.weight for b in self.blocks
+                                 for m in (b.attn_residual, b.mlp_residual)])
+            stats = torch.stack((gains.mean(-1), gains.std(-1, unbiased=False)), dim=-1)
+            for i, (mean, std) in enumerate(stats.tolist()):
+                result[f'residual/sublayer_{i}/velocity_gain_mean'] = mean
+                result[f'residual/sublayer_{i}/velocity_gain_std'] = std
         if self.velocity_embedding is not None:
             result['residual/velocity_embedding_rms'] = self.velocity_embedding.weight.float().square().mean().sqrt().item()
         if self.velocity_position_embedding is not None:
