@@ -18,8 +18,8 @@ def matrix(x):
     return torch.nn.Parameter(torch.tensor(x, device='cuda', dtype=torch.float32))
 
 
-def optimizer(p, mu=1., extras=()):
-    return ArcAdamW([dict(kind='muon', params=[p], lr=.17), *extras], mu=mu, beta=.5)
+def optimizer(p, mu=1., extras=(), step_scale='fan_out'):
+    return ArcAdamW([dict(kind='muon', params=[p], lr=.17), *extras], mu=mu, beta=.5, step_scale=step_scale)
 
 
 def normalized(x):
@@ -65,9 +65,10 @@ def test_query_gradient_base_write_transport_and_resume():
             assert torch.equal(restored.state[replica]['velocity'], opt.state[p]['velocity'])
 
 
-def test_zero_mu_matches_hyperball_and_zero_gradient():
+@pytest.mark.parametrize('step_scale', ['fan_out', 'radius'])
+def test_zero_mu_spherical_write_and_zero_gradient(step_scale):
     p = matrix([[3., 4.]])
-    opt = optimizer(p, mu=0.)
+    opt = optimizer(p, mu=0., step_scale=step_scale)
     for grad in (torch.tensor([[1., 2.]], device='cuda'), torch.zeros_like(p)):
         w = p.detach().clone()
         with opt.gradient_point():
@@ -75,7 +76,8 @@ def test_zero_mu_matches_hyperball_and_zero_gradient():
             p.grad = grad
         opt.step()
         if grad.norm():
-            torch.testing.assert_close(p, w.norm() * normalized(w - .17 * normalized(grad)))
+            length = .17 * (w.norm() if step_scale == 'radius' else 1.)
+            torch.testing.assert_close(p, w.norm() * normalized(w - length * normalized(grad)))
         else:
             assert torch.equal(p, w)
 
@@ -138,7 +140,8 @@ def test_accumulation_and_adamw_at_common_query():
 
 
 @pytest.mark.parametrize('shape', [(16, 32), (32, 16)])
-def test_muon_direction_matches_native_write_and_restores_moments(shape):
+@pytest.mark.parametrize('step_scale', ['fan_out', 'radius'])
+def test_muon_direction_matches_native_write_and_restores_moments(shape, step_scale):
     from nanochat.connection_model import schedule
 
     torch.manual_seed(42)
@@ -151,12 +154,12 @@ def test_muon_direction_matches_native_write_and_restores_moments(shape):
                      ns_steps=5, momentum=.95, beta2=.9)]
 
     def build(weights):
-        opt = ArcAdamW(groups(weights), direction='muon')
+        opt = ArcAdamW(groups(weights), direction='muon', step_scale=step_scale)
         opt.param_groups[0]['initial_lr'] = .03
         return opt
 
     opt, native = build(params), MuonAdamW(groups(refs))
-    for step in (39, 40, 401, 402):
+    for step in (19, 40, 401, 402):
         for o in (native, opt):
             schedule(o, step, 305176, 0.)
         assert opt.param_groups[0]['momentum'] == native.param_groups[0]['momentum']
@@ -175,7 +178,8 @@ def test_muon_direction_matches_native_write_and_restores_moments(shape):
         opt.step()
         for p, w, v, ref in zip(params, base, historical, refs):
             # A native, zero-decay Muon write to zero gives the signed direction.
-            trial = w + .03 * math.sqrt(shape[0]) * normalized(ref.detach())
+            scale = w.norm() if step_scale == 'radius' else math.sqrt(shape[0])
+            trial = w + native.param_groups[0]['lr'] * scale * normalized(ref.detach())
             expected = opt.state[p]['radius'] * normalized(trial)
             torch.testing.assert_close(p.detach()-w, expected-w, rtol=.01, atol=3e-5)
             carried = v - (v*expected).sum() * (w+expected) / (w.square().sum() + (w*expected).sum())

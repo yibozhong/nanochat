@@ -33,6 +33,10 @@ def main():
     hybrid = source.get('arc_direction', 'raw') == 'muon'
     target = 'arc_muon' if hybrid else 'arc'
     variants = ('muon', 'arc', 'arc_muon') if hybrid else ('muon', 'arc')
+    if source.get('arc_step_scale') == 'radius':
+        assert hybrid
+        variants = ('muon', 'arc_muon', 'arc_muon_radius')
+        target = 'arc_muon_radius'
     if hybrid:
         assert source['comparison_steps'] == 1000
     for name in variants:
@@ -45,8 +49,10 @@ def main():
                '--ngpt-force-rms-floor', '1e-6', '--steps', str(steps), '--schedule-steps', '305176',
                '--attention-backend', 'fa2', '--microbatch', '16', '--data-dir', '../data',
                '--output-dir', str(out), '--seed', '42', '--run-id', 'arc-local-debug']
-        if name == 'arc_muon':
+        if name in ('arc_muon', 'arc_muon_radius'):
             cmd.extend(['--arc-direction', 'muon'])
+        if name == 'arc_muon_radius':
+            cmd.extend(['--arc-step-scale', 'radius'])
         if name == target:
             first = subprocess.run([*cmd, '--segment-steps', '32'])
             if first.returncode != 85:
@@ -76,7 +82,10 @@ def main():
             assert protocol['batch_tokens'] == 32768 and protocol['microbatch'] == 16
             write = protocol.get('matrix_optimizer', {'name': 'muon'})
             assert write['name'] == matrix_optimizer
-            assert write.get('direction', 'raw') == ('muon' if name == target else 'raw')
+            if matrix_optimizer == 'arc':
+                assert write.get('direction', 'raw') == ('raw' if name == 'arc' else 'muon')
+                scale = 'initial_frobenius_radius' if name == 'arc_muon_radius' else 'sqrt(fan_out)'
+                assert write['step_length'] == f'scheduled_matrix_lr * {scale}'
             milestones = (50, 250, 500, 750, 1000)
             assert all(validation[step]['dev/tokens'] == info['dev_tokens'] for step in milestones)
             results[name]['validation_ce'] = {step: validation[step]['dev/ce'] for step in milestones}
@@ -96,10 +105,12 @@ def main():
     if hybrid:
         result['comparison'] = {
             'steps': steps, 'dev_tokens': info['dev_tokens'],
-            'delta_vs_raw_arc': results[target]['final_dev_ce'] - results['arc']['final_dev_ce'],
             'delta_vs_muon': results[target]['final_dev_ce'] - results['muon']['final_dev_ce'],
             'target': target, 'validation_ce': {name: results[name]['validation_ce'] for name in variants},
         }
+        control = variants[1]
+        delta_key = 'delta_vs_fan_out' if control == 'arc_muon' else 'delta_vs_raw_arc'
+        result['comparison'][delta_key] = results[target]['final_dev_ce'] - results[control]['final_dev_ce']
         print('ARC_1000_COMPARISON', json.dumps(result['comparison']), flush=True)
     marker.write_text(json.dumps(result, indent=2)+'\n')
     print('ARC_PREFLIGHT_PASSED', json.dumps(results), flush=True)

@@ -47,6 +47,8 @@ def main():
     p.add_argument('--residual-dynamics', choices=('vanilla','heavy_ball','heavy_ball_rms','ngpt_heavy_ball','ngpt_hbformer','ngpt','ngpt_lookahead','lookahead_only'), default='vanilla')
     p.add_argument('--matrix-optimizer', choices=('muon', 'arc'), default='muon')
     p.add_argument('--arc-direction', choices=('raw', 'muon'), default='raw', help='Direction used at the spherical write')
+    p.add_argument('--arc-step-scale', choices=('fan_out', 'radius'), default='fan_out',
+                   help='Multiply matrix LR by sqrt(fan_out) or by the fixed initial Frobenius norm of each matrix')
     p.add_argument('--arc-mu', type=float, default=1., help='Lookahead in units of the displacement EMA')
     p.add_argument('--arc-beta', type=float, default=.5, help='Transported displacement EMA decay')
     p.add_argument('--velocity-init', choices=('zero','token','token_position'), default=None,
@@ -151,7 +153,7 @@ def main():
     if a.matched_backbone_init:
         match_vanilla_initialization(model,a.seed)
     opt,wd=optimizer_for(model, matrix_optimizer=a.matrix_optimizer, arc_mu=a.arc_mu, arc_beta=a.arc_beta,
-                         arc_direction=a.arc_direction)
+                         arc_direction=a.arc_direction, arc_step_scale=a.arc_step_scale)
     initial_groups=[{k:v for k,v in group.items() if k!='params'} for group in opt.param_groups]
     protocol=dict(steps=a.steps,schedule_steps=a.schedule_steps,batch_tokens=32768,
                   microbatch=a.microbatch,grad_accum=rows_per_step//a.microbatch,seed=a.seed,
@@ -162,6 +164,8 @@ def main():
     if a.matrix_optimizer == 'arc':
         protocol['matrix_optimizer'] = dict(name='arc', mu=a.arc_mu, beta=a.arc_beta,
             sphere='initial_frobenius_per_matrix', step_length='scheduled_matrix_lr * sqrt(fan_out)')
+        if a.arc_step_scale == 'radius':
+            protocol['matrix_optimizer']['step_length'] = 'scheduled_matrix_lr * initial_frobenius_radius'
         if a.arc_direction != 'raw':
             protocol['matrix_optimizer']['direction'] = a.arc_direction
     if c.latent_feedback:
@@ -227,6 +231,7 @@ def main():
                     ('-velocity-ln' if c.ngpt_velocity_mode == 'transport_layernorm' else '')+
                     ('-no-weight-norm' if c.residual_mode=='ngpt_hbformer' and not c.ngpt_weight_norm else '')+
                     ('-arc-muon-direction' if a.arc_direction == 'muon' else '-arc' if a.matrix_optimizer == 'arc' else '')+
+                    ('-radius-step' if a.arc_step_scale == 'radius' else '')+
                     (f'-init-{c.residual_projection_init}' if c.residual_projection_init != 'zero' else '')+
                     f'-{c.sequence_length}ctx-{a.steps}steps',id=run_id,resume='allow',config=config)
     run=training_run(formal_training=a.formal_training, local_dir=out/"diagnostics", **kwargs)

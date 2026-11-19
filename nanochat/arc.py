@@ -21,7 +21,9 @@ def _query(w, v, radius, mu):
 
 
 @torch.compile(dynamic=False, fullgraph=True)
-def _update(w, grad, v, radius, step_length, beta):
+def _update(w, grad, v, radius, step_length, beta, relative_step=False):
+    if relative_step:
+        step_length = step_length * radius
     norm = torch.linalg.vector_norm(grad)
     trial = w - (step_length / norm.clamp_min(1e-30)) * grad
     trial_norm = torch.linalg.vector_norm(trial)
@@ -39,7 +41,9 @@ def _update(w, grad, v, radius, step_length, beta):
 class ArcAdamW(MuonAdamW):
     """Single-GPU Arc for backbone matrices and nanochat AdamW for other groups."""
 
-    def __init__(self, groups, mu=1., beta=.5, direction='raw'):
+    def __init__(self, groups, mu=1., beta=.5, direction='raw', step_scale='fan_out'):
+        if step_scale not in ('fan_out', 'radius'):
+            raise ValueError('Unknown Arc step scale')
         if direction not in ('raw', 'muon'):
             raise ValueError('Unknown Arc write direction')
         if not math.isfinite(mu) or not 0 <= beta < 1:
@@ -50,6 +54,8 @@ class ArcAdamW(MuonAdamW):
         for i, g in enumerate(groups):
             if g['kind'] == 'muon':
                 arc = dict(kind='arc', params=g['params'], lr=g['lr'], beta=beta, mu=mu)
+                if step_scale == 'radius':
+                    arc['step_scale'] = step_scale
                 if direction == 'muon':
                     arc.update(direction=direction, momentum=g['momentum'], beta2=g['beta2'], ns_steps=g['ns_steps'])
                     if len({p.shape for p in g['params']}) != 1:
@@ -104,8 +110,10 @@ class ArcAdamW(MuonAdamW):
 
     def _write(self, p, direction, group):
         state = self.state[p]
-        self._muon_lr_t.fill_(group['lr'] * math.sqrt(p.shape[0]))
-        _update(p, direction, state['velocity'], state['radius'], self._muon_lr_t, group['beta'])
+        relative_step = group.get('step_scale') == 'radius'
+        scale = 1. if relative_step else math.sqrt(p.shape[0])
+        self._muon_lr_t.fill_(group['lr'] * scale)
+        _update(p, direction, state['velocity'], state['radius'], self._muon_lr_t, group['beta'], relative_step)
 
     def _step_muon_direction(self, group):
         params = group['params']

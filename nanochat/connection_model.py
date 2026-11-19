@@ -445,8 +445,11 @@ class ConnectionModel(nn.Module):
             accum_e_fp32=True, accum_c_fp32=True)
 
 
-def optimizer_for(model, batch_tokens=32768, *, matrix_optimizer='muon', arc_mu=1., arc_beta=.5, arc_direction='raw'):
+def optimizer_for(model, batch_tokens=32768, *, matrix_optimizer='muon', arc_mu=1., arc_beta=.5, arc_direction='raw',
+                  arc_step_scale='fan_out'):
     """Same backbone native LR rules; connector parameters get separate AdamW."""
+    if matrix_optimizer != 'arc' and arc_step_scale != 'fan_out':
+        raise ValueError('Selecting an Arc step scale requires the Arc matrix optimizer')
     if matrix_optimizer != 'arc' and arc_direction != 'raw':
         raise ValueError('Selecting an Arc direction requires the Arc matrix optimizer')
     if matrix_optimizer not in ('muon', 'arc'):
@@ -506,7 +509,7 @@ def optimizer_for(model, batch_tokens=32768, *, matrix_optimizer='muon', arc_mu=
         compiler_config.recompile_limit = max(compiler_config.recompile_limit, 2*len(signatures))
     if matrix_optimizer == 'arc':
         from nanochat.arc import ArcAdamW
-        opt = ArcAdamW(groups, mu=arc_mu, beta=arc_beta, direction=arc_direction)
+        opt = ArcAdamW(groups, mu=arc_mu, beta=arc_beta, direction=arc_direction, step_scale=arc_step_scale)
     else:
         opt = MuonAdamW(groups)
     if c.ngpt_weight_norm:
