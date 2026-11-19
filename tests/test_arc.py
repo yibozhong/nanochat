@@ -135,3 +135,77 @@ def test_accumulation_and_adamw_at_common_query():
         bias.grad = error.mean().reshape_as(bias)
         reference_adam.step()
         torch.testing.assert_close(model.bias, bias)
+
+
+@pytest.mark.parametrize('shape', [(16, 32), (32, 16)])
+def test_muon_direction_matches_native_write_and_restores_moments(shape):
+    from nanochat.connection_model import schedule
+
+    torch.manual_seed(42)
+    params = [torch.nn.Parameter(torch.randn(shape, device='cuda')) for _ in range(2)]
+    refs = [torch.nn.Parameter(torch.zeros_like(p)) for p in params]
+    targets = [torch.randn_like(p) for p in params]
+
+    def groups(weights):
+        return [dict(kind='muon', params=weights, lr=.03, initial_lr=.03, weight_decay=0.,
+                     ns_steps=5, momentum=.95, beta2=.9)]
+
+    def build(weights):
+        opt = ArcAdamW(groups(weights), direction='muon')
+        opt.param_groups[0]['initial_lr'] = .03
+        return opt
+
+    opt, native = build(params), MuonAdamW(groups(refs))
+    for step in (39, 40, 401, 402):
+        for o in (native, opt):
+            schedule(o, step, 305176, 0.)
+        assert opt.param_groups[0]['momentum'] == native.param_groups[0]['momentum']
+        base = [p.detach().clone() for p in params]
+        historical = [opt.state[p]['velocity'].clone() for p in params]
+        opt.zero_grad(set_to_none=True)
+        with opt.gradient_point():
+            for p, w, v, target in zip(params, base, historical, targets):
+                torch.testing.assert_close(p, normalized(w+v)*w.norm(), rtol=2e-5, atol=2e-6)
+                (.5 * (p-target).square().sum()).backward()
+        for ref, p in zip(refs, params):
+            with torch.no_grad():
+                ref.zero_()
+            ref.grad = p.grad.clone()
+        native.step()
+        opt.step()
+        for p, w, v, ref in zip(params, base, historical, refs):
+            # A native, zero-decay Muon write to zero gives the signed direction.
+            trial = w + .03 * math.sqrt(shape[0]) * normalized(ref.detach())
+            expected = opt.state[p]['radius'] * normalized(trial)
+            torch.testing.assert_close(p.detach()-w, expected-w, rtol=.01, atol=3e-5)
+            carried = v - (v*expected).sum() * (w+expected) / (w.square().sum() + (w*expected).sum())
+            velocity = .5*(carried + expected-w)
+            velocity -= expected * ((velocity*expected).sum()/expected.square().sum())
+            torch.testing.assert_close(opt.state[p]['velocity'], velocity, rtol=.01, atol=3e-5)
+        if step == 40:
+            replicas = [torch.nn.Parameter(p.detach().clone()) for p in params]
+            restored = build(replicas)
+            restored.load_state_dict(copy.deepcopy(opt.state_dict()))
+        if step > 40:
+            schedule(restored, step, 305176, 0.)
+            restored.zero_grad(set_to_none=True)
+            with restored.gradient_point():
+                for p, target in zip(replicas, targets):
+                    (.5 * (p-target).square().sum()).backward()
+            restored.step()
+            for a, b in zip(replicas, params):
+                assert torch.equal(a, b)
+                for key, value in opt.state[b].items():
+                    assert torch.equal(restored.state[a][key], value)
+
+    untouched = params[0].detach().clone()
+    saved_state = {key: value.clone() for key, value in opt.state[params[0]].items()}
+    opt.zero_grad(set_to_none=True)
+    with opt.gradient_point():
+        params[1].sum().backward()
+    opt.step()
+    assert torch.equal(untouched, params[0])
+    for key in ('radius', 'velocity'):
+        assert torch.equal(opt.state[params[0]][key], saved_state[key])
+    for key in ('momentum_buffer', 'second_momentum_buffer'):
+        assert torch.equal(opt.state[params[0]][key][0], saved_state[key][0])

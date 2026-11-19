@@ -15,7 +15,7 @@ from policy import RANK, require_gpus
 REPO=Path(__file__).resolve().parents[3]
 HOME_ROOT=Path('/home/yzhong239')
 ASSETS=HOME_ROOT/'nanochat-runtime-assets'
-PRESETS={'arc':'vanilla', 'vanilla':'vanilla', 'ngpt':'ngpt', 'ngpt_momentum':'ngpt_heavy_ball',
+PRESETS={'arc':'vanilla', 'arc_muon':'vanilla', 'vanilla':'vanilla', 'ngpt':'ngpt', 'ngpt_momentum':'ngpt_heavy_ball',
          'ngpt_momentum_transport_rms':'ngpt_heavy_ball', 'heavy_ball_rms':'heavy_ball_rms',
          'ngpt_hbformer':'ngpt_hbformer', 'ngpt_hbformer_no_wn':'ngpt_hbformer',
          'ngpt_hbformer_velocity_ln':'ngpt_hbformer', 'ngpt_lookahead':'ngpt_lookahead', 'lookahead_only':'lookahead_only'}
@@ -36,6 +36,7 @@ def main():
     start.add_argument('--extend-to-schedule', action='store_true', help='Continue the completed lookahead pilot to its original 10B schedule')
     args=parser.parse_args()
     preset=args.preset
+    arc_optimizer = preset in ('arc', 'arc_muon')
     full_lookahead=args.fresh_10b or args.extend_to_schedule
     if full_lookahead and preset != 'ngpt_lookahead':
         parser.error('The lookahead start options require ngpt_lookahead')
@@ -46,8 +47,9 @@ def main():
     if args.fresh_10b:
         budget='10b-from-scratch'
     ROOT=HOME_ROOT/f'residual-nonzero-{preset}-{budget}-20261117'
-    if preset == 'arc':
-        ROOT = HOME_ROOT/'optimizer-arc-10b-20261118'
+    if arc_optimizer:
+        tag = 'arc' if preset == 'arc' else 'arc-muon-direction'
+        ROOT = HOME_ROOT/f'optimizer-{tag}-10b-20261118'
     if args.hopper_only:
         ROOT = ROOT.with_name(ROOT.name + '-hopper-only')
     KEY=ROOT.name
@@ -98,7 +100,7 @@ def main():
         if args.hopper_only:
             source.update(hopper_only=True, scheduling='Full H100/H200 only at startup and on resume')
             del source['compatible_fallback_backend']
-        if preset == 'arc':
+        if arc_optimizer:
             base = json.loads((HOME_ROOT/'residual-nonzero-vanilla-10b-20261117/summary.json').read_text())
             assert base['complete'] and base['run_id'] == '2eac64db' and base['steps'] == steps
             for key in ('model', 'seed', 'batch_tokens', 'microbatch', 'residual_projection_init',
@@ -109,6 +111,10 @@ def main():
                           reference_run=base['run_id'], reference_initial_dev_ce=base['initial_dev_ce'],
                           preflight='Analytical update and restart, accumulated query gradients, production CLI exit85, matched Muon speed',
                           timing_reference='Vanilla reference only; same-card Arc timing measured in preflight')
+            if preset == 'arc_muon':
+                source.update(arc_direction='muon', comparison_steps=1000,
+                              preflight='Same-GPU 1000-step Muon, raw Arc and Muon-direction Arc; independent restart check',
+                              direction_recipe='native scheduled Muon momentum, row equilibration, Polar Express and factored variance; no matrix decay')
             (ROOT/'comparison-reference.json').write_text(json.dumps(dict(run_id=base['run_id'],
                 dev_ce=base['final_dev_ce'], dev_tokens=base['dev_tokens'], step=steps), indent=2)+'\n')
         if mode in ('ngpt_lookahead', 'lookahead_only'):
@@ -212,12 +218,12 @@ def main():
             'osdf:///chtc/staging/y/yzhong239/mhc-official-runtime-7546767.tar.gz',
             'https://developer.download.nvidia.com/compute/cuda/repos/debian12/x86_64/cuda-compat-13-1_590.48.01-1_amd64.deb']
         lines=[]
-        batch_name = 'nanochat-arc-10b' if preset == 'arc' else f'nanochat-nonzero-residual-{budget}-{preset}'
+        batch_name = f'nanochat-{tag}-10b' if arc_optimizer else f'nanochat-nonzero-residual-{budget}-{preset}'
         job_args=f'{run_id} {mode}'
         if source['ngpt_velocity_mode'] != 'ambient':
             job_args+=' '+source['ngpt_velocity_mode']
-        if preset == 'arc':
-            job_args += ' ambient --arc'
+        if arc_optimizer:
+            job_args += ' ambient --arc-muon' if preset == 'arc_muon' else ' ambient --arc'
         if args.fresh_10b:
             job_args+=' --fresh-10b'
         if args.extend_to_schedule:
@@ -267,7 +273,7 @@ def main():
         assert set(ad['TransferOutput'].split(','))=={'results.tar','checkpoints.tar'}
         assert ad['NgptTrainKey']==KEY and ad['InteractiveJob'] and ad['WantGPULab']
         assert ad['Args']==job_args
-        if mode == 'lookahead_only' or preset == 'arc':
+        if mode == 'lookahead_only' or arc_optimizer:
             assert not any(name in ad['TransferInput'] for name in ('parent-', 'checkpoints.tar', 'results.tar'))
         if args.fresh_10b:
             assert 'lookahead-validation.json' in ad['TransferInput'] and 'continuation' not in source

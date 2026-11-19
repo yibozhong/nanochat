@@ -41,10 +41,14 @@ if [[ "${4:-}" == --extend-to-schedule || "${4:-}" == --fresh-10b ]]; then
     [[ "$#" == 4 && "$TASK_MODE" == ngpt_lookahead ]]
     TASK_GROUP=ngpt-lookahead-10b
     TASK_STEPS=$TASK_SCHEDULE_STEPS
-elif [[ "${4:-}" == --arc ]]; then
+elif [[ "${4:-}" == --arc || "${4:-}" == --arc-muon ]]; then
     [[ "$#" == 4 && "$TASK_MODE/$TASK_VELOCITY_MODE" == vanilla/ambient ]]
     TASK_MOMENTUM_ARGS=(--matrix-optimizer arc --arc-mu 1 --arc-beta .5)
     TASK_GROUP=arc-optimizer-10b
+    if [[ "$4" == --arc-muon ]]; then
+        TASK_MOMENTUM_ARGS+=(--arc-direction muon)
+        TASK_GROUP=arc-muon-direction-optimizer-10b
+    fi
 elif [ "$#" -gt 3 ]; then
     [[ "$#" == 4 && "$TASK_MODE" == ngpt_hbformer && "$4" == --no-ngpt-weight-norm ]]
     TASK_MOMENTUM_ARGS+=("$4")
@@ -96,8 +100,9 @@ assert s['velocity_embedding']==(sys.argv[2] in ('ngpt_heavy_ball','heavy_ball_r
 assert s['residual_projection_init']=='normal' and s['residual_projection_init_std']==.02
 assert s['ngpt_force_rms_floor']==1e-6
 assert s.get('ngpt_velocity_mode','ambient')==sys.argv[3]
-assert (sys.argv[6]=='--arc') == (s.get('matrix_optimizer')=='arc')
-if sys.argv[6]=='--arc':
+assert (sys.argv[6] in ('--arc','--arc-muon')) == (s.get('matrix_optimizer')=='arc')
+assert (sys.argv[6]=='--arc-muon') == (s.get('arc_direction')=='muon')
+if s.get('matrix_optimizer')=='arc':
     assert s['steps']==s['schedule_steps']==305176 and s['reference_run']=='2eac64db'
     assert s['arc_mu']==1 and s['arc_beta']==.5 and not s['velocity_embedding']
     assert s['residual_dynamics']=='vanilla' and 'continuation' not in s
@@ -195,7 +200,7 @@ cd nanochat-src
 cp ../source.json source.json
 ln -sfn ../results results
 # Validate this source once per GPU family, then start a fresh formal process.
-if [[ "${4:-}" == --arc ]]; then
+if [[ "${4:-}" == --arc || "${4:-}" == --arc-muon ]]; then
     WANDB_MODE=disabled timeout --kill-after=30s 2400 python research/connections/ngpt/arc_preflight.py
     echo "FORMAL_TRAINING_BEGIN arc_optimizer $TASK_RUN_ID"
 else

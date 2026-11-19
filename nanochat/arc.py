@@ -4,11 +4,14 @@ Run the forward and backward inside opt.gradient_point(), then call opt.step().
 Evaluation and checkpoints use the base weights.
 """
 from contextlib import contextmanager
+from itertools import groupby
 import math
 
 import torch
 
-from nanochat.optim import MuonAdamW
+from nanochat.optim import MuonAdamW, muon_direction
+
+_compiled_muon_direction = torch.compile(muon_direction, dynamic=False, fullgraph=True)
 
 
 @torch.compile(dynamic=False, fullgraph=True)
@@ -36,13 +39,22 @@ def _update(w, grad, v, radius, step_length, beta):
 class ArcAdamW(MuonAdamW):
     """Single-GPU Arc for backbone matrices and nanochat AdamW for other groups."""
 
-    def __init__(self, groups, mu=1., beta=.5):
+    def __init__(self, groups, mu=1., beta=.5, direction='raw'):
+        if direction not in ('raw', 'muon'):
+            raise ValueError('Unknown Arc write direction')
         if not math.isfinite(mu) or not 0 <= beta < 1:
             raise ValueError('Arc requires finite mu and 0 <= beta < 1')
         if torch.distributed.is_initialized() and torch.distributed.get_world_size() != 1:
             raise ValueError('Arc currently supports single-rank training')
-        groups = [dict(kind='arc', params=g['params'], lr=g['lr'], beta=beta, mu=mu)
-                  if g['kind'] == 'muon' else g for g in groups]
+        groups = list(groups)
+        for i, g in enumerate(groups):
+            if g['kind'] == 'muon':
+                arc = dict(kind='arc', params=g['params'], lr=g['lr'], beta=beta, mu=mu)
+                if direction == 'muon':
+                    arc.update(direction=direction, momentum=g['momentum'], beta2=g['beta2'], ns_steps=g['ns_steps'])
+                    if len({p.shape for p in g['params']}) != 1:
+                        raise ValueError('Batched Muon directions require matrices of the same shape')
+                groups[i] = arc
         super().__init__(groups)
         self._query_active = False
         self._gradient_ready = False
@@ -90,6 +102,36 @@ class ArcAdamW(MuonAdamW):
             raise RuntimeError('Cannot checkpoint transient Arc query weights')
         return super().state_dict()
 
+    def _write(self, p, direction, group):
+        state = self.state[p]
+        self._muon_lr_t.fill_(group['lr'] * math.sqrt(p.shape[0]))
+        _update(p, direction, state['velocity'], state['radius'], self._muon_lr_t, group['beta'])
+
+    def _step_muon_direction(self, group):
+        params = group['params']
+        p = params[0]
+        rows, cols = p.shape
+        red_dim = -1 if rows >= cols else -2
+        state = self.state[p]
+        if 'momentum_buffer' not in state:
+            state['momentum_buffer'] = p.new_zeros((len(params), rows, cols))
+            factor_shape = (rows, 1) if rows >= cols else (1, cols)
+            state['second_momentum_buffer'] = p.new_zeros((len(params), *factor_shape))
+        self._muon_momentum_t.fill_(group['momentum'])
+        self._muon_beta2_t.fill_(group['beta2'])
+        # Contiguous runs let the dense training path update one stack in place;
+        # a missing gradient also leaves that matrix's two Muon moments untouched.
+        for active, run in groupby(range(len(params)), key=lambda i: params[i].grad is not None):
+            if active:
+                indices = list(run)
+                span = slice(indices[0], indices[-1] + 1)
+                grads = torch.stack([params[i].grad for i in indices])
+                directions = _compiled_muon_direction(
+                    grads, state['momentum_buffer'][span], state['second_momentum_buffer'][span],
+                    self._muon_momentum_t, self._muon_beta2_t, group['ns_steps'], red_dim, p.dtype)
+                for i, direction in zip(indices, directions.unbind(0)):
+                    self._write(params[i], direction, group)
+
     @torch.no_grad()
     def step(self):
         if self._query_active or not self._gradient_ready:
@@ -100,13 +142,13 @@ class ArcAdamW(MuonAdamW):
                 info = self._reduce_adamw(group, world_size=1)
                 self._compute_adamw(group, info, [], rank=0, world_size=1)
                 continue
+            if group.get('direction') == 'muon':
+                self._step_muon_direction(group)
+                continue
             for p in group['params']:
                 if p.grad is None:
                     continue
-                state = self.state[p]
-                # Muon's nominal update norm on an [out,in] matrix is lr*sqrt(out).
-                self._muon_lr_t.fill_(group['lr'] * math.sqrt(p.shape[0]))
-                _update(p, p.grad, state['velocity'], state['radius'], self._muon_lr_t, group['beta'])
+                self._write(p, p.grad, group)
 
     @torch.no_grad()
     def metrics(self):

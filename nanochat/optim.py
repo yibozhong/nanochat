@@ -108,25 +108,9 @@ polar_express_coeffs = [
 ]
 
 
-@torch.compile(dynamic=False, fullgraph=True)
-def muon_step_fused(
-    stacked_grads: Tensor,          # (12, 768, 3072) - stacked gradients
-    stacked_params: Tensor,         # (12, 768, 3072) - stacked parameters
-    momentum_buffer: Tensor,        # (12, 768, 3072) - first moment buffer
-    second_momentum_buffer: Tensor, # (12, 768, 1) or (12, 1, 3072) - factored second moment
-    momentum_t: Tensor,             # () - 0-D CPU tensor, momentum coefficient
-    lr_t: Tensor,                   # () - 0-D CPU tensor, learning rate
-    wd_t: Tensor,                   # () - 0-D CPU tensor, weight decay
-    beta2_t: Tensor,                # () - 0-D CPU tensor, beta2 for second moment
-    ns_steps: int,                  # 5 - number of Newton-Schulz/Polar Express iterations
-    red_dim: int,                   # -1 or -2 - reduction dimension for variance
-) -> None:
-    """
-    Fused Muon step: momentum -> polar_express -> variance_reduction -> cautious_update
-    All in one compiled graph to eliminate Python overhead between ops.
-    Some of the constants are 0-D CPU tensors to avoid recompilation when values change.
-    """
-
+def muon_direction(stacked_grads, momentum_buffer, second_momentum_buffer, momentum_t,
+                   beta2_t, ns_steps, red_dim, param_dtype):
+    """Muon direction before the learning rate and cautious decay, batched by matrix shape."""
     # Nesterov momentum
     momentum = momentum_t.to(stacked_grads.dtype)
     momentum_buffer.lerp_(stacked_grads, 1 - momentum)
@@ -153,7 +137,7 @@ def muon_step_fused(
             B = b * A + c * (A @ A)
             X = a * X + B @ X
     # Cast back to the param dtype (MPS errors on the mixed-dtype ops below when X is bf16)
-    g = X.to(stacked_params.dtype)
+    g = X.to(param_dtype)
 
     # Muon+ renormalization: snap Frobenius norm to sqrt(min(m, n))
     target_norm = min(g.size(-2), g.size(-1)) ** 0.5
@@ -171,7 +155,30 @@ def muon_step_fused(
     scaled_sq_sum = (v_mean * red_dim_size) * step_size.float().square()
     v_norm_new = scaled_sq_sum.sum(dim=(-2, -1), keepdim=True).sqrt()
     final_scale = step_size * (v_norm / v_norm_new.clamp_min(1e-10))
-    g = g * final_scale.to(g.dtype)
+    return g * final_scale.to(g.dtype)
+
+
+@torch.compile(dynamic=False, fullgraph=True)
+def muon_step_fused(
+    stacked_grads: Tensor,          # (12, 768, 3072) - stacked gradients
+    stacked_params: Tensor,         # (12, 768, 3072) - stacked parameters
+    momentum_buffer: Tensor,        # (12, 768, 3072) - first moment buffer
+    second_momentum_buffer: Tensor, # (12, 768, 1) or (12, 1, 3072) - factored second moment
+    momentum_t: Tensor,             # () - 0-D CPU tensor, momentum coefficient
+    lr_t: Tensor,                   # () - 0-D CPU tensor, learning rate
+    wd_t: Tensor,                   # () - 0-D CPU tensor, weight decay
+    beta2_t: Tensor,                # () - 0-D CPU tensor, beta2 for second moment
+    ns_steps: int,                  # 5 - number of Newton-Schulz/Polar Express iterations
+    red_dim: int,                   # -1 or -2 - reduction dimension for variance
+) -> None:
+    """
+    Fused Muon step: momentum -> polar_express -> variance_reduction -> cautious_update
+    All in one compiled graph to eliminate Python overhead between ops.
+    Some of the constants are 0-D CPU tensors to avoid recompilation when values change.
+    """
+
+    g = muon_direction(stacked_grads, momentum_buffer, second_momentum_buffer,
+                       momentum_t, beta2_t, ns_steps, red_dim, stacked_params.dtype)
 
     # Cautious weight decay + parameter update
     lr = lr_t.to(g.dtype)

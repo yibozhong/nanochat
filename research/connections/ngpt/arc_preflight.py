@@ -30,16 +30,24 @@ def main():
                     '--junitxml=results/arc-tests.xml'], check=True)
     root = Path(tempfile.mkdtemp(prefix='arc-diagnostic-', dir='..')).resolve()
     results = {}
-    for name in ('muon', 'arc'):
+    hybrid = source.get('arc_direction', 'raw') == 'muon'
+    target = 'arc_muon' if hybrid else 'arc'
+    variants = ('muon', 'arc', 'arc_muon') if hybrid else ('muon', 'arc')
+    if hybrid:
+        assert source['comparison_steps'] == 1000
+    for name in variants:
         out = root/name
-        steps = 64 if name == 'arc' else 32
+        steps = source['comparison_steps'] if hybrid else (64 if name == 'arc' else 32)
+        matrix_optimizer = 'muon' if name == 'muon' else 'arc'
         cmd = [sys.executable, '-m', 'scripts.connection_train', '--variant', 'baseline',
-               '--streams', '1', '--matrix-optimizer', name, '--arc-mu', str(source['arc_mu']),
+               '--streams', '1', '--matrix-optimizer', matrix_optimizer, '--arc-mu', str(source['arc_mu']),
                '--arc-beta', str(source['arc_beta']), '--residual-projection-init', 'normal',
                '--ngpt-force-rms-floor', '1e-6', '--steps', str(steps), '--schedule-steps', '305176',
                '--attention-backend', 'fa2', '--microbatch', '16', '--data-dir', '../data',
                '--output-dir', str(out), '--seed', '42', '--run-id', 'arc-local-debug']
-        if name == 'arc':
+        if name == 'arc_muon':
+            cmd.extend(['--arc-direction', 'muon'])
+        if name == target:
             first = subprocess.run([*cmd, '--segment-steps', '32'])
             if first.returncode != 85:
                 raise RuntimeError(f'Expected a durable restart at 32, got {first.returncode}')
@@ -58,18 +66,41 @@ def main():
         results[name] = dict(initial_dev_ce=info['initial_dev_ce'], final_dev_ce=info['final_dev_ce'],
                              median_step_seconds=statistics.median(r['seconds'] for r in rows[16:32]),
                              peak_allocated_bytes=info['peak_allocated_bytes'])
-        if name == 'arc':
-            events = [json.loads(line)['values'] for line in (out/'diagnostics/arc-local-debug/events.jsonl').read_text().splitlines()]
-            last = next(e for e in reversed(events) if e.get('step') == steps and 'dev/ce' in e)
+        events = [json.loads(line)['values'] for line in (out/'diagnostics/arc-local-debug/events.jsonl').read_text().splitlines()]
+        validation = {e['step']: e for e in events if 'dev/ce' in e}
+        if hybrid:
+            config = json.loads((out/'config.json').read_text())
+            protocol = config['protocol']
+            assert config['logging_backend'] == 'local' and config['model']['residual_dynamics'] == 'vanilla'
+            assert protocol['schedule_steps'] == 305176 and protocol['seed'] == 42
+            assert protocol['batch_tokens'] == 32768 and protocol['microbatch'] == 16
+            write = protocol.get('matrix_optimizer', {'name': 'muon'})
+            assert write['name'] == matrix_optimizer
+            assert write.get('direction', 'raw') == ('muon' if name == target else 'raw')
+            milestones = (50, 250, 500, 750, 1000)
+            assert all(validation[step]['dev/tokens'] == info['dev_tokens'] for step in milestones)
+            results[name]['validation_ce'] = {step: validation[step]['dev/ce'] for step in milestones}
+            results[name]['steady_step_seconds'] = statistics.median(row['seconds'] for row in rows[100:])
+        if matrix_optimizer == 'arc':
+            last = validation[steps]
             assert 0 < last['optimizer/mean_query_degrees'] < 90
             assert last['optimizer/max_relative_radius_error'] < 1e-5
             results[name].update({k:v for k,v in last.items() if k.startswith('optimizer/')})
+        print('ARC_CONTROL_FINISHED', name, json.dumps(results[name]), flush=True)
         shutil.rmtree(out)
     root.rmdir()
     result = dict(complete=True, source=source, formal_training=False, gpu=gpu, torch=torch.__version__,
                   cuda=torch.version.cuda, models=results, resumed_at_step=32,
-                  arc_to_muon_time=results['arc']['median_step_seconds']/results['muon']['median_step_seconds'],
+                  arc_to_muon_time=results[target]['median_step_seconds']/results['muon']['median_step_seconds'],
                   evaluation_wall_seconds=time.perf_counter()-begin)
+    if hybrid:
+        result['comparison'] = {
+            'steps': steps, 'dev_tokens': info['dev_tokens'],
+            'delta_vs_raw_arc': results[target]['final_dev_ce'] - results['arc']['final_dev_ce'],
+            'delta_vs_muon': results[target]['final_dev_ce'] - results['muon']['final_dev_ce'],
+            'target': target, 'validation_ce': {name: results[name]['validation_ce'] for name in variants},
+        }
+        print('ARC_1000_COMPARISON', json.dumps(result['comparison']), flush=True)
     marker.write_text(json.dumps(result, indent=2)+'\n')
     print('ARC_PREFLIGHT_PASSED', json.dumps(results), flush=True)
 

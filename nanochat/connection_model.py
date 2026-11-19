@@ -445,8 +445,10 @@ class ConnectionModel(nn.Module):
             accum_e_fp32=True, accum_c_fp32=True)
 
 
-def optimizer_for(model, batch_tokens=32768, *, matrix_optimizer='muon', arc_mu=1., arc_beta=.5):
+def optimizer_for(model, batch_tokens=32768, *, matrix_optimizer='muon', arc_mu=1., arc_beta=.5, arc_direction='raw'):
     """Same backbone native LR rules; connector parameters get separate AdamW."""
+    if matrix_optimizer != 'arc' and arc_direction != 'raw':
+        raise ValueError('Selecting an Arc direction requires the Arc matrix optimizer')
     if matrix_optimizer not in ('muon', 'arc'):
         raise ValueError(f'Unknown matrix optimizer {matrix_optimizer}')
     if matrix_optimizer == 'arc' and (model.config.architecture != 'vanilla' or
@@ -504,7 +506,7 @@ def optimizer_for(model, batch_tokens=32768, *, matrix_optimizer='muon', arc_mu=
         compiler_config.recompile_limit = max(compiler_config.recompile_limit, 2*len(signatures))
     if matrix_optimizer == 'arc':
         from nanochat.arc import ArcAdamW
-        opt = ArcAdamW(groups, mu=arc_mu, beta=arc_beta)
+        opt = ArcAdamW(groups, mu=arc_mu, beta=arc_beta, direction=arc_direction)
     else:
         opt = MuonAdamW(groups)
     if c.ngpt_weight_norm:
@@ -556,7 +558,8 @@ def schedule(opt, step, total_steps, wd):
         momentum = .97
     for g in opt.param_groups:
         g['lr'] = g['initial_lr']*lr_mult
-        if g['kind'] == 'muon':
+        if g['kind'] == 'muon' or g.get('direction') == 'muon':
             g['momentum'] = momentum
+        if g['kind'] == 'muon':
             g['weight_decay'] = wd*.5*(1+math.cos(math.pi*step/total_steps))
     return lr_mult
