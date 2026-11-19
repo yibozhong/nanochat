@@ -2,13 +2,15 @@
 import torch
 from torch import nn
 
-from nanochat.momentum import MomentumModel, NormalizedResidual, state_dtype, tangent_project
+from nanochat.momentum import MomentumModel, NormalizedResidual, normalize_residual, state_dtype, tangent_project
 
 
 class LookaheadResidual(NormalizedResidual):
     def __init__(self, config):
         super().__init__(config)
         self.mu = nn.Parameter(torch.tensor([config.lookahead_mu_init], dtype=torch.float32))
+        self.kappa = (nn.Parameter(torch.zeros(1, dtype=torch.float32))
+                      if config.ngpt_velocity_mode == 'lookahead_axis_write' else None)
         self.decay = config.momentum_beta_init
 
     def query(self, h, v):
@@ -17,7 +19,15 @@ class LookaheadResidual(NormalizedResidual):
         return (h + offset) * torch.rsqrt(1 + offset.square().mean(-1, keepdim=True))
 
     def forward(self, h, v, force):
-        new_h = super().forward(h, force)
+        if self.kappa is None:
+            new_h = super().forward(h, force)
+        else:
+            h, v = state_dtype(h), state_dtype(v)
+            delta = normalize_residual(force, self.rms_floor) - h
+            # v is tangent at h. Use an RMS-squared floor to keep the write
+            # and its derivatives finite even for an exactly zero velocity.
+            along = (delta * v).mean(-1, keepdim=True) / v.square().mean(-1, keepdim=True).clamp_min(1e-12)
+            new_h = normalize_residual(h + self.alpha() * (delta + (self.kappa[0] * along) * v))
         # The Householder reflector with normal h + new_h gives short-arc
         # parallel transport. At opposite poles the two tangent planes coincide.
         bisector = h + new_h
@@ -79,5 +89,9 @@ class LookaheadModel(MomentumModel):
             mus = torch.stack([site.mu[0] for site in sites]).tolist()
             return {f'residual/sublayer_{i}/mu': value for i, value in enumerate(mus)}
         values = torch.stack([torch.stack((site.alpha(), site.mu[0])) for site in sites]).tolist()
-        return {f'residual/sublayer_{i}/{key}': value
-                for i, row in enumerate(values) for key, value in zip(('alpha', 'mu'), row)}
+        metrics = {f'residual/sublayer_{i}/{key}': value
+                   for i, row in enumerate(values) for key, value in zip(('alpha', 'mu'), row)}
+        if sites[0].kappa is not None:
+            kappas = torch.stack([site.kappa[0] for site in sites]).tolist()
+            metrics.update({f'residual/sublayer_{i}/kappa': k for i, k in enumerate(kappas)})
+        return metrics

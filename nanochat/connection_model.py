@@ -94,9 +94,10 @@ class ConnectionConfig:
             raise ValueError('Transported velocity LayerNorm requires the unit-step HBFormer')
         if self.residual_mode == 'lookahead_only' and self.ngpt_velocity_mode != 'ambient':
             raise ValueError('Additive lookahead uses Euclidean velocity')
-        if (self.residual_mode == 'ngpt_lookahead') != (self.ngpt_velocity_mode == 'lookahead_transport'):
+        spherical_lookahead = self.ngpt_velocity_mode in ('lookahead_transport', 'lookahead_axis_write')
+        if (self.residual_mode == 'ngpt_lookahead') != spherical_lookahead:
             raise ValueError('Lookahead requires a transported velocity for branch reads')
-        if self.ngpt_velocity_mode not in ('ambient', 'transport_rms', 'transport_layernorm', 'lookahead_transport'):
+        if not spherical_lookahead and self.ngpt_velocity_mode not in ('ambient', 'transport_rms', 'transport_layernorm'):
             raise ValueError('Unknown nGPT velocity mode')
         if not math.isfinite(self.momentum_velocity_rms_floor) or self.momentum_velocity_rms_floor <= 0:
             raise ValueError('Velocity RMS floor must be positive and finite')

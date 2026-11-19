@@ -27,16 +27,17 @@ case "$TASK_MODE/$TASK_VELOCITY_MODE" in
         TASK_MOMENTUM_ARGS=(--velocity-init token_position --velocity-embedding-std .02 --momentum-beta-init .5 --lookahead-mu-init 0)
         TASK_GROUP=lookahead-only-10b
         ;;
-    ngpt_lookahead/lookahead_transport)
+    ngpt_lookahead/lookahead_transport|ngpt_lookahead/lookahead_axis_write)
         TASK_MOMENTUM_ARGS=(--velocity-init token_position --velocity-embedding-std .02 --momentum-beta-init .5 --lookahead-mu-init 0)
         TASK_GROUP=ngpt-lookahead-5k
+        if [[ "$TASK_VELOCITY_MODE" == lookahead_axis_write ]]; then TASK_GROUP=arc-residual-axis-write-10b; fi
         ;;
     vanilla/ambient|ngpt/ambient|ngpt_heavy_ball/ambient) ;;
     *) exit 64 ;;
 esac
 TASK_SCHEDULE_STEPS=305176
 TASK_STEPS=$TASK_SCHEDULE_STEPS
-if [[ "$TASK_MODE" == ngpt_lookahead ]]; then TASK_STEPS=5000; fi
+if [[ "$TASK_VELOCITY_MODE" == lookahead_transport ]]; then TASK_STEPS=5000; fi
 if [[ "${4:-}" == --extend-to-schedule || "${4:-}" == --fresh-10b ]]; then
     [[ "$#" == 4 && "$TASK_MODE" == ngpt_lookahead ]]
     TASK_GROUP=ngpt-lookahead-10b
@@ -126,7 +127,10 @@ if sys.argv[2]=='lookahead_only':
 elif sys.argv[2]=='ngpt_lookahead':
     extended = sys.argv[6]=='--extend-to-schedule'
     assert extended == ('continuation' in s)
-    assert s['steps']==(305176 if extended or sys.argv[6]=='--fresh-10b' else 5000) and not s['ngpt_weight_norm']
+    axis_write = sys.argv[3]=='lookahead_axis_write'
+    assert s['steps']==(305176 if extended or sys.argv[6]=='--fresh-10b' or axis_write else 5000) and not s['ngpt_weight_norm']
+    if axis_write:
+        assert not sys.argv[6] and s['reference_run']=='d4293868' and s['kappa_init']==0
     assert s['lookahead_mu_init']==0 and s['momentum_beta_init']==.5 and not s['momentum_beta_trainable']
     assert s['velocity_init']=='token_position' and s['velocity_embedding_std']==.02
 elif sys.argv[2]=='ngpt_hbformer':
@@ -216,7 +220,11 @@ if [[ "${TASK_MOMENTUM_ARGS[0]:-}" == --matrix-optimizer ]]; then
     WANDB_MODE=disabled timeout --kill-after=30s 2400 python research/connections/ngpt/arc_preflight.py
     echo "FORMAL_TRAINING_BEGIN arc_optimizer $TASK_RUN_ID"
 else
-    WANDB_MODE=disabled python research/connections/ngpt/preflight.py
+    if [[ "$TASK_VELOCITY_MODE" == lookahead_axis_write ]]; then
+        WANDB_MODE=disabled timeout --kill-after=30s 2400 python -m research.connections.ngpt.axis_write_preflight
+    else
+        WANDB_MODE=disabled python research/connections/ngpt/preflight.py
+    fi
     echo "FORMAL_TRAINING_BEGIN nonzero_residual $TASK_RUN_ID"
 fi
 python -m scripts.connection_train --variant baseline --architecture vanilla --streams 1 \
