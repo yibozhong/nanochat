@@ -108,7 +108,7 @@ def fused_write(h, v, force, alpha, beta, floor):
 
 
 def compile_arc_step(block):
-    if block.attn_residual.kappa is not None or block.mlp_residual.kappa is not None:
+    if any(s.kappa is not None or s.raw_parallel is not None for s in (block.attn_residual, block.mlp_residual)):
         raise ValueError('The benchmark kernel implements the original isotropic Arc write')
     def update(site, h, v, force):
         return fused_write(h, v, force, site.alpha(), site.decay, site.rms_floor)

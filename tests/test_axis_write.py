@@ -80,8 +80,12 @@ def test_active_write_cache_and_compiled_training(setting):
     eager, compiled = make(setting), make(setting, compiled=True)
     with torch.no_grad():
         for b in eager.blocks:
-            b.attn_residual.kappa.fill_(.7)
-            b.mlp_residual.kappa.fill_(-.4)
+            if b.attn_residual.raw_parallel is None:
+                b.attn_residual.kappa.fill_(.7)
+                b.mlp_residual.kappa.fill_(-.4)
+            else:
+                b.attn_residual.raw_parallel.add_(.7)
+                b.mlp_residual.raw_parallel.sub_(.4)
     compiled.load_state_dict(eager.state_dict())
     x, y = inputs()
     with torch.no_grad():
@@ -100,7 +104,8 @@ def test_active_write_cache_and_compiled_training(setting):
         assert p.grad is not None and torch.isfinite(p.grad).all(), name
     # Compare the whole vector of gate derivatives to avoid a relative error
     # dominated by a single nearly orthogonal sublayer.
-    def kappa_grads(model):
-        return torch.cat([p.grad for n,p in model.named_parameters() if n.endswith('.kappa')])
-    expected = kappa_grads(eager)
-    assert (kappa_grads(compiled)-expected).norm() <= .04*expected.norm()+1e-8
+    def write_grads(model):
+        names = ('.raw_parallel','.raw') if setting.ngpt_velocity_mode == 'lookahead_split_write' else ('.kappa',)
+        return torch.cat([p.grad for n,p in model.named_parameters() if n.endswith(names)])
+    expected = write_grads(eager)
+    assert (write_grads(compiled)-expected).norm() <= .04*expected.norm()+1e-8

@@ -38,10 +38,12 @@ def model_cost(config, batch=1, activation_bytes=2, feedback_passes=None):
             embedding_parameters = (c.vocab_size+c.sequence_length)*d
         state_bytes = {'ngpt':4, 'lookahead_only':activation_bytes+4}.get(c.residual_mode, 8)
         scalars_per_site = {'ngpt':1, 'ngpt_hbformer':2, 'ngpt_lookahead':2, 'lookahead_only':1}.get(c.residual_mode, 3)
-        if c.ngpt_velocity_mode == 'lookahead_axis_write':
-            # Two dot products, multiply the projection coefficient by kappa,
+        if c.ngpt_velocity_mode in ('lookahead_axis_write', 'lookahead_split_write'):
+            # Two dot products, multiply the projection by its coefficient,
             # then scale v and add. Mean/division scalar work is excluded.
             residual += batch*t*sites*(6*d-1)
+            if c.ngpt_velocity_mode == 'lookahead_split_write':
+                residual += sites  # parallel minus perpendicular coefficient, shared across tokens
             scalars_per_site += 1
         return dict(estimated_forward_flops=forward+residual,
             estimated_training_flops=3*(forward+residual),

@@ -11,6 +11,8 @@ class LookaheadResidual(NormalizedResidual):
         self.mu = nn.Parameter(torch.tensor([config.lookahead_mu_init], dtype=torch.float32))
         self.kappa = (nn.Parameter(torch.zeros(1, dtype=torch.float32))
                       if config.ngpt_velocity_mode == 'lookahead_axis_write' else None)
+        self.raw_parallel = (nn.Parameter(self.raw.detach().clone())
+                             if config.ngpt_velocity_mode == 'lookahead_split_write' else None)
         self.decay = config.momentum_beta_init
 
     def query(self, h, v):
@@ -19,7 +21,7 @@ class LookaheadResidual(NormalizedResidual):
         return (h + offset) * torch.rsqrt(1 + offset.square().mean(-1, keepdim=True))
 
     def forward(self, h, v, force):
-        if self.kappa is None:
+        if self.kappa is None and self.raw_parallel is None:
             new_h = super().forward(h, force)
         else:
             h, v = state_dtype(h), state_dtype(v)
@@ -27,7 +29,14 @@ class LookaheadResidual(NormalizedResidual):
             # v is tangent at h. Use an RMS-squared floor to keep the write
             # and its derivatives finite even for an exactly zero velocity.
             along = (delta * v).mean(-1, keepdim=True) / v.square().mean(-1, keepdim=True).clamp_min(1e-12)
-            new_h = normalize_residual(h + self.alpha() * (delta + (self.kappa[0] * along) * v))
+            if self.raw_parallel is None:
+                new_h = normalize_residual(h + self.alpha() * (delta + (self.kappa[0] * along) * v))
+            else:
+                # a_perp*(delta - P) + a_parallel*P, grouped so equal steps
+                # reproduce the original Arc write without roundoff in delta-P.
+                perp = self.alpha()
+                parallel = nn.functional.softplus(self.raw_parallel[0])
+                new_h = normalize_residual((h + perp * delta) + ((parallel - perp) * along) * v)
         # The Householder reflector with normal h + new_h gives short-arc
         # parallel transport. At opposite poles the two tangent planes coincide.
         bisector = h + new_h
@@ -88,6 +97,11 @@ class LookaheadModel(MomentumModel):
         if self.config.residual_mode == 'lookahead_only':
             mus = torch.stack([site.mu[0] for site in sites]).tolist()
             return {f'residual/sublayer_{i}/mu': value for i, value in enumerate(mus)}
+        if sites[0].raw_parallel is not None:
+            values = torch.stack([torch.stack((s.alpha(), nn.functional.softplus(s.raw_parallel[0]), s.mu[0]))
+                                  for s in sites]).tolist()
+            return {f'residual/sublayer_{i}/{key}': value for i,row in enumerate(values)
+                    for key,value in zip(('alpha_perp','alpha_parallel','mu'),row)}
         values = torch.stack([torch.stack((site.alpha(), site.mu[0])) for site in sites]).tolist()
         metrics = {f'residual/sublayer_{i}/{key}': value
                    for i, row in enumerate(values) for key, value in zip(('alpha', 'mu'), row)}

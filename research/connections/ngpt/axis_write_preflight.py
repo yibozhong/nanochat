@@ -102,16 +102,29 @@ def profile(root, mode, resume):
     events = [json.loads(s)['values'] for s in (out/'diagnostics/axis-local-debug/events.jsonl').read_text().splitlines()]
     end, = [e for e in events if e.get('step') == steps and 'dev/ce' in e]
     kappas = {k:v for k,v in end.items() if k.endswith('/kappa')}
-    if resume:
+    if mode == 'lookahead_axis_write':
         assert len(kappas) == 2*cfg['model']['depth'] and all(math.isfinite(v) for v in kappas.values())
         assert any(v != 0 for v in kappas.values())
     else:
         assert not kappas
+    steps_by_component = {}
+    if mode == 'lookahead_split_write':
+        init, = [e for e in events if e.get('step') == 0 and 'dev/ce' in e]
+        for suffix in ('alpha_parallel','alpha_perp'):
+            rates = {k:v for k,v in end.items() if k.endswith('/'+suffix)}
+            assert len(rates) == 2*cfg['model']['depth'] and all(math.isfinite(v) and v>0 for v in rates.values())
+            assert all(abs(init[k]-.05)<1e-6 for k in rates)
+            assert any(v != init[k] for k,v in rates.items())
+            steps_by_component.update(rates)
+        assert any(end[f'residual/sublayer_{i}/alpha_parallel'] != end[f'residual/sublayer_{i}/alpha_perp']
+                   for i in range(2*cfg['model']['depth']))
     # Identical steps and data, after compile and the target's restart at 32.
     seconds = statistics.median(r['seconds'] for r in rows[64:])
     result = dict(config=cfg['model'], parameters=cfg['parameters'], initial_dev_ce=info['initial_dev_ce'],
                   final_dev_ce=info['final_dev_ce'], median_step_seconds=seconds, tokens_per_second=32768/seconds,
                   peak_allocated_bytes=info['peak_allocated_bytes'], kappas=kappas)
+    if steps_by_component:
+        result['component_steps'] = steps_by_component
     print('AXIS_WRITE_CONTROL',mode,json.dumps(result),flush=True)
     shutil.rmtree(out)
     return result
@@ -120,7 +133,9 @@ def profile(root, mode, resume):
 def main():
     start = time.perf_counter()
     source = json.loads(Path('source.json').read_text())
-    assert source['ngpt_velocity_mode'] == 'lookahead_axis_write' and source['hopper_only']
+    mode = source['ngpt_velocity_mode']
+    assert mode in ('lookahead_axis_write','lookahead_split_write') and source['hopper_only']
+    split = mode == 'lookahead_split_write'
     gpu = torch.cuda.get_device_name()
     assert torch.cuda.device_count() == 1 and torch.cuda.get_device_capability() == (9,0)
     assert any(h in gpu for h in ('H100','H200')) and 'MIG' not in gpu
@@ -129,24 +144,30 @@ def main():
         prior = json.loads(marker.read_text())
         assert prior['complete'] and prior['source'] == source and prior['torch'] == torch.__version__
         return
-    subprocess.run([sys.executable,'-m','pytest','-q','tests/test_axis_write.py',
+    suite = 'tests/test_split_write.py' if split else 'tests/test_axis_write.py'
+    subprocess.run([sys.executable,'-m','pytest','-q',suite,
                     '--junitxml=results/axis-tests.xml'],check=True)
     suites = list(ElementTree.parse('results/axis-tests.xml').getroot().iter('testsuite'))
-    assert suites and sum(int(s.get('tests')) for s in suites) == 5
+    tests = sum(int(s.get('tests')) for s in suites)
+    assert tests == (4 if split else 5)
     assert all(int(s.get(k,0)) == 0 for s in suites for k in ('errors','failures','skipped'))
-    alignment = measure_reference(source)
-    torch.cuda.empty_cache()
+    alignment = None
+    if not split:
+        alignment = measure_reference(source)
+        torch.cuda.empty_cache()
     root = Path(tempfile.mkdtemp(prefix='axis-debug-', dir='..')).resolve()
-    control = profile(root,'lookahead_transport',resume=False)
-    target = profile(root,'lookahead_axis_write',resume=True)
+    control = profile(root,'lookahead_axis_write' if split else 'lookahead_transport',resume=False)
+    target = profile(root,mode,resume=True)
     root.rmdir()
     assert {k for k in target['config'] if target['config'][k] != control['config'][k]} == {'ngpt_velocity_mode'}
-    assert target['parameters'] - control['parameters'] == len(alignment['layers'])
+    assert target['parameters'] - control['parameters'] == (0 if split else len(alignment['layers']))
     assert abs(target['initial_dev_ce'] - control['initial_dev_ce']) < 1e-4
     result = dict(complete=True, formal_training=False, source=source, gpu=gpu, torch=torch.__version__,
-                  cuda=torch.version.cuda, alignment=alignment, tests=5, resumed_at_step=32, control=control,
+                  cuda=torch.version.cuda, tests=tests, resumed_at_step=32, control=control,
                   target=target, step_time_ratio=target['median_step_seconds']/control['median_step_seconds'],
                   evaluation_wall_seconds=time.perf_counter()-start)
+    if alignment is not None:
+        result['alignment'] = alignment
     json_write(marker,result)
     print('AXIS_WRITE_PREFLIGHT_PASSED',result['step_time_ratio'],flush=True)
 

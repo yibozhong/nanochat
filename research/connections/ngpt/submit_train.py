@@ -19,7 +19,7 @@ PRESETS={'arc':'vanilla', 'arc_muon':'vanilla', 'arc_muon_radius':'vanilla', 'va
          'ngpt_momentum_transport_rms':'ngpt_heavy_ball', 'heavy_ball_rms':'heavy_ball_rms',
          'ngpt_hbformer':'ngpt_hbformer', 'ngpt_hbformer_no_wn':'ngpt_hbformer',
          'ngpt_hbformer_velocity_ln':'ngpt_hbformer', 'ngpt_lookahead':'ngpt_lookahead', 'lookahead_only':'lookahead_only',
-         'ngpt_lookahead_axis_write':'ngpt_lookahead'}
+         'ngpt_lookahead_axis_write':'ngpt_lookahead', 'ngpt_lookahead_split_write':'ngpt_lookahead'}
 STEPS=305176
 
 
@@ -46,7 +46,8 @@ def main():
     if full_lookahead and preset != 'ngpt_lookahead':
         parser.error('The lookahead start options require ngpt_lookahead')
     mode=PRESETS[preset]
-    axis_write = preset == 'ngpt_lookahead_axis_write'
+    split_write = preset == 'ngpt_lookahead_split_write'
+    axis_write = preset == 'ngpt_lookahead_axis_write' or split_write
     if axis_write and not args.hopper_only:
         parser.error('The axis-write experiment is scheduled on full H100/H200 only')
     short_control = preset == 'ngpt_hbformer_no_wn'
@@ -56,7 +57,8 @@ def main():
         budget='10b-from-scratch'
     ROOT=HOME_ROOT/f'residual-nonzero-{preset}-{budget}-20261117'
     if axis_write:
-        ROOT=HOME_ROOT/'residual-arc-axis-write-10b-20261119'
+        tag = 'split' if split_write else 'axis'
+        ROOT=HOME_ROOT/f'residual-arc-{tag}-write-10b-20261119'
     if arc_optimizer:
         tag = 'arc' if preset == 'arc' else 'arc-muon-direction'
         if preset == 'arc_muon_radius':
@@ -155,16 +157,23 @@ def main():
                         'residual_projection_init_std','ngpt_force_rms_floor','ngpt_weight_norm','ngpt_alpha_init',
                         'lookahead_mu_init','momentum_beta_init','velocity_init','velocity_embedding_std'):
                 assert source[key] == base['source'][key], key
-            archive = reference/'results'/f"train-{json.loads((reference/'state.json').read_text())['job']}-checkpoints.tar"
-            with tarfile.open(archive,'r:') as tar:
-                member = tar.getmember('checkpoints/best.pt')
-                assert member.isfile() and member.size == base['checkpoint_files']['best.pt']['bytes']
-            (bundle/'axis-reference.tar').symlink_to(archive)
-            source.update(ngpt_velocity_mode='lookahead_axis_write', kappa_init=0.,
-                          reference_run=base['run_id'], reference_best_step=base['best_dev_step'],
-                          reference_best_dev_ce=base['best_dev_ce'], reference_step_seconds=base['steady_step_seconds'],
-                          reference_gpu=base['gpu'], timing_reference='Prior Arc Residual; matched control timed during preflight',
-                          preflight='Read trained Arc Residual dev alignment; zero-kappa parity, geometry, gradients, cache, recovery; paired 128-step runs on the training GPU')
+            source.update(reference_run=base['run_id'], reference_step_seconds=base['steady_step_seconds'],
+                          reference_gpu=base['gpu'], timing_reference='Prior Arc Residual; matched control timed during preflight')
+            if split_write:
+                paired = json.loads((HOME_ROOT/'residual-arc-axis-write-10b-20261119-hopper-only/bundles/source.json').read_text())
+                assert paired['ngpt_velocity_mode'] == 'lookahead_axis_write' and paired['reference_run'] == base['run_id']
+                source.update(ngpt_velocity_mode='lookahead_split_write', paired_run=paired['run_id'],
+                              parallel_step_init=.05, perpendicular_step_init=.05, step_parameterization='independent_softplus',
+                              preflight='Equal-step parity, independent gradients, KV cache, restart; paired 128 steps versus alpha/kappa on the training GPU')
+            else:
+                archive = reference/'results'/f"train-{json.loads((reference/'state.json').read_text())['job']}-checkpoints.tar"
+                with tarfile.open(archive,'r:') as tar:
+                    member = tar.getmember('checkpoints/best.pt')
+                    assert member.isfile() and member.size == base['checkpoint_files']['best.pt']['bytes']
+                (bundle/'axis-reference.tar').symlink_to(archive)
+                source.update(ngpt_velocity_mode='lookahead_axis_write', kappa_init=0., reference_best_step=base['best_dev_step'],
+                              reference_best_dev_ce=base['best_dev_ce'],
+                              preflight='Read trained Arc Residual dev alignment; zero-kappa parity, geometry, gradients, cache, recovery; paired 128-step runs on the training GPU')
             (ROOT/'comparison-reference.json').write_text(json.dumps(dict(run_id=base['run_id'],
                 dev_ce=base['final_dev_ce'], dev_tokens=base['dev_tokens'], step=base['steps']), indent=2)+'\n')
         if mode == 'lookahead_only':
@@ -320,7 +329,8 @@ def main():
         assert ad['NgptTrainKey']==KEY and ad['InteractiveJob'] and ad['WantGPULab']
         assert ad['Args']==job_args
         if axis_write:
-            assert 'axis-reference.tar' in ad['TransferInput'] and 'parent-' not in ad['TransferInput'] and 'continuation' not in source
+            assert ('axis-reference.tar' in ad['TransferInput']) == (not split_write)
+            assert 'parent-' not in ad['TransferInput'] and 'continuation' not in source
         if mode == 'lookahead_only' or arc_optimizer:
             assert not any(name in ad['TransferInput'] for name in ('parent-', 'checkpoints.tar', 'results.tar'))
         if args.fresh_10b:
