@@ -74,7 +74,37 @@ def measure_reference(source):
     return result
 
 
-def profile(root, mode, resume):
+@torch.no_grad()
+def endpoint_turns(checkpoint):
+    """Measure actual endpoint angles on the same four dev sequences after the timed steps."""
+    configure_attention('fa2')
+    state = torch.load(checkpoint,map_location='cpu',mmap=True,weights_only=False)
+    model = build_connection_model(ConnectionConfig.from_checkpoint(state['config'])).prepare().eval()
+    model.load_state_dict(state['model'])
+    del state
+    turns = []
+    def observe(site,args,out):
+        h, new_h = args[0], out[0]
+        cosine = (h*new_h).mean(-1,keepdim=True)
+        sine = (new_h-cosine*h).square().mean(-1,keepdim=True).sqrt()
+        angles = torch.atan2(sine,cosine).rad2deg().flatten()
+        turns.append(torch.stack((angles.mean(),torch.quantile(angles,.95))))
+    handles = [s.register_forward_hook(observe) for b in model.blocks for s in (b.attn_residual,b.mlp_residual)]
+    try:
+        x,_ = PackedData('../data').batch('dev',0,4)
+        model.hidden(x)
+    finally:
+        for h in handles:
+            h.remove()
+    assert len(turns) == 2*model.config.depth
+    rows = torch.stack(turns).tolist()
+    assert all(0<=a<=180 and 0<=b<=180 for a,b in rows)
+    return dict(dev_tokens=x.numel(), step=128, sublayers=[
+        dict(block=i//2+1,branch='ffn' if i%2 else 'attention',mean_degrees=a,p95_degrees=b)
+        for i,(a,b) in enumerate(rows)])
+
+
+def profile(root, mode, resume, measure_turns=False):
     steps = 128
     out = root/mode
     cmd = [sys.executable, '-m', 'scripts.connection_train', '--variant', 'baseline', '--streams', '1',
@@ -108,7 +138,7 @@ def profile(root, mode, resume):
     else:
         assert not kappas
     steps_by_component = {}
-    if mode == 'lookahead_split_write':
+    if mode in ('lookahead_split_write','lookahead_geodesic_split'):
         init, = [e for e in events if e.get('step') == 0 and 'dev/ce' in e]
         for suffix in ('alpha_parallel','alpha_perp'):
             rates = {k:v for k,v in end.items() if k.endswith('/'+suffix)}
@@ -125,6 +155,9 @@ def profile(root, mode, resume):
                   peak_allocated_bytes=info['peak_allocated_bytes'], kappas=kappas)
     if steps_by_component:
         result['component_steps'] = steps_by_component
+    if measure_turns:
+        result['endpoint_turns'] = endpoint_turns(out/'checkpoints/latest.pt')
+        torch.cuda.empty_cache()
     print('AXIS_WRITE_CONTROL',mode,json.dumps(result),flush=True)
     shutil.rmtree(out)
     return result
@@ -134,8 +167,9 @@ def main():
     start = time.perf_counter()
     source = json.loads(Path('source.json').read_text())
     mode = source['ngpt_velocity_mode']
-    assert mode in ('lookahead_axis_write','lookahead_split_write') and source['hopper_only']
-    split = mode == 'lookahead_split_write'
+    assert mode in ('lookahead_axis_write','lookahead_split_write','lookahead_geodesic_split') and source['hopper_only']
+    geodesic = mode == 'lookahead_geodesic_split'
+    split = mode == 'lookahead_split_write' or geodesic
     gpu = torch.cuda.get_device_name()
     assert torch.cuda.device_count() == 1 and torch.cuda.get_device_capability() == (9,0)
     assert any(h in gpu for h in ('H100','H200')) and 'MIG' not in gpu
@@ -144,24 +178,26 @@ def main():
         prior = json.loads(marker.read_text())
         assert prior['complete'] and prior['source'] == source and prior['torch'] == torch.__version__
         return
-    suite = 'tests/test_split_write.py' if split else 'tests/test_axis_write.py'
+    suite = 'tests/test_geodesic_write.py' if geodesic else 'tests/test_split_write.py' if split else 'tests/test_axis_write.py'
     subprocess.run([sys.executable,'-m','pytest','-q',suite,
                     '--junitxml=results/axis-tests.xml'],check=True)
     suites = list(ElementTree.parse('results/axis-tests.xml').getroot().iter('testsuite'))
     tests = sum(int(s.get('tests')) for s in suites)
-    assert tests == (4 if split else 5)
+    assert tests == (7 if geodesic else 4 if split else 5)
     assert all(int(s.get(k,0)) == 0 for s in suites for k in ('errors','failures','skipped'))
     alignment = None
     if not split:
         alignment = measure_reference(source)
         torch.cuda.empty_cache()
     root = Path(tempfile.mkdtemp(prefix='axis-debug-', dir='..')).resolve()
-    control = profile(root,'lookahead_axis_write' if split else 'lookahead_transport',resume=False)
-    target = profile(root,mode,resume=True)
+    control_mode = 'lookahead_split_write' if geodesic else 'lookahead_axis_write' if split else 'lookahead_transport'
+    control = profile(root,control_mode,resume=False,measure_turns=geodesic)
+    target = profile(root,mode,resume=True,measure_turns=geodesic)
     root.rmdir()
     assert {k for k in target['config'] if target['config'][k] != control['config'][k]} == {'ngpt_velocity_mode'}
     assert target['parameters'] - control['parameters'] == (0 if split else len(alignment['layers']))
-    assert abs(target['initial_dev_ce'] - control['initial_dev_ce']) < 1e-4
+    if not geodesic:
+        assert abs(target['initial_dev_ce'] - control['initial_dev_ce']) < 1e-4
     result = dict(complete=True, formal_training=False, source=source, gpu=gpu, torch=torch.__version__,
                   cuda=torch.version.cuda, tests=tests, resumed_at_step=32, control=control,
                   target=target, step_time_ratio=target['median_step_seconds']/control['median_step_seconds'],

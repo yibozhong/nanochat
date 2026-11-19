@@ -17,6 +17,10 @@ def model_cost(config, batch=1, activation_bytes=2, feedback_passes=None):
         sites=2*depth
         per_site={'heavy_ball':5*d, 'heavy_ball_rms':8*d-1, 'ngpt_heavy_ball':12*d-2, 'ngpt_hbformer':25*d-6, 'ngpt':9*d-2, 'ngpt_lookahead':29*d-6, 'lookahead_only':7*d}[c.residual_mode]
         initial=3*d-1
+        if c.ngpt_velocity_mode == 'lookahead_geodesic_split':
+            # Leading vector arithmetic per token: read 5d, sphere log ~8d,
+            # split + EMA 11d, Exp/transport + roundoff projections ~19d.
+            per_site=43*d
         if c.residual_mode == 'ngpt_lookahead':
             initial += 4*d-1  # v0 tangent projection
         if c.residual_mode == 'heavy_ball_rms' and c.velocity_init == 'token':
@@ -38,6 +42,8 @@ def model_cost(config, batch=1, activation_bytes=2, feedback_passes=None):
             embedding_parameters = (c.vocab_size+c.sequence_length)*d
         state_bytes = {'ngpt':4, 'lookahead_only':activation_bytes+4}.get(c.residual_mode, 8)
         scalars_per_site = {'ngpt':1, 'ngpt_hbformer':2, 'ngpt_lookahead':2, 'lookahead_only':1}.get(c.residual_mode, 3)
+        if c.ngpt_velocity_mode == 'lookahead_geodesic_split':
+            scalars_per_site += 1
         if c.ngpt_velocity_mode in ('lookahead_axis_write', 'lookahead_split_write'):
             # Two dot products, multiply the projection by its coefficient,
             # then scale v and add. Mean/division scalar work is excluded.
@@ -52,7 +58,7 @@ def model_cost(config, batch=1, activation_bytes=2, feedback_passes=None):
             additional_parameters=scalars_per_site*sites+embedding_parameters+gain_parameters,
             velocity_embedding_parameters=embedding_parameters,
             live_residual_state_bytes=state_bytes*batch*t*d,
-            accounting='FMA=2; causal attention pairs; residual arithmetic estimate and backward approximated as 2x forward. Scalar rsqrt/division/sigmoid/softplus, optimizer (including post-step weight normalization), copies and checkpoint recomputation excluded. Not hardware-measured FLOPs.',
+            accounting='FMA=2; causal attention pairs; residual arithmetic estimate and backward approximated as 2x forward. Scalar transcendentals, division, optimizer (including post-step weight normalization), copies and checkpoint recomputation excluded. Not hardware-measured FLOPs.',
             memory_note='Live hidden and velocity where used. Additive lookahead uses a backbone-dtype hidden and FP32 velocity. Autograd intermediates, embedding/optimizer bandwidth and allocator peak must be measured.')
     if c.latent_feedback:
         backbone=projections+attention

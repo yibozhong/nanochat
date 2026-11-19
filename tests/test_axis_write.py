@@ -105,7 +105,7 @@ def test_active_write_cache_and_compiled_training(setting):
     # Compare the whole vector of gate derivatives to avoid a relative error
     # dominated by a single nearly orthogonal sublayer.
     def write_grads(model):
-        names = ('.raw_parallel','.raw') if setting.ngpt_velocity_mode == 'lookahead_split_write' else ('.kappa',)
+        names = ('.kappa',) if setting.ngpt_velocity_mode == 'lookahead_axis_write' else ('.raw_parallel','.raw')
         return torch.cat([p.grad for n,p in model.named_parameters() if n.endswith(names)])
     expected = write_grads(eager)
     assert (write_grads(compiled)-expected).norm() <= .04*expected.norm()+1e-8

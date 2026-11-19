@@ -2,6 +2,7 @@
 import torch
 from torch import nn
 
+from nanochat.geodesic_residual import geodesic_split_write
 from nanochat.momentum import MomentumModel, NormalizedResidual, normalize_residual, state_dtype, tangent_project
 
 
@@ -11,8 +12,9 @@ class LookaheadResidual(NormalizedResidual):
         self.mu = nn.Parameter(torch.tensor([config.lookahead_mu_init], dtype=torch.float32))
         self.kappa = (nn.Parameter(torch.zeros(1, dtype=torch.float32))
                       if config.ngpt_velocity_mode == 'lookahead_axis_write' else None)
+        self.geodesic = config.ngpt_velocity_mode == 'lookahead_geodesic_split'
         self.raw_parallel = (nn.Parameter(self.raw.detach().clone())
-                             if config.ngpt_velocity_mode == 'lookahead_split_write' else None)
+                             if self.geodesic or config.ngpt_velocity_mode == 'lookahead_split_write' else None)
         self.decay = config.momentum_beta_init
 
     def query(self, h, v):
@@ -21,6 +23,9 @@ class LookaheadResidual(NormalizedResidual):
         return (h + offset) * torch.rsqrt(1 + offset.square().mean(-1, keepdim=True))
 
     def forward(self, h, v, force):
+        if self.geodesic:
+            return geodesic_split_write(h, v, force, self.alpha(), nn.functional.softplus(self.raw_parallel[0]),
+                                        self.decay, self.rms_floor)
         if self.kappa is None and self.raw_parallel is None:
             new_h = super().forward(h, force)
         else:
