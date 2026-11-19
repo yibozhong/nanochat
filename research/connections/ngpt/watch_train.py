@@ -95,7 +95,7 @@ def main(root):
                 if not rows:raise RuntimeError('Job absent from queue and history')
                 ad=rows[0];state['last_job']=ad
                 assert ad['NgptTrainKey']==root.name
-                wanted=desired_fallback(ad,time.time())
+                wanted=False if training['source'].get('hopper_only') else desired_fallback(ad,time.time())
                 current='A100' in ad.get('RequireGPUs','')
                 if wanted is not None and wanted!=current:
                     cluster,proc=map(int,job.split('.'))

@@ -29,6 +29,8 @@ def command(args,cwd=REPO):
 def main():
     parser=argparse.ArgumentParser()
     parser.add_argument('preset',choices=PRESETS)
+    parser.add_argument('--hopper-only', action='store_true',
+                        help='Require a full H100 or H200 for the entire run, including restarts')
     start=parser.add_mutually_exclusive_group()
     start.add_argument('--fresh-10b', action='store_true', help='Start an independent 10B lookahead run at step zero')
     start.add_argument('--extend-to-schedule', action='store_true', help='Continue the completed lookahead pilot to its original 10B schedule')
@@ -46,6 +48,8 @@ def main():
     ROOT=HOME_ROOT/f'residual-nonzero-{preset}-{budget}-20261117'
     if preset == 'arc':
         ROOT = HOME_ROOT/'optimizer-arc-10b-20261118'
+    if args.hopper_only:
+        ROOT = ROOT.with_name(ROOT.name + '-hopper-only')
     KEY=ROOT.name
     ROOT.mkdir(exist_ok=True)
     with (ROOT/'submit.lock').open('a') as lock:
@@ -91,6 +95,9 @@ def main():
             passed_families=[],compatible_fallback_backend='A100 FA2/CCE runtime validated in skip-scale/validation.json',
             prior_h100_reference_step_seconds=.06704051233828068 if mode=='vanilla' else .0756970327347517,
             timing_reference='previous zero-init H100 diagnostics, estimate only; measure all three nonzero modes in preflight')
+        if args.hopper_only:
+            source.update(hopper_only=True, scheduling='Full H100/H200 only at startup and on resume')
+            del source['compatible_fallback_backend']
         if preset == 'arc':
             base = json.loads((HOME_ROOT/'residual-nonzero-vanilla-10b-20261117/summary.json').read_text())
             assert base['complete'] and base['run_id'] == '2eac64db' and base['steps'] == steps
@@ -173,6 +180,8 @@ def main():
             assert not json.loads(command(['condor_q',previous['job'],'-json']) or '[]')
             assert old['schedule_steps']==steps and old['steps']==summary['steps']
             metadata={'plan','commit','steps','training_tokens','run_id'}
+            if args.hopper_only:
+                metadata.update({'hopper_only', 'scheduling', 'compatible_fallback_backend'})
             assert {k:v for k,v in old.items() if k not in metadata} == {k:v for k,v in source.items() if k not in metadata}
             changed=command(['git','diff','--name-only',old['commit'],commit]).splitlines()
             assert all(p.startswith('research/connections/ngpt/') or p=='scripts/connection_train.py' for p in changed),changed
@@ -218,7 +227,8 @@ def main():
         for line in (ASSETS/'gate.sub').read_text().splitlines():
             if line.startswith('executable ='):line=f'executable = train.sh\narguments = {job_args}'
             elif line.startswith('request_disk ='):line='request_disk = 80GB'
-            elif line.startswith('gpus_minimum_capability ='):line='gpus_minimum_capability = 8.0'
+            elif line.startswith('gpus_minimum_capability ='):
+                line=f'gpus_minimum_capability = {9.0 if args.hopper_only else 8.0}'
             elif line.startswith('require_gpus ='):line='require_gpus = '+require_gpus()
             elif line.startswith('rank ='):line='rank = '+RANK
             elif line.startswith('transfer_input_files ='):line='transfer_input_files = '+','.join(inputs)
@@ -247,7 +257,7 @@ def main():
         ad=json.loads(command(['condor_q',job,'-json']))[0]
         assert ad['JobStatus']==5 and ad.get('NumJobStarts',0)==0
         assert ad['RequestGPUs']==1 and ad['RequestCpus']==2 and ad['RequestMemory']==16384
-        assert ad['RequestDisk']==80*1024**2 and ad['GPUsMinCapability']==8.0
+        assert ad['RequestDisk']==80*1024**2 and ad['GPUsMinCapability']==(9.0 if args.hopper_only else 8.0)
         assert 'H100|H200' in ad['RequireGPUs'] and 'A100' not in ad['RequireGPUs']
         assert 'nanochat-uv-v4.sif' in ad['TransferInput'] and data['data_uri'] in ad['TransferInput']
         assert 'gate-data.tar' not in ad['TransferInput'] and '.netrc' in ad['EncryptInputFiles']

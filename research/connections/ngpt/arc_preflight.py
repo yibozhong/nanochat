@@ -19,6 +19,8 @@ def main():
     assert torch.cuda.is_available() and torch.cuda.device_count() == 1
     gpu = torch.cuda.get_device_name()
     major, minor = torch.cuda.get_device_capability()
+    if source.get('hopper_only'):
+        assert (major, minor) == (9, 0) and any(name in gpu for name in ('H100', 'H200')) and 'MIG' not in gpu, gpu
     marker = Path(f'results/arc-sm{major}{minor}.json')
     if marker.exists():
         previous = json.loads(marker.read_text())
