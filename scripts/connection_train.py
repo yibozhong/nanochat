@@ -232,6 +232,7 @@ def main():
                     ('-no-weight-norm' if c.residual_mode=='ngpt_hbformer' and not c.ngpt_weight_norm else '')+
                     ('-arc-muon-direction' if a.arc_direction == 'muon' else '-arc' if a.matrix_optimizer == 'arc' else '')+
                     ('-radius-step' if a.arc_step_scale == 'radius' else '')+
+                    ('-mu0' if a.matrix_optimizer == 'arc' and a.arc_mu == 0 else '')+
                     (f'-init-{c.residual_projection_init}' if c.residual_projection_init != 'zero' else '')+
                     f'-{c.sequence_length}ctx-{a.steps}steps',id=run_id,resume='allow',config=config)
     run=training_run(formal_training=a.formal_training, local_dir=out/"diagnostics", **kwargs)

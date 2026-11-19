@@ -42,8 +42,14 @@ if [[ "${4:-}" == --extend-to-schedule || "${4:-}" == --fresh-10b ]]; then
     TASK_GROUP=ngpt-lookahead-10b
     TASK_STEPS=$TASK_SCHEDULE_STEPS
 elif [[ "${4:-}" == --arc || "${4:-}" == --arc-muon || "${4:-}" == --arc-muon-radius ]]; then
-    [[ "$#" == 4 && "$TASK_MODE/$TASK_VELOCITY_MODE" == vanilla/ambient ]]
-    TASK_MOMENTUM_ARGS=(--matrix-optimizer arc --arc-mu 1 --arc-beta .5)
+    [[ "$TASK_MODE/$TASK_VELOCITY_MODE" == vanilla/ambient ]]
+    TASK_ARC_MU=1
+    if [[ "$#" == 5 && "$4" == --arc-muon-radius && "$5" == --no-arc-lookahead ]]; then
+        TASK_ARC_MU=0
+    else
+        [[ "$#" == 4 ]]
+    fi
+    TASK_MOMENTUM_ARGS=(--matrix-optimizer arc --arc-mu "$TASK_ARC_MU" --arc-beta .5)
     TASK_GROUP=arc-optimizer-10b
     if [[ "$4" == --arc-muon* ]]; then
         TASK_MOMENTUM_ARGS+=(--arc-direction muon)
@@ -52,6 +58,7 @@ elif [[ "${4:-}" == --arc || "${4:-}" == --arc-muon || "${4:-}" == --arc-muon-ra
     if [[ "$4" == --arc-muon-radius ]]; then
         TASK_MOMENTUM_ARGS+=(--arc-step-scale radius)
         TASK_GROUP=arc-muon-direction-radius-step-10b
+        if [[ "$TASK_ARC_MU" == 0 ]]; then TASK_GROUP=arc-muon-direction-radius-step-mu0-10b; fi
     fi
 elif [ "$#" -gt 3 ]; then
     [[ "$#" == 4 && "$TASK_MODE" == ngpt_hbformer && "$4" == --no-ngpt-weight-norm ]]
@@ -90,7 +97,7 @@ if [[ "${4:-}" == --extend-to-schedule ]]; then
     tar -xOf parent-results.tar results/ngpt-sm90.json > parent-validation.json
 fi
 cp "$0" results/launcher.sh
-/opt/project/.venv/bin/python - "$TASK_RUN_ID" "$TASK_MODE" "$TASK_VELOCITY_MODE" "$TASK_STEPS" "$TASK_SCHEDULE_STEPS" "${4:-}" <<'PY'
+/opt/project/.venv/bin/python - "$TASK_RUN_ID" "$TASK_MODE" "$TASK_VELOCITY_MODE" "$TASK_STEPS" "$TASK_SCHEDULE_STEPS" "${4:-}" "${TASK_ARC_MU:-}" <<'PY'
 import json,sys
 from pathlib import Path
 s=json.loads(Path('source.json').read_text())
@@ -109,7 +116,7 @@ assert (sys.argv[6] in ('--arc-muon','--arc-muon-radius')) == (s.get('arc_direct
 assert (sys.argv[6]=='--arc-muon-radius') == (s.get('arc_step_scale')=='radius')
 if s.get('matrix_optimizer')=='arc':
     assert s['steps']==s['schedule_steps']==305176 and s['reference_run']=='2eac64db'
-    assert s['arc_mu']==1 and s['arc_beta']==.5 and not s['velocity_embedding']
+    assert s['arc_mu']==int(sys.argv[7]) and s['arc_beta']==.5 and not s['velocity_embedding']
     assert s['residual_dynamics']=='vanilla' and 'continuation' not in s
 if sys.argv[2]=='lookahead_only':
     assert s['steps']==s['schedule_steps']==305176 and not s['ngpt_weight_norm'] and 'continuation' not in s

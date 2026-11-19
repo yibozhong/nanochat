@@ -31,12 +31,16 @@ def main():
     parser.add_argument('preset',choices=PRESETS)
     parser.add_argument('--hopper-only', action='store_true',
                         help='Require a full H100 or H200 for the entire run, including restarts')
+    parser.add_argument('--no-arc-lookahead', action='store_true',
+                        help='Run the radius-step Muon-direction control with gradients evaluated at the base weights')
     start=parser.add_mutually_exclusive_group()
     start.add_argument('--fresh-10b', action='store_true', help='Start an independent 10B lookahead run at step zero')
     start.add_argument('--extend-to-schedule', action='store_true', help='Continue the completed lookahead pilot to its original 10B schedule')
     args=parser.parse_args()
     preset=args.preset
     arc_optimizer = preset in ('arc', 'arc_muon', 'arc_muon_radius')
+    if args.no_arc_lookahead and preset != 'arc_muon_radius':
+        parser.error('--no-arc-lookahead requires arc_muon_radius')
     full_lookahead=args.fresh_10b or args.extend_to_schedule
     if full_lookahead and preset != 'ngpt_lookahead':
         parser.error('The lookahead start options require ngpt_lookahead')
@@ -51,7 +55,10 @@ def main():
         tag = 'arc' if preset == 'arc' else 'arc-muon-direction'
         if preset == 'arc_muon_radius':
             tag += '-radius-step'
-        ROOT = HOME_ROOT/f'optimizer-{tag}-10b-20261118'
+        if args.no_arc_lookahead:
+            tag += '-mu0'
+        date_tag = '20261119' if args.no_arc_lookahead else '20261118'
+        ROOT = HOME_ROOT/f'optimizer-{tag}-10b-{date_tag}'
     if args.hopper_only:
         ROOT = ROOT.with_name(ROOT.name + '-hopper-only')
     KEY=ROOT.name
@@ -122,6 +129,9 @@ def main():
                               preflight='Same-GPU 1000-step Muon and Muon-direction Arc with fan-out versus radius steps; independent restart check',
                               prior_h100_reference_step_seconds=.07567,
                               timing_reference='Previous fan-out Arc + Muon direction, median H100 steps 101–1000')
+            if args.no_arc_lookahead:
+                source.update(arc_mu=0., lookahead_reference_run='4042e49e',
+                              preflight='Matched 1000-step radius-step Muon directions at mu=1 and mu=0; mu=0 checkpoint restart')
             (ROOT/'comparison-reference.json').write_text(json.dumps(dict(run_id=base['run_id'],
                 dev_ce=base['final_dev_ce'], dev_tokens=base['dev_tokens'], step=steps), indent=2)+'\n')
         if mode in ('ngpt_lookahead', 'lookahead_only'):
@@ -231,6 +241,8 @@ def main():
             job_args+=' '+source['ngpt_velocity_mode']
         if arc_optimizer:
             job_args += ' ambient --' + preset.replace('_', '-')
+        if args.no_arc_lookahead:
+            job_args+=' --no-arc-lookahead'
         if args.fresh_10b:
             job_args+=' --fresh-10b'
         if args.extend_to_schedule:

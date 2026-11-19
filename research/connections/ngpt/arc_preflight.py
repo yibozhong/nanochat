@@ -37,21 +37,27 @@ def main():
         assert hybrid
         variants = ('muon', 'arc_muon', 'arc_muon_radius')
         target = 'arc_muon_radius'
+    if source['arc_mu'] == 0:
+        assert target == 'arc_muon_radius'
+        variants = ('arc_muon_radius', 'arc_muon_radius_mu0')
+        target = 'arc_muon_radius_mu0'
     if hybrid:
         assert source['comparison_steps'] == 1000
     for name in variants:
         out = root/name
         steps = source['comparison_steps'] if hybrid else (64 if name == 'arc' else 32)
         matrix_optimizer = 'muon' if name == 'muon' else 'arc'
+        mu = source['arc_mu'] if name == target else 1.
+        radius_step = name in ('arc_muon_radius', 'arc_muon_radius_mu0')
         cmd = [sys.executable, '-m', 'scripts.connection_train', '--variant', 'baseline',
-               '--streams', '1', '--matrix-optimizer', matrix_optimizer, '--arc-mu', str(source['arc_mu']),
+               '--streams', '1', '--matrix-optimizer', matrix_optimizer, '--arc-mu', str(mu),
                '--arc-beta', str(source['arc_beta']), '--residual-projection-init', 'normal',
                '--ngpt-force-rms-floor', '1e-6', '--steps', str(steps), '--schedule-steps', '305176',
                '--attention-backend', 'fa2', '--microbatch', '16', '--data-dir', '../data',
                '--output-dir', str(out), '--seed', '42', '--run-id', 'arc-local-debug']
-        if name in ('arc_muon', 'arc_muon_radius'):
+        if name == 'arc_muon' or radius_step:
             cmd.extend(['--arc-direction', 'muon'])
-        if name == 'arc_muon_radius':
+        if radius_step:
             cmd.extend(['--arc-step-scale', 'radius'])
         if name == target:
             first = subprocess.run([*cmd, '--segment-steps', '32'])
@@ -84,7 +90,8 @@ def main():
             assert write['name'] == matrix_optimizer
             if matrix_optimizer == 'arc':
                 assert write.get('direction', 'raw') == ('raw' if name == 'arc' else 'muon')
-                scale = 'initial_frobenius_radius' if name == 'arc_muon_radius' else 'sqrt(fan_out)'
+                assert write['mu'] == mu and write['beta'] == source['arc_beta']
+                scale = 'initial_frobenius_radius' if radius_step else 'sqrt(fan_out)'
                 assert write['step_length'] == f'scheduled_matrix_lr * {scale}'
             milestones = (50, 250, 500, 750, 1000)
             assert all(validation[step]['dev/tokens'] == info['dev_tokens'] for step in milestones)
@@ -92,7 +99,10 @@ def main():
             results[name]['steady_step_seconds'] = statistics.median(row['seconds'] for row in rows[100:])
         if matrix_optimizer == 'arc':
             last = validation[steps]
-            assert 0 < last['optimizer/mean_query_degrees'] < 90
+            if mu == 0:
+                assert all(e['optimizer/mean_query_degrees'] == 0 for e in validation.values())
+            else:
+                assert 0 < last['optimizer/mean_query_degrees'] < 90
             assert last['optimizer/max_relative_radius_error'] < 1e-5
             results[name].update({k:v for k,v in last.items() if k.startswith('optimizer/')})
         print('ARC_CONTROL_FINISHED', name, json.dumps(results[name]), flush=True)
@@ -100,17 +110,20 @@ def main():
     root.rmdir()
     result = dict(complete=True, source=source, formal_training=False, gpu=gpu, torch=torch.__version__,
                   cuda=torch.version.cuda, models=results, resumed_at_step=32,
-                  arc_to_muon_time=results[target]['median_step_seconds']/results['muon']['median_step_seconds'],
                   evaluation_wall_seconds=time.perf_counter()-begin)
+    if 'muon' in results:
+        result['arc_to_muon_time'] = results[target]['median_step_seconds']/results['muon']['median_step_seconds']
+    else:
+        result['mu0_to_mu1_time'] = results[target]['steady_step_seconds']/results['arc_muon_radius']['steady_step_seconds']
     if hybrid:
         result['comparison'] = {
             'steps': steps, 'dev_tokens': info['dev_tokens'],
-            'delta_vs_muon': results[target]['final_dev_ce'] - results['muon']['final_dev_ce'],
             'target': target, 'validation_ce': {name: results[name]['validation_ce'] for name in variants},
         }
-        control = variants[1]
-        delta_key = 'delta_vs_fan_out' if control == 'arc_muon' else 'delta_vs_raw_arc'
-        result['comparison'][delta_key] = results[target]['final_dev_ce'] - results[control]['final_dev_ce']
+        delta_keys = {'muon': 'delta_vs_muon', 'arc': 'delta_vs_raw_arc',
+                      'arc_muon': 'delta_vs_fan_out', 'arc_muon_radius': 'delta_vs_lookahead'}
+        for control in variants[:-1]:
+            result['comparison'][delta_keys[control]] = results[target]['final_dev_ce'] - results[control]['final_dev_ce']
         print('ARC_1000_COMPARISON', json.dumps(result['comparison']), flush=True)
     marker.write_text(json.dumps(result, indent=2)+'\n')
     print('ARC_PREFLIGHT_PASSED', json.dumps(results), flush=True)
