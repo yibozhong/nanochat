@@ -23,6 +23,15 @@ def _log(h, f, FLOOR2: tl.constexpr, D: tl.constexpr):
     r = _mean(h*f, D)
     t = f - r*h
     z = _mean(t*t, D)
+    # Near an antipode the log amplifies radial roundoff by ~pi/sqrt(z).
+    # Retain the dot and its cancellation in double only on affected rows.
+    if (r < 0.) & (z < 1e-4*r*r):
+        hd = h.to(tl.float64)
+        fd = f.to(tl.float64)
+        radial = _mean(hd*fd, D)
+        t = (fd-radial*hd).to(tl.float32)
+        z = _mean(t*t, D)
+        r = radial.to(tl.float32)
     f2 = z + r*r
     weight = tl.minimum(f2/FLOOR2, 1.)
     threshold = 1e-12*tl.maximum(f2, FLOOR2)
