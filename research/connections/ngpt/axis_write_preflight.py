@@ -104,7 +104,7 @@ def endpoint_turns(checkpoint):
         for i,(a,b) in enumerate(rows)])
 
 
-def profile(root, mode, resume, measure_turns=False):
+def profile(root, mode, resume, measure_turns=False, signed_steps=False):
     steps = 128
     out = root/mode
     cmd = [sys.executable, '-m', 'scripts.connection_train', '--variant', 'baseline', '--streams', '1',
@@ -115,6 +115,8 @@ def profile(root, mode, resume, measure_turns=False):
            '--no-activation-checkpoint','--no-fused-connection-grad','--attention-backend','fa2',
            '--steps',str(steps),'--schedule-steps','305176','--microbatch','16','--seed','42',
            '--data-dir','../data','--output-dir',str(out),'--run-id','axis-local-debug']
+    if signed_steps:
+        cmd.append('--signed-chord-steps')
     if resume:
         part = subprocess.run([*cmd,'--segment-steps','32'])
         assert part.returncode == 85, part.returncode
@@ -125,6 +127,7 @@ def profile(root, mode, resume, measure_turns=False):
     cfg = json.loads((out/'config.json').read_text())
     assert info['complete'] and info['steps'] == steps and info['dev_tokens'] == 131072
     assert cfg['model']['ngpt_velocity_mode'] == mode and cfg['logging_backend'] == 'local'
+    assert cfg['model']['signed_chord_steps'] == signed_steps
     assert math.isfinite(info['final_dev_ce']) and info['final_dev_ce'] < info['initial_dev_ce']
     rows = [json.loads(s) for s in (out/'steps.jsonl').read_text().splitlines()]
     assert [r['step'] for r in rows] == list(range(1,steps+1))
@@ -142,7 +145,9 @@ def profile(root, mode, resume, measure_turns=False):
         init, = [e for e in events if e.get('step') == 0 and 'dev/ce' in e]
         for suffix in ('alpha_parallel','alpha_perp'):
             rates = {k:v for k,v in end.items() if k.endswith('/'+suffix)}
-            assert len(rates) == 2*cfg['model']['depth'] and all(math.isfinite(v) and v>0 for v in rates.values())
+            assert len(rates) == 2*cfg['model']['depth'] and all(math.isfinite(v) for v in rates.values())
+            if not signed_steps:
+                assert all(v>0 for v in rates.values())
             assert all(abs(init[k]-.05)<1e-6 for k in rates)
             assert any(v != init[k] for k,v in rates.items())
             steps_by_component.update(rates)
@@ -174,6 +179,7 @@ def main():
     source = json.loads(Path('source.json').read_text())
     mode = source['ngpt_velocity_mode']
     learned_beta = mode == 'lookahead_split_learned_beta'
+    signed_steps = source.get('signed_chord_steps',False)
     assert (learned_beta or mode in ('lookahead_axis_write','lookahead_split_write','lookahead_geodesic_split')) and source['hopper_only']
     geodesic = mode == 'lookahead_geodesic_split'
     split = mode == 'lookahead_split_write' or geodesic or learned_beta
@@ -187,7 +193,7 @@ def main():
         return
     suite = 'tests/test_geodesic_write.py' if geodesic else 'tests/test_split_write.py' if split else 'tests/test_axis_write.py'
     if learned_beta:
-        suite = 'tests/test_split_learned_beta.py'
+        suite = 'tests/test_signed_chord.py' if signed_steps else 'tests/test_split_learned_beta.py'
     subprocess.run([sys.executable,'-m','pytest','-q',suite,
                     '--junitxml=results/axis-tests.xml'],check=True)
     suites = list(ElementTree.parse('results/axis-tests.xml').getroot().iter('testsuite'))
@@ -200,11 +206,14 @@ def main():
         torch.cuda.empty_cache()
     root = Path(tempfile.mkdtemp(prefix='axis-debug-', dir='..')).resolve()
     control_mode = 'lookahead_split_write' if geodesic or learned_beta else 'lookahead_axis_write' if split else 'lookahead_transport'
+    if signed_steps:
+        control_mode = mode
     control = profile(root,control_mode,resume=False,measure_turns=geodesic)
-    target = profile(root,mode,resume=True,measure_turns=geodesic)
+    target = profile(root,mode,resume=True,measure_turns=geodesic,signed_steps=signed_steps)
     root.rmdir()
-    assert {k for k in target['config'] if target['config'][k] != control['config'][k]} == {'ngpt_velocity_mode'}
-    extra = source['learned_beta_sites'] if learned_beta else 0 if split else len(alignment['layers'])
+    changed = {k for k in target['config'] if target['config'][k] != control['config'][k]}
+    assert changed == ({'signed_chord_steps'} if signed_steps else {'ngpt_velocity_mode'})
+    extra = source['learned_beta_sites'] if learned_beta and not signed_steps else 0 if split else len(alignment['layers'])
     assert target['parameters'] - control['parameters'] == extra
     if not geodesic:
         assert abs(target['initial_dev_ce'] - control['initial_dev_ce']) < 1e-4

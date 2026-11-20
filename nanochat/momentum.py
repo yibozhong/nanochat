@@ -133,11 +133,24 @@ class NormalizedResidual(nn.Module):
     """Scalar nGPT normalized interpolation, with no velocity state or parameters."""
     def __init__(self, config):
         super().__init__()
-        self.raw = nn.Parameter(torch.tensor([inverse_softplus(config.ngpt_alpha_init)], dtype=torch.float32))
+        self.initial_alpha = config.ngpt_alpha_init
+        self.initial_raw = inverse_softplus(self.initial_alpha)
+        self.raw = nn.Parameter(torch.tensor([self.initial_raw], dtype=torch.float32))
+        self.signed_chord_steps = config.signed_chord_steps
+        self.initial_slope = -math.expm1(-self.initial_alpha)
         self.rms_floor = config.ngpt_force_rms_floor
 
+    def step_size(self, raw):
+        positive = F.softplus(raw[0])
+        if self.signed_chord_steps:
+            # Extend the softplus tangent below initialization. Both the value
+            # and derivative match at the join, and the slope stays nonzero at zero.
+            tangent = self.initial_alpha + self.initial_slope * (raw[0] - self.initial_raw)
+            return torch.where(raw[0] >= self.initial_raw, positive, tangent)
+        return positive
+
     def alpha(self):
-        return F.softplus(self.raw[0])
+        return self.step_size(self.raw)
 
     def forward(self, h, force):
         h = state_dtype(h)

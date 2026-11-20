@@ -33,7 +33,7 @@ class LookaheadResidual(NormalizedResidual):
 
     def forward(self, h, v, force):
         if self.geodesic:
-            return geodesic_split_write(h, v, force, self.alpha(), nn.functional.softplus(self.raw_parallel[0]),
+            return geodesic_split_write(h, v, force, self.alpha(), self.step_size(self.raw_parallel),
                                         self.decay, self.rms_floor)
         if self.kappa is None and self.raw_parallel is None:
             new_h = super().forward(h, force)
@@ -49,7 +49,7 @@ class LookaheadResidual(NormalizedResidual):
                 # a_perp*(delta - P) + a_parallel*P, grouped so equal steps
                 # reproduce the original Arc write without roundoff in delta-P.
                 perp = self.alpha()
-                parallel = nn.functional.softplus(self.raw_parallel[0])
+                parallel = self.step_size(self.raw_parallel)
                 new_h = normalize_residual((h + perp * delta) + ((parallel - perp) * along) * v)
         # The Householder reflector with normal h + new_h gives short-arc
         # parallel transport. At opposite poles the two tangent planes coincide.
@@ -113,7 +113,7 @@ class LookaheadModel(MomentumModel):
             mus = torch.stack([site.mu[0] for site in sites]).tolist()
             return {f'residual/sublayer_{i}/mu': value for i, value in enumerate(mus)}
         if sites[0].raw_parallel is not None:
-            values = torch.stack([torch.stack((s.alpha(), nn.functional.softplus(s.raw_parallel[0]), s.mu[0]))
+            values = torch.stack([torch.stack((s.alpha(), s.step_size(s.raw_parallel), s.mu[0]))
                                   for s in sites]).tolist()
             metrics = {f'residual/sublayer_{i}/{key}': value for i,row in enumerate(values)
                        for key,value in zip(('alpha_perp','alpha_parallel','mu'),row)}

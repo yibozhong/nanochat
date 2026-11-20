@@ -86,6 +86,9 @@ def test_active_write_cache_and_compiled_training(setting):
             else:
                 b.attn_residual.raw_parallel.add_(.7)
                 b.mlp_residual.raw_parallel.sub_(.4)
+                if setting.signed_chord_steps:
+                    b.attn_residual.raw.sub_(3.)
+                    b.mlp_residual.raw_parallel.sub_(3.)
     compiled.load_state_dict(eager.state_dict())
     x, y = inputs()
     with torch.no_grad():

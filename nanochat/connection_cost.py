@@ -50,6 +50,8 @@ def model_cost(config, batch=1, activation_bytes=2, feedback_passes=None):
             residual += batch*t*sites*(6*d-1)
             if c.split_chord_write:
                 residual += sites  # parallel minus perpendicular coefficient, shared across tokens
+                if c.signed_chord_steps:
+                    residual += 6*sites  # two scalar tangent extensions, shared across tokens
             scalars_per_site += 1
         if c.ngpt_velocity_mode == 'lookahead_split_learned_beta':
             gain_parameters += sites - 1  # Final FFN velocity does not reach the logits.

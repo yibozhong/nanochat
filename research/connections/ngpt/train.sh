@@ -64,6 +64,10 @@ elif [[ "${4:-}" == --arc || "${4:-}" == --arc-muon || "${4:-}" == --arc-muon-ra
         TASK_GROUP=arc-muon-direction-radius-step-10b
         if [[ "$TASK_ARC_MU" == 0 ]]; then TASK_GROUP=arc-muon-direction-radius-step-mu0-10b; fi
     fi
+elif [[ "${4:-}" == --signed-chord-steps ]]; then
+    [[ "$#" == 4 && "$TASK_VELOCITY_MODE" == lookahead_split_learned_beta ]]
+    TASK_MOMENTUM_ARGS+=(--signed-chord-steps)
+    TASK_GROUP=chord-signed-steps-learned-beta-10b
 elif [ "$#" -gt 3 ]; then
     [[ "$#" == 4 && "$TASK_MODE" == ngpt_hbformer && "$4" == --no-ngpt-weight-norm ]]
     TASK_MOMENTUM_ARGS+=("$4")
@@ -115,6 +119,8 @@ assert s['velocity_embedding']==(sys.argv[2] in ('ngpt_heavy_ball','heavy_ball_r
 assert s['residual_projection_init']=='normal' and s['residual_projection_init_std']==.02
 assert s['ngpt_force_rms_floor']==1e-6
 assert s.get('ngpt_velocity_mode','ambient')==sys.argv[3]
+signed_steps = sys.argv[6]=='--signed-chord-steps'
+assert signed_steps == s.get('signed_chord_steps',False)
 assert (sys.argv[6] in ('--arc','--arc-muon','--arc-muon-radius')) == (s.get('matrix_optimizer')=='arc')
 assert (sys.argv[6] in ('--arc-muon','--arc-muon-radius')) == (s.get('arc_direction')=='muon')
 assert (sys.argv[6]=='--arc-muon-radius') == (s.get('arc_step_scale')=='radius')
@@ -134,10 +140,11 @@ elif sys.argv[2]=='ngpt_lookahead':
     axis_write = learned_beta or sys.argv[3] in ('lookahead_axis_write','lookahead_split_write','lookahead_geodesic_split')
     assert s['steps']==(305176 if extended or sys.argv[6]=='--fresh-10b' or axis_write else 5000) and not s['ngpt_weight_norm']
     if axis_write:
-        assert not sys.argv[6] and s['reference_run']=='d4293868'
+        assert (not sys.argv[6] or signed_steps and learned_beta) and s['reference_run']=='d4293868'
         if learned_beta or sys.argv[3] in ('lookahead_split_write','lookahead_geodesic_split'):
             assert s['parallel_step_init']==s['perpendicular_step_init']==s['ngpt_alpha_init']
-            assert s['step_parameterization']=='independent_softplus' and 'kappa_init' not in s
+            expected = 'independent_softplus_with_linear_lower_extension' if signed_steps else 'independent_softplus'
+            assert s['step_parameterization']==expected and 'kappa_init' not in s
         else:
             assert s['kappa_init']==0
     assert s['lookahead_mu_init']==0 and s['momentum_beta_init']==.5 and s['momentum_beta_trainable']==learned_beta

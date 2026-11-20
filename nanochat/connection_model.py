@@ -55,6 +55,7 @@ class ConnectionConfig:
     momentum_velocity_rms_floor: float = 0.1
     residual_projection_init: str | None = None
     residual_projection_init_std: float = 0.02
+    signed_chord_steps: bool = False
 
     def __post_init__(self):
         hbformer = self.residual_mode == 'ngpt_hbformer'
@@ -95,6 +96,8 @@ class ConnectionConfig:
         if self.residual_mode == 'lookahead_only' and self.ngpt_velocity_mode != 'ambient':
             raise ValueError('Additive lookahead uses Euclidean velocity')
         spherical_lookahead = self.split_chord_write or self.ngpt_velocity_mode in ('lookahead_transport', 'lookahead_axis_write', 'lookahead_geodesic_split')
+        if self.signed_chord_steps and not self.split_chord_write:
+            raise ValueError('Signed component steps require a split chord write')
         if (self.residual_mode == 'ngpt_lookahead') != spherical_lookahead:
             raise ValueError('Lookahead requires a transported velocity for branch reads')
         if not spherical_lookahead and self.ngpt_velocity_mode not in ('ambient', 'transport_rms', 'transport_layernorm'):

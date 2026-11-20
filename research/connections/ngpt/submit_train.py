@@ -32,6 +32,8 @@ def command(args,cwd=REPO):
 def main():
     parser=argparse.ArgumentParser()
     parser.add_argument('preset',choices=PRESETS)
+    parser.add_argument('--signed-chord-steps', action='store_true',
+                        help='Compare two signed chord steps to the positive-step learned-beta run')
     parser.add_argument('--hopper-only', action='store_true',
                         help='Require a full H100 or H200 for the entire run, including restarts')
     parser.add_argument('--no-arc-lookahead', action='store_true',
@@ -50,6 +52,8 @@ def main():
     mode=PRESETS[preset]
     geodesic = preset == 'ngpt_lookahead_geodesic_split'
     learned_beta = preset == 'ngpt_lookahead_split_learned_beta'
+    if args.signed_chord_steps and not learned_beta:
+        parser.error('--signed-chord-steps requires the split learned-beta preset')
     split_write = preset == 'ngpt_lookahead_split_write' or geodesic or learned_beta
     axis_write = preset == 'ngpt_lookahead_axis_write' or split_write
     if axis_write and not args.hopper_only:
@@ -64,6 +68,8 @@ def main():
         tag = 'geodesic-split' if geodesic else 'split' if split_write else 'axis'
         if learned_beta:
             tag = 'split-learned-beta'
+        if args.signed_chord_steps:
+            tag = 'split-learned-beta-signed'
         ROOT=HOME_ROOT/f'residual-arc-{tag}-write-10b-20261119'
     if arc_optimizer:
         tag = 'arc' if preset == 'arc' else 'arc-muon-direction'
@@ -181,6 +187,16 @@ def main():
                     source.update(momentum_beta_trainable=True, beta_parameterization='sigmoid',
                                   learned_beta_sites=2*source['model']['depth']-1,
                                   preflight='Fixed-beta init parity, beta gradients, causal KV, optimizer restart; paired 128 steps versus fixed-beta chord split')
+                    if args.signed_chord_steps:
+                        control_dir = HOME_ROOT/'residual-arc-split-learned-beta-write-10b-20261119-hopper-only'
+                        control = json.loads((control_dir/'bundles/source.json').read_text())
+                        for key in ('model','seed','training_tokens','batch_tokens','microbatch','dataset_revision',
+                                    'schedule_steps','ngpt_velocity_mode','momentum_beta_init','learned_beta_sites',
+                                    'velocity_init','parallel_step_init','perpendicular_step_init','step_parameterization'):
+                            assert control[key] == source[key], key
+                        source.update(signed_chord_steps=True, paired_run=control['run_id'],
+                                      step_parameterization='independent_softplus_with_linear_lower_extension',
+                                      preflight='Both signs, matched initial values and derivatives, causal KV, optimizer restart; paired 128 steps versus positive steps with learned beta')
             else:
                 archive = reference/'results'/f"train-{json.loads((reference/'state.json').read_text())['job']}-checkpoints.tar"
                 with tarfile.open(archive,'r:') as tar:
@@ -291,6 +307,9 @@ def main():
         job_args=f'{run_id} {mode}'
         if source['ngpt_velocity_mode'] != 'ambient':
             job_args+=' '+source['ngpt_velocity_mode']
+        if args.signed_chord_steps:
+            job_args+=' --signed-chord-steps'
+            batch_name+='-signed-steps'
         if arc_optimizer:
             job_args += ' ambient --' + preset.replace('_', '-')
         if args.no_arc_lookahead:
