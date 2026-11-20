@@ -1,4 +1,7 @@
-"""Fused spherical residual write and VJP. One Triton program owns one token."""
+"""Fused spherical residual write and VJP. One Triton program owns one token.
+
+MODE specializes the write at compile time: 0 isotropic, 1 token alpha gates, 2 token beta gate.
+"""
 import torch
 import triton
 import triton.language as tl
@@ -27,20 +30,35 @@ def _split(delta, v, P, D: tl.constexpr):
 
 
 @triton.jit
+def _history_alignment(new_h, carried, chord, D: tl.constexpr):
+    radial = _mean(new_h * chord, D)
+    recent = chord - radial * new_h
+    h2 = _mean(carried * carried, D)
+    r2 = _mean(recent * recent, D)
+    inv_h = tl.rsqrt(tl.maximum(h2, 1e-12))
+    inv_r = tl.rsqrt(tl.maximum(r2, 1e-12))
+    inv = inv_h * inv_r
+    cosine = _mean(carried * recent, D) * inv
+    return cosine, recent, radial, h2, r2, inv
+
+
+@triton.jit
 def _write_values(h, v, force, P, BETA: tl.constexpr, FLOOR2: tl.constexpr,
-                  D: tl.constexpr, GATED: tl.constexpr):
+                  D: tl.constexpr, MODE: tl.constexpr):
     force_sq = _mean(force * force, D)
     force_inv = tl.rsqrt(tl.maximum(force_sq, FLOOR2))
     target = force * force_inv
     delta = target - h
-    if GATED:
+    if MODE == 1:
         split = _split(delta, v, P, D)
         perp, par, along = split[0], split[1], split[2]
         mixed = (h + perp * delta) + ((par - perp) * along) * v
-        beta = tl.load(P + 2)
+    elif MODE == 2:
+        perp, par = tl.load(P), tl.load(P + 1)
+        along = _mean(delta * v, D) / tl.maximum(_mean(v * v, D), 1e-12)
+        mixed = (h + perp * delta) + ((par - perp) * along) * v
     else:
         mixed = h + tl.load(P) * delta
-        beta = BETA
     mixed_sq = _mean(mixed * mixed, D)
     mixed_inv = tl.rsqrt(tl.maximum(mixed_sq, 1e-12))
     new_h = mixed * mixed_inv
@@ -49,19 +67,26 @@ def _write_values(h, v, force, P, BETA: tl.constexpr, FLOOR2: tl.constexpr,
     denom = tl.maximum(bisector_sq, 1e-12)
     scale = 2.0 * _mean(v * bisector, D) / denom
     carried = v - scale * bisector
+    if MODE == 2:
+        geometry = _history_alignment(new_h, carried, new_h - h, D)
+        beta = tl.sigmoid(tl.load(P + 2) + tl.load(P + 3) * geometry[0])
+    elif MODE == 1:
+        beta = tl.load(P + 2)
+    else:
+        beta = BETA
     velocity = beta * carried + (1.0 - beta) * (new_h - h)
     radial = _mean(new_h * velocity, D)
     return (new_h, velocity, radial, bisector, scale, denom, bisector_sq,
-            mixed_inv, mixed_sq, target, force_inv, force_sq, carried)
+            mixed_inv, mixed_sq, target, force_inv, force_sq, carried, beta)
 
 
 @triton.jit
 def _forward(H, V, F, P, NH, NV, BETA: tl.constexpr, FLOOR2: tl.constexpr,
-             D: tl.constexpr, GATED: tl.constexpr):
+             D: tl.constexpr, MODE: tl.constexpr):
     offsets = tl.program_id(0).to(tl.int64) * D + tl.arange(0, D)
     h, v = tl.load(H + offsets), tl.load(V + offsets)
     force = tl.load(F + offsets).to(tl.float32)
-    values = _write_values(h, v, force, P, BETA, FLOOR2, D, GATED)
+    values = _write_values(h, v, force, P, BETA, FLOOR2, D, MODE)
     new_h, velocity, radial = values[0], values[1], values[2]
     tl.store(NH + offsets, new_h)
     tl.store(NV + offsets, velocity - radial * new_h)
@@ -69,33 +94,43 @@ def _forward(H, V, F, P, NH, NV, BETA: tl.constexpr, FLOOR2: tl.constexpr,
 
 @triton.jit
 def _backward(H, V, F, P, DNH, DNV, DH, DV, DF, DP, ROWS, BETA: tl.constexpr,
-              FLOOR2: tl.constexpr, D: tl.constexpr, GATED: tl.constexpr):
+              FLOOR2: tl.constexpr, D: tl.constexpr, MODE: tl.constexpr):
     row = tl.program_id(0)
     offsets = row.to(tl.int64) * D + tl.arange(0, D)
     h, v = tl.load(H + offsets), tl.load(V + offsets)
     force = tl.load(F + offsets).to(tl.float32)
     (new_h, velocity, radial, bisector, scale, denom, bisector_sq, mixed_inv,
-     mixed_sq, target, force_inv, force_sq, carried) = _write_values(h, v, force, P, BETA, FLOOR2, D, GATED)
-    if GATED:
-        beta = tl.load(P + 2)
-    else:
-        beta = BETA
+     mixed_sq, target, force_inv, force_sq, carried, beta) = _write_values(h, v, force, P, BETA, FLOOR2, D, MODE)
     # Reverse the tangent projection, then the short-arc parallel transport.
     upstream = tl.load(DNV + offsets)
     dot = _mean(upstream * new_h, D)
     d_velocity = upstream - dot * new_h
-    d_new_h = tl.load(DNH + offsets) + ((1.0 - beta) * d_velocity - radial * upstream - dot * velocity)
+    d_chord = (1.0 - beta) * d_velocity
+    d_new_h = tl.load(DNH + offsets) + (d_chord - radial * upstream - dot * velocity)
     d_carried = beta * d_velocity
+    if MODE == 2:
+        chord = new_h - h
+        cosine, recent, chord_radial, h2, r2, inv = _history_alignment(new_h, carried, chord, D)
+        d_logit = _mean(d_velocity * (carried - chord), D) * beta * (1. - beta)
+        tl.store(DP + 2 * ROWS + row, D * d_logit)
+        tl.store(DP + 3 * ROWS + row, D * d_logit * cosine)
+        d_cos = d_logit * tl.load(P + 3)
+        d_carried += d_cos * (inv * recent - tl.where(h2 >= 1e-12, cosine / tl.maximum(h2, 1e-12), 0.) * carried)
+        d_recent = d_cos * (inv * carried - tl.where(r2 >= 1e-12, cosine / tl.maximum(r2, 1e-12), 0.) * recent)
+        d_radial = _mean(d_recent * new_h, D)
+        d_projected_chord = d_recent - d_radial * new_h
+        d_chord += d_projected_chord
+        d_new_h += d_projected_chord - chord_radial * d_recent - d_radial * chord
     coeff = -2.0 * _mean(d_carried * bisector, D) / denom
     d_v = d_carried + coeff * bisector
     d_bisector = coeff * (v - tl.where(bisector_sq >= 1e-12, scale * bisector, 0.0)) - scale * d_carried
-    d_h = d_bisector - (1.0 - beta) * d_velocity
+    d_h = d_bisector - d_chord
     d_new_h += d_bisector
 
     dot_h = _mean(d_new_h * new_h, D)
     d_mixed = mixed_inv * (d_new_h - tl.where(mixed_sq >= 1e-12, new_h * dot_h, 0.0))
     delta = target - h
-    if GATED:
+    if MODE == 1:
         perp, par, along, cosine, gp, gq, inv_norms, den, v2, delta2 = _split(delta, v, P, D)
         dot_v = _mean(d_mixed * v, D)
         d_par = along * dot_v
@@ -117,6 +152,18 @@ def _backward(H, V, F, P, DNH, DNV, DH, DV, DF, DP, ROWS, BETA: tl.constexpr,
         tl.store(DP + 2 * ROWS + row, tl.sum(d_velocity * (carried - (new_h - h)), 0))
         tl.store(DP + 3 * ROWS + row, D * d_logit_p * cosine)
         tl.store(DP + 4 * ROWS + row, D * d_logit_q * cosine)
+    elif MODE == 2:
+        perp, par = tl.load(P), tl.load(P + 1)
+        v2 = _mean(v * v, D)
+        den = tl.maximum(v2, 1e-12)
+        along = _mean(delta * v, D) / den
+        dot_v = _mean(d_mixed * v, D)
+        d_dot = (par - perp) * dot_v / den
+        d_delta = perp * d_mixed + d_dot * v
+        d_v += ((par - perp) * along) * d_mixed + d_dot * (delta - tl.where(v2 >= 1e-12, 2. * along * v, 0.))
+        d_h += d_mixed - d_delta
+        tl.store(DP + row, D * (_mean(d_mixed * delta, D) - along * dot_v))
+        tl.store(DP + ROWS + row, D * along * dot_v)
     else:
         alpha = tl.load(P)
         d_h += (1. - alpha) * d_mixed
@@ -131,17 +178,17 @@ def _backward(H, V, F, P, DNH, DNV, DH, DV, DF, DP, ROWS, BETA: tl.constexpr,
 
 class _ChordWrite(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, h, v, force, params, fixed_beta, floor, gated):
+    def forward(ctx, h, v, force, params, fixed_beta, floor, mode):
         width = h.size(-1)
         assert h.is_cuda and h.dtype == v.dtype == params.dtype == torch.float32
-        assert h.shape == v.shape == force.shape and params.numel() == (5 if gated else 1)
+        assert h.shape == v.shape == force.shape and params.numel() == (1, 5, 4)[mode]
         assert width == triton.next_power_of_2(width) and force.dtype in (torch.bfloat16, torch.float32)
         new_h, new_v = torch.empty_like(h), torch.empty_like(v)
         rows = h.numel() // width
         _forward[(rows,)](h, v, force, params, new_h, new_v, fixed_beta, floor**2,
-                          width, gated, num_warps=4, enable_fp_fusion=False)
+                          width, mode, num_warps=4, enable_fp_fusion=False)
         ctx.save_for_backward(h, v, force, params)
-        ctx.options = fixed_beta, floor**2, width, gated
+        ctx.options = fixed_beta, floor**2, width, mode
         return new_h, new_v
 
     @staticmethod
@@ -156,9 +203,14 @@ class _ChordWrite(torch.autograd.Function):
 
 
 def fused_gated_write(h, v, force, params, floor):
-    return _ChordWrite.apply(h.contiguous(), v.contiguous(), force.contiguous(), params, 0., floor, True)
+    return _ChordWrite.apply(h.contiguous(), v.contiguous(), force.contiguous(), params, 0., floor, 1)
+
+
+def fused_beta_write(h, v, force, params, floor):
+    """Positive split steps with per-token velocity decay. P holds both steps, bias and slope."""
+    return _ChordWrite.apply(h.contiguous(), v.contiguous(), force.contiguous(), params, 0., floor, 2)
 
 
 def fused_write(h, v, force, alpha, beta, floor):
     """Original single-step-size Arc benchmark entry point."""
-    return _ChordWrite.apply(h.contiguous(), v.contiguous(), force.contiguous(), alpha, beta, floor, False)
+    return _ChordWrite.apply(h.contiguous(), v.contiguous(), force.contiguous(), alpha, beta, floor, 0)

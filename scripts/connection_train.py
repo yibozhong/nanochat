@@ -70,6 +70,7 @@ def main():
     p.add_argument('--ngpt-alpha-init', type=float, default=.05)
     p.add_argument('--signed-chord-steps', action='store_true', help='Allow both split-chord step sizes to cross zero independently')
     p.add_argument('--token-chord-gates', action='store_true', help='Modulate positive split steps by independent per-token cosine gates')
+    p.add_argument('--token-beta-gate', action='store_true', help='Gate velocity decay by per-token tangent alignment')
     p.add_argument('--residual-projection-init', choices=('zero','normal'), default=None)
     p.add_argument('--residual-projection-init-std', type=float, default=.02,
                    help='Normal output-projection std before division by sqrt(2*depth)')
@@ -129,6 +130,7 @@ def main():
                        momentum_eta_init=a.momentum_eta_init, ngpt_force_rms_floor=a.ngpt_force_rms_floor,
                        lookahead_mu_init=a.lookahead_mu_init, ngpt_alpha_init=a.ngpt_alpha_init, ngpt_weight_norm=a.ngpt_weight_norm,
                        ngpt_velocity_mode=a.ngpt_velocity_mode, signed_chord_steps=a.signed_chord_steps, token_chord_gates=a.token_chord_gates,
+                       token_beta_gate=a.token_beta_gate,
                        momentum_velocity_rms_floor=a.momentum_velocity_rms_floor,
                        residual_projection_init=a.residual_projection_init,
                        residual_projection_init_std=a.residual_projection_init_std,
@@ -236,6 +238,7 @@ def main():
                     ('-learned-beta' if c.ngpt_velocity_mode == 'lookahead_split_learned_beta' else '')+
                     ('-signed-steps' if c.signed_chord_steps else '')+
                     ('-token-alpha-gates' if c.token_chord_gates else '')+
+                    ('-token-beta-gate' if c.token_beta_gate else '')+
                     ('-geodesic-split' if c.ngpt_velocity_mode == 'lookahead_geodesic_split' else '')+
                     ('-no-weight-norm' if c.residual_mode=='ngpt_hbformer' and not c.ngpt_weight_norm else '')+
                     ('-arc-muon-direction' if a.arc_direction == 'muon' else '-arc' if a.matrix_optimizer == 'arc' else '')+

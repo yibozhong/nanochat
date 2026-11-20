@@ -20,9 +20,12 @@ class LookaheadResidual(NormalizedResidual):
         self.decay = config.momentum_beta_init
         self.gate_slopes = nn.Parameter(torch.zeros(2, dtype=torch.float32)) if config.token_chord_gates else None
         self.raw_beta = None
+        self.beta_gate_slope = None
         if config.ngpt_velocity_mode == 'lookahead_split_learned_beta' and velocity_consumed:
             logit = math.log(self.decay / (1 - self.decay))
             self.raw_beta = nn.Parameter(torch.tensor([logit], dtype=torch.float32))
+            if config.token_beta_gate:
+                self.beta_gate_slope = nn.Parameter(torch.zeros(1, dtype=torch.float32))
 
     def beta(self):
         return self.decay if self.raw_beta is None else self.raw_beta[0].sigmoid()
@@ -33,9 +36,14 @@ class LookaheadResidual(NormalizedResidual):
         return (h + offset) * torch.rsqrt(1 + offset.square().mean(-1, keepdim=True))
 
     def forward(self, h, v, force):
-        if (self.gate_slopes is not None and h.is_cuda and h.dtype == v.dtype == torch.float32
+        if ((self.gate_slopes is not None or self.beta_gate_slope is not None)
+                and h.is_cuda and h.dtype == v.dtype == torch.float32
                 and force.dtype in (torch.bfloat16, torch.float32) and h.size(-1) in (128, 512)):
-            from nanochat.chord_triton import fused_gated_write
+            from nanochat.chord_triton import fused_beta_write, fused_gated_write
+            if self.beta_gate_slope is not None:
+                params = torch.stack((self.alpha(), self.step_size(self.raw_parallel),
+                                      self.raw_beta[0], self.beta_gate_slope[0]))
+                return fused_beta_write(h, v, force, params, self.rms_floor)
             beta = self.beta() if self.raw_beta is not None else self.raw.new_tensor(self.decay)
             params = torch.stack((self.alpha(), self.step_size(self.raw_parallel), beta,
                                   self.gate_slopes[0], self.gate_slopes[1]))
@@ -75,8 +83,17 @@ class LookaheadResidual(NormalizedResidual):
         norm2 = bisector.square().mean(-1, keepdim=True)
         scale = 2 * (v * bisector).mean(-1, keepdim=True) / norm2.clamp_min(1e-12)
         carried = v - scale * bisector
-        beta = self.beta()
-        v = tangent_project(new_h, beta * carried + (1 - beta) * (new_h - h))
+        chord = new_h - h
+        if self.beta_gate_slope is None:
+            beta = self.beta()
+        else:
+            # Compare the transported history and realized step in the same tangent space.
+            recent = tangent_project(new_h, chord)
+            inv_history = carried.square().mean(-1, keepdim=True).clamp_min(1e-12).rsqrt()
+            inv_recent = recent.square().mean(-1, keepdim=True).clamp_min(1e-12).rsqrt()
+            alignment = (carried * recent).mean(-1, keepdim=True) * (inv_history * inv_recent)
+            beta = torch.sigmoid(self.raw_beta[0] + self.beta_gate_slope[0] * alignment)
+        v = tangent_project(new_h, beta * carried + (1 - beta) * chord)
         return new_h, v
 
 
@@ -137,7 +154,11 @@ class LookaheadModel(MomentumModel):
                        for key,value in zip(('alpha_perp','alpha_parallel','mu'),row)}
             if sites[0].raw_beta is not None:
                 betas = torch.stack([s.beta() for s in sites if s.raw_beta is not None]).tolist()
-                metrics.update({f'residual/sublayer_{i}/beta': value for i,value in enumerate(betas)})
+                key = 'beta_at_zero_alignment' if sites[0].beta_gate_slope is not None else 'beta'
+                metrics.update({f'residual/sublayer_{i}/{key}': value for i,value in enumerate(betas)})
+            if sites[0].beta_gate_slope is not None:
+                slopes = torch.stack([s.beta_gate_slope[0] for s in sites if s.beta_gate_slope is not None]).tolist()
+                metrics.update({f'residual/sublayer_{i}/beta_gate_slope': value for i,value in enumerate(slopes)})
             if sites[0].gate_slopes is not None:
                 slopes = torch.stack([s.gate_slopes for s in sites]).tolist()
                 metrics.update({f'residual/sublayer_{i}/gate_{axis}_slope': value

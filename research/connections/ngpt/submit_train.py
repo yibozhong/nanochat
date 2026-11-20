@@ -36,6 +36,8 @@ def main():
                         help='Compare two signed chord steps to the positive-step learned-beta run')
     parser.add_argument('--token-chord-gates', action='store_true',
                         help='Compare two token-dependent positive steps to the learned-beta control')
+    parser.add_argument('--token-beta-gate', action='store_true',
+                        help='Compare token-dependent velocity decay to the positive split learned-beta control')
     parser.add_argument('--hopper-only', action='store_true',
                         help='Require a full H100 or H200 for the entire run, including restarts')
     parser.add_argument('--no-arc-lookahead', action='store_true',
@@ -58,6 +60,8 @@ def main():
         parser.error('--signed-chord-steps requires the split learned-beta preset')
     if args.token_chord_gates and (not learned_beta or args.signed_chord_steps):
         parser.error('--token-chord-gates requires the positive split learned-beta preset')
+    if args.token_beta_gate and (not learned_beta or args.token_chord_gates or args.signed_chord_steps):
+        parser.error('--token-beta-gate requires the shared positive split learned-beta preset')
     split_write = preset == 'ngpt_lookahead_split_write' or geodesic or learned_beta
     axis_write = preset == 'ngpt_lookahead_axis_write' or split_write
     if axis_write and not args.hopper_only:
@@ -77,6 +81,8 @@ def main():
         ROOT=HOME_ROOT/f'residual-arc-{tag}-write-10b-20261119'
         if args.token_chord_gates:
             ROOT=HOME_ROOT/'residual-chord-token-alpha-gates-10b-20261120'
+        if args.token_beta_gate:
+            ROOT=HOME_ROOT/'residual-chord-token-beta-gate-10b-20261120'
     if arc_optimizer:
         tag = 'arc' if preset == 'arc' else 'arc-muon-direction'
         if preset == 'arc_muon_radius':
@@ -193,7 +199,7 @@ def main():
                     source.update(momentum_beta_trainable=True, beta_parameterization='sigmoid',
                                   learned_beta_sites=2*source['model']['depth']-1,
                                   preflight='Fixed-beta init parity, beta gradients, causal KV, optimizer restart; paired 128 steps versus fixed-beta chord split')
-                    if args.signed_chord_steps or args.token_chord_gates:
+                    if args.signed_chord_steps or args.token_chord_gates or args.token_beta_gate:
                         control_dir = HOME_ROOT/'residual-arc-split-learned-beta-write-10b-20261119-hopper-only'
                         control = json.loads((control_dir/'bundles/source.json').read_text())
                         for key in ('model','seed','training_tokens','batch_tokens','microbatch','dataset_revision',
@@ -207,11 +213,16 @@ def main():
                         else:
                             base = json.loads((control_dir/'summary.json').read_text())
                             assert base['complete'] and base['run_id'] == control['run_id'] and base['steps'] == steps
-                            source.update(token_chord_gates=True, reference_run=control['run_id'],
+                            source.update(reference_run=control['run_id'],
                                           reference_step_seconds=base['steady_step_seconds'],reference_gpu=base['gpu'],
-                                          gate_signal='cosine(target-h, velocity)', gate_scale='2*sigmoid(w*c)',
                                           gate_slope_init=0., residual_kernel='fused_chord_triton',
                                           preflight='Fused/eager VJPs at active gates, neutral init, KV, exact resume; paired 128 steps versus positive learned-beta control')
+                            if args.token_beta_gate:
+                                source.update(token_beta_gate=True, gate_signal='cosine(transported_velocity,tangent_realized_chord)',
+                                              gate_scale='sigmoid(raw_beta+w*c)')
+                            else:
+                                source.update(token_chord_gates=True, gate_signal='cosine(target-h, velocity)',
+                                              gate_scale='2*sigmoid(w*c)')
             else:
                 archive = reference/'results'/f"train-{json.loads((reference/'state.json').read_text())['job']}-checkpoints.tar"
                 with tarfile.open(archive,'r:') as tar:
@@ -328,6 +339,9 @@ def main():
         if args.token_chord_gates:
             job_args+=' --token-chord-gates'
             batch_name+='-token-alpha-gates'
+        if args.token_beta_gate:
+            job_args+=' --token-beta-gate'
+            batch_name+='-token-beta-gate'
         if arc_optimizer:
             job_args += ' ambient --' + preset.replace('_', '-')
         if args.no_arc_lookahead:

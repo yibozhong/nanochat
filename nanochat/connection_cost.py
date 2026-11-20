@@ -60,6 +60,10 @@ def model_cost(config, batch=1, activation_bytes=2, feedback_passes=None):
             gain_parameters += 2*sites
             # RMS(delta), cosine and per-token gate scalings; reuse dot(delta,v) and RMS(v).
             residual += batch*t*sites*(2*d+9) - sites
+        if c.token_beta_gate:
+            gain_parameters += sites - 1
+            # Project the realized chord, compute the two RMS norms and their dot product.
+            residual += (sites-1)*(batch*t*(10*d+2)-1)
         return dict(estimated_forward_flops=forward+residual,
             estimated_training_flops=3*(forward+residual),
             components_forward=dict(backbone_projections=projections,vocab_head=head,

@@ -94,6 +94,11 @@ def test_active_write_cache_and_compiled_training(setting):
                         site.gate_slopes.copy_(site.raw.new_tensor([1.2,-.8]))
                         # Use the unfused equations on the reference model.
                         site.forward = site.reference_write
+                if setting.token_beta_gate:
+                    for site in (b.attn_residual, b.mlp_residual):
+                        if site.beta_gate_slope is not None:
+                            site.beta_gate_slope.fill_(1.2)
+                            site.forward = site.reference_write
     compiled.load_state_dict(eager.state_dict())
     x, y = inputs()
     with torch.no_grad():
@@ -123,7 +128,8 @@ def test_active_write_cache_and_compiled_training(setting):
         expected = beta_grads(eager)
         assert expected.norm() > 0
         assert (beta_grads(compiled)-expected).norm() <= .04*expected.norm()+1e-8
-    if setting.token_chord_gates:
-        ref_gates = torch.cat([p.grad for n,p in eager.named_parameters() if n.endswith('.gate_slopes')])
-        gates = torch.cat([p.grad for n,p in compiled.named_parameters() if n.endswith('.gate_slopes')])
+    if setting.token_chord_gates or setting.token_beta_gate:
+        suffix = '.beta_gate_slope' if setting.token_beta_gate else '.gate_slopes'
+        ref_gates = torch.cat([p.grad for n,p in eager.named_parameters() if n.endswith(suffix)])
+        gates = torch.cat([p.grad for n,p in compiled.named_parameters() if n.endswith(suffix)])
         assert ref_gates.norm()>0 and (gates-ref_gates).norm() <= .04*ref_gates.norm()+1e-8

@@ -57,6 +57,7 @@ class ConnectionConfig:
     residual_projection_init_std: float = 0.02
     signed_chord_steps: bool = False
     token_chord_gates: bool = False
+    token_beta_gate: bool = False
 
     def __post_init__(self):
         hbformer = self.residual_mode == 'ngpt_hbformer'
@@ -101,6 +102,9 @@ class ConnectionConfig:
             raise ValueError('Signed component steps require a split chord write')
         if self.token_chord_gates and (self.ngpt_velocity_mode != 'lookahead_split_learned_beta' or self.signed_chord_steps):
             raise ValueError('Token chord gates require positive split steps and learned velocity decay')
+        if self.token_beta_gate and (self.ngpt_velocity_mode != 'lookahead_split_learned_beta'
+                                     or self.signed_chord_steps or self.token_chord_gates):
+            raise ValueError('Token beta gate requires shared positive split steps and learned velocity decay')
         if (self.residual_mode == 'ngpt_lookahead') != spherical_lookahead:
             raise ValueError('Lookahead requires a transported velocity for branch reads')
         if not spherical_lookahead and self.ngpt_velocity_mode not in ('ambient', 'transport_rms', 'transport_layernorm'):

@@ -68,6 +68,10 @@ elif [[ "${4:-}" == --token-chord-gates ]]; then
     [[ "$#" == 4 && "$TASK_VELOCITY_MODE" == lookahead_split_learned_beta ]]
     TASK_MOMENTUM_ARGS+=(--token-chord-gates)
     TASK_GROUP=chord-token-alpha-gates-10b
+elif [[ "${4:-}" == --token-beta-gate ]]; then
+    [[ "$#" == 4 && "$TASK_VELOCITY_MODE" == lookahead_split_learned_beta ]]
+    TASK_MOMENTUM_ARGS+=(--token-beta-gate)
+    TASK_GROUP=chord-token-beta-gate-10b
 elif [[ "${4:-}" == --signed-chord-steps ]]; then
     [[ "$#" == 4 && "$TASK_VELOCITY_MODE" == lookahead_split_learned_beta ]]
     TASK_MOMENTUM_ARGS+=(--signed-chord-steps)
@@ -127,7 +131,9 @@ signed_steps = sys.argv[6]=='--signed-chord-steps'
 assert signed_steps == s.get('signed_chord_steps',False)
 token_gates = sys.argv[6]=='--token-chord-gates'
 assert token_gates == s.get('token_chord_gates',False)
-if token_gates:
+token_beta_gate = sys.argv[6]=='--token-beta-gate'
+assert token_beta_gate == s.get('token_beta_gate',False)
+if token_gates or token_beta_gate:
     assert not signed_steps and s['paired_run']=='6721b437' and s['residual_kernel']=='fused_chord_triton'
 assert (sys.argv[6] in ('--arc','--arc-muon','--arc-muon-radius')) == (s.get('matrix_optimizer')=='arc')
 assert (sys.argv[6] in ('--arc-muon','--arc-muon-radius')) == (s.get('arc_direction')=='muon')
@@ -148,8 +154,8 @@ elif sys.argv[2]=='ngpt_lookahead':
     axis_write = learned_beta or sys.argv[3] in ('lookahead_axis_write','lookahead_split_write','lookahead_geodesic_split')
     assert s['steps']==(305176 if extended or sys.argv[6]=='--fresh-10b' or axis_write else 5000) and not s['ngpt_weight_norm']
     if axis_write:
-        assert not sys.argv[6] or (signed_steps or token_gates) and learned_beta
-        assert s['reference_run']==('6721b437' if token_gates else 'd4293868')
+        assert not sys.argv[6] or (signed_steps or token_gates or token_beta_gate) and learned_beta
+        assert s['reference_run']==('6721b437' if token_gates or token_beta_gate else 'd4293868')
         if learned_beta or sys.argv[3] in ('lookahead_split_write','lookahead_geodesic_split'):
             assert s['parallel_step_init']==s['perpendicular_step_init']==s['ngpt_alpha_init']
             expected = 'independent_softplus_with_linear_lower_extension' if signed_steps else 'independent_softplus'
@@ -252,7 +258,7 @@ else
             :
         else
             gate_status=$?
-            [[ "${4:-}" == --token-chord-gates ]] || exit "$gate_status"
+            [[ "${4:-}" == --token-chord-gates || "${4:-}" == --token-beta-gate ]] || exit "$gate_status"
             echo "PREFLIGHT_NEEDS_REPAIR status=$gate_status; retaining allocation for manual retry" >&2
             deadline=$((SECONDS+900))
             while [[ ! -e results/retry-preflight && $SECONDS -lt $deadline ]]; do sleep 2; done
