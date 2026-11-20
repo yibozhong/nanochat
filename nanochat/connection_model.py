@@ -58,6 +58,7 @@ class ConnectionConfig:
     signed_chord_steps: bool = False
     token_chord_gates: bool = False
     token_beta_gate: bool = False
+    chord_velocity_geometry: str = 'parallel_transport'
 
     def __post_init__(self):
         hbformer = self.residual_mode == 'ngpt_hbformer'
@@ -102,11 +103,17 @@ class ConnectionConfig:
             raise ValueError('Signed component steps require a split chord write')
         if self.token_chord_gates and (self.ngpt_velocity_mode != 'lookahead_split_learned_beta' or self.signed_chord_steps):
             raise ValueError('Token chord gates require positive split steps and learned velocity decay')
+        if self.chord_velocity_geometry not in ('parallel_transport', 'project_only', 'ambient'):
+            raise ValueError('Unknown Chord velocity geometry')
+        if self.chord_velocity_geometry != 'parallel_transport' and (
+                self.ngpt_velocity_mode != 'lookahead_split_learned_beta' or self.signed_chord_steps
+                or self.token_chord_gates or self.token_beta_gate):
+            raise ValueError('Velocity geometry ablations require positive split steps and layerwise beta')
         if self.token_beta_gate and (self.ngpt_velocity_mode != 'lookahead_split_learned_beta'
                                      or self.signed_chord_steps or self.token_chord_gates):
             raise ValueError('Token beta gate requires shared positive split steps and learned velocity decay')
         if (self.residual_mode == 'ngpt_lookahead') != spherical_lookahead:
-            raise ValueError('Lookahead requires a transported velocity for branch reads')
+            raise ValueError('Spherical lookahead requires a compatible Chord or geodesic velocity mode')
         if not spherical_lookahead and self.ngpt_velocity_mode not in ('ambient', 'transport_rms', 'transport_layernorm'):
             raise ValueError('Unknown nGPT velocity mode')
         if not math.isfinite(self.momentum_velocity_rms_floor) or self.momentum_velocity_rms_floor <= 0:

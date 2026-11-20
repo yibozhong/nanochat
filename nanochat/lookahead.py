@@ -17,6 +17,7 @@ class LookaheadResidual(NormalizedResidual):
         self.geodesic = config.ngpt_velocity_mode == 'lookahead_geodesic_split'
         self.raw_parallel = (nn.Parameter(self.raw.detach().clone())
                              if self.geodesic or config.split_chord_write else None)
+        self.velocity_geometry = config.chord_velocity_geometry
         self.decay = config.momentum_beta_init
         self.gate_slopes = nn.Parameter(torch.zeros(2, dtype=torch.float32)) if config.token_chord_gates else None
         self.raw_beta = None
@@ -31,8 +32,10 @@ class LookaheadResidual(NormalizedResidual):
         return self.decay if self.raw_beta is None else self.raw_beta[0].sigmoid()
 
     def query(self, h, v):
-        # h has RMS 1 and v is tangent. This form is exactly h when mu=0.
+        # The tangent-only denominator omits the vanishing cross term.
         offset = self.mu[0] * v
+        if self.velocity_geometry == 'ambient':
+            return normalize_residual(h + offset)
         return (h + offset) * torch.rsqrt(1 + offset.square().mean(-1, keepdim=True))
 
     def forward(self, h, v, force):
@@ -54,7 +57,7 @@ class LookaheadResidual(NormalizedResidual):
         if self.gate_slopes is not None:
             params = torch.stack((perp, parallel, beta, self.gate_slopes[0], self.gate_slopes[1]))
             return fused_gated_write(h, v, force, params, self.rms_floor)
-        return fused_split_write(h, v, force, torch.stack((perp, parallel, beta)), self.rms_floor)
+        return fused_split_write(h, v, force, torch.stack((perp, parallel, beta)), self.rms_floor, self.velocity_geometry)
 
     def reference_write(self, h, v, force):
         if self.geodesic:
@@ -65,7 +68,7 @@ class LookaheadResidual(NormalizedResidual):
         else:
             h, v = state_dtype(h), state_dtype(v)
             delta = normalize_residual(force, self.rms_floor) - h
-            # v is tangent at h. Use an RMS-squared floor to keep the write
+            # Use an RMS-squared floor to keep the write
             # and its derivatives finite even for an exactly zero velocity.
             dot = (delta * v).mean(-1, keepdim=True)
             v2 = v.square().mean(-1, keepdim=True).clamp_min(1e-12)
@@ -85,10 +88,13 @@ class LookaheadResidual(NormalizedResidual):
                 new_h = normalize_residual((h + perp * delta) + ((parallel - perp) * along) * v)
         # The Householder reflector with normal h + new_h gives short-arc
         # parallel transport. At opposite poles the two tangent planes coincide.
-        bisector = h + new_h
-        norm2 = bisector.square().mean(-1, keepdim=True)
-        scale = 2 * (v * bisector).mean(-1, keepdim=True) / norm2.clamp_min(1e-12)
-        carried = v - scale * bisector
+        if self.velocity_geometry == 'parallel_transport':
+            bisector = h + new_h
+            norm2 = bisector.square().mean(-1, keepdim=True)
+            scale = 2 * (v * bisector).mean(-1, keepdim=True) / norm2.clamp_min(1e-12)
+            carried = v - scale * bisector
+        else:
+            carried = v
         chord = new_h - h
         if self.beta_gate_slope is None:
             beta = self.beta()
@@ -99,8 +105,10 @@ class LookaheadResidual(NormalizedResidual):
             inv_recent = recent.square().mean(-1, keepdim=True).clamp_min(1e-12).rsqrt()
             alignment = (carried * recent).mean(-1, keepdim=True) * (inv_history * inv_recent)
             beta = torch.sigmoid(self.raw_beta[0] + self.beta_gate_slope[0] * alignment)
-        v = tangent_project(new_h, beta * carried + (1 - beta) * chord)
-        return new_h, v
+        velocity = beta * carried + (1 - beta) * chord
+        if self.velocity_geometry != 'ambient':
+            velocity = tangent_project(new_h, velocity)
+        return new_h, velocity
 
 
 def additive_branch_input(h, v, mu):
@@ -194,6 +202,8 @@ class LookaheadModel(MomentumModel):
         h, v = super().initial_state(x, token_ids, start)
         if self.config.residual_mode == 'lookahead_only':
             return h.to(x.dtype), v
+        if self.config.chord_velocity_geometry == 'ambient':
+            return h, v
         return h, tangent_project(h, v)
 
     @torch.no_grad()
