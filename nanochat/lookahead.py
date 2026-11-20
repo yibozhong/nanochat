@@ -140,7 +140,56 @@ class AdditiveLookaheadResidual(nn.Module):
         return new_h, self.decay * v + (1 - self.decay) * displacement
 
 
+def compile_split_block(block, next_mu, *, first, preview, terminal):
+    """Carry the next BF16 branch input across block boundaries while preserving both FP32 streams."""
+    from nanochat.chord_triton import split_boundary
+    attn, mlp = block.attn_residual, block.mlp_residual
+
+    def step(h, v, q, cos, sin, cache=None):
+        force = block.attention_branch(q, cos, sin, cache)
+        if preview:
+            h, v, q = split_boundary(attn, h, v, force, mlp.mu)
+        else:
+            h, v = attn(h, v, force)
+            q = mlp.query(h, v).to(cos.dtype)
+        force = block.mlp_branch(q)
+        if terminal:
+            return (split_boundary(mlp, h, v, force, None),)
+        if preview and next_mu is not None:
+            return split_boundary(mlp, h, v, force, next_mu)
+        return mlp(h, v, force)
+
+    def starting_step(h, v, cos, sin, cache=None):
+        q = attn.query(h, v).to(cos.dtype)
+        return step(h, v, q, cos, sin, cache)
+
+    return torch.compile(starting_step if first else step, dynamic=False, fullgraph=True,
+                         options={'emulate_precision_casts': True})
+
+
 class LookaheadModel(MomentumModel):
+    def prepare(self, device='cuda', dtype=torch.bfloat16, compile_blocks=False, *,
+                compile_lookahead_branches=False, chord_kernel='current'):
+        super().prepare(device, dtype, compile_blocks, compile_lookahead_branches=compile_lookahead_branches)
+        if chord_kernel == 'current':
+            return self
+        if chord_kernel not in ('terminal', 'boundary', 'both'):
+            raise ValueError(f'Unknown Chord kernel {chord_kernel}')
+        c = self.config
+        if (c.ngpt_velocity_mode != 'lookahead_split_learned_beta' or c.signed_chord_steps or
+                c.token_beta_gate or c.token_chord_gates or c.width not in (128, 512) or
+                torch.device(device).type != 'cuda' or dtype != torch.bfloat16 or not compile_blocks):
+            raise ValueError('Boundary kernels require compiled BF16 CUDA shared positive split steps and layer beta')
+        preview = chord_kernel in ('boundary', 'both')
+        for i, block in enumerate(self.blocks):
+            last = i + 1 == len(self.blocks)
+            if preview or last:
+                next_mu = None if last else self.blocks[i+1].attn_residual.mu
+                self.compiled_steps[i] = compile_split_block(
+                    block, next_mu, first=(i == 0 or not preview), preview=preview,
+                    terminal=(last and chord_kernel in ('terminal', 'both')))
+        return self
+
     def initial_state(self, x, token_ids=None, start=0):
         h, v = super().initial_state(x, token_ids, start)
         if self.config.residual_mode == 'lookahead_only':
