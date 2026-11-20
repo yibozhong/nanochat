@@ -1,3 +1,4 @@
+from copy import deepcopy
 from dataclasses import replace
 
 import pytest
@@ -83,6 +84,14 @@ def test_active_fused_vjp(setting, width, dtype):
     upstream = tuple(torch.randn_like(t) for t in reference)
     expected = torch.autograd.grad(reference,args,upstream)
     observed = torch.autograd.grad(fused,args,upstream)
+    # The zero-force row has zero step derivative in exact arithmetic. FP32
+    # eager autograd loses precision when its large floor terms cancel before
+    # the shared-parameter reduction. Use a double oracle for those scalars.
+    oracle = deepcopy(site).double()
+    precise = oracle.reference_write(h.detach().double(), v.detach().double(), f.detach().double())
+    scalar_grads = torch.autograd.grad(precise, (oracle.raw, oracle.raw_parallel, oracle.raw_beta,
+                                                oracle.beta_gate_slope), tuple(u.double() for u in upstream))
+    expected = (*expected[:3], *scalar_grads)
     for i,(a,b) in enumerate(zip(observed,expected)):
         assert torch.isfinite(a).all() and torch.isfinite(b).all()
         groups = [(a[j],b[j]) for j in range(4)] + [(a[4:],b[4:])] if i < 3 else [(a,b)]

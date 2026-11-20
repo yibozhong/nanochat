@@ -162,8 +162,16 @@ def _backward(H, V, F, P, DNH, DNV, DH, DV, DF, DP, ROWS, BETA: tl.constexpr,
         d_delta = perp * d_mixed + d_dot * v
         d_v += ((par - perp) * along) * d_mixed + d_dot * (delta - tl.where(v2 >= 1e-12, 2. * along * v, 0.))
         d_h += d_mixed - d_delta
-        tl.store(DP + row, D * (_mean(d_mixed * delta, D) - along * dot_v))
-        tl.store(DP + ROWS + row, D * along * dot_v)
+        # Contract the normalization Jacobian with the step directions first.
+        # For a radial write its angular derivative vanishes; projecting the
+        # upstream adjoint first would sum large cancelling terms at zero chord.
+        par_dir = along * v
+        perp_dir = delta - par_dir
+        if_unclamped = mixed_sq >= 1e-12
+        perp_dir -= tl.where(if_unclamped, _mean(perp_dir * new_h, D) * new_h, 0.)
+        par_dir -= tl.where(if_unclamped, _mean(par_dir * new_h, D) * new_h, 0.)
+        tl.store(DP + row, mixed_inv * tl.sum(d_new_h * perp_dir, 0))
+        tl.store(DP + ROWS + row, mixed_inv * tl.sum(d_new_h * par_dir, 0))
     else:
         alpha = tl.load(P)
         d_h += (1. - alpha) * d_mixed
