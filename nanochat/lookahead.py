@@ -1,4 +1,6 @@
 """Lookahead branch reads for spherical and vanilla additive residuals."""
+import math
+
 import torch
 from torch import nn
 
@@ -7,15 +9,22 @@ from nanochat.momentum import MomentumModel, NormalizedResidual, normalize_resid
 
 
 class LookaheadResidual(NormalizedResidual):
-    def __init__(self, config):
+    def __init__(self, config, *, velocity_consumed=True):
         super().__init__(config)
         self.mu = nn.Parameter(torch.tensor([config.lookahead_mu_init], dtype=torch.float32))
         self.kappa = (nn.Parameter(torch.zeros(1, dtype=torch.float32))
                       if config.ngpt_velocity_mode == 'lookahead_axis_write' else None)
         self.geodesic = config.ngpt_velocity_mode == 'lookahead_geodesic_split'
         self.raw_parallel = (nn.Parameter(self.raw.detach().clone())
-                             if self.geodesic or config.ngpt_velocity_mode == 'lookahead_split_write' else None)
+                             if self.geodesic or config.split_chord_write else None)
         self.decay = config.momentum_beta_init
+        self.raw_beta = None
+        if config.ngpt_velocity_mode == 'lookahead_split_learned_beta' and velocity_consumed:
+            logit = math.log(self.decay / (1 - self.decay))
+            self.raw_beta = nn.Parameter(torch.tensor([logit], dtype=torch.float32))
+
+    def beta(self):
+        return self.decay if self.raw_beta is None else self.raw_beta[0].sigmoid()
 
     def query(self, h, v):
         # h has RMS 1 and v is tangent. This form is exactly h when mu=0.
@@ -48,7 +57,8 @@ class LookaheadResidual(NormalizedResidual):
         norm2 = bisector.square().mean(-1, keepdim=True)
         scale = 2 * (v * bisector).mean(-1, keepdim=True) / norm2.clamp_min(1e-12)
         carried = v - scale * bisector
-        v = tangent_project(new_h, self.decay * carried + (1 - self.decay) * (new_h - h))
+        beta = self.beta()
+        v = tangent_project(new_h, beta * carried + (1 - beta) * (new_h - h))
         return new_h, v
 
 
@@ -105,8 +115,12 @@ class LookaheadModel(MomentumModel):
         if sites[0].raw_parallel is not None:
             values = torch.stack([torch.stack((s.alpha(), nn.functional.softplus(s.raw_parallel[0]), s.mu[0]))
                                   for s in sites]).tolist()
-            return {f'residual/sublayer_{i}/{key}': value for i,row in enumerate(values)
-                    for key,value in zip(('alpha_perp','alpha_parallel','mu'),row)}
+            metrics = {f'residual/sublayer_{i}/{key}': value for i,row in enumerate(values)
+                       for key,value in zip(('alpha_perp','alpha_parallel','mu'),row)}
+            if sites[0].raw_beta is not None:
+                betas = torch.stack([s.beta() for s in sites if s.raw_beta is not None]).tolist()
+                metrics.update({f'residual/sublayer_{i}/beta': value for i,value in enumerate(betas)})
+            return metrics
         values = torch.stack([torch.stack((site.alpha(), site.mu[0])) for site in sites]).tolist()
         metrics = {f'residual/sublayer_{i}/{key}': value
                    for i, row in enumerate(values) for key, value in zip(('alpha', 'mu'), row)}

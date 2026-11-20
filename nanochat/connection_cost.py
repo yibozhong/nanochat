@@ -44,13 +44,16 @@ def model_cost(config, batch=1, activation_bytes=2, feedback_passes=None):
         scalars_per_site = {'ngpt':1, 'ngpt_hbformer':2, 'ngpt_lookahead':2, 'lookahead_only':1}.get(c.residual_mode, 3)
         if c.ngpt_velocity_mode == 'lookahead_geodesic_split':
             scalars_per_site += 1
-        if c.ngpt_velocity_mode in ('lookahead_axis_write', 'lookahead_split_write'):
+        if c.ngpt_velocity_mode == 'lookahead_axis_write' or c.split_chord_write:
             # Two dot products, multiply the projection by its coefficient,
             # then scale v and add. Mean/division scalar work is excluded.
             residual += batch*t*sites*(6*d-1)
-            if c.ngpt_velocity_mode == 'lookahead_split_write':
+            if c.split_chord_write:
                 residual += sites  # parallel minus perpendicular coefficient, shared across tokens
             scalars_per_site += 1
+        if c.ngpt_velocity_mode == 'lookahead_split_learned_beta':
+            gain_parameters += sites - 1  # Final FFN velocity does not reach the logits.
+            residual += sites - 1  # 1 - beta, shared across tokens; sigmoid excluded.
         return dict(estimated_forward_flops=forward+residual,
             estimated_training_flops=3*(forward+residual),
             components_forward=dict(backbone_projections=projections,vocab_head=head,

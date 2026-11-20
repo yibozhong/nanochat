@@ -20,6 +20,7 @@ PRESETS={'arc':'vanilla', 'arc_muon':'vanilla', 'arc_muon_radius':'vanilla', 'va
          'ngpt_hbformer':'ngpt_hbformer', 'ngpt_hbformer_no_wn':'ngpt_hbformer',
          'ngpt_hbformer_velocity_ln':'ngpt_hbformer', 'ngpt_lookahead':'ngpt_lookahead', 'lookahead_only':'lookahead_only',
          'ngpt_lookahead_axis_write':'ngpt_lookahead', 'ngpt_lookahead_split_write':'ngpt_lookahead',
+         'ngpt_lookahead_split_learned_beta':'ngpt_lookahead',
          'ngpt_lookahead_geodesic_split':'ngpt_lookahead'}
 STEPS=305176
 
@@ -48,7 +49,8 @@ def main():
         parser.error('The lookahead start options require ngpt_lookahead')
     mode=PRESETS[preset]
     geodesic = preset == 'ngpt_lookahead_geodesic_split'
-    split_write = preset == 'ngpt_lookahead_split_write' or geodesic
+    learned_beta = preset == 'ngpt_lookahead_split_learned_beta'
+    split_write = preset == 'ngpt_lookahead_split_write' or geodesic or learned_beta
     axis_write = preset == 'ngpt_lookahead_axis_write' or split_write
     if axis_write and not args.hopper_only:
         parser.error('The axis-write experiment is scheduled on full H100/H200 only')
@@ -60,6 +62,8 @@ def main():
     ROOT=HOME_ROOT/f'residual-nonzero-{preset}-{budget}-20261117'
     if axis_write:
         tag = 'geodesic-split' if geodesic else 'split' if split_write else 'axis'
+        if learned_beta:
+            tag = 'split-learned-beta'
         ROOT=HOME_ROOT/f'residual-arc-{tag}-write-10b-20261119'
     if arc_optimizer:
         tag = 'arc' if preset == 'arc' else 'arc-muon-direction'
@@ -162,7 +166,7 @@ def main():
             source.update(reference_run=base['run_id'], reference_step_seconds=base['steady_step_seconds'],
                           reference_gpu=base['gpu'], timing_reference='Prior Arc Residual; matched control timed during preflight')
             if split_write:
-                control_tag = 'split' if geodesic else 'axis'
+                control_tag = 'split' if geodesic or learned_beta else 'axis'
                 paired = json.loads((HOME_ROOT/f'residual-arc-{control_tag}-write-10b-20261119-hopper-only/bundles/source.json').read_text())
                 assert paired['ngpt_velocity_mode'] == f'lookahead_{control_tag}_write' and paired['reference_run'] == base['run_id']
                 source.update(ngpt_velocity_mode=preset.removeprefix('ngpt_'), paired_run=paired['run_id'],
@@ -172,6 +176,11 @@ def main():
                     source.update(residual_write='split sphere log then sphere exp',
                                   velocity_observation='parallel transport of actual arc step and incoming velocity along selected arc',
                                   preflight='SLERP, oriented arc transport, degeneracies, gradients, KV cache, restart; paired 128 steps versus chord split')
+                if learned_beta:
+                    assert paired['momentum_beta_init'] == .5 and not paired['momentum_beta_trainable']
+                    source.update(momentum_beta_trainable=True, beta_parameterization='sigmoid',
+                                  learned_beta_sites=2*source['model']['depth']-1,
+                                  preflight='Fixed-beta init parity, beta gradients, causal KV, optimizer restart; paired 128 steps versus fixed-beta chord split')
             else:
                 archive = reference/'results'/f"train-{json.loads((reference/'state.json').read_text())['job']}-checkpoints.tar"
                 with tarfile.open(archive,'r:') as tar:

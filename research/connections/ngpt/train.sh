@@ -27,11 +27,12 @@ case "$TASK_MODE/$TASK_VELOCITY_MODE" in
         TASK_MOMENTUM_ARGS=(--velocity-init token_position --velocity-embedding-std .02 --momentum-beta-init .5 --lookahead-mu-init 0)
         TASK_GROUP=lookahead-only-10b
         ;;
-    ngpt_lookahead/lookahead_transport|ngpt_lookahead/lookahead_axis_write|ngpt_lookahead/lookahead_split_write|ngpt_lookahead/lookahead_geodesic_split)
+    ngpt_lookahead/lookahead_transport|ngpt_lookahead/lookahead_axis_write|ngpt_lookahead/lookahead_split_write|ngpt_lookahead/lookahead_split_learned_beta|ngpt_lookahead/lookahead_geodesic_split)
         TASK_MOMENTUM_ARGS=(--velocity-init token_position --velocity-embedding-std .02 --momentum-beta-init .5 --lookahead-mu-init 0)
         TASK_GROUP=ngpt-lookahead-5k
         if [[ "$TASK_VELOCITY_MODE" == lookahead_axis_write ]]; then TASK_GROUP=arc-residual-axis-write-10b; fi
         if [[ "$TASK_VELOCITY_MODE" == lookahead_split_write ]]; then TASK_GROUP=arc-residual-split-write-10b; fi
+        if [[ "$TASK_VELOCITY_MODE" == lookahead_split_learned_beta ]]; then TASK_GROUP=arc-residual-split-learned-beta-10b; fi
         if [[ "$TASK_VELOCITY_MODE" == lookahead_geodesic_split ]]; then TASK_GROUP=arc-residual-geodesic-split-10b; fi
         ;;
     vanilla/ambient|ngpt/ambient|ngpt_heavy_ball/ambient) ;;
@@ -129,16 +130,19 @@ if sys.argv[2]=='lookahead_only':
 elif sys.argv[2]=='ngpt_lookahead':
     extended = sys.argv[6]=='--extend-to-schedule'
     assert extended == ('continuation' in s)
-    axis_write = sys.argv[3] in ('lookahead_axis_write','lookahead_split_write','lookahead_geodesic_split')
+    learned_beta = sys.argv[3]=='lookahead_split_learned_beta'
+    axis_write = learned_beta or sys.argv[3] in ('lookahead_axis_write','lookahead_split_write','lookahead_geodesic_split')
     assert s['steps']==(305176 if extended or sys.argv[6]=='--fresh-10b' or axis_write else 5000) and not s['ngpt_weight_norm']
     if axis_write:
         assert not sys.argv[6] and s['reference_run']=='d4293868'
-        if sys.argv[3] in ('lookahead_split_write','lookahead_geodesic_split'):
+        if learned_beta or sys.argv[3] in ('lookahead_split_write','lookahead_geodesic_split'):
             assert s['parallel_step_init']==s['perpendicular_step_init']==s['ngpt_alpha_init']
             assert s['step_parameterization']=='independent_softplus' and 'kappa_init' not in s
         else:
             assert s['kappa_init']==0
-    assert s['lookahead_mu_init']==0 and s['momentum_beta_init']==.5 and not s['momentum_beta_trainable']
+    assert s['lookahead_mu_init']==0 and s['momentum_beta_init']==.5 and s['momentum_beta_trainable']==learned_beta
+    if learned_beta:
+        assert s['learned_beta_sites']==2*s['model']['depth']-1 and s['beta_parameterization']=='sigmoid'
     assert s['velocity_init']=='token_position' and s['velocity_embedding_std']==.02
 elif sys.argv[2]=='ngpt_hbformer':
     import math
@@ -227,7 +231,7 @@ if [[ "${TASK_MOMENTUM_ARGS[0]:-}" == --matrix-optimizer ]]; then
     WANDB_MODE=disabled timeout --kill-after=30s 2400 python research/connections/ngpt/arc_preflight.py
     echo "FORMAL_TRAINING_BEGIN arc_optimizer $TASK_RUN_ID"
 else
-    if [[ "$TASK_VELOCITY_MODE" == lookahead_axis_write || "$TASK_VELOCITY_MODE" == lookahead_split_write || "$TASK_VELOCITY_MODE" == lookahead_geodesic_split ]]; then
+    if [[ "$TASK_VELOCITY_MODE" == lookahead_axis_write || "$TASK_VELOCITY_MODE" == lookahead_split_write || "$TASK_VELOCITY_MODE" == lookahead_split_learned_beta || "$TASK_VELOCITY_MODE" == lookahead_geodesic_split ]]; then
         WANDB_MODE=disabled timeout --kill-after=30s 2400 python -m research.connections.ngpt.axis_write_preflight
     else
         WANDB_MODE=disabled python research/connections/ngpt/preflight.py

@@ -118,13 +118,13 @@ class NormalizedHeavyBall(HeavyBall):
         return ngpt_momentum_step(h, v, force, *self.coefficients(), self.rms_floor)
 
 
-def residual_update(config):
+def residual_update(config, *, velocity_consumed=True):
     if config.residual_mode == 'lookahead_only':
         from nanochat.lookahead import AdditiveLookaheadResidual
         return AdditiveLookaheadResidual(config)
     if config.residual_mode == 'ngpt_lookahead':
         from nanochat.lookahead import LookaheadResidual
-        return LookaheadResidual(config)
+        return LookaheadResidual(config, velocity_consumed=velocity_consumed)
     return {'heavy_ball': HeavyBall, 'heavy_ball_rms': HeavyBall, 'ngpt_heavy_ball': NormalizedHeavyBall,
             'ngpt_hbformer': NormalizedHeavyBall, 'ngpt': NormalizedResidual}[config.residual_mode](config)
 

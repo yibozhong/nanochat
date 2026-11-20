@@ -109,3 +109,9 @@ def test_active_write_cache_and_compiled_training(setting):
         return torch.cat([p.grad for n,p in model.named_parameters() if n.endswith(names)])
     expected = write_grads(eager)
     assert (write_grads(compiled)-expected).norm() <= .04*expected.norm()+1e-8
+    if setting.ngpt_velocity_mode == 'lookahead_split_learned_beta':
+        def beta_grads(model):
+            return torch.cat([p.grad for n,p in model.named_parameters() if n.endswith('.raw_beta')])
+        expected = beta_grads(eager)
+        assert expected.norm() > 0
+        assert (beta_grads(compiled)-expected).norm() <= .04*expected.norm()+1e-8

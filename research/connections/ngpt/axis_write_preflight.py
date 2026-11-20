@@ -138,7 +138,7 @@ def profile(root, mode, resume, measure_turns=False):
     else:
         assert not kappas
     steps_by_component = {}
-    if mode in ('lookahead_split_write','lookahead_geodesic_split'):
+    if mode in ('lookahead_split_write','lookahead_split_learned_beta','lookahead_geodesic_split'):
         init, = [e for e in events if e.get('step') == 0 and 'dev/ce' in e]
         for suffix in ('alpha_parallel','alpha_perp'):
             rates = {k:v for k,v in end.items() if k.endswith('/'+suffix)}
@@ -155,6 +155,12 @@ def profile(root, mode, resume, measure_turns=False):
                   peak_allocated_bytes=info['peak_allocated_bytes'], kappas=kappas)
     if steps_by_component:
         result['component_steps'] = steps_by_component
+    if mode == 'lookahead_split_learned_beta':
+        betas = {k:v for k,v in end.items() if k.endswith('/beta')}
+        assert set(betas) == {f'residual/sublayer_{i}/beta' for i in range(2*cfg['model']['depth']-1)}
+        assert all(init[k] == .5 and 0 < v < 1 for k,v in betas.items())
+        assert any(v != .5 for v in betas.values())
+        result['betas'] = betas
     if measure_turns:
         result['endpoint_turns'] = endpoint_turns(out/'checkpoints/latest.pt')
         torch.cuda.empty_cache()
@@ -167,9 +173,10 @@ def main():
     start = time.perf_counter()
     source = json.loads(Path('source.json').read_text())
     mode = source['ngpt_velocity_mode']
-    assert mode in ('lookahead_axis_write','lookahead_split_write','lookahead_geodesic_split') and source['hopper_only']
+    learned_beta = mode == 'lookahead_split_learned_beta'
+    assert (learned_beta or mode in ('lookahead_axis_write','lookahead_split_write','lookahead_geodesic_split')) and source['hopper_only']
     geodesic = mode == 'lookahead_geodesic_split'
-    split = mode == 'lookahead_split_write' or geodesic
+    split = mode == 'lookahead_split_write' or geodesic or learned_beta
     gpu = torch.cuda.get_device_name()
     assert torch.cuda.device_count() == 1 and torch.cuda.get_device_capability() == (9,0)
     assert any(h in gpu for h in ('H100','H200')) and 'MIG' not in gpu
@@ -179,6 +186,8 @@ def main():
         assert prior['complete'] and prior['source'] == source and prior['torch'] == torch.__version__
         return
     suite = 'tests/test_geodesic_write.py' if geodesic else 'tests/test_split_write.py' if split else 'tests/test_axis_write.py'
+    if learned_beta:
+        suite = 'tests/test_split_learned_beta.py'
     subprocess.run([sys.executable,'-m','pytest','-q',suite,
                     '--junitxml=results/axis-tests.xml'],check=True)
     suites = list(ElementTree.parse('results/axis-tests.xml').getroot().iter('testsuite'))
@@ -190,12 +199,13 @@ def main():
         alignment = measure_reference(source)
         torch.cuda.empty_cache()
     root = Path(tempfile.mkdtemp(prefix='axis-debug-', dir='..')).resolve()
-    control_mode = 'lookahead_split_write' if geodesic else 'lookahead_axis_write' if split else 'lookahead_transport'
+    control_mode = 'lookahead_split_write' if geodesic or learned_beta else 'lookahead_axis_write' if split else 'lookahead_transport'
     control = profile(root,control_mode,resume=False,measure_turns=geodesic)
     target = profile(root,mode,resume=True,measure_turns=geodesic)
     root.rmdir()
     assert {k for k in target['config'] if target['config'][k] != control['config'][k]} == {'ngpt_velocity_mode'}
-    assert target['parameters'] - control['parameters'] == (0 if split else len(alignment['layers']))
+    extra = source['learned_beta_sites'] if learned_beta else 0 if split else len(alignment['layers'])
+    assert target['parameters'] - control['parameters'] == extra
     if not geodesic:
         assert abs(target['initial_dev_ce'] - control['initial_dev_ce']) < 1e-4
     result = dict(complete=True, formal_training=False, source=source, gpu=gpu, torch=torch.__version__,

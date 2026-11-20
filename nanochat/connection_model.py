@@ -94,7 +94,7 @@ class ConnectionConfig:
             raise ValueError('Transported velocity LayerNorm requires the unit-step HBFormer')
         if self.residual_mode == 'lookahead_only' and self.ngpt_velocity_mode != 'ambient':
             raise ValueError('Additive lookahead uses Euclidean velocity')
-        spherical_lookahead = self.ngpt_velocity_mode in ('lookahead_transport', 'lookahead_axis_write', 'lookahead_split_write', 'lookahead_geodesic_split')
+        spherical_lookahead = self.split_chord_write or self.ngpt_velocity_mode in ('lookahead_transport', 'lookahead_axis_write', 'lookahead_geodesic_split')
         if (self.residual_mode == 'ngpt_lookahead') != spherical_lookahead:
             raise ValueError('Lookahead requires a transported velocity for branch reads')
         if not spherical_lookahead and self.ngpt_velocity_mode not in ('ambient', 'transport_rms', 'transport_layernorm'):
@@ -179,6 +179,10 @@ class ConnectionConfig:
             raise ValueError('Sinkhorn needs at least one iteration')
         if self.variant not in ('baseline', 'attnres', 'attnres_scale', 'skip_scale') and (self.streams != 4 or self.width % 128):
             raise ValueError('NVIDIA mHC kernels require four streams and width divisible by 128')
+
+    @property
+    def split_chord_write(self):
+        return self.ngpt_velocity_mode in ('lookahead_split_write', 'lookahead_split_learned_beta')
 
     @property
     def residual_mode(self):
@@ -272,7 +276,7 @@ class ConnectionBlock(Block):
         if config.residual_mode != 'vanilla':
             from nanochat.momentum import residual_update
             self.attn_residual = residual_update(config)
-            self.mlp_residual = residual_update(config)
+            self.mlp_residual = residual_update(config, velocity_consumed=index + 1 < config.depth)
         if self.variant == 'skip_scale':
             self.attn_skip_scale = nn.Parameter(torch.ones(config.width))
             self.mlp_skip_scale = nn.Parameter(torch.ones(config.width))
