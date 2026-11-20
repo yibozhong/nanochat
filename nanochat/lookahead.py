@@ -36,19 +36,25 @@ class LookaheadResidual(NormalizedResidual):
         return (h + offset) * torch.rsqrt(1 + offset.square().mean(-1, keepdim=True))
 
     def forward(self, h, v, force):
-        if ((self.gate_slopes is not None or self.beta_gate_slope is not None)
-                and h.is_cuda and h.dtype == v.dtype == torch.float32
-                and force.dtype in (torch.bfloat16, torch.float32) and h.size(-1) in (128, 512)):
-            from nanochat.chord_triton import fused_beta_write, fused_gated_write
-            if self.beta_gate_slope is not None:
-                params = torch.stack((self.alpha(), self.step_size(self.raw_parallel),
-                                      self.raw_beta[0], self.beta_gate_slope[0]))
-                return fused_beta_write(h, v, force, params, self.rms_floor)
-            beta = self.beta() if self.raw_beta is not None else self.raw.new_tensor(self.decay)
-            params = torch.stack((self.alpha(), self.step_size(self.raw_parallel), beta,
-                                  self.gate_slopes[0], self.gate_slopes[1]))
+        if (self.geodesic or not h.is_cuda or h.dtype != torch.float32 or v.dtype != torch.float32
+                or force.dtype not in (torch.bfloat16, torch.float32) or h.size(-1) not in (128, 512)):
+            return self.reference_write(h, v, force)
+        from nanochat.chord_triton import fused_axis_write, fused_beta_write, fused_gated_write, fused_split_write, fused_write
+        perp = self.alpha()
+        if self.kappa is not None:
+            params = torch.stack((perp, self.kappa[0]))
+            return fused_axis_write(h, v, force, params, self.decay, self.rms_floor)
+        if self.raw_parallel is None:
+            return fused_write(h, v, force, perp, self.decay, self.rms_floor)
+        parallel = self.step_size(self.raw_parallel)
+        if self.beta_gate_slope is not None:
+            params = torch.stack((perp, parallel, self.raw_beta[0], self.beta_gate_slope[0]))
+            return fused_beta_write(h, v, force, params, self.rms_floor)
+        beta = self.beta() if self.raw_beta is not None else self.raw.new_tensor(self.decay)
+        if self.gate_slopes is not None:
+            params = torch.stack((perp, parallel, beta, self.gate_slopes[0], self.gate_slopes[1]))
             return fused_gated_write(h, v, force, params, self.rms_floor)
-        return self.reference_write(h, v, force)
+        return fused_split_write(h, v, force, torch.stack((perp, parallel, beta)), self.rms_floor)
 
     def reference_write(self, h, v, force):
         if self.geodesic:

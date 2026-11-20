@@ -89,22 +89,18 @@ def test_active_write_cache_and_compiled_training(setting):
                 if setting.signed_chord_steps:
                     b.attn_residual.raw.sub_(3.)
                     b.mlp_residual.raw_parallel.sub_(3.)
-                if setting.token_chord_gates:
-                    for site in (b.attn_residual,b.mlp_residual):
-                        site.gate_slopes.copy_(site.raw.new_tensor([1.2,-.8]))
-                        # Use the unfused equations on the reference model.
-                        site.forward = site.reference_write
-                if setting.token_beta_gate:
-                    for site in (b.attn_residual, b.mlp_residual):
-                        if site.beta_gate_slope is not None:
-                            site.beta_gate_slope.fill_(1.2)
-                            site.forward = site.reference_write
+            for site in (b.attn_residual, b.mlp_residual):
+                if site.gate_slopes is not None:
+                    site.gate_slopes.copy_(site.raw.new_tensor([1.2,-.8]))
+                if site.beta_gate_slope is not None:
+                    site.beta_gate_slope.fill_(1.2)
+                site.forward = site.reference_write
     compiled.load_state_dict(eager.state_dict())
     x, y = inputs()
     with torch.no_grad():
         logits = eager(x)
         cache = KVCache(2,1,32,128,2,'cuda',torch.bfloat16)
-        chunked = torch.cat([eager(x[:,:7],kv_cache=cache),eager(x[:,7:],kv_cache=cache)], dim=1)
+        chunked = torch.cat([compiled(x[:,:7],kv_cache=cache),compiled(x[:,7:],kv_cache=cache)], dim=1)
         assert (logits-chunked).norm() < .025*logits.norm()
         other = x.clone()
         other[:,7:] = (other[:,7:]+1) % setting.vocab_size

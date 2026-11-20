@@ -1,6 +1,7 @@
 """Fused spherical residual write and VJP. One Triton program owns one token.
 
-MODE specializes the write at compile time: 0 isotropic, 1 token alpha gates, 2 token beta gate.
+Compile-time modes: 0 isotropic, 1 token alpha gates, 2 token beta gate,
+3 split steps with shared beta, 4 single step with a parallel-axis correction.
 """
 import torch
 import triton
@@ -53,7 +54,10 @@ def _write_values(h, v, force, P, BETA: tl.constexpr, FLOOR2: tl.constexpr,
         split = _split(delta, v, P, D)
         perp, par, along = split[0], split[1], split[2]
         mixed = (h + perp * delta) + ((par - perp) * along) * v
-    elif MODE == 2:
+    elif MODE == 4:
+        along = _mean(delta * v, D) / tl.maximum(_mean(v * v, D), 1e-12)
+        mixed = h + tl.load(P) * (delta + (tl.load(P + 1) * along) * v)
+    elif MODE == 2 or MODE == 3:
         perp, par = tl.load(P), tl.load(P + 1)
         along = _mean(delta * v, D) / tl.maximum(_mean(v * v, D), 1e-12)
         mixed = (h + perp * delta) + ((par - perp) * along) * v
@@ -70,7 +74,7 @@ def _write_values(h, v, force, P, BETA: tl.constexpr, FLOOR2: tl.constexpr,
     if MODE == 2:
         geometry = _history_alignment(new_h, carried, new_h - h, D)
         beta = tl.sigmoid(tl.load(P + 2) + tl.load(P + 3) * geometry[0])
-    elif MODE == 1:
+    elif MODE == 1 or MODE == 3:
         beta = tl.load(P + 2)
     else:
         beta = BETA
@@ -152,26 +156,38 @@ def _backward(H, V, F, P, DNH, DNV, DH, DV, DF, DP, ROWS, BETA: tl.constexpr,
         tl.store(DP + 2 * ROWS + row, tl.sum(d_velocity * (carried - (new_h - h)), 0))
         tl.store(DP + 3 * ROWS + row, D * d_logit_p * cosine)
         tl.store(DP + 4 * ROWS + row, D * d_logit_q * cosine)
-    elif MODE == 2:
-        perp, par = tl.load(P), tl.load(P + 1)
+    elif MODE == 2 or MODE == 3 or MODE == 4:
+        perp = tl.load(P)
+        if MODE == 4:
+            kappa = tl.load(P + 1)
+            gain = perp * kappa
+        else:
+            gain = tl.load(P + 1) - perp
         v2 = _mean(v * v, D)
         den = tl.maximum(v2, 1e-12)
         along = _mean(delta * v, D) / den
         dot_v = _mean(d_mixed * v, D)
-        d_dot = (par - perp) * dot_v / den
+        d_dot = gain * dot_v / den
         d_delta = perp * d_mixed + d_dot * v
-        d_v += ((par - perp) * along) * d_mixed + d_dot * (delta - tl.where(v2 >= 1e-12, 2. * along * v, 0.))
+        d_v += (gain * along) * d_mixed + d_dot * (delta - tl.where(v2 >= 1e-12, 2. * along * v, 0.))
         d_h += d_mixed - d_delta
         # Contract the normalization Jacobian with the step directions first.
         # For a radial write its angular derivative vanishes; projecting the
         # upstream adjoint first would sum large cancelling terms at zero chord.
         par_dir = along * v
-        perp_dir = delta - par_dir
+        if MODE == 4:
+            base_dir = delta + kappa * par_dir
+            axis_dir = perp * par_dir
+        else:
+            base_dir = delta - par_dir
+            axis_dir = par_dir
         if_unclamped = mixed_sq >= 1e-12
-        perp_dir -= tl.where(if_unclamped, _mean(perp_dir * new_h, D) * new_h, 0.)
-        par_dir -= tl.where(if_unclamped, _mean(par_dir * new_h, D) * new_h, 0.)
-        tl.store(DP + row, mixed_inv * tl.sum(d_new_h * perp_dir, 0))
-        tl.store(DP + ROWS + row, mixed_inv * tl.sum(d_new_h * par_dir, 0))
+        base_dir -= tl.where(if_unclamped, _mean(base_dir * new_h, D) * new_h, 0.)
+        axis_dir -= tl.where(if_unclamped, _mean(axis_dir * new_h, D) * new_h, 0.)
+        tl.store(DP + row, mixed_inv * tl.sum(d_new_h * base_dir, 0))
+        tl.store(DP + ROWS + row, mixed_inv * tl.sum(d_new_h * axis_dir, 0))
+        if MODE == 3:
+            tl.store(DP + 2 * ROWS + row, tl.sum(d_velocity * (carried - (new_h - h)), 0))
     else:
         alpha = tl.load(P)
         d_h += (1. - alpha) * d_mixed
@@ -189,7 +205,7 @@ class _ChordWrite(torch.autograd.Function):
     def forward(ctx, h, v, force, params, fixed_beta, floor, mode):
         width = h.size(-1)
         assert h.is_cuda and h.dtype == v.dtype == params.dtype == torch.float32
-        assert h.shape == v.shape == force.shape and params.numel() == (1, 5, 4)[mode]
+        assert h.shape == v.shape == force.shape and params.numel() == (1, 5, 4, 3, 2)[mode]
         assert width == triton.next_power_of_2(width) and force.dtype in (torch.bfloat16, torch.float32)
         new_h, new_v = torch.empty_like(h), torch.empty_like(v)
         rows = h.numel() // width
@@ -220,5 +236,15 @@ def fused_beta_write(h, v, force, params, floor):
 
 
 def fused_write(h, v, force, alpha, beta, floor):
-    """Original single-step-size Arc benchmark entry point."""
+    """Isotropic Chord write."""
     return _ChordWrite.apply(h.contiguous(), v.contiguous(), force.contiguous(), alpha, beta, floor, 0)
+
+
+def fused_split_write(h, v, force, params, floor):
+    """P holds the perpendicular and parallel step sizes and the effective scalar beta."""
+    return _ChordWrite.apply(h.contiguous(), v.contiguous(), force.contiguous(), params, 0., floor, 3)
+
+
+def fused_axis_write(h, v, force, params, beta, floor):
+    """P holds the isotropic step and kappa; beta is fixed."""
+    return _ChordWrite.apply(h.contiguous(), v.contiguous(), force.contiguous(), params, beta, floor, 4)

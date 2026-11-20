@@ -64,7 +64,7 @@ def local_checks():
                 site.raw.fill_(inverse_softplus(1. if case == 'antipodal' else .5))
         v = tangent_project(h, torch.randn_like(h))
         inputs = [x.requires_grad_() for x in (h, v, force)] + [site.raw]
-        reference = site(h, v, force)
+        reference = site.reference_write(h, v, force)
         candidate = fused_write(h, v, force, site.alpha(), site.decay, site.rms_floor)
         for exp, actual in zip(reference, candidate, strict=True):
             torch.testing.assert_close(actual, exp, atol=3e-5, rtol=3e-5)
@@ -107,7 +107,7 @@ def write_timings():
         return fused_write(h, v, force, site.alpha(), site.decay, site.rms_floor)
 
     timings = {}
-    for name, fn in [('compiled', site.forward), ('triton', candidate)]:
+    for name, fn in [('compiled', site.reference_write), ('triton', candidate)]:
         fn = torch.compile(fn, fullgraph=True, dynamic=False, options={'emulate_precision_casts': True})
         samples = []
         for i in range(30):
@@ -130,12 +130,24 @@ def benchmark(mode, data):
     config = ConnectionConfig(streams=1, residual_dynamics=MODES[mode],
                               residual_projection_init='normal', ngpt_force_rms_floor=1e-6)
     model = build_connection_model(config)
+    if mode == 'arc':
+        use_reference_writes(model)
     if mode == 'lookahead_split':
         model.prepare(compile_blocks=True, compile_lookahead_branches=True)
     else:
         model.prepare(compile_blocks=True)
         if mode == 'arc_triton':
             install(model)
+    return time_steps(model, data)
+
+
+def use_reference_writes(model):
+    for block in model.blocks:
+        for site in (block.attn_residual, block.mlp_residual):
+            site.forward = site.reference_write
+
+
+def time_steps(model, data):
     optimizer, wd = optimizer_for(model)
     durations, losses = [], []
     for i in range(WARMUP + MEASURE):
@@ -149,7 +161,7 @@ def benchmark(mode, data):
         if i >= WARMUP:
             durations.append(1000 * (time.perf_counter() - start))
         losses.append(loss)
-    return dict(config=asdict(config), parameters=sum(p.numel() for p in model.parameters()),
+    return dict(config=asdict(model.config), parameters=sum(p.numel() for p in model.parameters()),
                 median_ms=statistics.median(durations), milliseconds=durations,
                 peak_bytes=torch.cuda.max_memory_allocated(), initial_ce=losses[0], final_ce=losses[-1])
 
