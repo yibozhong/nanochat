@@ -66,6 +66,8 @@ def main():
                    help='Project backbone weights at initialization and after optimizer steps (HBFormer default)')
     p.add_argument('--compile-lookahead-branches', action='store_true',
                    help='Compile additive lookahead reads, backbone branches and residual writes separately')
+    p.add_argument('--chord-kernel', choices=('current', 'terminal', 'boundary', 'both'), default='current',
+                   help='Execution path for layer-beta Chord (terminal write, fused next read, or both)')
     p.add_argument('--lookahead-mu-init', type=float, default=0.)
     p.add_argument('--ngpt-alpha-init', type=float, default=.05)
     p.add_argument('--signed-chord-steps', action='store_true', help='Allow both split-chord step sizes to cross zero independently')
@@ -153,6 +155,10 @@ def main():
         if c.residual_mode != 'lookahead_only':
             p.error('--compile-lookahead-branches requires --residual-dynamics lookahead_only')
         prepare_options['compile_lookahead_branches'] = True
+    if a.chord_kernel != 'current':
+        if c.ngpt_velocity_mode != 'lookahead_split_learned_beta' or c.signed_chord_steps or c.token_chord_gates or c.token_beta_gate:
+            p.error('--chord-kernel requires positive split steps and layerwise learned beta')
+        prepare_options['chord_kernel'] = a.chord_kernel
     model=build_connection_model(c).prepare(**prepare_options)
     if a.matched_backbone_init:
         match_vanilla_initialization(model,a.seed)
@@ -220,6 +226,8 @@ def main():
         optimizer_groups=initial_groups,
         loss='full-token full-vocabulary CCE; no gradient filtering',
         references='research/connections/references.json')
+    if a.chord_kernel != 'current':
+        config['chord_kernel'] = a.chord_kernel
     from nanochat.connection_cost import model_cost
     cost=model_cost(c,batch=rows_per_step)
     config['compute_estimate']=cost
