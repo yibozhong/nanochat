@@ -93,8 +93,8 @@ def _write_values(h, v, force, P, BETA: tl.constexpr, FLOOR2: tl.constexpr,
 
 @triton.jit
 def _forward(H, V, F, P, NH, NV, BETA: tl.constexpr, FLOOR2: tl.constexpr,
-             D: tl.constexpr, MODE: tl.constexpr, Q=None, TERMINAL: tl.constexpr=False,
-             PREVIEW: tl.constexpr=False):
+             D: tl.constexpr, MODE: tl.constexpr, Q, TERMINAL: tl.constexpr,
+             PREVIEW: tl.constexpr):
     offsets = tl.program_id(0).to(tl.int64) * D + tl.arange(0, D)
     h, v = tl.load(H + offsets), tl.load(V + offsets)
     force = tl.load(F + offsets).to(tl.float32)
@@ -115,8 +115,8 @@ def _forward(H, V, F, P, NH, NV, BETA: tl.constexpr, FLOOR2: tl.constexpr,
 
 @triton.jit
 def _backward(H, V, F, P, DNH, DNV, DH, DV, DF, DP, ROWS, BETA: tl.constexpr,
-              FLOOR2: tl.constexpr, D: tl.constexpr, MODE: tl.constexpr, DQ=None, TERMINAL: tl.constexpr=False,
-              PREVIEW: tl.constexpr=False):
+              FLOOR2: tl.constexpr, D: tl.constexpr, MODE: tl.constexpr, DQ, TERMINAL: tl.constexpr,
+              PREVIEW: tl.constexpr):
     row = tl.program_id(0)
     offsets = row.to(tl.int64) * D + tl.arange(0, D)
     h, v = tl.load(H + offsets), tl.load(V + offsets)
@@ -246,7 +246,7 @@ class _ChordWrite(torch.autograd.Function):
         new_h, new_v = torch.empty_like(h), torch.empty_like(v)
         rows = h.numel() // width
         _forward[(rows,)](h, v, force, params, new_h, new_v, fixed_beta, floor**2,
-                          width, mode, num_warps=4, enable_fp_fusion=False)
+                          width, mode, params, False, False, num_warps=4, enable_fp_fusion=False)
         ctx.save_for_backward(h, v, force, params)
         ctx.options = fixed_beta, floor**2, width, mode
         return new_h, new_v
@@ -258,7 +258,7 @@ class _ChordWrite(torch.autograd.Function):
         dh, dv, df = torch.empty_like(h), torch.empty_like(v), torch.empty_like(force)
         partials = params.new_empty((params.numel(), rows))
         _backward[(rows,)](h, v, force, params, d_new_h.contiguous(), d_new_v.contiguous(),
-                           dh, dv, df, partials, rows, *ctx.options, num_warps=4, enable_fp_fusion=False)
+                           dh, dv, df, partials, rows, *ctx.options, params, False, False, num_warps=4, enable_fp_fusion=False)
         return dh, dv, df, partials.sum(1).reshape_as(params), None, None, None
 
 
@@ -268,8 +268,8 @@ class _SplitBoundary(torch.autograd.Function):
     def forward(ctx, h, v, force, params, floor, terminal):
         width = h.size(-1)
         nh = torch.empty_like(h)
-        nv = None if terminal else torch.empty_like(v)
-        q = None if terminal else torch.empty_like(h, dtype=torch.bfloat16)
+        nv = params if terminal else torch.empty_like(v)
+        q = params if terminal else torch.empty_like(h, dtype=torch.bfloat16)
         _forward[(h.numel() // width,)](h, v, force, params, nh, nv, 0., floor**2, width, 3,
                                         q, terminal, not terminal, num_warps=4, enable_fp_fusion=False)
         ctx.save_for_backward(h, v, force, params)
@@ -285,8 +285,8 @@ class _SplitBoundary(torch.autograd.Function):
         dh, dv, df = torch.empty_like(h), torch.empty_like(v), torch.empty_like(force)
         partials = params.new_empty((params.numel(), rows))
         dnh = grads[0].contiguous()
-        dnv = None if terminal else grads[1].contiguous()
-        dq = None if terminal else grads[2].contiguous()
+        dnv = params if terminal else grads[1].contiguous()
+        dq = params if terminal else grads[2].contiguous()
         _backward[(rows,)](h, v, force, params, dnh, dnv, dh, dv, df, partials, rows,
                            0., ctx.floor2, width, 3, dq, terminal, not terminal,
                            num_warps=4, enable_fp_fusion=False)
