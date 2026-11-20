@@ -5,6 +5,8 @@ TASK_RUN_ID="$1"
 TASK_MODE="$2"
 TASK_VELOCITY_MODE="${3:-ambient}"
 TASK_MOMENTUM_ARGS=()
+TASK_VARIANT=baseline
+TASK_STREAMS=1
 TASK_GROUP=residual-nonzero-10b-20261117
 case "$TASK_MODE/$TASK_VELOCITY_MODE" in
     ngpt_hbformer/transport_rms|ngpt_hbformer/transport_layernorm)
@@ -45,6 +47,12 @@ if [[ "${4:-}" == --extend-to-schedule || "${4:-}" == --fresh-10b ]]; then
     [[ "$#" == 4 && "$TASK_MODE" == ngpt_lookahead ]]
     TASK_GROUP=ngpt-lookahead-10b
     TASK_STEPS=$TASK_SCHEDULE_STEPS
+elif [[ "${4:-}" == --mhc || "${4:-}" == --attnres ]]; then
+    [[ "$#" == 4 && "$TASK_MODE/$TASK_VELOCITY_MODE" == vanilla/ambient ]]
+    TASK_VARIANT="${4#--}"
+    if [[ "$TASK_VARIANT" == mhc ]]; then TASK_STREAMS=4; fi
+    TASK_MOMENTUM_ARGS=(--matched-backbone-init)
+    TASK_GROUP=random-init-connections-10b
 elif [[ "${4:-}" == --arc || "${4:-}" == --arc-muon || "${4:-}" == --arc-muon-radius ]]; then
     [[ "$TASK_MODE/$TASK_VELOCITY_MODE" == vanilla/ambient ]]
     TASK_ARC_MU=1
@@ -127,6 +135,10 @@ assert s['velocity_embedding']==(sys.argv[2] in ('ngpt_heavy_ball','heavy_ball_r
 assert s['residual_projection_init']=='normal' and s['residual_projection_init_std']==.02
 assert s['ngpt_force_rms_floor']==1e-6
 assert s.get('ngpt_velocity_mode','ambient')==sys.argv[3]
+if sys.argv[6] in ('--mhc','--attnres') or 'connection_variant' in s:
+    assert sys.argv[6]=='--'+s['connection_variant'] and s['reference_run']=='2eac64db'
+    assert s['matched_backbone_init'] and s['streams']==(4 if s['connection_variant']=='mhc' else 1)
+    assert s['steps']==s['schedule_steps']==305176 and s['residual_dynamics']=='vanilla'
 signed_steps = sys.argv[6]=='--signed-chord-steps'
 assert signed_steps == s.get('signed_chord_steps',False)
 token_gates = sys.argv[6]=='--token-chord-gates'
@@ -248,12 +260,19 @@ uv pip freeze --python "$PWD/runtime/.venv/bin/python" > results/environment.txt
 cd nanochat-src
 cp ../source.json source.json
 ln -sfn ../results results
+TASK_MODEL_ARGS=(--variant "$TASK_VARIANT" --architecture vanilla --streams "$TASK_STREAMS"
+    --residual-dynamics "$TASK_MODE" --ngpt-velocity-mode "$TASK_VELOCITY_MODE" "${TASK_MOMENTUM_ARGS[@]}"
+    --ngpt-alpha-init .05 --ngpt-force-rms-floor 1e-6 --residual-projection-init normal --residual-projection-init-std .02
+    --attention-kernel original --attention-backend fa2 --schedule-steps "$TASK_SCHEDULE_STEPS" --microbatch 16 --seed 42
+    --no-activation-checkpoint --no-fused-connection-grad --data-dir ../data)
 # Validate this source once per GPU family, then start a fresh formal process.
 if [[ "${TASK_MOMENTUM_ARGS[0]:-}" == --matrix-optimizer ]]; then
     WANDB_MODE=disabled timeout --kill-after=30s 2400 python research/connections/ngpt/arc_preflight.py
     echo "FORMAL_TRAINING_BEGIN arc_optimizer $TASK_RUN_ID"
 else
-    if [[ "$TASK_VELOCITY_MODE" == lookahead_axis_write || "$TASK_VELOCITY_MODE" == lookahead_split_write || "$TASK_VELOCITY_MODE" == lookahead_split_learned_beta || "$TASK_VELOCITY_MODE" == lookahead_geodesic_split ]]; then
+    if [[ "$TASK_VARIANT" == mhc || "$TASK_VARIANT" == attnres ]]; then
+        WANDB_MODE=disabled timeout --kill-after=30s 2400 python -m research.connections.ngpt.connection_init_preflight "${TASK_MODEL_ARGS[@]}"
+    elif [[ "$TASK_VELOCITY_MODE" == lookahead_axis_write || "$TASK_VELOCITY_MODE" == lookahead_split_write || "$TASK_VELOCITY_MODE" == lookahead_split_learned_beta || "$TASK_VELOCITY_MODE" == lookahead_geodesic_split ]]; then
         if WANDB_MODE=disabled timeout --kill-after=30s 2400 python -m research.connections.ngpt.axis_write_preflight; then
             :
         else
@@ -271,11 +290,7 @@ else
     fi
     echo "FORMAL_TRAINING_BEGIN nonzero_residual $TASK_RUN_ID"
 fi
-python -m scripts.connection_train --variant baseline --architecture vanilla --streams 1 \
-    --residual-dynamics "$TASK_MODE" --ngpt-velocity-mode "$TASK_VELOCITY_MODE" "${TASK_MOMENTUM_ARGS[@]}" --ngpt-alpha-init .05 --ngpt-force-rms-floor 1e-6 \
-    --residual-projection-init normal --residual-projection-init-std .02 --attention-kernel original --attention-backend fa2 \
-    --steps "$TASK_STEPS" --schedule-steps "$TASK_SCHEDULE_STEPS" --microbatch 16 --seed 42 \
-    --no-activation-checkpoint --no-fused-connection-grad --evaluate-test \
-    --data-dir ../data --output-dir results/train --checkpoint-dir ../checkpoints \
+python -m scripts.connection_train "${TASK_MODEL_ARGS[@]}" --steps "$TASK_STEPS" --evaluate-test \
+    --output-dir results/train --checkpoint-dir ../checkpoints \
     --formal-training --wandb-group "$TASK_GROUP" --run-id "$TASK_RUN_ID" \
     --resume auto --segment-seconds 1800

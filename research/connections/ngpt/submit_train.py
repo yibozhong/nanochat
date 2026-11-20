@@ -15,7 +15,7 @@ from policy import RANK, require_gpus
 REPO=Path(__file__).resolve().parents[3]
 HOME_ROOT=Path('/home/yzhong239')
 ASSETS=HOME_ROOT/'nanochat-runtime-assets'
-PRESETS={'arc':'vanilla', 'arc_muon':'vanilla', 'arc_muon_radius':'vanilla', 'vanilla':'vanilla', 'ngpt':'ngpt', 'ngpt_momentum':'ngpt_heavy_ball',
+PRESETS={'mhc':'vanilla', 'attnres':'vanilla', 'arc':'vanilla', 'arc_muon':'vanilla', 'arc_muon_radius':'vanilla', 'vanilla':'vanilla', 'ngpt':'ngpt', 'ngpt_momentum':'ngpt_heavy_ball',
          'ngpt_momentum_transport_rms':'ngpt_heavy_ball', 'heavy_ball_rms':'heavy_ball_rms',
          'ngpt_hbformer':'ngpt_hbformer', 'ngpt_hbformer_no_wn':'ngpt_hbformer',
          'ngpt_hbformer_velocity_ln':'ngpt_hbformer', 'ngpt_lookahead':'ngpt_lookahead', 'lookahead_only':'lookahead_only',
@@ -72,6 +72,11 @@ def main():
     if args.fresh_10b:
         budget='10b-from-scratch'
     ROOT=HOME_ROOT/f'residual-nonzero-{preset}-{budget}-20261117'
+    connection = preset in ('mhc', 'attnres')
+    if connection and not args.hopper_only:
+        parser.error('The matched connection runs use full H100/H200')
+    if connection:
+        ROOT = HOME_ROOT/f'residual-nonzero-{preset}-{budget}-20261120'
     if axis_write:
         tag = 'geodesic-split' if geodesic else 'split' if split_write else 'axis'
         if learned_beta:
@@ -141,6 +146,23 @@ def main():
         if args.hopper_only:
             source.update(hopper_only=True, scheduling='Full H100/H200 only at startup and on resume')
             del source['compatible_fallback_backend']
+        if connection:
+            base = json.loads((HOME_ROOT/'residual-nonzero-vanilla-10b-20261117/summary.json').read_text())
+            assert base['complete'] and base['run_id']=='2eac64db' and base['steps']==steps
+            for key in ('model','steps','seed','microbatch','batch_tokens','attention_backend','dataset_revision',
+                        'data_uri','residual_projection_init','residual_projection_init_std','output_projection_actual_std'):
+                assert source[key]==base['source'][key], key
+            if preset=='mhc':
+                previous=json.loads((REPO/'research/connections/pretrain/results.json').read_text())['trials']['mhc']
+            else:
+                previous=json.loads((REPO/'research/connections/attnres/validation.json').read_text())['restart']
+            source.update(connection_variant=preset, streams=4 if preset=='mhc' else 1,
+                          matched_backbone_init=True, schedule_steps=STEPS, reference_run=base['run_id'],
+                          preflight='Seed-matched backbone, finite gradients and 32 real FA2 steps with a step-12 restart',
+                          reference_gpu=previous['gpu'], reference_step_seconds=previous['steady_step_seconds'],
+                          timing_reference='Historical H200 zero-init timing with its original attention backend')
+            (ROOT/'comparison-reference.json').write_text(json.dumps(dict(run_id=base['run_id'],
+                dev_ce=base['final_dev_ce'], dev_tokens=base['dev_tokens'], step=steps), indent=2)+'\n')
         if arc_optimizer:
             base = json.loads((HOME_ROOT/'residual-nonzero-vanilla-10b-20261117/summary.json').read_text())
             assert base['complete'] and base['run_id'] == '2eac64db' and base['steps'] == steps
@@ -342,6 +364,8 @@ def main():
         if args.token_beta_gate:
             job_args+=' --token-beta-gate'
             batch_name+='-token-beta-gate'
+        if connection:
+            job_args += ' ambient --' + preset
         if arc_optimizer:
             job_args += ' ambient --' + preset.replace('_', '-')
         if args.no_arc_lookahead:
@@ -398,7 +422,7 @@ def main():
         if axis_write:
             assert ('axis-reference.tar' in ad['TransferInput']) == (not split_write)
             assert 'parent-' not in ad['TransferInput'] and 'continuation' not in source
-        if mode == 'lookahead_only' or arc_optimizer:
+        if mode == 'lookahead_only' or arc_optimizer or connection:
             assert not any(name in ad['TransferInput'] for name in ('parent-', 'checkpoints.tar', 'results.tar'))
         if args.fresh_10b:
             assert 'lookahead-validation.json' in ad['TransferInput'] and 'continuation' not in source

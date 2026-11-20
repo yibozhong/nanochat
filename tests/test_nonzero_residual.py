@@ -99,3 +99,38 @@ def test_legacy_initialization_defaults():
                    {'residual_projection_init':'normal', 'architecture':'native'}):
         with pytest.raises(ValueError):
             ConnectionConfig(**fields)
+
+
+@pytest.mark.parametrize('variant', ['mhc', 'attnres'])
+def test_matched_connection_initialization(variant):
+    from nanochat.connection_experiment import match_vanilla_initialization
+    from nanochat.packed_training import seed_all
+
+    config = ConnectionConfig(variant=variant, streams=4 if variant == 'mhc' else 1,
+                              residual_projection_init='normal')
+    model = make(config, perturb=False)
+    match_vanilla_initialization(model, 42)
+    vanilla = replace(config, variant='baseline', streams=1)
+    chord = replace(vanilla, residual_dynamics='ngpt_lookahead', velocity_init='token_position',
+                    ngpt_velocity_mode='lookahead_split_learned_beta')
+    seed_all(42)
+    base = make(vanilla, perturb=False)
+    seed_all(42)
+    chord_weights = dict(make(chord, perturb=False).named_parameters())
+    actual = dict(model.named_parameters())
+    for name, weight in base.named_parameters():
+        assert torch.equal(actual[name], weight) and torch.equal(chord_weights[name], weight), name
+    del base, chord_weights
+    for block in model.blocks:
+        for weight in (block.attn.c_proj.weight, block.mlp.c_proj.weight):
+            assert .0049 < weight.std().item() < .0051
+    x = torch.randint(0, config.vocab_size, (1, 128), device='cuda')
+    loss = model(x, (x + 3) % config.vocab_size, dense=True)
+    loss.backward()
+    assert torch.isfinite(loss)
+    for name, weight in model.named_parameters():
+        assert weight.grad is not None and torch.isfinite(weight.grad).all(), name
+    for block in model.blocks:
+        for weight in (block.attn.c_q.weight, block.mlp.c_fc.weight):
+            assert weight.grad.abs().sum() > 0
+    assert ConnectionConfig.from_checkpoint(asdict(config)) == config

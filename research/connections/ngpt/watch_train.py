@@ -50,7 +50,7 @@ def collect(root,training):
             save(root/filename,value)
     with tarfile.open(archive) as tar:
         for member in tar.getmembers():
-            if member.name.startswith(('results/ngpt-sm', 'results/arc-sm')) and member.name.endswith('.json'):
+            if member.name.startswith(('results/ngpt-sm', 'results/arc-sm', 'results/connection-init-sm')) and member.name.endswith('.json'):
                 assert member.isfile() and member.size<4*1024*1024
                 gate=json.load(tar.extractfile(member))
                 assert gate['complete'] and gate['source']==training['source']
