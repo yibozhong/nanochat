@@ -64,6 +64,10 @@ elif [[ "${4:-}" == --arc || "${4:-}" == --arc-muon || "${4:-}" == --arc-muon-ra
         TASK_GROUP=arc-muon-direction-radius-step-10b
         if [[ "$TASK_ARC_MU" == 0 ]]; then TASK_GROUP=arc-muon-direction-radius-step-mu0-10b; fi
     fi
+elif [[ "${4:-}" == --token-chord-gates ]]; then
+    [[ "$#" == 4 && "$TASK_VELOCITY_MODE" == lookahead_split_learned_beta ]]
+    TASK_MOMENTUM_ARGS+=(--token-chord-gates)
+    TASK_GROUP=chord-token-alpha-gates-10b
 elif [[ "${4:-}" == --signed-chord-steps ]]; then
     [[ "$#" == 4 && "$TASK_VELOCITY_MODE" == lookahead_split_learned_beta ]]
     TASK_MOMENTUM_ARGS+=(--signed-chord-steps)
@@ -121,6 +125,10 @@ assert s['ngpt_force_rms_floor']==1e-6
 assert s.get('ngpt_velocity_mode','ambient')==sys.argv[3]
 signed_steps = sys.argv[6]=='--signed-chord-steps'
 assert signed_steps == s.get('signed_chord_steps',False)
+token_gates = sys.argv[6]=='--token-chord-gates'
+assert token_gates == s.get('token_chord_gates',False)
+if token_gates:
+    assert not signed_steps and s['paired_run']=='6721b437' and s['residual_kernel']=='fused_chord_triton'
 assert (sys.argv[6] in ('--arc','--arc-muon','--arc-muon-radius')) == (s.get('matrix_optimizer')=='arc')
 assert (sys.argv[6] in ('--arc-muon','--arc-muon-radius')) == (s.get('arc_direction')=='muon')
 assert (sys.argv[6]=='--arc-muon-radius') == (s.get('arc_step_scale')=='radius')
@@ -140,7 +148,8 @@ elif sys.argv[2]=='ngpt_lookahead':
     axis_write = learned_beta or sys.argv[3] in ('lookahead_axis_write','lookahead_split_write','lookahead_geodesic_split')
     assert s['steps']==(305176 if extended or sys.argv[6]=='--fresh-10b' or axis_write else 5000) and not s['ngpt_weight_norm']
     if axis_write:
-        assert (not sys.argv[6] or signed_steps and learned_beta) and s['reference_run']=='d4293868'
+        assert not sys.argv[6] or (signed_steps or token_gates) and learned_beta
+        assert s['reference_run']==('6721b437' if token_gates else 'd4293868')
         if learned_beta or sys.argv[3] in ('lookahead_split_write','lookahead_geodesic_split'):
             assert s['parallel_step_init']==s['perpendicular_step_init']==s['ngpt_alpha_init']
             expected = 'independent_softplus_with_linear_lower_extension' if signed_steps else 'independent_softplus'
@@ -239,7 +248,18 @@ if [[ "${TASK_MOMENTUM_ARGS[0]:-}" == --matrix-optimizer ]]; then
     echo "FORMAL_TRAINING_BEGIN arc_optimizer $TASK_RUN_ID"
 else
     if [[ "$TASK_VELOCITY_MODE" == lookahead_axis_write || "$TASK_VELOCITY_MODE" == lookahead_split_write || "$TASK_VELOCITY_MODE" == lookahead_split_learned_beta || "$TASK_VELOCITY_MODE" == lookahead_geodesic_split ]]; then
-        WANDB_MODE=disabled timeout --kill-after=30s 2400 python -m research.connections.ngpt.axis_write_preflight
+        if WANDB_MODE=disabled timeout --kill-after=30s 2400 python -m research.connections.ngpt.axis_write_preflight; then
+            :
+        else
+            gate_status=$?
+            [[ "${4:-}" == --token-chord-gates ]] || exit "$gate_status"
+            echo "PREFLIGHT_NEEDS_REPAIR status=$gate_status; retaining allocation for manual retry" >&2
+            deadline=$((SECONDS+900))
+            while [[ ! -e results/retry-preflight && $SECONDS -lt $deadline ]]; do sleep 2; done
+            [[ -e results/retry-preflight ]] || exit "$gate_status"
+            rm results/retry-preflight
+            WANDB_MODE=disabled timeout --kill-after=30s 2400 python -m research.connections.ngpt.axis_write_preflight
+        fi
     else
         WANDB_MODE=disabled python research/connections/ngpt/preflight.py
     fi

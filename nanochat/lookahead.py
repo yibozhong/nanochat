@@ -18,6 +18,7 @@ class LookaheadResidual(NormalizedResidual):
         self.raw_parallel = (nn.Parameter(self.raw.detach().clone())
                              if self.geodesic or config.split_chord_write else None)
         self.decay = config.momentum_beta_init
+        self.gate_slopes = nn.Parameter(torch.zeros(2, dtype=torch.float32)) if config.token_chord_gates else None
         self.raw_beta = None
         if config.ngpt_velocity_mode == 'lookahead_split_learned_beta' and velocity_consumed:
             logit = math.log(self.decay / (1 - self.decay))
@@ -32,6 +33,16 @@ class LookaheadResidual(NormalizedResidual):
         return (h + offset) * torch.rsqrt(1 + offset.square().mean(-1, keepdim=True))
 
     def forward(self, h, v, force):
+        if (self.gate_slopes is not None and h.is_cuda and h.dtype == v.dtype == torch.float32
+                and force.dtype in (torch.bfloat16, torch.float32) and h.size(-1) in (128, 512)):
+            from nanochat.chord_triton import fused_gated_write
+            beta = self.beta() if self.raw_beta is not None else self.raw.new_tensor(self.decay)
+            params = torch.stack((self.alpha(), self.step_size(self.raw_parallel), beta,
+                                  self.gate_slopes[0], self.gate_slopes[1]))
+            return fused_gated_write(h, v, force, params, self.rms_floor)
+        return self.reference_write(h, v, force)
+
+    def reference_write(self, h, v, force):
         if self.geodesic:
             return geodesic_split_write(h, v, force, self.alpha(), self.step_size(self.raw_parallel),
                                         self.decay, self.rms_floor)
@@ -42,7 +53,9 @@ class LookaheadResidual(NormalizedResidual):
             delta = normalize_residual(force, self.rms_floor) - h
             # v is tangent at h. Use an RMS-squared floor to keep the write
             # and its derivatives finite even for an exactly zero velocity.
-            along = (delta * v).mean(-1, keepdim=True) / v.square().mean(-1, keepdim=True).clamp_min(1e-12)
+            dot = (delta * v).mean(-1, keepdim=True)
+            v2 = v.square().mean(-1, keepdim=True).clamp_min(1e-12)
+            along = dot / v2
             if self.raw_parallel is None:
                 new_h = normalize_residual(h + self.alpha() * (delta + (self.kappa[0] * along) * v))
             else:
@@ -50,6 +63,11 @@ class LookaheadResidual(NormalizedResidual):
                 # reproduce the original Arc write without roundoff in delta-P.
                 perp = self.alpha()
                 parallel = self.step_size(self.raw_parallel)
+                if self.gate_slopes is not None:
+                    inv_delta = delta.square().mean(-1, keepdim=True).clamp_min(1e-12).rsqrt()
+                    cosine = dot * (v2.rsqrt() * inv_delta)
+                    perp = perp * (2 * torch.sigmoid(self.gate_slopes[0] * cosine))
+                    parallel = parallel * (2 * torch.sigmoid(self.gate_slopes[1] * cosine))
                 new_h = normalize_residual((h + perp * delta) + ((parallel - perp) * along) * v)
         # The Householder reflector with normal h + new_h gives short-arc
         # parallel transport. At opposite poles the two tangent planes coincide.
@@ -120,6 +138,10 @@ class LookaheadModel(MomentumModel):
             if sites[0].raw_beta is not None:
                 betas = torch.stack([s.beta() for s in sites if s.raw_beta is not None]).tolist()
                 metrics.update({f'residual/sublayer_{i}/beta': value for i,value in enumerate(betas)})
+            if sites[0].gate_slopes is not None:
+                slopes = torch.stack([s.gate_slopes for s in sites]).tolist()
+                metrics.update({f'residual/sublayer_{i}/gate_{axis}_slope': value
+                                for i,row in enumerate(slopes) for axis,value in zip(('perp','parallel'),row)})
             return metrics
         values = torch.stack([torch.stack((site.alpha(), site.mu[0])) for site in sites]).tolist()
         metrics = {f'residual/sublayer_{i}/{key}': value

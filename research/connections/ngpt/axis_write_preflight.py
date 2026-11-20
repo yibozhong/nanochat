@@ -104,7 +104,7 @@ def endpoint_turns(checkpoint):
         for i,(a,b) in enumerate(rows)])
 
 
-def profile(root, mode, resume, measure_turns=False, signed_steps=False):
+def profile(root, mode, resume, measure_turns=False, signed_steps=False, token_gates=False):
     steps = 128
     out = root/mode
     cmd = [sys.executable, '-m', 'scripts.connection_train', '--variant', 'baseline', '--streams', '1',
@@ -117,6 +117,8 @@ def profile(root, mode, resume, measure_turns=False, signed_steps=False):
            '--data-dir','../data','--output-dir',str(out),'--run-id','axis-local-debug']
     if signed_steps:
         cmd.append('--signed-chord-steps')
+    if token_gates:
+        cmd.append('--token-chord-gates')
     if resume:
         part = subprocess.run([*cmd,'--segment-steps','32'])
         assert part.returncode == 85, part.returncode
@@ -128,6 +130,7 @@ def profile(root, mode, resume, measure_turns=False, signed_steps=False):
     assert info['complete'] and info['steps'] == steps and info['dev_tokens'] == 131072
     assert cfg['model']['ngpt_velocity_mode'] == mode and cfg['logging_backend'] == 'local'
     assert cfg['model']['signed_chord_steps'] == signed_steps
+    assert cfg['model']['token_chord_gates'] == token_gates
     assert math.isfinite(info['final_dev_ce']) and info['final_dev_ce'] < info['initial_dev_ce']
     rows = [json.loads(s) for s in (out/'steps.jsonl').read_text().splitlines()]
     assert [r['step'] for r in rows] == list(range(1,steps+1))
@@ -169,6 +172,13 @@ def profile(root, mode, resume, measure_turns=False, signed_steps=False):
     if measure_turns:
         result['endpoint_turns'] = endpoint_turns(out/'checkpoints/latest.pt')
         torch.cuda.empty_cache()
+    if token_gates:
+        slopes = {k:v for k,v in end.items() if k.endswith(('/gate_perp_slope','/gate_parallel_slope'))}
+        assert len(slopes) == 4*cfg['model']['depth']
+        assert all(init[k] == 0 and math.isfinite(v) for k,v in slopes.items())
+        for axis in ('perp','parallel'):
+            assert any(v != 0 for k,v in slopes.items() if k.endswith(f'/gate_{axis}_slope'))
+        result['gate_slopes'] = slopes
     print('AXIS_WRITE_CONTROL',mode,json.dumps(result),flush=True)
     shutil.rmtree(out)
     return result
@@ -180,6 +190,7 @@ def main():
     mode = source['ngpt_velocity_mode']
     learned_beta = mode == 'lookahead_split_learned_beta'
     signed_steps = source.get('signed_chord_steps',False)
+    token_gates = source.get('token_chord_gates',False)
     assert (learned_beta or mode in ('lookahead_axis_write','lookahead_split_write','lookahead_geodesic_split')) and source['hopper_only']
     geodesic = mode == 'lookahead_geodesic_split'
     split = mode == 'lookahead_split_write' or geodesic or learned_beta
@@ -194,11 +205,13 @@ def main():
     suite = 'tests/test_geodesic_write.py' if geodesic else 'tests/test_split_write.py' if split else 'tests/test_axis_write.py'
     if learned_beta:
         suite = 'tests/test_signed_chord.py' if signed_steps else 'tests/test_split_learned_beta.py'
+    if token_gates:
+        suite = 'tests/test_token_chord.py'
     subprocess.run([sys.executable,'-m','pytest','-q',suite,
                     '--junitxml=results/axis-tests.xml'],check=True)
     suites = list(ElementTree.parse('results/axis-tests.xml').getroot().iter('testsuite'))
     tests = sum(int(s.get('tests')) for s in suites)
-    assert tests == (7 if geodesic else 4 if split else 5)
+    assert tests == (7 if geodesic else 6 if token_gates else 4 if split else 5)
     assert all(int(s.get(k,0)) == 0 for s in suites for k in ('errors','failures','skipped'))
     alignment = None
     if not split:
@@ -206,14 +219,16 @@ def main():
         torch.cuda.empty_cache()
     root = Path(tempfile.mkdtemp(prefix='axis-debug-', dir='..')).resolve()
     control_mode = 'lookahead_split_write' if geodesic or learned_beta else 'lookahead_axis_write' if split else 'lookahead_transport'
-    if signed_steps:
+    if signed_steps or token_gates:
         control_mode = mode
     control = profile(root,control_mode,resume=False,measure_turns=geodesic)
-    target = profile(root,mode,resume=True,measure_turns=geodesic,signed_steps=signed_steps)
+    target = profile(root,mode,resume=True,measure_turns=geodesic,signed_steps=signed_steps,token_gates=token_gates)
     root.rmdir()
     changed = {k for k in target['config'] if target['config'][k] != control['config'][k]}
-    assert changed == ({'signed_chord_steps'} if signed_steps else {'ngpt_velocity_mode'})
+    assert changed == ({'token_chord_gates'} if token_gates else {'signed_chord_steps'} if signed_steps else {'ngpt_velocity_mode'})
     extra = source['learned_beta_sites'] if learned_beta and not signed_steps else 0 if split else len(alignment['layers'])
+    if token_gates:
+        extra = 4*source['model']['depth']
     assert target['parameters'] - control['parameters'] == extra
     if not geodesic:
         assert abs(target['initial_dev_ce'] - control['initial_dev_ce']) < 1e-4

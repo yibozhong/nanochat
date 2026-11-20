@@ -56,6 +56,10 @@ def model_cost(config, batch=1, activation_bytes=2, feedback_passes=None):
         if c.ngpt_velocity_mode == 'lookahead_split_learned_beta':
             gain_parameters += sites - 1  # Final FFN velocity does not reach the logits.
             residual += sites - 1  # 1 - beta, shared across tokens; sigmoid excluded.
+        if c.token_chord_gates:
+            gain_parameters += 2*sites
+            # RMS(delta), cosine and per-token gate scalings; reuse dot(delta,v) and RMS(v).
+            residual += batch*t*sites*(2*d+9) - sites
         return dict(estimated_forward_flops=forward+residual,
             estimated_training_flops=3*(forward+residual),
             components_forward=dict(backbone_projections=projections,vocab_head=head,
