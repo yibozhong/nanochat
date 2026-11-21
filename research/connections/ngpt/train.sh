@@ -88,7 +88,10 @@ elif [[ "${4:-}" == --chord-velocity-geometry=project_only || "${4:-}" == --chor
         if [[ "${6:-}" == --fuse-chord-read-norm ]]; then
             TASK_MOMENTUM_ARGS+=(--fuse-chord-read-norm --no-recompute-chord-force)
             TASK_GROUP=chord-fused-read-token-only-bf16-10b
-            if [[ "$#" == 7 && "$7" == --channel-chord-coefficients ]]; then
+            if [[ "$#" == 7 && "$7" == --chord-velocity-write ]]; then
+                TASK_MOMENTUM_ARGS+=("$7")
+                TASK_GROUP=chord-scalar-rho-v-10b
+            elif [[ "$#" == 7 && "$7" == --channel-chord-coefficients ]]; then
                 TASK_MOMENTUM_ARGS+=("$7")
                 TASK_GROUP=chord-channel-alpha-beta-10b
             else
@@ -182,8 +185,12 @@ if token_only:
     assert geometry=='project_only' and s['velocity_init']=='token' and s['chord_state_dtype']=='bfloat16'
 channel_coefficients = sys.argv[10]=='--channel-chord-coefficients'
 assert channel_coefficients == s.get('channel_chord_coefficients', False)
+velocity_write = sys.argv[10]=='--chord-velocity-write'
+assert velocity_write == s.get('chord_velocity_write', False)
+if velocity_write:
+    assert not channel_coefficients and s['rho_init']==0 and s['rho_parameterization']=='tanh'
 chord_control = 'af1c3266' if token_only else '6721b437'
-if channel_coefficients:
+if channel_coefficients or velocity_write:
     assert token_only and s['fuse_chord_read_norm']
     chord_control = 'a7163d23'
 if token_gates or token_beta_gate or geometry:

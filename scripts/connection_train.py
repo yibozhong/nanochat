@@ -78,6 +78,7 @@ def main():
     p.add_argument('--token-chord-gates', action='store_true', help='Modulate positive split steps by independent per-token cosine gates')
     p.add_argument('--chord-velocity-geometry', choices=('parallel_transport','project_only','ambient'),
                    default='parallel_transport', help='How Chord carries velocity to the next sublayer')
+    p.add_argument('--chord-velocity-write', action='store_true', help='Add a learned scalar rho times the old velocity before Chord retraction')
     p.add_argument('--channel-chord-coefficients', action='store_true', help='Learn both Chord step sizes and velocity decay independently per channel')
     p.add_argument('--token-beta-gate', action='store_true', help='Gate velocity decay by per-token tangent alignment')
     p.add_argument('--residual-projection-init', choices=('zero','normal'), default=None)
@@ -145,7 +146,7 @@ def main():
                        momentum_eta_init=a.momentum_eta_init, ngpt_force_rms_floor=a.ngpt_force_rms_floor,
                        lookahead_mu_init=a.lookahead_mu_init, ngpt_alpha_init=a.ngpt_alpha_init, ngpt_weight_norm=a.ngpt_weight_norm,
                        ngpt_velocity_mode=a.ngpt_velocity_mode, signed_chord_steps=a.signed_chord_steps, token_chord_gates=a.token_chord_gates,
-                       channel_chord_coefficients=a.channel_chord_coefficients, token_beta_gate=a.token_beta_gate, chord_velocity_geometry=a.chord_velocity_geometry, chord_state_dtype=a.chord_state_dtype,
+                       chord_velocity_write=a.chord_velocity_write, channel_chord_coefficients=a.channel_chord_coefficients, token_beta_gate=a.token_beta_gate, chord_velocity_geometry=a.chord_velocity_geometry, chord_state_dtype=a.chord_state_dtype,
                        fuse_chord_read_norm=a.fuse_chord_read_norm, recompute_chord_force=a.recompute_chord_force,
                        momentum_velocity_rms_floor=a.momentum_velocity_rms_floor,
                        residual_projection_init=a.residual_projection_init,
@@ -257,6 +258,7 @@ def main():
                     ('-learned-beta' if c.ngpt_velocity_mode == 'lookahead_split_learned_beta' else '')+
                     ('-signed-steps' if c.signed_chord_steps else '')+
                     ('-token-alpha-gates' if c.token_chord_gates else '')+
+                    ('-rho-v' if c.chord_velocity_write else '')+
                     ('-channel-alpha-beta' if c.channel_chord_coefficients else '')+
                     ('-token-beta-gate' if c.token_beta_gate else '')+
                     (f'-velocity-{c.chord_velocity_geometry}' if c.chord_velocity_geometry != 'parallel_transport' else '')+

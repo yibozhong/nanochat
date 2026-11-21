@@ -37,6 +37,8 @@ v_next = P(h_next, beta*v + (1 - beta)*chord)
 
 实验选项 `--channel-chord-coefficients` 将两个正步长和 β 各扩为宽度 d 的向量，所有通道均按标量版初值初始化。先沿历史速度分解建议位移，再逐通道缩放两个分量；速度混合也逐通道计算，最后整体投影到终点切平面。前瞻系数 mu 仍是子层标量。
 
+实验选项 `--chord-velocity-write` 在归一化前把 `rho * v` 加入 hidden 的建议位移。rho 由每个子层的一个标量经 tanh 得到，初值为 0，此时复现默认写回。mu 控制前瞻读取距离，rho 控制旧速度对本次位移的直接贡献。下一子层的速度仍由实际弦与旧速度混合后做终点切向投影。8 层模型增加 16 个参数。
+
 ## 迁移校验与训练参照
 
 对同一批输入，逐子层检查 `mean(h*h) ≈ 1` 和 `mean(h*v) ≈ 0`。把两个步长设为相同值时，写回应化简为 `N(h + alpha*delta)`。对照实现还覆盖非零前瞻、互异步长、速度为零时的梯度，以及整段推理与 KV cache 分段推理的一致性。[PyTorch 更新](../../../nanochat/lookahead.py) · [Triton 前反向](../../../nanochat/chord_triton.py) · [几何与梯度测试](../../../tests/test_chord_velocity_geometry.py) · [分支接线与优化器](../../../nanochat/connection_model.py)

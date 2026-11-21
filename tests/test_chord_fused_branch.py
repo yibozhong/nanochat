@@ -69,6 +69,9 @@ def test_fused_model(setting, remat):
         for block in ref.blocks:
             block.attn_residual.raw_parallel.add_(.65)
             block.mlp_residual.raw_parallel.sub_(.5)
+            if setting.chord_velocity_write:
+                block.attn_residual.raw_rho.fill_(.3)
+                block.mlp_residual.raw_rho.fill_(-.25)
     target.load_state_dict(ref.state_dict(), strict=True)
     ids, labels = inputs()
     h, v = target.initial_state(target.wte(ids), ids)

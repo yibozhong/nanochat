@@ -107,7 +107,7 @@ def endpoint_turns(checkpoint):
 
 def profile(root, mode, resume, measure_turns=False, signed_steps=False, token_gates=False, token_beta_gate=False,
             geometry='parallel_transport', velocity_init='token_position', state_dtype='float32',
-            fused_read=False, remat=False, channel_coefficients=False):
+            fused_read=False, remat=False, channel_coefficients=False, velocity_write=False):
     steps = 128
     out = root/mode
     cmd = [sys.executable, '-m', 'scripts.connection_train', '--variant', 'baseline', '--streams', '1',
@@ -119,6 +119,8 @@ def profile(root, mode, resume, measure_turns=False, signed_steps=False, token_g
            '--steps',str(steps),'--schedule-steps','305176','--microbatch','16','--seed','42',
            '--data-dir','../data','--output-dir',str(out),'--run-id','axis-local-debug']
     cmd.extend(['--chord-velocity-geometry', geometry, '--chord-state-dtype', state_dtype])
+    if velocity_write:
+        cmd.append('--chord-velocity-write')
     if channel_coefficients:
         cmd.append('--channel-chord-coefficients')
     if fused_read:
@@ -145,6 +147,7 @@ def profile(root, mode, resume, measure_turns=False, signed_steps=False, token_g
     assert cfg['model']['chord_state_dtype'] == state_dtype
     assert cfg['model']['fuse_chord_read_norm'] == fused_read and cfg['model']['recompute_chord_force'] == remat
     assert cfg['model']['channel_chord_coefficients'] == channel_coefficients
+    assert cfg['model']['chord_velocity_write'] == velocity_write
     assert cfg['model']['signed_chord_steps'] == signed_steps
     assert cfg['model']['token_chord_gates'] == token_gates
     assert cfg['model']['token_beta_gate'] == token_beta_gate
@@ -193,6 +196,12 @@ def profile(root, mode, resume, measure_turns=False, signed_steps=False, token_g
         assert all(init[k] == 0 and math.isfinite(v) for k,v in slopes.items())
         assert any(v != 0 for v in slopes.values())
         result['beta_gate_slopes'] = slopes
+    if velocity_write:
+        rhos = {k:v for k,v in end.items() if k.endswith('/rho')}
+        assert len(rhos) == 2*cfg['model']['depth']
+        assert all(init[k]==0 and math.isfinite(v) and abs(v)<=1 for k,v in rhos.items())
+        assert any(v != 0 for v in rhos.values())
+        result['rhos'] = rhos
     if channel_coefficients:
         for key in ('alpha_parallel_std', 'alpha_perp_std', 'beta_std'):
             spread = [v for k,v in end.items() if k.endswith('/'+key)]
@@ -212,28 +221,34 @@ def profile(root, mode, resume, measure_turns=False, signed_steps=False, token_g
     return result
 
 
-def validate_channel_coefficients(source, gpu, marker, start):
-    subprocess.run([sys.executable, '-m', 'pytest', '-q', 'tests/test_chord_channel_coefficients.py',
-                    '--junitxml=results/chord-channel-tests.xml'], check=True)
-    suites = ElementTree.parse('results/chord-channel-tests.xml').getroot().findall('.//testsuite')
+def validate_against_scalar_chord(source, gpu, marker, start):
+    velocity_write = source.get('chord_velocity_write', False)
+    label = 'rho_v' if velocity_write else 'channel'
+    flag = 'chord_velocity_write' if velocity_write else 'channel_chord_coefficients'
+    suite = 'test_chord_velocity_write' if velocity_write else 'test_chord_channel_coefficients'
+    xml = f'results/chord-{label}-tests.xml'
+    subprocess.run([sys.executable, '-m', 'pytest', '-q', f'tests/{suite}.py', f'--junitxml={xml}'], check=True)
+    suites = ElementTree.parse(xml).getroot().findall('.//testsuite')
     assert sum(int(s.get('tests')) for s in suites) == 5
     assert all(int(s.get(k, 0)) == 0 for s in suites for k in ('errors', 'failures', 'skipped'))
     with tempfile.TemporaryDirectory(prefix='chord-channel-', dir='..') as tmp:
         arms = {name: profile(Path(tmp).resolve(), source['ngpt_velocity_mode'], resume=True,
                               geometry='project_only', velocity_init='token', state_dtype='bfloat16',
-                              fused_read=True, channel_coefficients=enabled)
-                for name, enabled in [('scalar', False), ('channel', True)]}
-    scalar, channel = arms['scalar'], arms['channel']
+                              fused_read=True, channel_coefficients=enabled and not velocity_write,
+                              velocity_write=enabled and velocity_write)
+                for name, enabled in [('scalar', False), (label, True)]}
+    scalar, target = arms['scalar'], arms[label]
     depth, width = source['model']['depth'], source['model']['width']
-    assert channel['parameters'] - scalar['parameters'] == (6*depth - 1)*(width - 1)
-    assert abs(channel['initial_dev_ce'] - scalar['initial_dev_ce']) < 1e-4
-    assert dict(scalar['config'], channel_chord_coefficients=True) == channel['config']
+    extra = 2*depth if velocity_write else (6*depth - 1)*(width - 1)
+    assert target['parameters'] - scalar['parameters'] == extra
+    assert abs(target['initial_dev_ce'] - scalar['initial_dev_ce']) < 1e-4
+    assert {**scalar['config'], flag: True} == target['config']
     summary = {name:{k:v[k] for k in ('parameters','median_step_seconds','tokens_per_second',
                                        'peak_allocated_bytes','initial_dev_ce','final_dev_ce')}
                for name,v in arms.items()}
     json_write(marker, dict(complete=True, formal_training=False, source=source, gpu=gpu, torch=torch.__version__,
                             timed_steps=[65,128], comparison=summary, evaluation_wall_seconds=time.perf_counter()-start))
-    print('CHORD_CHANNEL_BENCH_PASSED', json.dumps(summary), flush=True)
+    print(f'CHORD_{label.upper()}_BENCH_PASSED', json.dumps(summary), flush=True)
 
 
 def validate_fused_branches(source, gpu, marker, start):
@@ -295,8 +310,8 @@ def main():
         prior = json.loads(marker.read_text())
         assert prior['complete'] and prior['source'] == source and prior['torch'] == torch.__version__
         return
-    if source.get('channel_chord_coefficients'):
-        validate_channel_coefficients(source, gpu, marker, start)
+    if source.get('channel_chord_coefficients') or source.get('chord_velocity_write'):
+        validate_against_scalar_chord(source, gpu, marker, start)
         return
     if source.get('fuse_chord_read_norm'):
         validate_fused_branches(source, gpu, marker, start)

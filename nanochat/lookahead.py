@@ -23,6 +23,7 @@ class LookaheadResidual(NormalizedResidual):
         self.mu = nn.Parameter(torch.tensor([config.lookahead_mu_init], dtype=torch.float32))
         self.kappa = (nn.Parameter(torch.zeros(1, dtype=torch.float32))
                       if config.ngpt_velocity_mode == 'lookahead_axis_write' else None)
+        self.raw_rho = nn.Parameter(torch.zeros(1, dtype=torch.float32)) if config.chord_velocity_write else None
         self.geodesic = config.ngpt_velocity_mode == 'lookahead_geodesic_split'
         self.raw_parallel = (nn.Parameter(self.raw.detach().clone())
                              if self.geodesic or config.split_chord_write else None)
@@ -88,7 +89,10 @@ class LookaheadResidual(NormalizedResidual):
         if self.gate_slopes is not None:
             params = torch.stack((perp, parallel, beta, self.gate_slopes[0], self.gate_slopes[1]))
             return fused_gated_write(h, v, force, params, self.rms_floor)
-        return fused_split_write(h, v, force, torch.stack((perp, parallel, beta)), self.rms_floor, self.velocity_geometry, projection)
+        coefficients = (perp, parallel, beta)
+        if self.raw_rho is not None:
+            coefficients += (self.raw_rho[0].tanh(),)
+        return fused_split_write(h, v, force, torch.stack(coefficients), self.rms_floor, self.velocity_geometry, projection)
 
     def reference_write(self, h, v, force):
         if self.geodesic:
@@ -117,7 +121,10 @@ class LookaheadResidual(NormalizedResidual):
                     cosine = dot * (v2.rsqrt() * inv_delta)
                     perp = perp * (2 * torch.sigmoid(self.gate_slopes[0] * cosine))
                     parallel = parallel * (2 * torch.sigmoid(self.gate_slopes[1] * cosine))
-                new_h = normalize_residual((h + perp * delta) + ((parallel - perp) * along) * v)
+                v_weight = (parallel - perp) * along
+                if self.raw_rho is not None:
+                    v_weight = v_weight + self.raw_rho[0].tanh()
+                new_h = normalize_residual((h + perp * delta) + v_weight * v)
         # The Householder reflector with normal h + new_h gives short-arc
         # parallel transport. At opposite poles the two tangent planes coincide.
         if self.velocity_geometry == 'parallel_transport':
@@ -218,6 +225,8 @@ class LookaheadModel(MomentumModel):
         if chord_kernel not in ('terminal', 'boundary', 'both'):
             raise ValueError(f'Unknown Chord kernel {chord_kernel}')
         c = self.config
+        if c.chord_velocity_write:
+            raise ValueError('Direct velocity write uses the current Chord kernel')
         if c.channel_chord_coefficients:
             raise ValueError('Channel alpha and beta use the current Chord write kernel')
         if c.fuse_chord_read_norm or c.recompute_chord_force:
@@ -268,6 +277,9 @@ class LookaheadModel(MomentumModel):
                 betas = torch.stack([s.beta().mean() for s in sites if s.raw_beta is not None]).tolist()
                 key = 'beta_at_zero_alignment' if sites[0].beta_gate_slope is not None else 'beta'
                 metrics.update({f'residual/sublayer_{i}/{key}': value for i,value in enumerate(betas)})
+            if self.config.chord_velocity_write:
+                rhos = torch.stack([s.raw_rho[0] for s in sites]).tanh().tolist()
+                metrics.update({f'residual/sublayer_{i}/rho': x for i, x in enumerate(rhos)})
             if self.config.channel_chord_coefficients:
                 for key, vectors in (('alpha_perp', [s.alpha() for s in sites]),
                                      ('alpha_parallel', [s.step_size(s.raw_parallel) for s in sites]),
