@@ -22,6 +22,8 @@ Chord 为每个 token 维护球面上的 hidden `h` 和与它垂直的速度 `v`
 
 输入时设 `h = N(token_embedding[id])`，再设 `v = P(h, velocity_token[id] + velocity_position[pos])`。两个速度表均独立学习，每项按标准差 0.02 的零均值正态分布初始化。缓存解码时 `pos` 包含 KV cache 的位置偏移。速度沿同一 token 的模型深度传递。
 
+速度位置表消融只把上述参数改为 `--velocity-init token`，此时 `v = P(h, velocity_token[id])`。Attention 继续使用主干的 RoPE。
+
 对每层先执行 Attention，再执行 FFN；后者使用前者更新后的 `h, v`。下式的 `F` 表示带原 pre-norm 的当前分支，返回该分支的输出投影结果。残差状态和归约用 FP32，参考训练将前瞻读取转为 BF16 送入分支。
 
 ```text

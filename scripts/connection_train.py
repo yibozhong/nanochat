@@ -52,7 +52,7 @@ def main():
     p.add_argument('--arc-mu', type=float, default=1., help='Lookahead in units of the displacement EMA')
     p.add_argument('--arc-beta', type=float, default=.5, help='Transported displacement EMA decay')
     p.add_argument('--velocity-init', choices=('zero','token','token_position'), default=None,
-                   help='HBFormer and lookahead use token plus position velocity, other momentum modes default to token velocity')
+                   help='HBFormer and lookahead default to token plus position velocity. Spherical lookahead also supports token-only velocity.')
     p.add_argument('--velocity-embedding-std', type=float, default=.02)
     p.add_argument('--momentum-beta-init', type=float, default=.5)
     p.add_argument('--momentum-gamma-init', type=float, default=None)

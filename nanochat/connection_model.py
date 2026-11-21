@@ -128,14 +128,14 @@ class ConnectionConfig:
         if hbformer and (self.velocity_init != 'token_position' or self.ngpt_velocity_mode == 'ambient'
                          or self.momentum_eta_init != 1 or self.residual_projection_init != 'normal'):
             raise ValueError('ngpt_hbformer requires token_position velocity, parallel transport, fixed unit step and nonzero projections')
-        if lookahead and self.velocity_init != 'token_position':
-            raise ValueError('Lookahead uses independent token and position velocity embeddings')
+        if lookahead and self.velocity_init not in ('token', 'token_position'):
+            raise ValueError('Lookahead requires a velocity token embedding')
         if self.velocity_init == 'token_position' and not (hbformer or lookahead):
             raise ValueError('Token plus position velocity requires HBFormer or lookahead')
         if self.velocity_init not in ('zero', 'token', 'token_position'):
             raise ValueError('Unknown velocity initialization')
-        if self.velocity_init == 'token' and self.residual_mode not in ('heavy_ball', 'heavy_ball_rms', 'ngpt_heavy_ball'):
-            raise ValueError('Velocity embeddings require a momentum stream')
+        if self.velocity_init == 'token' and self.residual_mode not in ('heavy_ball', 'heavy_ball_rms', 'ngpt_heavy_ball', 'ngpt_lookahead'):
+            raise ValueError('Token-only velocity requires heavy ball or spherical lookahead')
         if not math.isfinite(self.velocity_embedding_std) or self.velocity_embedding_std <= 0:
             raise ValueError('Velocity embedding initialization must be positive and finite')
         if not (math.isfinite(self.momentum_beta_init) and 0 < self.momentum_beta_init < 1):

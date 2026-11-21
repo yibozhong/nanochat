@@ -105,12 +105,12 @@ def endpoint_turns(checkpoint):
 
 
 def profile(root, mode, resume, measure_turns=False, signed_steps=False, token_gates=False, token_beta_gate=False,
-            geometry='parallel_transport'):
+            geometry='parallel_transport', velocity_init='token_position'):
     steps = 128
     out = root/mode
     cmd = [sys.executable, '-m', 'scripts.connection_train', '--variant', 'baseline', '--streams', '1',
            '--residual-dynamics','ngpt_lookahead','--ngpt-velocity-mode',mode,
-           '--velocity-init','token_position','--velocity-embedding-std','.02','--momentum-beta-init','.5',
+           '--velocity-init',velocity_init,'--velocity-embedding-std','.02','--momentum-beta-init','.5',
            '--lookahead-mu-init','0','--ngpt-alpha-init','.05','--ngpt-force-rms-floor','1e-6',
            '--residual-projection-init','normal','--residual-projection-init-std','.02',
            '--no-activation-checkpoint','--no-fused-connection-grad','--attention-backend','fa2',
@@ -133,7 +133,7 @@ def profile(root, mode, resume, measure_turns=False, signed_steps=False, token_g
     cfg = json.loads((out/'config.json').read_text())
     assert info['complete'] and info['steps'] == steps and info['dev_tokens'] == 131072
     assert cfg['model']['ngpt_velocity_mode'] == mode and cfg['logging_backend'] == 'local'
-    assert cfg['model']['chord_velocity_geometry'] == geometry
+    assert cfg['model']['chord_velocity_geometry'] == geometry and cfg['model']['velocity_init'] == velocity_init
     assert cfg['model']['signed_chord_steps'] == signed_steps
     assert cfg['model']['token_chord_gates'] == token_gates
     assert cfg['model']['token_beta_gate'] == token_beta_gate
@@ -206,7 +206,11 @@ def main():
     token_gates = source.get('token_chord_gates',False)
     token_beta_gate = source.get('token_beta_gate',False)
     geometry = source.get('chord_velocity_geometry','parallel_transport')
-    geometry_ablation = geometry != 'parallel_transport'
+    velocity_init = source['velocity_init']
+    token_only = velocity_init == 'token'
+    geometry_ablation = geometry != 'parallel_transport' and not token_only
+    if token_only:
+        assert geometry == 'project_only' and learned_beta
     assert (learned_beta or mode in ('lookahead_axis_write','lookahead_split_write','lookahead_geodesic_split')) and source['hopper_only']
     geodesic = mode == 'lookahead_geodesic_split'
     split = mode == 'lookahead_split_write' or geodesic or learned_beta
@@ -227,11 +231,13 @@ def main():
         suite = 'tests/test_token_beta_gate.py'
     if geometry_ablation:
         suite = 'tests/test_chord_velocity_geometry.py'
+    if token_only:
+        suite = 'tests/test_chord_token_velocity.py'
     subprocess.run([sys.executable,'-m','pytest','-q',suite,
                     '--junitxml=results/axis-tests.xml'],check=True)
     suites = list(ElementTree.parse('results/axis-tests.xml').getroot().iter('testsuite'))
     tests = sum(int(s.get('tests')) for s in suites)
-    assert tests == (8 if geometry_ablation else 7 if geodesic else 6 if token_gates or token_beta_gate else 4 if split else 5)
+    assert tests == (3 if token_only else 8 if geometry_ablation else 7 if geodesic else 6 if token_gates or token_beta_gate else 4 if split else 5)
     assert all(int(s.get(k,0)) == 0 for s in suites for k in ('errors','failures','skipped'))
     alignment = None
     if not split:
@@ -239,15 +245,18 @@ def main():
         torch.cuda.empty_cache()
     root = Path(tempfile.mkdtemp(prefix='axis-debug-', dir='..')).resolve()
     control_mode = 'lookahead_split_write' if geodesic or learned_beta else 'lookahead_axis_write' if split else 'lookahead_transport'
-    if signed_steps or token_gates or token_beta_gate or geometry_ablation:
+    if signed_steps or token_gates or token_beta_gate or geometry_ablation or token_only:
         control_mode = mode
-    control = profile(root,control_mode,resume=False,measure_turns=geodesic)
+    control = profile(root,control_mode,resume=False,measure_turns=geodesic,
+                      geometry=geometry if token_only else 'parallel_transport')
     target = profile(root,mode,resume=True,measure_turns=geodesic,signed_steps=signed_steps,
-                     token_gates=token_gates,token_beta_gate=token_beta_gate,geometry=geometry)
+                     token_gates=token_gates,token_beta_gate=token_beta_gate,geometry=geometry,velocity_init=velocity_init)
     root.rmdir()
     changed = {k for k in target['config'] if target['config'][k] != control['config'][k]}
     expected_change = 'ngpt_velocity_mode'
-    if geometry_ablation:
+    if token_only:
+        expected_change = 'velocity_init'
+    elif geometry_ablation:
         expected_change = 'chord_velocity_geometry'
     elif token_beta_gate:
         expected_change = 'token_beta_gate'
@@ -257,7 +266,9 @@ def main():
         expected_change = 'signed_chord_steps'
     assert changed == {expected_change}
     extra = source['learned_beta_sites'] if learned_beta and not signed_steps else 0 if split else len(alignment['layers'])
-    if geometry_ablation:
+    if token_only:
+        extra = -source['model']['sequence_length'] * source['model']['width']
+    elif geometry_ablation:
         extra = 0
     if token_gates:
         extra = 4*source['model']['depth']

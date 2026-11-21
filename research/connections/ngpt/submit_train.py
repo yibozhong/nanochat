@@ -38,6 +38,8 @@ def main():
                         help='Compare two token-dependent positive steps to the learned-beta control')
     parser.add_argument('--chord-velocity-geometry', choices=('project_only','ambient'),
                         help='Compare endpoint projection or unconstrained velocity to parallel transport')
+    parser.add_argument('--token-only-velocity', action='store_true',
+                        help='Remove the velocity position table from the project-only Chord control')
     parser.add_argument('--token-beta-gate', action='store_true',
                         help='Compare token-dependent velocity decay to the positive split learned-beta control')
     parser.add_argument('--hopper-only', action='store_true',
@@ -65,6 +67,8 @@ def main():
     if args.token_beta_gate and (not learned_beta or args.token_chord_gates or args.signed_chord_steps):
         parser.error('--token-beta-gate requires the shared positive split learned-beta preset')
     geometry = args.chord_velocity_geometry
+    if args.token_only_velocity and geometry != 'project_only':
+        parser.error('--token-only-velocity requires --chord-velocity-geometry project_only')
     if geometry and (not learned_beta or args.token_beta_gate or args.token_chord_gates or args.signed_chord_steps):
         parser.error('--chord-velocity-geometry requires the shared positive split learned-beta preset')
     split_write = preset == 'ngpt_lookahead_split_write' or geodesic or learned_beta
@@ -95,6 +99,8 @@ def main():
             ROOT=HOME_ROOT/'residual-chord-token-beta-gate-10b-20261120'
         if geometry:
             ROOT=HOME_ROOT/f'residual-chord-velocity-{geometry.replace("_","-")}-10b-20261120'
+    if args.token_only_velocity:
+        ROOT=HOME_ROOT/'residual-chord-velocity-token-only-10b-20261120'
     if arc_optimizer:
         tag = 'arc' if preset == 'arc' else 'arc-muon-direction'
         if preset == 'arc_muon_radius':
@@ -201,7 +207,21 @@ def main():
                           lookahead_mu_init=0., ngpt_velocity_mode='lookahead_transport' if mode=='ngpt_lookahead' else 'ambient', ngpt_weight_norm=False, schedule_steps=STEPS,
                           reference_run='d065c132', backbone_weight_constraint='none',
                           preflight='Zero-gate equality with nGPT, trainable lookahead, tangent geometry, causal KV, gradients, exact resume and same-GPU speed')
-        if axis_write:
+        if args.token_only_velocity:
+            control_dir = HOME_ROOT/'residual-chord-velocity-project-only-10b-20261120-hopper-only'
+            control = json.loads((control_dir/'bundles/source.json').read_text())
+            assert control['run_id']=='af1c3266' and control['velocity_init']=='token_position'
+            assert control['chord_velocity_geometry']==geometry and control['initial_velocity_projected']
+            for key in ('model','preset','seed','initialization','steps','schedule_steps','batch_tokens',
+                        'microbatch','data_uri','dataset_revision','tokenizer','runtime','attention_backend','hopper_only'):
+                assert control[key] == source[key], key
+            source = dict(control, plan=KEY, commit=commit, run_id=run_id, velocity_init='token',
+                          reference_run=control['run_id'], paired_run=control['run_id'],
+                          preflight='Token-only velocity, seed-matched shared weights, compiled gradients and KV, restart; paired 128 steps versus token plus position on the same GPU',
+                          timing_reference='Historical H200 timing of transported Chord; paired project-only timing in preflight')
+            (ROOT/'comparison-reference.json').write_text(json.dumps(dict(run_id=control['run_id'],
+                summary_path=str(control_dir/'summary.json'), step=steps), indent=2)+'\n')
+        elif axis_write:
             reference = HOME_ROOT/'residual-nonzero-ngpt_lookahead-10b-from-scratch-20261117'
             base = json.loads((reference/'summary.json').read_text())
             assert base['complete'] and base['run_id'] == 'd4293868' and base['source']['ngpt_velocity_mode'] == 'lookahead_transport'
@@ -380,6 +400,9 @@ def main():
         if geometry:
             job_args+=f' --chord-velocity-geometry={geometry}'
             batch_name+='-velocity-'+geometry.replace('_','-')
+        if args.token_only_velocity:
+            job_args+=' --token-only-velocity'
+            batch_name+='-token-only'
         if connection:
             job_args += ' ambient --' + preset
         if arc_optimizer:

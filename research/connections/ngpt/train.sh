@@ -30,7 +30,9 @@ case "$TASK_MODE/$TASK_VELOCITY_MODE" in
         TASK_GROUP=lookahead-only-10b
         ;;
     ngpt_lookahead/lookahead_transport|ngpt_lookahead/lookahead_axis_write|ngpt_lookahead/lookahead_split_write|ngpt_lookahead/lookahead_split_learned_beta|ngpt_lookahead/lookahead_geodesic_split)
-        TASK_MOMENTUM_ARGS=(--velocity-init token_position --velocity-embedding-std .02 --momentum-beta-init .5 --lookahead-mu-init 0)
+        TASK_VELOCITY_INIT=token_position
+        if [[ "${5:-}" == --token-only-velocity ]]; then TASK_VELOCITY_INIT=token; fi
+        TASK_MOMENTUM_ARGS=(--velocity-init "$TASK_VELOCITY_INIT" --velocity-embedding-std .02 --momentum-beta-init .5 --lookahead-mu-init 0)
         TASK_GROUP=ngpt-lookahead-5k
         if [[ "$TASK_VELOCITY_MODE" == lookahead_axis_write ]]; then TASK_GROUP=arc-residual-axis-write-10b; fi
         if [[ "$TASK_VELOCITY_MODE" == lookahead_split_write ]]; then TASK_GROUP=arc-residual-split-write-10b; fi
@@ -77,9 +79,14 @@ elif [[ "${4:-}" == --token-chord-gates ]]; then
     TASK_MOMENTUM_ARGS+=(--token-chord-gates)
     TASK_GROUP=chord-token-alpha-gates-10b
 elif [[ "${4:-}" == --chord-velocity-geometry=project_only || "${4:-}" == --chord-velocity-geometry=ambient ]]; then
-    [[ "$#" == 4 && "$TASK_VELOCITY_MODE" == lookahead_split_learned_beta ]]
+    [[ "$TASK_VELOCITY_MODE" == lookahead_split_learned_beta ]]
     TASK_MOMENTUM_ARGS+=("$4")
     TASK_GROUP=chord-velocity-geometry-10b
+    if [[ "$#" == 5 && "$4" == --chord-velocity-geometry=project_only && "$5" == --token-only-velocity ]]; then
+        TASK_GROUP=chord-velocity-token-only-10b
+    else
+        [[ "$#" == 4 ]]
+    fi
 elif [[ "${4:-}" == --token-beta-gate ]]; then
     [[ "$#" == 4 && "$TASK_VELOCITY_MODE" == lookahead_split_learned_beta ]]
     TASK_MOMENTUM_ARGS+=(--token-beta-gate)
@@ -125,7 +132,7 @@ if [[ "${4:-}" == --extend-to-schedule ]]; then
     tar -xOf parent-results.tar results/ngpt-sm90.json > parent-validation.json
 fi
 cp "$0" results/launcher.sh
-/opt/project/.venv/bin/python - "$TASK_RUN_ID" "$TASK_MODE" "$TASK_VELOCITY_MODE" "$TASK_STEPS" "$TASK_SCHEDULE_STEPS" "${4:-}" "${TASK_ARC_MU:-}" <<'PY'
+/opt/project/.venv/bin/python - "$TASK_RUN_ID" "$TASK_MODE" "$TASK_VELOCITY_MODE" "$TASK_STEPS" "$TASK_SCHEDULE_STEPS" "${4:-}" "${TASK_ARC_MU:-}" "${TASK_VELOCITY_INIT:-}" <<'PY'
 import json,sys
 from pathlib import Path
 s=json.loads(Path('source.json').read_text())
@@ -153,8 +160,12 @@ geometry = s.get('chord_velocity_geometry')
 if geometry or sys.argv[6].startswith('--chord-velocity-geometry='):
     assert geometry in ('project_only','ambient') and sys.argv[6]=='--chord-velocity-geometry='+geometry
     assert s['initial_velocity_projected']==(geometry=='project_only')
+token_only = sys.argv[8]=='token'
+if token_only:
+    assert geometry=='project_only' and s['velocity_init']=='token'
+chord_control = 'af1c3266' if token_only else '6721b437'
 if token_gates or token_beta_gate or geometry:
-    assert not signed_steps and s['paired_run']=='6721b437' and s['residual_kernel']=='fused_chord_triton'
+    assert not signed_steps and s['paired_run']==chord_control and s['residual_kernel']=='fused_chord_triton'
 assert (sys.argv[6] in ('--arc','--arc-muon','--arc-muon-radius')) == (s.get('matrix_optimizer')=='arc')
 assert (sys.argv[6] in ('--arc-muon','--arc-muon-radius')) == (s.get('arc_direction')=='muon')
 assert (sys.argv[6]=='--arc-muon-radius') == (s.get('arc_step_scale')=='radius')
@@ -175,7 +186,7 @@ elif sys.argv[2]=='ngpt_lookahead':
     assert s['steps']==(305176 if extended or sys.argv[6]=='--fresh-10b' or axis_write else 5000) and not s['ngpt_weight_norm']
     if axis_write:
         assert not sys.argv[6] or (signed_steps or token_gates or token_beta_gate or geometry) and learned_beta
-        assert s['reference_run']==('6721b437' if token_gates or token_beta_gate or geometry else 'd4293868')
+        assert s['reference_run']==(chord_control if token_gates or token_beta_gate or geometry else 'd4293868')
         if learned_beta or sys.argv[3] in ('lookahead_split_write','lookahead_geodesic_split'):
             assert s['parallel_step_init']==s['perpendicular_step_init']==s['ngpt_alpha_init']
             expected = 'independent_softplus_with_linear_lower_extension' if signed_steps else 'independent_softplus'
@@ -185,7 +196,7 @@ elif sys.argv[2]=='ngpt_lookahead':
     assert s['lookahead_mu_init']==0 and s['momentum_beta_init']==.5 and s['momentum_beta_trainable']==learned_beta
     if learned_beta:
         assert s['learned_beta_sites']==2*s['model']['depth']-1 and s['beta_parameterization']=='sigmoid'
-    assert s['velocity_init']=='token_position' and s['velocity_embedding_std']==.02
+    assert s['velocity_init']==sys.argv[8] and s['velocity_embedding_std']==.02
 elif sys.argv[2]=='ngpt_hbformer':
     import math
     assert s['momentum_eta_init']==1 and not s['momentum_eta_trainable']

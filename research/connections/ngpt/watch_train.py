@@ -63,6 +63,15 @@ def collect(root,training):
         ref_path = root/'comparison-reference.json'
         if ref_path.exists():
             reference = json.loads(ref_path.read_text())
+            if 'summary_path' in reference:
+                control_path = Path(reference['summary_path'])
+                if not control_path.exists():
+                    save(root/'comparison.json', dict(status='awaiting_reference_summary', reference=reference,
+                                                       run_id=value['run_id'], dev_ce=value['final_dev_ce']))
+                    return True
+                control = json.loads(control_path.read_text())
+                assert control['complete'] and control['run_id']==reference['run_id'] and control['steps']==reference['step']
+                reference.update(dev_ce=control['final_dev_ce'], dev_tokens=control['dev_tokens'])
             assert reference['step'] == value['steps'] and reference['dev_tokens'] == value['dev_tokens']
             comparison=dict(reference=reference, run_id=value['run_id'], step=value['steps'],
                             dev_ce=value['final_dev_ce'], delta_dev_ce=value['final_dev_ce']-reference['dev_ce'])
