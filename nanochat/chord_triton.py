@@ -353,8 +353,13 @@ class _ChordWrite(torch.autograd.Function):
         rows = h.numel() // width
         _forward[(rows,)](h, v, force, params, new_h, new_v, fixed_beta, floor**2,
                           width, mode, params, False, False, geometry, num_warps=4, enable_fp_fusion=False)
-        ctx.remat = bool(projection)
-        ctx.save_for_backward(h, v, params, *(projection or (force,)))
+        ctx.remat = len(projection) == 2
+        if ctx.remat:
+            features, weight = projection
+            ctx.save_for_backward(h, v, params, features, weight)
+        else:
+            assert len(projection) == 0
+            ctx.save_for_backward(h, v, params, force)
         ctx.options = fixed_beta, floor**2, width, mode
         ctx.geometry = geometry
         return new_h, new_v
