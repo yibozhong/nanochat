@@ -91,9 +91,18 @@ elif [[ "${4:-}" == --chord-velocity-geometry=project_only || "${4:-}" == --chor
             if [[ "$#" == 7 && "$7" == --chord-velocity-write ]]; then
                 TASK_MOMENTUM_ARGS+=("$7")
                 TASK_GROUP=chord-scalar-rho-v-10b
-            elif [[ "$#" == 7 && "$7" == --channel-chord-coefficients ]]; then
+            elif [[ "${7:-}" == --channel-chord-coefficients ]]; then
                 TASK_MOMENTUM_ARGS+=("$7")
                 TASK_GROUP=chord-channel-alpha-beta-10b
+                if [[ "$#" == 8 && "$8" == --fixed-first-attention-mu ]]; then
+                    TASK_MOMENTUM_ARGS+=("$8")
+                    TASK_GROUP=chord-channel-fixed-first-attn-mu1-10b
+                else
+                    [[ "$#" == 7 ]]
+                fi
+            elif [[ "$#" == 7 && "$7" == --fixed-first-attention-mu ]]; then
+                TASK_MOMENTUM_ARGS+=("$7")
+                TASK_GROUP=chord-scalar-fixed-first-attn-mu1-10b
             else
                 [[ "$#" == 6 ]]
             fi
@@ -149,7 +158,7 @@ if [[ "${4:-}" == --extend-to-schedule ]]; then
     tar -xOf parent-results.tar results/ngpt-sm90.json > parent-validation.json
 fi
 cp "$0" results/launcher.sh
-/opt/project/.venv/bin/python - "$TASK_RUN_ID" "$TASK_MODE" "$TASK_VELOCITY_MODE" "$TASK_STEPS" "$TASK_SCHEDULE_STEPS" "${4:-}" "${TASK_ARC_MU:-}" "${TASK_VELOCITY_INIT:-}" "${6:-}" "${7:-}" <<'PY'
+/opt/project/.venv/bin/python - "$TASK_RUN_ID" "$TASK_MODE" "$TASK_VELOCITY_MODE" "$TASK_STEPS" "$TASK_SCHEDULE_STEPS" "${4:-}" "${TASK_ARC_MU:-}" "${TASK_VELOCITY_INIT:-}" "${6:-}" "${7:-}" "${8:-}" <<'PY'
 import json,sys
 from pathlib import Path
 s=json.loads(Path('source.json').read_text())
@@ -183,6 +192,8 @@ if s.get('fuse_chord_read_norm'):
     assert token_only and s['recompute_chord_force'] is False
 if token_only:
     assert geometry=='project_only' and s['velocity_init']=='token' and s['chord_state_dtype']=='bfloat16'
+fixed_first_mu = '--fixed-first-attention-mu' in sys.argv[10:]
+assert fixed_first_mu == s.get('fixed_first_attention_mu', False)
 channel_coefficients = sys.argv[10]=='--channel-chord-coefficients'
 assert channel_coefficients == s.get('channel_chord_coefficients', False)
 velocity_write = sys.argv[10]=='--chord-velocity-write'
@@ -190,9 +201,9 @@ assert velocity_write == s.get('chord_velocity_write', False)
 if velocity_write:
     assert not channel_coefficients and s['rho_init']==0 and s['rho_parameterization']=='tanh'
 chord_control = 'af1c3266' if token_only else '6721b437'
-if channel_coefficients or velocity_write:
+if channel_coefficients or velocity_write or fixed_first_mu:
     assert token_only and s['fuse_chord_read_norm']
-    chord_control = 'a7163d23'
+    chord_control = '9a7fd31d' if fixed_first_mu and channel_coefficients else 'a7163d23'
 if token_gates or token_beta_gate or geometry:
     assert not signed_steps and s['paired_run']==chord_control and s['residual_kernel']=='fused_chord_triton'
 assert (sys.argv[6] in ('--arc','--arc-muon','--arc-muon-radius')) == (s.get('matrix_optimizer')=='arc')

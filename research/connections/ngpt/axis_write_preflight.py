@@ -107,7 +107,7 @@ def endpoint_turns(checkpoint):
 
 def profile(root, mode, resume, measure_turns=False, signed_steps=False, token_gates=False, token_beta_gate=False,
             geometry='parallel_transport', velocity_init='token_position', state_dtype='float32',
-            fused_read=False, remat=False, channel_coefficients=False, velocity_write=False):
+            fused_read=False, remat=False, channel_coefficients=False, velocity_write=False, fixed_first_mu=False):
     steps = 128
     out = root/mode
     cmd = [sys.executable, '-m', 'scripts.connection_train', '--variant', 'baseline', '--streams', '1',
@@ -119,6 +119,8 @@ def profile(root, mode, resume, measure_turns=False, signed_steps=False, token_g
            '--steps',str(steps),'--schedule-steps','305176','--microbatch','16','--seed','42',
            '--data-dir','../data','--output-dir',str(out),'--run-id','axis-local-debug']
     cmd.extend(['--chord-velocity-geometry', geometry, '--chord-state-dtype', state_dtype])
+    if fixed_first_mu:
+        cmd.append('--fixed-first-attention-mu')
     if velocity_write:
         cmd.append('--chord-velocity-write')
     if channel_coefficients:
@@ -146,6 +148,7 @@ def profile(root, mode, resume, measure_turns=False, signed_steps=False, token_g
     assert cfg['model']['chord_velocity_geometry'] == geometry and cfg['model']['velocity_init'] == velocity_init
     assert cfg['model']['chord_state_dtype'] == state_dtype
     assert cfg['model']['fuse_chord_read_norm'] == fused_read and cfg['model']['recompute_chord_force'] == remat
+    assert cfg['model']['fixed_first_attention_mu'] == fixed_first_mu
     assert cfg['model']['channel_chord_coefficients'] == channel_coefficients
     assert cfg['model']['chord_velocity_write'] == velocity_write
     assert cfg['model']['signed_chord_steps'] == signed_steps
@@ -166,6 +169,9 @@ def profile(root, mode, resume, measure_turns=False, signed_steps=False, token_g
     steps_by_component = {}
     if mode in ('lookahead_split_write','lookahead_split_learned_beta','lookahead_geodesic_split'):
         init, = [e for e in events if e.get('step') == 0 and 'dev/ce' in e]
+        if fixed_first_mu:
+            assert init['residual/sublayer_0/mu'] == end['residual/sublayer_0/mu'] == 1.
+            assert init['residual/sublayer_1/mu'] == 0. and end['residual/sublayer_1/mu'] != 0.
         for suffix in ('alpha_parallel','alpha_perp'):
             rates = {k:v for k,v in end.items() if k.endswith('/'+suffix)}
             assert len(rates) == 2*cfg['model']['depth'] and all(math.isfinite(v) for v in rates.values())
@@ -309,6 +315,16 @@ def main():
     if marker.exists():
         prior = json.loads(marker.read_text())
         assert prior['complete'] and prior['source'] == source and prior['torch'] == torch.__version__
+        return
+    if source.get('fixed_first_attention_mu'):
+        subprocess.run([sys.executable, '-m', 'pytest', '-q', 'tests/test_chord_fixed_first_mu.py',
+                        '--junitxml=results/fixed-first-mu-tests.xml'], check=True)
+        with tempfile.TemporaryDirectory(prefix='fixed-first-mu-', dir='..') as tmp:
+            target = profile(Path(tmp).resolve(), mode, resume=True, geometry=geometry,
+                             velocity_init=velocity_init, state_dtype=state_dtype, fused_read=True,
+                             channel_coefficients=source.get('channel_chord_coefficients', False), fixed_first_mu=True)
+        json_write(marker, dict(complete=True, formal_training=False, source=source, gpu=gpu, torch=torch.__version__,
+                                profile=target, evaluation_wall_seconds=time.perf_counter()-start))
         return
     if source.get('channel_chord_coefficients') or source.get('chord_velocity_write'):
         validate_against_scalar_chord(source, gpu, marker, start)

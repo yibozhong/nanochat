@@ -42,6 +42,8 @@ def main():
                         help='Benchmark separate, fused and force-recomputed Chord then train fused token-only from scratch')
     parser.add_argument('--token-only-velocity', action='store_true',
                         help='Remove the velocity position table from the project-only Chord control')
+    parser.add_argument('--fixed-first-attention-mu', action='store_true',
+                        help='Fix the first Attention lookahead at one in the standard Chord recipe')
     parser.add_argument('--chord-velocity-write', action='store_true',
                         help='Compare direct scalar rho*v writeback to the fused scalar Chord default')
     parser.add_argument('--channel-chord-coefficients', action='store_true',
@@ -73,6 +75,8 @@ def main():
     if args.token_beta_gate and (not learned_beta or args.token_chord_gates or args.signed_chord_steps):
         parser.error('--token-beta-gate requires the shared positive split learned-beta preset')
     geometry = args.chord_velocity_geometry
+    if args.fixed_first_attention_mu and (not args.fuse_chord_read_norm or args.chord_velocity_write):
+        parser.error('--fixed-first-attention-mu uses the fused token-only Chord recipe')
     if args.chord_velocity_write and (args.channel_chord_coefficients or not args.fuse_chord_read_norm):
         parser.error('--chord-velocity-write uses the fused scalar Chord default')
     if args.channel_chord_coefficients and not args.fuse_chord_read_norm:
@@ -119,6 +123,9 @@ def main():
         ROOT=HOME_ROOT/'residual-chord-scalar-rho-v-10b-20261121'
     if args.channel_chord_coefficients:
         ROOT=HOME_ROOT/'residual-chord-channel-alpha-beta-10b-20261121'
+    if args.fixed_first_attention_mu:
+        coefficients = 'channel' if args.channel_chord_coefficients else 'scalar'
+        ROOT=HOME_ROOT/f'residual-chord-{coefficients}-fixed-first-attn-mu1-10b-20261121'
     if arc_optimizer:
         tag = 'arc' if preset == 'arc' else 'arc-muon-direction'
         if preset == 'arc_muon_radius':
@@ -225,15 +232,22 @@ def main():
                           lookahead_mu_init=0., ngpt_velocity_mode='lookahead_transport' if mode=='ngpt_lookahead' else 'ambient', ngpt_weight_norm=False, schedule_steps=STEPS,
                           reference_run='d065c132', backbone_weight_constraint='none',
                           preflight='Zero-gate equality with nGPT, trainable lookahead, tangent geometry, causal KV, gradients, exact resume and same-GPU speed')
-        if args.channel_chord_coefficients or args.chord_velocity_write:
+        if args.channel_chord_coefficients or args.chord_velocity_write or args.fixed_first_attention_mu:
             control_dir = HOME_ROOT/'residual-chord-fused-read-token-only-bf16-10b-20261120-hopper-only'
+            control_id = 'a7163d23'
+            if args.fixed_first_attention_mu and args.channel_chord_coefficients:
+                control_dir = HOME_ROOT/'residual-chord-channel-alpha-beta-10b-20261121-hopper-only'
+                control_id = '9a7fd31d'
             control = json.loads((control_dir/'bundles/source.json').read_text())
-            assert control['run_id']=='a7163d23' and control['fuse_chord_read_norm'] and not control['recompute_chord_force']
+            assert control['run_id']==control_id and control['fuse_chord_read_norm'] and not control['recompute_chord_force']
             assert control['seed']==42 and control['steps']==steps and control['chord_state_dtype']=='bfloat16'
             assert control['velocity_init']=='token' and control['chord_velocity_geometry']==geometry
             source = dict(control, plan=KEY, commit=commit, run_id=run_id, reference_run=control['run_id'],
                           paired_run=control['run_id'])
-            if args.chord_velocity_write:
+            if args.fixed_first_attention_mu:
+                source.update(fixed_first_attention_mu=True,
+                              preflight='Fixed first read, embedding gradients, compiled KV, exact restart and 128-step profile; independent seed42 formal')
+            elif args.chord_velocity_write:
                 source.update(chord_velocity_write=True, rho_parameterization='tanh', rho_init=0.,
                               preflight='Zero-rho equality and drift, FP64 VJP, compiled cache, exact resume; paired scalar and rho-v 128-step profiles; fresh seed42 formal')
             else:
@@ -448,6 +462,9 @@ def main():
         if args.channel_chord_coefficients:
             job_args+=' --channel-chord-coefficients'
             batch_name+='-channel-alpha-beta'
+        if args.fixed_first_attention_mu:
+            job_args+=' --fixed-first-attention-mu'
+            batch_name+='-fixed-first-attn-mu1'
         if connection:
             job_args += ' ambient --' + preset
         if arc_optimizer:

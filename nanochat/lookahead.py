@@ -18,9 +18,12 @@ def _read(h, v, mu, ambient):
 
 
 class LookaheadResidual(NormalizedResidual):
-    def __init__(self, config, *, velocity_consumed=True):
+    def __init__(self, config, *, velocity_consumed=True, fixed_unit_mu=False):
         super().__init__(config)
-        self.mu = nn.Parameter(torch.tensor([config.lookahead_mu_init], dtype=torch.float32))
+        if fixed_unit_mu:
+            self.register_buffer('mu', torch.ones(1, dtype=torch.float32), persistent=False)
+        else:
+            self.mu = nn.Parameter(torch.tensor([config.lookahead_mu_init], dtype=torch.float32))
         self.kappa = (nn.Parameter(torch.zeros(1, dtype=torch.float32))
                       if config.ngpt_velocity_mode == 'lookahead_axis_write' else None)
         self.raw_rho = nn.Parameter(torch.zeros(1, dtype=torch.float32)) if config.chord_velocity_write else None

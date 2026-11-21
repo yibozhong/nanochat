@@ -73,6 +73,7 @@ def main():
     p.add_argument('--chord-kernel', choices=('current', 'terminal', 'boundary', 'both'), default='current',
                    help='Execution path for layer-beta Chord (terminal write, fused next read, or both)')
     p.add_argument('--lookahead-mu-init', type=float, default=0.)
+    p.add_argument('--fixed-first-attention-mu', action='store_true', help='Fix the first Attention lookahead at one')
     p.add_argument('--ngpt-alpha-init', type=float, default=.05)
     p.add_argument('--signed-chord-steps', action='store_true', help='Allow both split-chord step sizes to cross zero independently')
     p.add_argument('--token-chord-gates', action='store_true', help='Modulate positive split steps by independent per-token cosine gates')
@@ -144,6 +145,7 @@ def main():
                        velocity_embedding_std=a.velocity_embedding_std,
                        momentum_beta_init=a.momentum_beta_init, momentum_gamma_init=a.momentum_gamma_init,
                        momentum_eta_init=a.momentum_eta_init, ngpt_force_rms_floor=a.ngpt_force_rms_floor,
+                       fixed_first_attention_mu=a.fixed_first_attention_mu,
                        lookahead_mu_init=a.lookahead_mu_init, ngpt_alpha_init=a.ngpt_alpha_init, ngpt_weight_norm=a.ngpt_weight_norm,
                        ngpt_velocity_mode=a.ngpt_velocity_mode, signed_chord_steps=a.signed_chord_steps, token_chord_gates=a.token_chord_gates,
                        chord_velocity_write=a.chord_velocity_write, channel_chord_coefficients=a.channel_chord_coefficients, token_beta_gate=a.token_beta_gate, chord_velocity_geometry=a.chord_velocity_geometry, chord_state_dtype=a.chord_state_dtype,
@@ -258,6 +260,7 @@ def main():
                     ('-learned-beta' if c.ngpt_velocity_mode == 'lookahead_split_learned_beta' else '')+
                     ('-signed-steps' if c.signed_chord_steps else '')+
                     ('-token-alpha-gates' if c.token_chord_gates else '')+
+                    ('-fixed-first-attn-mu1' if c.fixed_first_attention_mu else '')+
                     ('-rho-v' if c.chord_velocity_write else '')+
                     ('-channel-alpha-beta' if c.channel_chord_coefficients else '')+
                     ('-token-beta-gate' if c.token_beta_gate else '')+

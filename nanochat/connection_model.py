@@ -50,6 +50,7 @@ class ConnectionConfig:
     ngpt_force_rms_floor: float = 0.1
     ngpt_alpha_init: float = 0.05
     lookahead_mu_init: float = 0.0
+    fixed_first_attention_mu: bool = False
     ngpt_weight_norm: bool | None = None
     ngpt_velocity_mode: str | None = None
     momentum_velocity_rms_floor: float = 0.1
@@ -68,6 +69,8 @@ class ConnectionConfig:
     def __post_init__(self):
         hbformer = self.residual_mode == 'ngpt_hbformer'
         lookahead = self.residual_mode in ('ngpt_lookahead', 'lookahead_only')
+        if self.fixed_first_attention_mu and self.residual_mode != 'ngpt_lookahead':
+            raise ValueError('Fixed first Attention lookahead requires spherical lookahead')
         if not math.isfinite(self.lookahead_mu_init):
             raise ValueError('Lookahead must start at a finite value')
         if self.ngpt_weight_norm is None:
@@ -315,7 +318,7 @@ class ConnectionBlock(Block):
         self.compiled_attention = self.compiled_mlp = None
         if config.residual_mode != 'vanilla':
             from nanochat.momentum import residual_update
-            self.attn_residual = residual_update(config)
+            self.attn_residual = residual_update(config, fixed_unit_mu=index == 0 and config.fixed_first_attention_mu)
             self.mlp_residual = residual_update(config, velocity_consumed=index + 1 < config.depth)
         if self.variant == 'skip_scale':
             self.attn_skip_scale = nn.Parameter(torch.ones(config.width))
