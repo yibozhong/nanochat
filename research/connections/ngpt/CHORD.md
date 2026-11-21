@@ -6,29 +6,17 @@ Chord 为每个 token 维护球面上的 hidden `h` 和与它垂直的速度 `v`
 
 ## nanochat 配置
 
-以下是传给 `python -m scripts.connection_train` 的模型参数片段。迁移时请显式保存 `project_only`。原 CLI 和缺少此字段的历史 Chord checkpoint 使用 `parallel_transport`。
-
-```text
---variant baseline --architecture vanilla --streams 1
---residual-dynamics ngpt_lookahead --ngpt-velocity-mode lookahead_split_learned_beta
---chord-velocity-geometry project_only --chord-kernel current --chord-state-dtype bfloat16
---velocity-init token_position --velocity-embedding-std 0.02
---lookahead-mu-init 0 --ngpt-alpha-init 0.05 --momentum-beta-init 0.5
---ngpt-force-rms-floor 1e-6 --no-ngpt-weight-norm
---residual-projection-init normal --residual-projection-init-std 0.02
-```
+新训练从仓库根目录向 `python -m scripts.connection_train` 传入 `@research/connections/ngpt/chord.args`，再指定本次的训练步数、学习率日程、数据与输出路径。跨仓库迁移时使用这份文件中的显式模型参数。历史实验按其保存的配置恢复。[默认模型参数](chord.args)
 
 ## 融合与反向重算
 
-在 BF16、`project_only` 配方中，`--fuse-chord-read-norm` 将前瞻读取和分支入口的无权重 RMSNorm 融为一次读写，保留中间 BF16 舍入和原主干的 epsilon。反向从 h、v 和 mu 重建分支读取。`--recompute-chord-force` 可独立启用，默认为关闭。开启后，训练反向会用已经保存的输入与 BF16 权重各重算一次 Attention 输出投影和 FFN down 投影。KV 推理沿用正常投影。两项均使用 `--chord-kernel current`。
+默认开启 `--fuse-chord-read-norm`，将 BF16 前瞻读取和分支入口的无权重 RMSNorm 融为一次读写，保留中间 BF16 舍入和原主干的 epsilon。反向从 h、v 和 mu 重建分支读取。`--recompute-chord-force` 可独立启用，默认为关闭。开启后，训练反向会用已经保存的输入与 BF16 权重各重算一次 Attention 输出投影和 FFN down 投影。KV 推理沿用正常投影。两项均使用 `--chord-kernel current`。
 
 ## 初始化与更新顺序
 
 `mean` 沿当前 token 的 hidden 维度取均值。记 `N(x) = x / sqrt(max(mean(x*x), 1e-12))`，`P(h,x) = x - mean(h*x)*h`。正常尺度下，`N` 给出 RMS 为 1、半径为 `sqrt(d_model)` 的向量，`P` 把向量投影到该点的切平面。
 
-输入时设 `h = N(token_embedding[id])`，再设 `v = P(h, velocity_token[id] + velocity_position[pos])`。两个速度表均独立学习，每项按标准差 0.02 的零均值正态分布初始化。缓存解码时 `pos` 包含 KV cache 的位置偏移。速度沿同一 token 的模型深度传递。
-
-速度位置表消融只把上述参数改为 `--velocity-init token`，此时 `v = P(h, velocity_token[id])`。Attention 继续使用主干的 RoPE。
+输入时设 `h = N(token_embedding[id])`，再设 `v = P(h, velocity_token[id])`。速度表独立于主干词嵌入，形状为 `vocab_size × d_model`，按标准差 0.02 的零均值正态分布初始化。速度沿同一 token 的模型深度传递。位置由 Attention 的 RoPE 编码。复现历史 `token_position` 对照时，初速度额外加上绝对位置速度嵌入，再做切向投影。
 
 对每层先执行 Attention，再执行 FFN；后者使用前者更新后的 `h, v`。下式的 `F` 表示带原 pre-norm 的当前分支，返回该分支的输出投影结果。当前默认以 BF16 保存跨子层的 `h, v`；球面归一化、投影、速度混合和弦位移在 FP32 计算。速度使用本次写回舍入前的 `h_next - h`，下一个子层的前瞻使用已舍入的两个状态。Attention 和 FFN 接收 BF16。一个位置和通道的两条跨层状态合计占 4 字节。旧参考训练 af1c3266 使用 FP32 状态，旧 checkpoint 继续沿用其精度。
 
@@ -51,4 +39,4 @@ v_next = P(h_next, beta*v + (1 - beta)*chord)
 
 对同一批输入，逐子层检查 `mean(h*h) ≈ 1` 和 `mean(h*v) ≈ 0`。把两个步长设为相同值时，写回应化简为 `N(h + alpha*delta)`。对照实现还覆盖非零前瞻、互异步长、速度为零时的梯度，以及整段推理与 KV cache 分段推理的一致性。[PyTorch 更新](../../../nanochat/lookahead.py) · [Triton 前反向](../../../nanochat/chord_triton.py) · [几何与梯度测试](../../../tests/test_chord_velocity_geometry.py) · [分支接线与优化器](../../../nanochat/connection_model.py)
 
-对应的 10B 配方为 8 层、宽 512、4 头、上下文 2048、词表 32768。Attention 输出和 FFN down 投影按标准差 `0.02/sqrt(2*depth)` 初始化。参考训练使用 seed 42、FineWeb-Edu packed 2K、FA2 和 MuonAdamW，每步 16 条序列共 32768 tokens，训练 305176 步。实现版本为 `84a4e16`。[投影版训练 af1c3266](https://wandb.ai/yibozhong657-none/nanochat/runs/af1c3266) · [固定版本源码](https://github.com/yibozhong/nanochat/tree/84a4e16b148de495a2c14c7ceb9c4bde10afb638)
+对应的 10B 配方为 8 层、宽 512、4 头、上下文 2048、词表 32768。Attention 输出和 FFN down 投影按标准差 `0.02/sqrt(2*depth)` 初始化。参考训练使用 seed 42、FineWeb-Edu packed 2K、FA2 和 MuonAdamW，每步 16 条序列共 32768 tokens，目标 305176 步。[默认训练 a7163d23](https://wandb.ai/yibozhong657-none/nanochat/runs/a7163d23) · [该训练使用的源码](https://github.com/yibozhong/nanochat/tree/c9823a1f2e13b326328b584354a20890d8afa346)

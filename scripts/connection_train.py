@@ -38,7 +38,7 @@ def check_resume_protocol(state, source, protocol, *, latest):
 
 
 def main():
-    p = argparse.ArgumentParser()
+    p = argparse.ArgumentParser(fromfile_prefix_chars='@')
     p.add_argument('--variant', choices=CONNECTION_VARIANTS, required=True)
     p.add_argument('--sequence-length', type=int, default=2048)
     p.add_argument('--attention-kernel', choices=('original','fla_triton'), default='original')
