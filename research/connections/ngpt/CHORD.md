@@ -2,6 +2,8 @@
 
 Chord 为每个 token 维护球面上的 hidden `h` 和与它垂直的速度 `v`。每个 Attention 和 FFN 子层在前瞻点读取，用两个步长写回当前 hidden，再用实际位移更新速度。Attention、FFN、分支 pre-norm 和 NTP loss 沿用 vanilla 主干。
 
+[交互演示](chord-demo.html)可下载后用浏览器离线打开。拖动球面、切换更新阶段或调节步长，即可观察一个示例 token 的位置与切向速度。
+
 ## nanochat 配置
 
 以下是传给 `python -m scripts.connection_train` 的模型参数片段。迁移时请显式保存 `project_only`。原 CLI 和缺少此字段的历史 Chord checkpoint 使用 `parallel_transport`。

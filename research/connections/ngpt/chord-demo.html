@@ -1,0 +1,1255 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light" />
+    <title>ChordRes · 球面残差更新</title>
+    <style>
+      :root {
+        --paper: #f6f4ed;
+        --card: #fdfcf7;
+        --ink: #172f2c;
+        --muted: #536660;
+        --line: #d7dcd2;
+        --accent: #166651;
+        --mono: "IBM Plex Mono", "SFMono-Regular", Consolas, monospace;
+        --sans: Inter, "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        color: var(--ink);
+        background: var(--paper);
+        font: 15px/1.55 var(--sans);
+      }
+      button,
+      input,
+      select {
+        font: inherit;
+      }
+      button,
+      select,
+      input[type="range"],
+      input[type="checkbox"] {
+        cursor: pointer;
+      }
+      button {
+        color: inherit;
+      }
+      button:focus-visible,
+      input:focus-visible,
+      select:focus-visible,
+      canvas:focus-visible,
+      summary:focus-visible {
+        outline: 3px solid #db9835;
+        outline-offset: 3px;
+      }
+      main {
+        max-width: 1320px;
+        padding: 36px clamp(16px, 4vw, 62px) 40px;
+        margin: auto;
+      }
+      .mast {
+        display: flex;
+        align-items: center;
+        flex-wrap: wrap;
+        gap: 12px 24px;
+        margin-bottom: 20px;
+      }
+      .mast h1 {
+        font:
+          normal clamp(46px, 5vw, 74px) / 1 "Baskervville",
+          Georgia,
+          serif;
+        letter-spacing: -0.055em;
+        margin: 0;
+      }
+      .mast .text {
+        padding-left: 22px;
+        border-left: 1px solid #bdc8bf;
+      }
+      .mast h2 {
+        font-size: clamp(17px, 2vw, 23px);
+        letter-spacing: 0.04em;
+        font-weight: 650;
+        margin: 0;
+      }
+      .mast p {
+        color: var(--muted);
+        margin: 3px 0 0;
+        font-size: 13px;
+      }
+      .workbench {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr) minmax(270px, 320px);
+        align-items: start;
+        gap: 18px;
+      }
+      .viewer,
+      .panel {
+        border: 1px solid var(--line);
+        border-radius: 16px;
+        background: var(--card);
+        overflow: hidden;
+      }
+      .scene {
+        position: relative;
+        background: #102928;
+        color: #f5f7ec;
+        isolation: isolate;
+      }
+      .scene canvas {
+        width: 100%;
+        height: clamp(365px, 42vw, 480px);
+        display: block;
+        touch-action: none;
+        cursor: grab;
+      }
+      .scene canvas.dragging {
+        cursor: grabbing;
+      }
+      .scene-head {
+        position: absolute;
+        z-index: 1;
+        top: 16px;
+        left: 20px;
+        right: 16px;
+        display: flex;
+        align-items: start;
+        justify-content: space-between;
+        gap: 8px;
+        pointer-events: none;
+      }
+      .subname {
+        margin-right: auto;
+        font-weight: 550;
+        font-size: 15px;
+      }
+      .subname span {
+        color: #9fbeb3;
+        font: 12px var(--mono);
+        margin-right: 8px;
+      }
+      .scene .ghost {
+        pointer-events: auto;
+        border: 1px solid #59726b;
+        border-radius: 7px;
+        background: #16332ff2;
+        color: #dce9df;
+        padding: 4px 9px;
+        font-size: 12px;
+      }
+      .scene .ghost:hover {
+        background: #24483e;
+      }
+      .scene-foot {
+        position: absolute;
+        bottom: 12px;
+        left: 18px;
+        right: 18px;
+        display: flex;
+        justify-content: space-between;
+        align-items: flex-end;
+        gap: 8px;
+        pointer-events: none;
+        color: #b2c8be;
+        font-size: 12px;
+      }
+      .viewhint {
+        font-size: 11px;
+        color: #a9c7b9;
+      }
+      .readouts {
+        display: flex;
+        gap: 12px;
+        font: 12px var(--mono);
+        color: #dceae2;
+        flex-wrap: wrap;
+      }
+      .legend {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 5px 15px;
+        padding: 11px 18px;
+        background: #153330;
+        color: #e3eee4;
+        font-size: 12px;
+        border-top: 1px solid #395752;
+      }
+      .legend span {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 100%;
+        background: var(--color);
+        display: inline-block;
+      }
+      .player {
+        padding: 13px 18px;
+        display: flex;
+        align-items: center;
+        gap: 11px;
+      }
+      .play,
+      .step,
+      .preset button,
+      .stages button,
+      .speed {
+        background: transparent;
+        border: 1px solid var(--line);
+        border-radius: 7px;
+        color: var(--ink);
+      }
+      .play,
+      .step {
+        min-height: 36px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 6px;
+      }
+      .play {
+        background: var(--ink);
+        color: #fff;
+        border-color: var(--ink);
+        min-width: 74px;
+      }
+      .play:hover {
+        background: #245248;
+      }
+      .step {
+        width: 32px;
+        font-size: 13px;
+      }
+      .step:hover,
+      .stages button:hover,
+      .preset button:hover {
+        background: #eaf1e7;
+      }
+      button:disabled {
+        opacity: 0.35;
+        cursor: default;
+      }
+      .player .scrub {
+        flex: 1;
+        min-width: 44px;
+      }
+      .speed {
+        height: 34px;
+        padding: 0 5px;
+        background: var(--card);
+        font: 12px var(--mono);
+      }
+      .counter {
+        white-space: nowrap;
+        color: var(--muted);
+        font: 12px var(--mono);
+      }
+      input[type="range"] {
+        height: 20px;
+        margin: 0;
+        background: transparent;
+        accent-color: var(--accent);
+        width: 100%;
+      }
+      .stages {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 6px;
+      }
+      .stages button {
+        white-space: nowrap;
+        padding: 6px;
+        font-size: 13px;
+      }
+      .stages button[aria-pressed="true"] {
+        color: #fff;
+        background: var(--ink);
+        border-color: var(--ink);
+      }
+      .explanation {
+        padding: 15px 18px 17px;
+        border-top: 1px solid var(--line);
+      }
+      .explanation p {
+        margin: 12px 0 5px;
+        font-size: 14px;
+      }
+      .eq {
+        color: var(--accent);
+        font: 13px/1.6 var(--mono);
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+      }
+      .panel {
+        padding: 19px 20px 15px;
+      }
+      .panel h2 {
+        margin: 0 0 12px;
+        font-size: 19px;
+      }
+      .preset {
+        display: flex;
+        gap: 5px;
+      }
+      .preset button {
+        flex: 1;
+        padding: 6px;
+        font-size: 13px;
+      }
+      .preset button[aria-pressed="true"] {
+        border-color: #61937e;
+        background: #e3efe3;
+        color: #154e3d;
+      }
+      .knobs {
+        margin: 14px 0 10px;
+      }
+      .knob {
+        padding: 8px 0;
+        border-bottom: 1px solid var(--line);
+      }
+      .knob:last-child {
+        border: 0;
+      }
+      .knob label {
+        display: flex;
+        align-items: baseline;
+        gap: 8px;
+      }
+      .knob .symbol {
+        font:
+          italic 20px Georgia,
+          serif;
+        min-width: 32px;
+        color: var(--accent);
+      }
+      .knob small {
+        font-size: 13px;
+      }
+      .knob output {
+        margin-left: auto;
+        font: 14px var(--mono);
+        font-variant-numeric: tabular-nums;
+      }
+      .knob input {
+        display: block;
+      }
+      .layers {
+        border-top: 1px solid var(--line);
+        margin-top: 12px;
+        padding-top: 12px;
+        display: flex;
+        gap: 16px;
+        flex-wrap: wrap;
+        font-size: 13px;
+      }
+      .layers label {
+        display: flex;
+        gap: 6px;
+        align-items: center;
+      }
+      .layers input {
+        accent-color: var(--accent);
+        margin: 0;
+        width: 15px;
+        height: 15px;
+      }
+      .note {
+        font-size: 12px;
+        line-height: 1.65;
+        color: var(--muted);
+        margin: 14px 0 0;
+      }
+      .method {
+        border-top: 1px solid var(--line);
+        margin-top: 16px;
+        padding-top: 12px;
+        font-size: 14px;
+      }
+      .method summary {
+        color: var(--accent);
+        cursor: pointer;
+        font-weight: 600;
+        width: fit-content;
+      }
+      .method p {
+        max-width: 78ch;
+        margin: 8px 0;
+      }
+      .method code {
+        font-family: var(--mono);
+        overflow-wrap: anywhere;
+      }
+      .method ol {
+        padding-left: 1.5em;
+        max-width: 90ch;
+      }
+      .method li {
+        margin: 5px 0;
+      }
+      @media (max-width: 850px) {
+        main {
+          padding-top: 22px;
+        }
+        .workbench {
+          grid-template-columns: minmax(0, 1fr);
+        }
+        .panel {
+          padding: 14px 18px;
+        }
+        .knobs {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 0 25px;
+        }
+        .knob:nth-child(3) {
+          border: 0;
+        }
+        .preset {
+          max-width: 300px;
+        }
+        .scene canvas {
+          height: clamp(340px, 68vw, 460px);
+        }
+      }
+      @media (max-width: 500px) {
+        main {
+          padding: 18px 10px 26px;
+        }
+        .mast {
+          gap: 10px;
+          margin-bottom: 14px;
+        }
+        .mast h1 {
+          font-size: 42px;
+        }
+        .mast .text {
+          padding-left: 10px;
+        }
+        .mast h2 {
+          font-size: 16px;
+        }
+        .mast p {
+          font-size: 11px;
+        }
+        .viewer,
+        .panel {
+          border-radius: 12px;
+        }
+        .scene-head {
+          left: 12px;
+          top: 12px;
+        }
+        .scene-foot {
+          left: 12px;
+          right: 12px;
+          bottom: 9px;
+        }
+        .viewhint {
+          display: none;
+        }
+        .legend {
+          gap: 4px 10px;
+          padding: 8px 12px;
+          font-size: 11px;
+        }
+        .player {
+          flex-wrap: wrap;
+          gap: 6px;
+          padding: 10px;
+        }
+        .play {
+          min-width: 58px;
+        }
+        .step {
+          width: 28px;
+        }
+        .player .scrub {
+          min-width: 36px;
+        }
+        .explanation {
+          padding: 10px 12px 13px;
+        }
+        .stages {
+          gap: 3px;
+        }
+        .stages button {
+          font-size: 12px;
+        }
+        .eq {
+          font-size: 12px;
+        }
+        .panel {
+          padding: 14px;
+        }
+        .knobs {
+          column-gap: 14px;
+        }
+        .knob label {
+          gap: 2px;
+        }
+        .knob small {
+          font-size: 12px;
+        }
+        .knob .symbol {
+          min-width: 24px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <main>
+      <header class="mast">
+        <h1>ChordRes</h1>
+        <div class="text">
+          <h2>球面残差更新</h2>
+          <p>跟随一个 token，穿过 Attention 与 FFN。</p>
+        </div>
+      </header>
+      <div class="workbench">
+        <section class="viewer" aria-label="球面更新动画">
+          <div class="scene">
+            <div class="scene-head">
+              <strong class="subname" id="subname"></strong
+              ><button type="button" class="ghost" id="side" title="正视半径与速度所在的平面，查看它们的直角">
+                正视直角</button
+              ><button type="button" class="ghost" id="home">复位视角</button>
+            </div>
+            <canvas
+              id="scene"
+              tabindex="0"
+              aria-label="三维球面。拖动或用方向键旋转，空格播放。图中状态也在下方以文字显示。"
+              >请使用支持 Canvas 的浏览器观看球面动画。</canvas
+            >
+            <div class="scene-foot">
+              <div class="readouts"><span id="radius"></span><span id="orthogonality"></span></div>
+              <span class="viewhint">拖动旋转 · 空格播放</span>
+            </div>
+          </div>
+          <div class="legend" aria-label="图例">
+            <span><i class="dot" style="--color: #f2f5dc"></i>h 当前位置</span
+            ><span><i class="dot" style="--color: #67edd0"></i>v 切向速度</span
+            ><span><i class="dot" style="--color: #ffd27b"></i>q 前瞻点</span
+            ><span><i class="dot" style="--color: #cfb5ff"></i>t 子层目标</span
+            ><span><i class="dot" style="--color: #ffa285"></i>h′ 写回点</span>
+          </div>
+          <div class="player">
+            <button class="play" id="play" type="button" aria-label="播放动画">▶ 播放</button>
+            <button class="step" id="prev" type="button" aria-label="上一个子层" title="上一个子层">
+              ◀
+            </button>
+            <input
+              class="scrub"
+              id="timeline"
+              type="range"
+              min="0"
+              max="16"
+              step="0.001"
+              value="0.31"
+              aria-label="子层时间轴"
+            />
+            <button class="step" id="next" type="button" aria-label="下一个子层" title="下一个子层">
+              ▶
+            </button>
+            <span class="counter" id="counter"></span
+            ><select class="speed" id="speed" aria-label="播放速度">
+              <option value="0.5">0.5×</option>
+              <option value="1" selected>1×</option>
+              <option value="2">2×</option>
+            </select>
+          </div>
+          <div class="explanation">
+            <div class="stages" aria-label="选择要查看的更新阶段">
+              <button type="button" data-phase="0">① 前瞻读取</button
+              ><button type="button" data-phase="1">② 双步长写回</button
+              ><button type="button" data-phase="2">③ 速度投影</button>
+            </div>
+            <p id="caption"></p>
+            <div class="eq" id="equation"></div>
+          </div>
+        </section>
+        <aside class="panel" aria-label="更新参数">
+          <h2>更新参数</h2>
+          <div class="preset">
+            <button type="button" id="demo">演示值</button><button type="button" id="init">训练初值</button>
+          </div>
+          <div class="knobs">
+            <div class="knob">
+              <label for="mu"
+                ><span class="symbol">μ</span><small>前瞻距离系数</small
+                ><output for="mu" id="muVal"></output></label
+              ><input id="mu" type="range" min="-1.5" max="1.5" step=".01" value=".85" />
+            </div>
+            <div class="knob">
+              <label for="parallel"
+                ><span class="symbol">α∥</span><small>沿速度步长</small
+                ><output for="parallel" id="parallelVal"></output></label
+              ><input id="parallel" type="range" min=".01" max="1" step=".01" value=".52" />
+            </div>
+            <div class="knob">
+              <label for="perp"
+                ><span class="symbol">α⊥</span><small>其余分量步长</small
+                ><output for="perp" id="perpVal"></output></label
+              ><input id="perp" type="range" min=".01" max="1" step=".01" value=".28" />
+            </div>
+            <div class="knob">
+              <label for="beta"
+                ><span class="symbol">β</span><small>旧速度权重</small
+                ><output for="beta" id="betaVal"></output></label
+              ><input id="beta" type="range" min=".01" max=".99" step=".01" value=".50" />
+            </div>
+          </div>
+          <div class="layers">
+            <label><input type="checkbox" id="plane" checked />切平面</label
+            ><label><input type="checkbox" id="trail" checked />历史轨迹</label>
+          </div>
+          <p class="note">
+            三维示意取 r = √3，训练中 r =
+            √d_model。图中用三维旋转模拟子层输出。演示值放大了位移，方便观察。滑块同时作用于所有子层，真实模型逐子层学习。
+          </p>
+        </aside>
+      </div>
+      <details class="method">
+        <summary>图里的一步，对应模型里的什么？</summary>
+        <p>
+          每个子层读入同一 token 的位置 h 与切向速度 v。模型在前瞻点 q 运行 Attention 或 FFN，再用输出建议从 h
+          写回。本图用依赖 q 的确定性三维旋转模拟子层输出，用固定示例向量初始化 h 和 v。轨迹是示意数据。
+        </p>
+        <ol>
+          <li>
+            <b>读取。</b>沿 v 从 h 走 μ 倍速度，把结果归一化到球面得到 q。μ = 0
+            时，两个点重合。将分支输出归一化，得到淡紫色目标点 t。
+          </li>
+          <li>
+            <b>写回。</b>把 Δ = t − h 分成沿 v 的 p 和与 v 垂直的 s。分量 s 可以有径向部分。两个步长分别缩放 p
+            和 s，和 h 相加后归一化得到 h′。珊瑚色直线是实际位移 c = h′ − h。
+          </li>
+          <li>
+            <b>更新速度。</b>用 β 混合旧速度和弦位移，将结果 w 投到 h′ 的切平面得到 v′。下一子层从 (h′, v′)
+            开始。最后一个 FFN 后，输出头只读 h′。
+          </li>
+        </ol>
+        <p>
+          记 N(x) = r x / ‖x‖，P(h, x) = x − (h·x /
+          r²)h。切平面接触球面的位置就是当前速度的起点；左下角显示该点的位置模长以及与速度的夹角。
+        </p>
+      </details>
+    </main>
+    <script>
+      "use strict";
+      const Chord = (() => {
+        const r = Math.sqrt(3);
+        const add = (a, b) => a.map((x, i) => x + b[i]);
+        const sub = (a, b) => a.map((x, i) => x - b[i]);
+        const scale = (a, k) => a.map((x) => k * x);
+        const dot = (a, b) => a.reduce((s, x, i) => s + x * b[i], 0);
+        const norm = (a) => Math.sqrt(dot(a, a));
+        const cross = (a, b) => [
+          a[1] * b[2] - a[2] * b[1],
+          a[2] * b[0] - a[0] * b[2],
+          a[0] * b[1] - a[1] * b[0],
+        ];
+        const unit = (a) => scale(a, 1 / Math.max(norm(a), 1e-12));
+        const sphere = (a) => scale(a, r / Math.sqrt(Math.max(dot(a, a), 3e-12)));
+        const tangent = (h, x) => sub(x, scale(h, dot(h, x) / (r * r)));
+        function branch(q, i) {
+          // Rodrigues rotation gives each toy branch a reproducible, q-dependent target.
+          const k = unit(i % 2 ? [-0.48, 0.43, -0.71] : [0.12, 0.96, -0.16]);
+          const a = (i % 2 ? 0.9 : 1.27) + 0.17 * Math.sin(i * 0.73);
+          return add(
+            add(scale(q, Math.cos(a)), scale(cross(k, q), Math.sin(a))),
+            scale(k, dot(k, q) * (1 - Math.cos(a))),
+          );
+        }
+        function trace(params, count) {
+          const h0 = sphere([-0.57, -0.3, 0.77]);
+          let h = h0,
+            v = scale(unit(tangent(h, [0.7, 0.85, 0.06])), 0.62 * r);
+          const steps = [];
+          for (let i = 0; i < count; i++) {
+            const q = sphere(add(h, scale(v, params.mu)));
+            const target = sphere(branch(q, i));
+            const delta = sub(target, h);
+            const p = scale(v, dot(delta, v) / Math.max(dot(v, v), 3e-12));
+            const along = scale(p, params.parallel),
+              other = scale(sub(delta, p), params.perp);
+            const corner = add(h, along),
+              raw = add(corner, other),
+              end = sphere(raw);
+            const chord = sub(end, h);
+            const mixed = add(scale(v, params.beta), scale(chord, 1 - params.beta));
+            const velocity = tangent(end, mixed);
+            steps.push({ h, v, q, target, corner, raw, end, chord, mixed, velocity });
+            h = end;
+            v = velocity;
+          }
+          return steps;
+        }
+        return { r, add, sub, scale, dot, norm, cross, unit, sphere, trace };
+      })();
+    </script>
+    <script>
+      (() => {
+        "use strict";
+        const { r, add, sub, scale, dot, norm, cross, unit, sphere, trace } = Chord;
+        const $ = (id) => document.getElementById(id);
+        const canvas = $("scene"),
+          ctx = canvas.getContext("2d");
+        const total = 16,
+          TAU = 2 * Math.PI,
+          initialTime = 0.31;
+        const presets = {
+          demo: { mu: 0.85, parallel: 0.52, perp: 0.28, beta: 0.5 },
+          init: { mu: 0, parallel: 0.05, perp: 0.05, beta: 0.5 },
+        };
+        const params = { ...presets.demo };
+        const colors = {
+          h: "#f2f5dc",
+          v: "#67edd0",
+          q: "#ffd27b",
+          target: "#cfb5ff",
+          end: "#ffa285",
+          other: "#86bdff",
+          grid: "#82c9ac",
+        };
+        const captions = [
+          "沿切向速度 v 前瞻，再归一化得到 q。子层在 q 读取，淡紫点是它给出的目标。",
+          "从 h 指向子层目标，把建议位移分成沿 v 的 p 和垂直于 v 的 s。分别缩放、相加，再投回球面得到 h′。",
+          "将旧速度与实际走过的弦混合。在新位置去掉混合速度的径向分量，让下一次前瞻沿新切平面出发。",
+        ];
+        const equations = [
+          "q = N(h + μv)     t = N(F(q))",
+          "Δ = t − h = p + s　　 h′ = N(h + α∥p + α⊥s)",
+          "c = h′ − h　　 w = βv + (1 − β)c　　 v′ = P(h′, w)",
+        ];
+        const phases = [...document.querySelectorAll("[data-phase]")];
+        const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+        const mix = (a, b, t) => add(a, scale(sub(b, a), t));
+        const ease = (x) => {
+          const t = clamp(x, 0, 1);
+          return t * t * (3 - 2 * t);
+        };
+        let steps = trace(params, total),
+          time = initialTime,
+          showingPreview = true,
+          playing = false,
+          lastStamp;
+        let yaw = -0.1,
+          pitch = 0.19,
+          width,
+          height,
+          radius,
+          cx,
+          cy,
+          dpr;
+        let backdrop,
+          frame,
+          uiKey,
+          labels = [];
+        function project([x, y, z]) {
+          const xx = Math.cos(yaw) * x + Math.sin(yaw) * z,
+            zz = -Math.sin(yaw) * x + Math.cos(yaw) * z;
+          return {
+            x: cx + (radius * xx) / r,
+            y: cy - (radius * (Math.cos(pitch) * y - Math.sin(pitch) * zz)) / r,
+            z: Math.sin(pitch) * y + Math.cos(pitch) * zz,
+          };
+        }
+        function rebuildBackdrop() {
+          backdrop = document.createElement("canvas");
+          backdrop.width = canvas.width;
+          backdrop.height = canvas.height;
+          const b = backdrop.getContext("2d");
+          b.scale(dpr, dpr);
+          const sky = b.createRadialGradient(cx - radius * 0.7, cy - radius * 0.8, 0, cx, cy, width * 0.8);
+          sky.addColorStop(0, "#254843");
+          sky.addColorStop(1, "#0d2426");
+          b.fillStyle = sky;
+          b.fillRect(0, 0, width, height);
+          // An orthographic sphere. Split graticules at the silhouette to distinguish depth.
+          const globe = b.createRadialGradient(
+            cx - radius * 0.38,
+            cy - radius * 0.46,
+            0,
+            cx,
+            cy,
+            radius * 1.02,
+          );
+          globe.addColorStop(0, "#427466");
+          globe.addColorStop(0.72, "#305b51");
+          globe.addColorStop(1, "#1b413d");
+          b.beginPath();
+          b.arc(cx, cy, radius, 0, TAU);
+          b.fillStyle = globe;
+          b.fill();
+          const front = new Path2D(),
+            back = new Path2D();
+          function curve(point, segments) {
+            let prev = project(point(0));
+            for (let i = 1; i <= segments; i++) {
+              const pt = project(point(i / segments)),
+                path = pt.z + prev.z > 0 ? front : back;
+              path.moveTo(prev.x, prev.y);
+              path.lineTo(pt.x, pt.y);
+              prev = pt;
+            }
+          }
+          for (let j = -4; j <= 4; j++) {
+            const lat = (j * Math.PI) / 10;
+            curve(
+              (t) => [
+                r * Math.cos(lat) * Math.cos(TAU * t),
+                r * Math.sin(lat),
+                r * Math.cos(lat) * Math.sin(TAU * t),
+              ],
+              96,
+            );
+          }
+          for (let k = 0; k < 16; k++) {
+            const lon = (k * TAU) / 16;
+            curve((t) => {
+              const lat = (t - 0.5) * Math.PI;
+              return [
+                r * Math.cos(lat) * Math.cos(lon),
+                r * Math.sin(lat),
+                r * Math.cos(lat) * Math.sin(lon),
+              ];
+            }, 56);
+          }
+          b.lineWidth = 0.75;
+          b.strokeStyle = "rgba(166,220,195,.065)";
+          b.stroke(back);
+          b.strokeStyle = "rgba(163,220,193,.33)";
+          b.stroke(front);
+          b.beginPath();
+          b.arc(cx, cy, radius, 0, TAU);
+          b.lineWidth = 1.45;
+          b.strokeStyle = "#8ebba4";
+          b.stroke();
+        }
+        function resize() {
+          const rect = canvas.getBoundingClientRect();
+          width = rect.width;
+          height = rect.height;
+          dpr = Math.min(window.devicePixelRatio || 1, 2);
+          canvas.width = Math.round(width * dpr);
+          canvas.height = Math.round(height * dpr);
+          cx = width * 0.5;
+          cy = height * 0.51;
+          radius = Math.min(width * 0.305, (height - 55) * 0.435);
+          backdrop = null;
+          requestDraw();
+        }
+        function path(points, color, lineWidth = 1, dash = [], opacity = 1, arrow = false) {
+          const vertices = points.map(project);
+          ctx.save();
+          ctx.strokeStyle = color;
+          ctx.fillStyle = color;
+          ctx.lineWidth = lineWidth;
+          ctx.globalAlpha = opacity;
+          ctx.setLineDash(dash);
+          ctx.lineCap = "round";
+          ctx.lineJoin = "round";
+          ctx.beginPath();
+          vertices.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)));
+          ctx.stroke();
+          if (arrow) {
+            const a = vertices[vertices.length - 2],
+              b = vertices[vertices.length - 1],
+              dx = b.x - a.x,
+              dy = b.y - a.y,
+              dist = Math.hypot(dx, dy);
+            if (dist > 3) {
+              const l = Math.min(8, dist * 0.44),
+                w = l * 0.5,
+                x = dx / dist,
+                y = dy / dist;
+              ctx.beginPath();
+              ctx.moveTo(b.x, b.y);
+              ctx.lineTo(b.x - l * x - w * y, b.y - l * y + w * x);
+              ctx.lineTo(b.x - l * x + w * y, b.y - l * y - w * x);
+              ctx.closePath();
+              ctx.fill();
+            }
+          }
+          ctx.restore();
+        }
+        function arrow(a, b, color, alpha = 1) {
+          path([a, b], color, 2.4, [], alpha, true);
+        }
+        function point(a, color, size = 5) {
+          const p = project(a);
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, size, 0, TAU);
+          ctx.fillStyle = color;
+          ctx.fill();
+          ctx.strokeStyle = "#193631";
+          ctx.lineWidth = 1.5;
+          ctx.stroke();
+        }
+        function label(a, name, color, dir = 1) {
+          labels.push({ p: project(a), name, color, dir });
+        }
+        function drawLabels() {
+          const occupied = [];
+          const narrow = width < 520,
+            fh = narrow ? 12 : 13;
+          ctx.font = "600 " + fh + "px system-ui, sans-serif";
+          for (const { p, name, color, dir } of labels) {
+            const w = ctx.measureText(name).width + 13,
+              h = 22;
+            let best,
+              bestScore = Infinity;
+            for (const dist of [13, 30, 50, 74]) {
+              for (const [sx, sy] of [
+                [dir, -1],
+                [dir, 1],
+                [-dir, -1],
+                [-dir, 1],
+                [dir, 0],
+                [-dir, 0],
+              ]) {
+                const x = clamp(p.x + (sx > 0 ? dist : -dist - w), 5, width - w - 5);
+                const y = clamp(p.y + sy * dist * 0.65 - h * 0.5, 46, height - h - 31);
+                let cost = Math.hypot(x + w * 0.5 - p.x, y + h * 0.5 - p.y);
+                for (const o of occupied)
+                  cost +=
+                    Math.max(0, Math.min(x + w + 3, o.x + o.w) - Math.max(x - 3, o.x)) *
+                    Math.max(0, Math.min(y + h + 3, o.y + o.h) - Math.max(y - 3, o.y)) *
+                    6;
+                for (const mark of labels)
+                  if (mark.p.x > x - 4 && mark.p.x < x + w + 4 && mark.p.y > y - 4 && mark.p.y < y + h + 4)
+                    cost += 500;
+                if (cost < bestScore) {
+                  bestScore = cost;
+                  best = { x, y, w, h };
+                }
+              }
+            }
+            const { x, y } = best;
+            occupied.push(best);
+            ctx.strokeStyle = color;
+            ctx.globalAlpha = 0.55;
+            ctx.lineWidth = 0.85;
+            ctx.beginPath();
+            ctx.moveTo(p.x, p.y);
+            ctx.lineTo(clamp(p.x, x, x + w), clamp(p.y, y, y + h));
+            ctx.stroke();
+            ctx.globalAlpha = 1;
+            ctx.fillStyle = "#152e2cf2";
+            ctx.beginPath();
+            ctx.roundRect(x, y, w, h, 5);
+            ctx.fill();
+            ctx.fillStyle = color;
+            ctx.textBaseline = "middle";
+            ctx.fillText(name, x + 6, y + h * 0.5 + 0.5);
+          }
+        }
+        function tangentPlane(h, v) {
+          const n = unit(h);
+          const basis =
+            norm(v) > 1e-8 ? unit(v) : unit(cross(n, Math.abs(n[1]) < 0.85 ? [0, 1, 0] : [1, 0, 0]));
+          const side = unit(cross(n, basis));
+          const corner = (a, b) => add(h, add(scale(basis, a * r), scale(side, b * r)));
+          const corners = [
+            corner(-0.19, -0.23),
+            corner(0.68, -0.23),
+            corner(0.68, 0.23),
+            corner(-0.19, 0.23),
+          ].map(project);
+          ctx.beginPath();
+          corners.forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y)));
+          ctx.closePath();
+          ctx.fillStyle = "rgba(114,239,198,.13)";
+          ctx.fill();
+          ctx.strokeStyle = "rgba(145,244,215,.47)";
+          ctx.lineWidth = 1;
+          ctx.stroke();
+          // Draw the right-angle mark in 3D so it rotates with the tangent plane.
+          const a = scale(n, -0.08 * r),
+            b = scale(basis, 0.08 * r);
+          path([add(h, a), add(add(h, a), b), add(h, b)], colors.v, 1.15, [], 0.9);
+        }
+        function phaseState() {
+          const index = Math.min(total - 1, Math.floor(time)),
+            frac = time - index;
+          const phase = Math.min(2, Math.floor(frac * 3));
+          return { index, phase, t: clamp(frac * 3 - phase, 0, 1) };
+        }
+        function draw() {
+          if (!width || !height) return;
+          const { index, phase, t } = phaseState(),
+            step = steps[index];
+          const { h, v, q, target, corner, raw, end, mixed, velocity } = step;
+          const finalOutput = index === total - 1 && phase === 2;
+          if (!backdrop) rebuildBackdrop();
+          ctx.setTransform(1, 0, 0, 1, 0, 0);
+          ctx.drawImage(backdrop, 0, 0);
+          ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+          labels = [];
+          const anchor = phase === 2 ? end : h,
+            vel = phase === 2 ? velocity : v,
+            zero = [0, 0, 0];
+          if ($("trail").checked && index > 0) {
+            for (let i = 0; i < index; i++) {
+              const s = steps[i];
+              path([s.h, s.end], "#e9bd9c", 1.7, [], 0.4 + (0.4 * (i + 1)) / index);
+              point(s.h, "#c4b8a1", 2.2);
+            }
+          }
+          if ($("plane").checked && !finalOutput) tangentPlane(anchor, vel);
+          path([zero, anchor], "#d2ddc2", 1, [3, 5], 0.58);
+          point(zero, "#bbd1ba", 2.4);
+          if (phase === 0) {
+            const a = ease(t * 1.8),
+              offset = add(h, scale(v, params.mu * a)),
+              read = sphere(offset),
+              tip = add(h, v);
+            arrow(h, tip, colors.v);
+            label(tip, "v", colors.v);
+            if (norm(sub(read, h)) > 0.01 && a > 0.01) {
+              path([h, offset, read], colors.q, 1.65, [4, 4], 0.95);
+              point(read, colors.q, 5);
+              label(read, "q", colors.q);
+            }
+            if (t > 0.53) {
+              const reveal = ease((t - 0.53) / 0.43);
+              path([q, mix(q, target, reveal)], colors.target, 1.4, [2, 5], 0.8);
+              if (reveal > 0.9) {
+                point(target, colors.target);
+                label(target, "t", colors.target);
+              }
+            }
+            point(h, colors.h, 6);
+            label(h, Math.abs(params.mu) < 1e-8 ? "h = q" : "h", colors.h, -1);
+          } else if (phase === 1) {
+            path([h, target], colors.target, 1.4, [3, 5], 0.7);
+            point(target, colors.target);
+            label(target, "t", colors.target);
+            const a = ease(t * 2.7),
+              b = ease((t - 0.23) * 2.6),
+              c = ease((t - 0.58) * 2.75);
+            arrow(h, mix(h, corner, a), colors.v);
+            if (a > 0.3 && norm(sub(corner, h)) > 0.05) label(mix(h, corner, 0.48), "α∥p", colors.v, -1);
+            if (b > 0.01) {
+              arrow(corner, mix(corner, raw, b), colors.other);
+              if (b > 0.5 && norm(sub(raw, corner)) > 0.05)
+                label(mix(corner, raw, 0.55), "α⊥s", colors.other);
+            }
+            if (c > 0.01) {
+              path([raw, end], colors.end, 1.4, [3, 4], 0.85);
+              const tip = mix(h, end, c);
+              arrow(h, tip, colors.end);
+              if (c > 0.97) {
+                point(end, colors.end, 6);
+                label(end, "h′", colors.end);
+              }
+            }
+            point(h, colors.h, 6);
+            label(h, "h", colors.h, -1);
+          } else {
+            const a = ease(t * 2.2),
+              b = ease((t - 0.25) * 1.8),
+              start = add(end, mixed),
+              tip = add(end, velocity);
+            point(h, colors.h, 5);
+            label(h, "h", colors.h, -1);
+            arrow(h, end, colors.end);
+            if (!finalOutput) {
+              path([h, add(h, v)], colors.v, 1.5, [3, 5], 0.55);
+              arrow(end, mix(end, start, a), "#c9d4d7", 0.9);
+              if (a > 0.8) label(start, "w", "#d8e0df", -1);
+              if (b > 0.02) {
+                path([start, mix(start, tip, b)], colors.q, 1.5, [3, 4]);
+                arrow(end, mix(start, tip, b), colors.v);
+                if (b > 0.9) label(tip, "v′", colors.v);
+              }
+            }
+            point(end, colors.end, 6);
+            label(end, "h′", colors.end);
+          }
+          drawLabels();
+          const key = [index, phase, playing, finalOutput, time >= total].join("/");
+          if (uiKey !== key) {
+            uiKey = key;
+            $("subname").textContent =
+              "第 " + (Math.floor(index / 2) + 1) + " 层 · " + (index % 2 ? "FFN" : "Attention");
+            $("counter").textContent = index + 1 + " / " + total;
+            phases.forEach((el, i) => el.setAttribute("aria-pressed", String(i === phase)));
+            $("side").disabled = finalOutput;
+            phases[2].textContent = index === total - 1 ? "③ 输出 hidden" : "③ 速度投影";
+            $("caption").textContent = finalOutput
+              ? "最后一个 FFN 已完成写回，输出头读取 h′。"
+              : captions[phase];
+            $("equation").textContent = finalOutput ? "c = h′ − h" : equations[phase];
+            $("play").textContent = playing ? "Ⅱ 暂停" : time >= total ? "↺ 重播" : "▶ 播放";
+            $("play").setAttribute(
+              "aria-label",
+              playing ? "暂停动画" : time >= total ? "重播动画" : "播放动画",
+            );
+          }
+          $("prev").disabled = index === 0;
+          $("next").disabled = time >= total;
+          $("timeline").value = time;
+          $("timeline").setAttribute(
+            "aria-valuetext",
+            "子层 " + (index + 1) + "，" + phases[phase].textContent.slice(2),
+          );
+          const hName = phase === 2 ? "h′" : "h",
+            vName = phase === 2 ? "v′" : "v";
+          $("radius").textContent = "‖" + hName + "‖ = " + norm(anchor).toFixed(3);
+          const tiny = norm(vel) < 1e-9;
+          const angle = tiny
+            ? 0
+            : (Math.acos(clamp(dot(anchor, vel) / (norm(anchor) * norm(vel)), -1, 1)) * 180) / Math.PI;
+          $("orthogonality").textContent = finalOutput
+            ? ""
+            : tiny
+              ? "‖" + vName + "‖ ≈ 0"
+              : "∠(" + hName + ", " + vName + ") = " + angle.toFixed(1) + "°";
+        }
+        function tick(stamp) {
+          frame = undefined;
+          if (playing && lastStamp !== undefined) {
+            time = Math.min(
+              total,
+              time + (Math.min(100, stamp - lastStamp) / 4600) * Number($("speed").value),
+            );
+            if (time === total) playing = false;
+          }
+          lastStamp = playing ? stamp : undefined;
+          draw();
+          if (playing) requestDraw();
+        }
+        function requestDraw() {
+          if (frame === undefined) frame = requestAnimationFrame(tick);
+        }
+        function seek(value) {
+          showingPreview = false;
+          playing = false;
+          lastStamp = undefined;
+          time = clamp(value, 0, total);
+          requestDraw();
+        }
+        function togglePlay() {
+          if (!playing && (showingPreview || time >= total)) time = 0;
+          showingPreview = false;
+          playing = !playing;
+          lastStamp = undefined;
+          requestDraw();
+        }
+        function updateParams() {
+          for (const id of Object.keys(params)) {
+            $(id).value = params[id];
+            $(id + "Val").textContent = params[id].toFixed(2);
+          }
+          for (const [id, values] of Object.entries(presets))
+            $(id).setAttribute(
+              "aria-pressed",
+              String(Object.keys(params).every((k) => params[k] === values[k])),
+            );
+          steps = trace(params, total);
+          requestDraw();
+        }
+        for (const id of Object.keys(params))
+          $(id).addEventListener("input", () => {
+            params[id] = Number($(id).value);
+            updateParams();
+          });
+        for (const [id, values] of Object.entries(presets))
+          $(id).addEventListener("click", () => {
+            Object.assign(params, values);
+            updateParams();
+          });
+        phases.forEach((el, i) =>
+          el.addEventListener("click", () => seek(phaseState().index + (i + 0.97) / 3)),
+        );
+        $("play").addEventListener("click", togglePlay);
+        $("prev").addEventListener("click", () => seek(Math.max(0, phaseState().index - 1) + initialTime));
+        $("next").addEventListener("click", () =>
+          seek(Math.min(total, phaseState().index + 1 + initialTime)),
+        );
+        $("timeline").addEventListener("input", () => seek(Number($("timeline").value)));
+        for (const id of ["plane", "trail"]) $(id).addEventListener("change", requestDraw);
+        function orbit(dx, dy) {
+          yaw += dx;
+          pitch = clamp(pitch + dy, -1.52, 1.52);
+          backdrop = null;
+          requestDraw();
+        }
+        $("side").addEventListener("click", () => {
+          const { index, phase } = phaseState(),
+            s = steps[index];
+          const normal = cross(phase === 2 ? s.end : s.h, phase === 2 ? s.velocity : s.v);
+          if (norm(normal) < 1e-12) return;
+          const camera = [-Math.sin(yaw) * Math.cos(pitch), Math.sin(pitch), Math.cos(yaw) * Math.cos(pitch)];
+          const toward = scale(unit(normal), dot(normal, camera) < 0 ? -1 : 1);
+          yaw = Math.atan2(-toward[0], toward[2]);
+          pitch = Math.asin(clamp(toward[1], -1, 1));
+          backdrop = null;
+          requestDraw();
+        });
+        $("home").addEventListener("click", () => {
+          yaw = -0.1;
+          pitch = 0.19;
+          backdrop = null;
+          requestDraw();
+        });
+        let drag;
+        canvas.addEventListener("pointerdown", (e) => {
+          if (drag || e.button !== 0) return;
+          drag = { id: e.pointerId, x: e.clientX, y: e.clientY };
+          canvas.setPointerCapture(e.pointerId);
+          canvas.classList.add("dragging");
+        });
+        canvas.addEventListener("pointermove", (e) => {
+          if (!drag || drag.id !== e.pointerId) return;
+          orbit((e.clientX - drag.x) * 0.009, (e.clientY - drag.y) * 0.009);
+          drag.x = e.clientX;
+          drag.y = e.clientY;
+        });
+        canvas.addEventListener("lostpointercapture", () => {
+          drag = undefined;
+          canvas.classList.remove("dragging");
+        });
+        canvas.addEventListener("keydown", (e) => {
+          const move = {
+            ArrowLeft: [-0.14, 0],
+            ArrowRight: [0.14, 0],
+            ArrowUp: [0, -0.14],
+            ArrowDown: [0, 0.14],
+          }[e.key];
+          if (move) {
+            e.preventDefault();
+            orbit(...move);
+          }
+        });
+        document.addEventListener("keydown", (e) => {
+          if (e.code === "Space" && [document.body, canvas].includes(e.target)) {
+            e.preventDefault();
+            if (!e.repeat) togglePlay();
+          }
+        });
+        document.addEventListener("visibilitychange", () => {
+          if (document.hidden) {
+            playing = false;
+            lastStamp = undefined;
+            requestDraw();
+          }
+        });
+        new ResizeObserver(resize).observe(canvas);
+        updateParams();
+        resize();
+      })();
+    </script>
+  </body>
+</html>
