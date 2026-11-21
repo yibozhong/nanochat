@@ -58,6 +58,7 @@ class ConnectionConfig:
     signed_chord_steps: bool = False
     token_chord_gates: bool = False
     token_beta_gate: bool = False
+    channel_chord_coefficients: bool = False
     chord_velocity_geometry: str = 'parallel_transport'
     chord_state_dtype: str | None = None
     fuse_chord_read_norm: bool = False
@@ -122,6 +123,9 @@ class ConnectionConfig:
                 self.ngpt_velocity_mode != 'lookahead_split_learned_beta' or self.signed_chord_steps
                 or self.token_chord_gates or self.token_beta_gate):
             raise ValueError('Velocity geometry ablations require positive split steps and layerwise beta')
+        if self.channel_chord_coefficients and (
+                self.ngpt_velocity_mode != 'lookahead_split_learned_beta' or self.chord_velocity_geometry != 'project_only'):
+            raise ValueError('Channel alpha and beta require the project-only learned-beta Chord write')
         if self.token_beta_gate and (self.ngpt_velocity_mode != 'lookahead_split_learned_beta'
                                      or self.signed_chord_steps or self.token_chord_gates):
             raise ValueError('Token beta gate requires shared positive split steps and learned velocity decay')

@@ -135,18 +135,20 @@ class NormalizedResidual(nn.Module):
         super().__init__()
         self.initial_alpha = config.ngpt_alpha_init
         self.initial_raw = inverse_softplus(self.initial_alpha)
-        self.raw = nn.Parameter(torch.tensor([self.initial_raw], dtype=torch.float32))
+        size = config.width if config.channel_chord_coefficients else 1
+        self.raw = nn.Parameter(torch.full((size,), self.initial_raw, dtype=torch.float32))
         self.signed_chord_steps = config.signed_chord_steps
         self.initial_slope = -math.expm1(-self.initial_alpha)
         self.rms_floor = config.ngpt_force_rms_floor
 
     def step_size(self, raw):
-        positive = F.softplus(raw[0])
+        value = raw.squeeze(0)
+        positive = F.softplus(value)
         if self.signed_chord_steps:
             # Extend the softplus tangent below initialization. Both the value
             # and derivative match at the join, and the slope stays nonzero at zero.
-            tangent = self.initial_alpha + self.initial_slope * (raw[0] - self.initial_raw)
-            return torch.where(raw[0] >= self.initial_raw, positive, tangent)
+            tangent = self.initial_alpha + self.initial_slope * (value - self.initial_raw)
+            return torch.where(value >= self.initial_raw, positive, tangent)
         return positive
 
     def alpha(self):

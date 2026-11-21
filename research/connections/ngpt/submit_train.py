@@ -42,6 +42,8 @@ def main():
                         help='Benchmark separate, fused and force-recomputed Chord then train fused token-only from scratch')
     parser.add_argument('--token-only-velocity', action='store_true',
                         help='Remove the velocity position table from the project-only Chord control')
+    parser.add_argument('--channel-chord-coefficients', action='store_true',
+                        help='Compare per-channel alpha and beta to the fused token-only BF16 Chord')
     parser.add_argument('--token-beta-gate', action='store_true',
                         help='Compare token-dependent velocity decay to the positive split learned-beta control')
     parser.add_argument('--hopper-only', action='store_true',
@@ -69,6 +71,8 @@ def main():
     if args.token_beta_gate and (not learned_beta or args.token_chord_gates or args.signed_chord_steps):
         parser.error('--token-beta-gate requires the shared positive split learned-beta preset')
     geometry = args.chord_velocity_geometry
+    if args.channel_chord_coefficients and not args.fuse_chord_read_norm:
+        parser.error('--channel-chord-coefficients requires the fused default Chord control')
     if args.fuse_chord_read_norm and not args.token_only_velocity:
         parser.error('--fuse-chord-read-norm requires the token-only velocity experiment')
     if args.token_only_velocity and geometry != 'project_only':
@@ -107,6 +111,8 @@ def main():
         ROOT=HOME_ROOT/'residual-chord-velocity-token-only-bf16-10b-20261120'
         if args.fuse_chord_read_norm:
             ROOT=HOME_ROOT/'residual-chord-fused-read-token-only-bf16-10b-20261120'
+    if args.channel_chord_coefficients:
+        ROOT=HOME_ROOT/'residual-chord-channel-alpha-beta-10b-20261121'
     if arc_optimizer:
         tag = 'arc' if preset == 'arc' else 'arc-muon-direction'
         if preset == 'arc_muon_radius':
@@ -213,7 +219,16 @@ def main():
                           lookahead_mu_init=0., ngpt_velocity_mode='lookahead_transport' if mode=='ngpt_lookahead' else 'ambient', ngpt_weight_norm=False, schedule_steps=STEPS,
                           reference_run='d065c132', backbone_weight_constraint='none',
                           preflight='Zero-gate equality with nGPT, trainable lookahead, tangent geometry, causal KV, gradients, exact resume and same-GPU speed')
-        if args.token_only_velocity:
+        if args.channel_chord_coefficients:
+            control_dir = HOME_ROOT/'residual-chord-fused-read-token-only-bf16-10b-20261120-hopper-only'
+            control = json.loads((control_dir/'bundles/source.json').read_text())
+            assert control['run_id']=='a7163d23' and control['fuse_chord_read_norm'] and not control['recompute_chord_force']
+            assert control['seed']==42 and control['steps']==steps and control['chord_state_dtype']=='bfloat16'
+            assert control['velocity_init']=='token' and control['chord_velocity_geometry']==geometry
+            source = dict(control, plan=KEY, commit=commit, run_id=run_id, reference_run=control['run_id'],
+                          paired_run=control['run_id'], channel_chord_coefficients=True,
+                          preflight='Channel VJP, compiled cache and exact optimizer resume; matched scalar and channel 128-step profiles; fresh seed42 formal')
+        elif args.token_only_velocity:
             control_dir = HOME_ROOT/'residual-chord-velocity-project-only-10b-20261120-hopper-only'
             control = json.loads((control_dir/'bundles/source.json').read_text())
             assert control['run_id']=='af1c3266' and control['velocity_init']=='token_position'
@@ -416,6 +431,9 @@ def main():
         if args.fuse_chord_read_norm:
             job_args+=' --fuse-chord-read-norm'
             batch_name+='-fused-read'
+        if args.channel_chord_coefficients:
+            job_args+=' --channel-chord-coefficients'
+            batch_name+='-channel-alpha-beta'
         if connection:
             job_args += ' ambient --' + preset
         if arc_optimizer:

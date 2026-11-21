@@ -33,12 +33,12 @@ class LookaheadResidual(NormalizedResidual):
         self.beta_gate_slope = None
         if config.ngpt_velocity_mode == 'lookahead_split_learned_beta' and velocity_consumed:
             logit = math.log(self.decay / (1 - self.decay))
-            self.raw_beta = nn.Parameter(torch.tensor([logit], dtype=torch.float32))
+            self.raw_beta = nn.Parameter(torch.full_like(self.raw, logit))
             if config.token_beta_gate:
                 self.beta_gate_slope = nn.Parameter(torch.zeros(1, dtype=torch.float32))
 
     def beta(self):
-        return self.decay if self.raw_beta is None else self.raw_beta[0].sigmoid()
+        return self.decay if self.raw_beta is None else self.raw_beta.squeeze(0).sigmoid()
 
     def query(self, h, v):
         # The tangent-only denominator omits the vanishing cross term.
@@ -84,7 +84,7 @@ class LookaheadResidual(NormalizedResidual):
         if self.beta_gate_slope is not None:
             params = torch.stack((perp, parallel, self.raw_beta[0], self.beta_gate_slope[0]))
             return fused_beta_write(h, v, force, params, self.rms_floor)
-        beta = self.beta() if self.raw_beta is not None else self.raw.new_tensor(self.decay)
+        beta = self.beta() if self.raw_beta is not None else torch.full_like(perp, self.decay)
         if self.gate_slopes is not None:
             params = torch.stack((perp, parallel, beta, self.gate_slopes[0], self.gate_slopes[1]))
             return fused_gated_write(h, v, force, params, self.rms_floor)
@@ -218,6 +218,8 @@ class LookaheadModel(MomentumModel):
         if chord_kernel not in ('terminal', 'boundary', 'both'):
             raise ValueError(f'Unknown Chord kernel {chord_kernel}')
         c = self.config
+        if c.channel_chord_coefficients:
+            raise ValueError('Channel alpha and beta use the current Chord write kernel')
         if c.fuse_chord_read_norm or c.recompute_chord_force:
             raise ValueError('Fused read/norm and force recomputation use the current write kernel')
         if (c.ngpt_velocity_mode != 'lookahead_split_learned_beta' or c.signed_chord_steps or
@@ -258,14 +260,20 @@ class LookaheadModel(MomentumModel):
             mus = torch.stack([site.mu[0] for site in sites]).tolist()
             return {f'residual/sublayer_{i}/mu': value for i, value in enumerate(mus)}
         if sites[0].raw_parallel is not None:
-            values = torch.stack([torch.stack((s.alpha(), s.step_size(s.raw_parallel), s.mu[0]))
+            values = torch.stack([torch.stack((s.alpha().mean(), s.step_size(s.raw_parallel).mean(), s.mu[0]))
                                   for s in sites]).tolist()
             metrics = {f'residual/sublayer_{i}/{key}': value for i,row in enumerate(values)
                        for key,value in zip(('alpha_perp','alpha_parallel','mu'),row)}
             if sites[0].raw_beta is not None:
-                betas = torch.stack([s.beta() for s in sites if s.raw_beta is not None]).tolist()
+                betas = torch.stack([s.beta().mean() for s in sites if s.raw_beta is not None]).tolist()
                 key = 'beta_at_zero_alignment' if sites[0].beta_gate_slope is not None else 'beta'
                 metrics.update({f'residual/sublayer_{i}/{key}': value for i,value in enumerate(betas)})
+            if self.config.channel_chord_coefficients:
+                for key, vectors in (('alpha_perp', [s.alpha() for s in sites]),
+                                     ('alpha_parallel', [s.step_size(s.raw_parallel) for s in sites]),
+                                     ('beta', [s.beta() for s in sites if s.raw_beta is not None])):
+                    spreads = torch.stack(vectors).std(dim=-1, unbiased=False).tolist()
+                    metrics.update({f'residual/sublayer_{i}/{key}_std': x for i, x in enumerate(spreads)})
             if sites[0].beta_gate_slope is not None:
                 slopes = torch.stack([s.beta_gate_slope[0] for s in sites if s.beta_gate_slope is not None]).tolist()
                 metrics.update({f'residual/sublayer_{i}/beta_gate_slope': value for i,value in enumerate(slopes)})

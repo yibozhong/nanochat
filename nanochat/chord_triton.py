@@ -1,7 +1,7 @@
-"""Fused spherical residual write and VJP. One Triton program owns one token.
+"""Fused spherical residual write and VJP. The forward owns one token per program.
 
 Compile-time modes: 0 isotropic, 1 token alpha gates, 2 token beta gate,
-3 split steps with shared beta, 4 single step with a parallel-axis correction.
+3 split steps with shared beta, 4 single step with a parallel-axis correction, 5 channel-wise split steps and beta.
 """
 import torch
 import triton
@@ -14,7 +14,10 @@ _GEOMETRY = {'parallel_transport': 0, 'project_only': 1, 'ambient': 2}
 
 @triton.jit
 def _mean(x, D: tl.constexpr):
-    return tl.sum(x, 0) / D
+    if len(x.shape) == 2:
+        return tl.sum(x, 1)[:, None] / D
+    else:
+        return tl.sum(x, 0) / D
 
 
 @triton.jit
@@ -61,8 +64,12 @@ def _position(h, v, force, P, FLOOR2: tl.constexpr,
     elif MODE == 4:
         along = _mean(delta * v, D) / tl.maximum(_mean(v * v, D), 1e-12)
         mixed = h + tl.load(P) * (delta + (tl.load(P + 1) * along) * v)
-    elif MODE == 2 or MODE == 3:
-        perp, par = tl.load(P), tl.load(P + 1)
+    elif MODE == 2 or MODE == 3 or MODE == 5:
+        if MODE == 5:
+            channels = tl.arange(0, D)
+            perp, par = tl.load(P + channels), tl.load(P + D + channels)
+        else:
+            perp, par = tl.load(P), tl.load(P + 1)
         along = _mean(delta * v, D) / tl.maximum(_mean(v * v, D), 1e-12)
         mixed = (h + perp * delta) + ((par - perp) * along) * v
     else:
@@ -85,6 +92,8 @@ def _write_values(h, v, force, P, BETA: tl.constexpr, FLOOR2: tl.constexpr,
     if MODE == 2:
         geometry = _history_alignment(new_h, carried, new_h - h, D)
         beta = tl.sigmoid(tl.load(P + 2) + tl.load(P + 3) * geometry[0])
+    elif MODE == 5:
+        beta = tl.load(P + 2 * D + tl.arange(0, D))
     elif MODE == 1 or MODE == 3:
         beta = tl.load(P + 2)
     else:
@@ -198,13 +207,22 @@ def _forward(H, V, F, P, NH, NV, BETA: tl.constexpr, FLOOR2: tl.constexpr,
 @triton.jit
 def _backward(H, V, F, P, DNH, DNV, DH, DV, DF, DP, ROWS, BETA: tl.constexpr,
               FLOOR2: tl.constexpr, D: tl.constexpr, MODE: tl.constexpr, DQ, TERMINAL: tl.constexpr,
-              PREVIEW: tl.constexpr, GEOMETRY: tl.constexpr):
+              PREVIEW: tl.constexpr, GEOMETRY: tl.constexpr, ROW_TILE: tl.constexpr = 1):
     row = tl.program_id(0)
-    offsets = row.to(tl.int64) * D + tl.arange(0, D)
-    h = tl.load(H + offsets).to(tl.float32)
-    v = tl.load(V + offsets).to(tl.float32)
-    force = tl.load(F + offsets).to(tl.float32)
-    dh_next = tl.load(DNH + offsets).to(tl.float32)
+    if MODE == 5:
+        # Reduce coefficient gradients over a small tile of tokens before writing
+        # them out. No atomics or full [tokens, parameters] gradient buffer.
+        channels = tl.arange(0, D)
+        token = row * ROW_TILE + tl.arange(0, ROW_TILE)
+        offsets = token[:, None].to(tl.int64) * D + channels[None, :]
+        live = token[:, None] < ROWS
+    else:
+        offsets = row.to(tl.int64) * D + tl.arange(0, D)
+        live = True
+    h = tl.load(H + offsets, mask=live, other=0.).to(tl.float32)
+    v = tl.load(V + offsets, mask=live, other=0.).to(tl.float32)
+    force = tl.load(F + offsets, mask=live, other=0.).to(tl.float32)
+    dh_next = tl.load(DNH + offsets, mask=live, other=0.).to(tl.float32)
     if TERMINAL:
         new_h, mixed_inv, mixed_sq, target, force_inv, force_sq = _position(h, v, force, P, FLOOR2, D, MODE)
         d_new_h = dh_next
@@ -214,7 +232,7 @@ def _backward(H, V, F, P, DNH, DNV, DH, DV, DF, DP, ROWS, BETA: tl.constexpr,
         (new_h, velocity, radial, bisector, scale, denom, bisector_sq, mixed_inv,
          mixed_sq, target, force_inv, force_sq, carried, beta) = _write_values(h, v, force, P, BETA, FLOOR2, D, MODE, GEOMETRY)
         # Reverse the tangent projection, then the short-arc parallel transport.
-        upstream = tl.load(DNV + offsets).to(tl.float32)
+        upstream = tl.load(DNV + offsets, mask=live, other=0.).to(tl.float32)
         if PREVIEW:
             new_v = velocity - radial * new_h if GEOMETRY != 2 else velocity
             mu = tl.load(P + 3)
@@ -285,6 +303,24 @@ def _backward(H, V, F, P, DNH, DNV, DH, DV, DF, DP, ROWS, BETA: tl.constexpr,
         tl.store(DP + 2 * ROWS + row, tl.sum(d_velocity * (carried - (new_h - h)), 0))
         tl.store(DP + 3 * ROWS + row, D * d_logit_p * cosine)
         tl.store(DP + 4 * ROWS + row, D * d_logit_q * cosine)
+    elif MODE == 5:
+        perp = tl.load(P + channels)
+        gain = tl.load(P + D + channels) - perp
+        v2 = _mean(v * v, D)
+        den = tl.maximum(v2, 1e-12)
+        along = _mean(delta * v, D) / den
+        # The coefficient is a vector and must be INSIDE this contraction.
+        d_dot = _mean(d_mixed * gain * v, D) / den
+        d_delta = perp * d_mixed + d_dot * v
+        d_v += (gain * along) * d_mixed + d_dot * (delta - tl.where(v2 >= 1e-12, 2. * along * v, 0.))
+        d_h += d_mixed - d_delta
+        par_dir = along * v
+        tile_offset = row * D + channels
+        stride = tl.num_programs(0) * D
+        tl.store(DP + tile_offset, tl.sum(tl.where(live, d_mixed * (delta - par_dir), 0.), 0))
+        tl.store(DP + stride + tile_offset, tl.sum(tl.where(live, d_mixed * par_dir, 0.), 0))
+        tl.store(DP + 2 * stride + tile_offset,
+                 tl.sum(tl.where(live, d_velocity * (carried - (new_h - h)), 0.), 0))
     elif MODE == 2 or MODE == 3 or MODE == 4:
         perp = tl.load(P)
         if MODE == 4:
@@ -324,9 +360,9 @@ def _backward(H, V, F, P, DNH, DNV, DH, DV, DF, DP, ROWS, BETA: tl.constexpr,
         tl.store(DP + row, tl.sum(d_mixed * delta, 0))
     dot_target = _mean(d_delta * target, D)
     d_force = force_inv * (d_delta - tl.where(force_sq >= FLOOR2, target * dot_target, 0.))
-    tl.store(DH + offsets, d_h)
-    tl.store(DV + offsets, d_v)
-    tl.store(DF + offsets, d_force)
+    tl.store(DH + offsets, d_h, mask=live)
+    tl.store(DV + offsets, d_v, mask=live)
+    tl.store(DF + offsets, d_force, mask=live)
 
 
 # Keep the backward-only GEMM distinct in AOTAutograd's joint graph. CSE of
@@ -347,7 +383,7 @@ class _ChordWrite(torch.autograd.Function):
         width = h.size(-1)
         assert h.is_cuda and h.dtype == v.dtype and h.dtype in (torch.bfloat16, torch.float32)
         assert params.dtype == torch.float32
-        assert h.shape == v.shape == force.shape and params.numel() == (1, 5, 4, 3, 2)[mode]
+        assert h.shape == v.shape == force.shape and params.numel() == (1, 5, 4, 3, 2, 3 * width)[mode]
         assert width == triton.next_power_of_2(width) and force.dtype in (torch.bfloat16, torch.float32)
         new_h, new_v = torch.empty_like(h), torch.empty_like(v)
         rows = h.numel() // width
@@ -376,9 +412,14 @@ class _ChordWrite(torch.autograd.Function):
             force, = saved
         rows = h.numel() // h.size(-1)
         dh, dv, df = torch.empty_like(h), torch.empty_like(v), torch.empty_like(force)
-        partials = params.new_empty((params.numel(), rows))
-        _backward[(rows,)](h, v, force, params, d_new_h.contiguous(), d_new_v.contiguous(),
-                           dh, dv, df, partials, rows, *ctx.options, params, False, False, ctx.geometry, num_warps=4, enable_fp_fusion=False)
+        channel_mode = ctx.options[-1] == 5
+        row_tile = 16 if channel_mode else 1
+        tiles = triton.cdiv(rows, row_tile)
+        shape = (3, tiles, h.size(-1)) if channel_mode else (params.numel(), rows)
+        partials = params.new_empty(shape)
+        _backward[(tiles,)](h, v, force, params, d_new_h.contiguous(), d_new_v.contiguous(),
+                           dh, dv, df, partials, rows, *ctx.options, params, False, False, ctx.geometry, row_tile,
+                           num_warps=8 if channel_mode else 4, enable_fp_fusion=False)
         grads = (dh, dv, df, partials.sum(1).reshape_as(params), None, None, None, None)
         return grads + ((None, None) if ctx.remat else ())
 
@@ -438,8 +479,9 @@ def fused_write(h, v, force, alpha, beta, floor):
 
 
 def fused_split_write(h, v, force, params, floor, geometry='parallel_transport', projection=()):
-    """P holds the perpendicular and parallel step sizes and the effective scalar beta."""
-    return _ChordWrite.apply(h.contiguous(), v.contiguous(), force.contiguous(), params, 0., floor, 3, _GEOMETRY[geometry], *projection)
+    """Pack perpendicular step, parallel step and beta as [3] or [3, width]."""
+    mode = 5 if params.ndim == 2 else 3
+    return _ChordWrite.apply(h.contiguous(), v.contiguous(), force.contiguous(), params, 0., floor, mode, _GEOMETRY[geometry], *projection)
 
 
 def fused_axis_write(h, v, force, params, beta, floor):

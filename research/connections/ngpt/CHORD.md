@@ -35,6 +35,8 @@ v_next = P(h_next, beta*v + (1 - beta)*chord)
 - `beta = sigmoid(raw_beta)`，初始 logit 为 0，有效初值为 0.5。每个把速度传给后续子层的位置各学习一个 β。最后一个 FFN 之后，输出头只读取 hidden，因此 L 层共有 2L−1 个可学习 β。两个步长和 β 在各自子层内跨 token 共享。对应的消融开关 `signed_chord_steps`、`token_chord_gates`、`token_beta_gate` 均为 `false`。
 - `project_only` 将旧速度直接与实际弦混合，随后在新位置做一次切向投影。整个跨层更新参与反向传播。参考优化器将残差标量放入零权重衰减的 AdamW 组，速度表放入 embedding 组。
 
+实验选项 `--channel-chord-coefficients` 将两个正步长和 β 各扩为宽度 d 的向量，所有通道均按标量版初值初始化。先沿历史速度分解建议位移，再逐通道缩放两个分量；速度混合也逐通道计算，最后整体投影到终点切平面。前瞻系数 mu 仍是子层标量。
+
 ## 迁移校验与训练参照
 
 对同一批输入，逐子层检查 `mean(h*h) ≈ 1` 和 `mean(h*v) ≈ 0`。把两个步长设为相同值时，写回应化简为 `N(h + alpha*delta)`。对照实现还覆盖非零前瞻、互异步长、速度为零时的梯度，以及整段推理与 KV cache 分段推理的一致性。[PyTorch 更新](../../../nanochat/lookahead.py) · [Triton 前反向](../../../nanochat/chord_triton.py) · [几何与梯度测试](../../../tests/test_chord_velocity_geometry.py) · [分支接线与优化器](../../../nanochat/connection_model.py)
