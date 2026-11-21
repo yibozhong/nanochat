@@ -100,7 +100,7 @@ def main():
         if geometry:
             ROOT=HOME_ROOT/f'residual-chord-velocity-{geometry.replace("_","-")}-10b-20261120'
     if args.token_only_velocity:
-        ROOT=HOME_ROOT/'residual-chord-velocity-token-only-10b-20261120'
+        ROOT=HOME_ROOT/'residual-chord-velocity-token-only-bf16-10b-20261120'
     if arc_optimizer:
         tag = 'arc' if preset == 'arc' else 'arc-muon-direction'
         if preset == 'arc_muon_radius':
@@ -215,9 +215,9 @@ def main():
             for key in ('model','preset','seed','initialization','steps','schedule_steps','batch_tokens',
                         'microbatch','data_uri','dataset_revision','tokenizer','runtime','attention_backend','hopper_only'):
                 assert control[key] == source[key], key
-            source = dict(control, plan=KEY, commit=commit, run_id=run_id, velocity_init='token',
+            source = dict(control, plan=KEY, commit=commit, run_id=run_id, velocity_init='token', chord_state_dtype='bfloat16',
                           reference_run=control['run_id'], paired_run=control['run_id'],
-                          preflight='Token-only velocity, seed-matched shared weights, compiled gradients and KV, restart; paired 128 steps versus token plus position on the same GPU',
+                          preflight='BF16 h/v storage, long-sequence memory, gradients, cache and restart; 128 steps each for BF16 token-only, FP32 token-only and BF16 token plus position',
                           timing_reference='Historical H200 timing of transported Chord; paired project-only timing in preflight')
             (ROOT/'comparison-reference.json').write_text(json.dumps(dict(run_id=control['run_id'],
                 summary_path=str(control_dir/'summary.json'), step=steps), indent=2)+'\n')
@@ -402,7 +402,7 @@ def main():
             batch_name+='-velocity-'+geometry.replace('_','-')
         if args.token_only_velocity:
             job_args+=' --token-only-velocity'
-            batch_name+='-token-only'
+            batch_name+='-token-only-bf16'
         if connection:
             job_args += ' ambient --' + preset
         if arc_optimizer:

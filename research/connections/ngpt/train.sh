@@ -83,9 +83,11 @@ elif [[ "${4:-}" == --chord-velocity-geometry=project_only || "${4:-}" == --chor
     TASK_MOMENTUM_ARGS+=("$4")
     TASK_GROUP=chord-velocity-geometry-10b
     if [[ "$#" == 5 && "$4" == --chord-velocity-geometry=project_only && "$5" == --token-only-velocity ]]; then
-        TASK_GROUP=chord-velocity-token-only-10b
+        TASK_MOMENTUM_ARGS+=(--chord-state-dtype bfloat16)
+        TASK_GROUP=chord-velocity-token-only-bf16-10b
     else
         [[ "$#" == 4 ]]
+        TASK_MOMENTUM_ARGS+=(--chord-state-dtype float32)  # Historical geometry controls.
     fi
 elif [[ "${4:-}" == --token-beta-gate ]]; then
     [[ "$#" == 4 && "$TASK_VELOCITY_MODE" == lookahead_split_learned_beta ]]
@@ -162,7 +164,7 @@ if geometry or sys.argv[6].startswith('--chord-velocity-geometry='):
     assert s['initial_velocity_projected']==(geometry=='project_only')
 token_only = sys.argv[8]=='token'
 if token_only:
-    assert geometry=='project_only' and s['velocity_init']=='token'
+    assert geometry=='project_only' and s['velocity_init']=='token' and s['chord_state_dtype']=='bfloat16'
 chord_control = 'af1c3266' if token_only else '6721b437'
 if token_gates or token_beta_gate or geometry:
     assert not signed_steps and s['paired_run']==chord_control and s['residual_kernel']=='fused_chord_triton'

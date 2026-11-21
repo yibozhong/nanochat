@@ -18,7 +18,7 @@ def setting(request):
                             streams=1, residual_dynamics='ngpt_lookahead', lookahead_mu_init=.3,
                             velocity_init='token_position', residual_projection_init='normal',
                             ngpt_velocity_mode='lookahead_split_learned_beta', ngpt_force_rms_floor=1e-6,
-                            chord_velocity_geometry=request.param)
+                            chord_velocity_geometry=request.param, chord_state_dtype='float32')
 
 
 def test_write_and_derivatives_against_fp64(setting):

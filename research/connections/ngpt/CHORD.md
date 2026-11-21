@@ -9,7 +9,7 @@ Chord 为每个 token 维护球面上的 hidden `h` 和与它垂直的速度 `v`
 ```text
 --variant baseline --architecture vanilla --streams 1
 --residual-dynamics ngpt_lookahead --ngpt-velocity-mode lookahead_split_learned_beta
---chord-velocity-geometry project_only --chord-kernel current
+--chord-velocity-geometry project_only --chord-kernel current --chord-state-dtype bfloat16
 --velocity-init token_position --velocity-embedding-std 0.02
 --lookahead-mu-init 0 --ngpt-alpha-init 0.05 --momentum-beta-init 0.5
 --ngpt-force-rms-floor 1e-6 --no-ngpt-weight-norm
@@ -24,7 +24,7 @@ Chord 为每个 token 维护球面上的 hidden `h` 和与它垂直的速度 `v`
 
 速度位置表消融只把上述参数改为 `--velocity-init token`，此时 `v = P(h, velocity_token[id])`。Attention 继续使用主干的 RoPE。
 
-对每层先执行 Attention，再执行 FFN；后者使用前者更新后的 `h, v`。下式的 `F` 表示带原 pre-norm 的当前分支，返回该分支的输出投影结果。残差状态和归约用 FP32，参考训练将前瞻读取转为 BF16 送入分支。
+对每层先执行 Attention，再执行 FFN；后者使用前者更新后的 `h, v`。下式的 `F` 表示带原 pre-norm 的当前分支，返回该分支的输出投影结果。当前默认以 BF16 保存跨子层的 `h, v`；球面归一化、投影、速度混合和弦位移在 FP32 计算。速度使用本次写回舍入前的 `h_next - h`，下一个子层的前瞻使用已舍入的两个状态。Attention 和 FFN 接收 BF16。一个位置和通道的两条跨层状态合计占 4 字节。旧参考训练 af1c3266 使用 FP32 状态，旧 checkpoint 继续沿用其精度。
 
 ```text
 offset = mu * v

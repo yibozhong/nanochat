@@ -41,6 +41,8 @@ def model_cost(config, batch=1, activation_bytes=2, feedback_passes=None):
             residual += batch*t*d  # v0 = token + position
             embedding_parameters = (c.vocab_size+c.sequence_length)*d
         state_bytes = {'ngpt':4, 'lookahead_only':activation_bytes+4}.get(c.residual_mode, 8)
+        if c.chord_state_dtype == 'bfloat16':
+            state_bytes = 4  # Two BF16 streams per token and channel.
         scalars_per_site = {'ngpt':1, 'ngpt_hbformer':2, 'ngpt_lookahead':2, 'lookahead_only':1}.get(c.residual_mode, 3)
         if c.ngpt_velocity_mode == 'lookahead_geodesic_split':
             scalars_per_site += 1

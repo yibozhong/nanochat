@@ -1,6 +1,7 @@
 """Same-GPU alignment measurement and paired checks before the fresh 10B run."""
 from functools import partial
 import json
+import os
 import math
 from pathlib import Path
 import shutil
@@ -105,7 +106,7 @@ def endpoint_turns(checkpoint):
 
 
 def profile(root, mode, resume, measure_turns=False, signed_steps=False, token_gates=False, token_beta_gate=False,
-            geometry='parallel_transport', velocity_init='token_position'):
+            geometry='parallel_transport', velocity_init='token_position', state_dtype='float32'):
     steps = 128
     out = root/mode
     cmd = [sys.executable, '-m', 'scripts.connection_train', '--variant', 'baseline', '--streams', '1',
@@ -116,7 +117,7 @@ def profile(root, mode, resume, measure_turns=False, signed_steps=False, token_g
            '--no-activation-checkpoint','--no-fused-connection-grad','--attention-backend','fa2',
            '--steps',str(steps),'--schedule-steps','305176','--microbatch','16','--seed','42',
            '--data-dir','../data','--output-dir',str(out),'--run-id','axis-local-debug']
-    cmd.extend(['--chord-velocity-geometry', geometry])
+    cmd.extend(['--chord-velocity-geometry', geometry, '--chord-state-dtype', state_dtype])
     if signed_steps:
         cmd.append('--signed-chord-steps')
     if token_gates:
@@ -134,6 +135,7 @@ def profile(root, mode, resume, measure_turns=False, signed_steps=False, token_g
     assert info['complete'] and info['steps'] == steps and info['dev_tokens'] == 131072
     assert cfg['model']['ngpt_velocity_mode'] == mode and cfg['logging_backend'] == 'local'
     assert cfg['model']['chord_velocity_geometry'] == geometry and cfg['model']['velocity_init'] == velocity_init
+    assert cfg['model']['chord_state_dtype'] == state_dtype
     assert cfg['model']['signed_chord_steps'] == signed_steps
     assert cfg['model']['token_chord_gates'] == token_gates
     assert cfg['model']['token_beta_gate'] == token_beta_gate
@@ -209,8 +211,9 @@ def main():
     velocity_init = source['velocity_init']
     token_only = velocity_init == 'token'
     geometry_ablation = geometry != 'parallel_transport' and not token_only
+    state_dtype = source.get('chord_state_dtype', 'float32')
     if token_only:
-        assert geometry == 'project_only' and learned_beta
+        assert geometry == 'project_only' and learned_beta and state_dtype == 'bfloat16'
     assert (learned_beta or mode in ('lookahead_axis_write','lookahead_split_write','lookahead_geodesic_split')) and source['hopper_only']
     geodesic = mode == 'lookahead_geodesic_split'
     split = mode == 'lookahead_split_write' or geodesic or learned_beta
@@ -233,11 +236,14 @@ def main():
         suite = 'tests/test_chord_velocity_geometry.py'
     if token_only:
         suite = 'tests/test_chord_token_velocity.py'
+    env = os.environ.copy()
+    if token_only:
+        env['CHORD_STORAGE_REPORT'] = 'results/chord-storage.json'
     subprocess.run([sys.executable,'-m','pytest','-q',suite,
-                    '--junitxml=results/axis-tests.xml'],check=True)
+                    '--junitxml=results/axis-tests.xml'],check=True,env=env)
     suites = list(ElementTree.parse('results/axis-tests.xml').getroot().iter('testsuite'))
     tests = sum(int(s.get('tests')) for s in suites)
-    assert tests == (3 if token_only else 8 if geometry_ablation else 7 if geodesic else 6 if token_gates or token_beta_gate else 4 if split else 5)
+    assert tests == (6 if token_only else 8 if geometry_ablation else 7 if geodesic else 6 if token_gates or token_beta_gate else 4 if split else 5)
     assert all(int(s.get(k,0)) == 0 for s in suites for k in ('errors','failures','skipped'))
     alignment = None
     if not split:
@@ -248,9 +254,14 @@ def main():
     if signed_steps or token_gates or token_beta_gate or geometry_ablation or token_only:
         control_mode = mode
     control = profile(root,control_mode,resume=False,measure_turns=geodesic,
-                      geometry=geometry if token_only else 'parallel_transport')
+                      geometry=geometry if token_only else 'parallel_transport', state_dtype=state_dtype)
     target = profile(root,mode,resume=True,measure_turns=geodesic,signed_steps=signed_steps,
-                     token_gates=token_gates,token_beta_gate=token_beta_gate,geometry=geometry,velocity_init=velocity_init)
+                     token_gates=token_gates,token_beta_gate=token_beta_gate,geometry=geometry,velocity_init=velocity_init,state_dtype=state_dtype)
+    precision_control = None
+    if token_only:
+        precision_control = profile(root,mode,resume=False,geometry=geometry,velocity_init=velocity_init,state_dtype='float32')
+        assert {k for k in target['config'] if target['config'][k] != precision_control['config'][k]} == {'chord_state_dtype'}
+        assert target['parameters'] == precision_control['parameters']
     root.rmdir()
     changed = {k for k in target['config'] if target['config'][k] != control['config'][k]}
     expected_change = 'ngpt_velocity_mode'
@@ -279,6 +290,9 @@ def main():
                   cuda=torch.version.cuda, tests=tests, resumed_at_step=32, control=control,
                   target=target, step_time_ratio=target['median_step_seconds']/control['median_step_seconds'],
                   evaluation_wall_seconds=time.perf_counter()-start)
+    if precision_control is not None:
+        result['fp32_token_only'] = precision_control
+        result['residual_memory'] = json.loads(Path('results/chord-storage.json').read_text())
     if alignment is not None:
         result['alignment'] = alignment
     json_write(marker,result)

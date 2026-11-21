@@ -66,6 +66,8 @@ def main():
                    help='Project backbone weights at initialization and after optimizer steps (HBFormer default)')
     p.add_argument('--compile-lookahead-branches', action='store_true',
                    help='Compile additive lookahead reads, backbone branches and residual writes separately')
+    p.add_argument('--chord-state-dtype', choices=('bfloat16', 'float32'),
+                   help='Storage for spherical Chord h/v. Project-only defaults to BF16; resume inherits the checkpoint.')
     p.add_argument('--chord-kernel', choices=('current', 'terminal', 'boundary', 'both'), default='current',
                    help='Execution path for layer-beta Chord (terminal write, fused next read, or both)')
     p.add_argument('--lookahead-mu-init', type=float, default=0.)
@@ -122,6 +124,12 @@ def main():
     torch.set_num_threads(2);torch.backends.cuda.matmul.allow_tf32=False
     actual_attention_backend = configure_attention(a.attention_backend)
     seed_all(a.seed)
+    if a.resume=='auto':
+        a.resume=str(ckpt/'latest.pt') if (ckpt/'latest.pt').exists() else None
+    if a.resume:
+        state=torch.load(a.resume,map_location='cpu',weights_only=False)
+        if a.chord_state_dtype is None:
+            a.chord_state_dtype = state['config'].get('chord_state_dtype', 'float32')
     c=ConnectionConfig(variant=a.variant,streams=a.streams,sinkhorn_iterations=a.sinkhorn_iterations,
                        sequence_length=a.sequence_length, compact_routing=a.compact_routing,
                        attnres_block_size=a.attnres_block_size,
@@ -134,7 +142,7 @@ def main():
                        momentum_eta_init=a.momentum_eta_init, ngpt_force_rms_floor=a.ngpt_force_rms_floor,
                        lookahead_mu_init=a.lookahead_mu_init, ngpt_alpha_init=a.ngpt_alpha_init, ngpt_weight_norm=a.ngpt_weight_norm,
                        ngpt_velocity_mode=a.ngpt_velocity_mode, signed_chord_steps=a.signed_chord_steps, token_chord_gates=a.token_chord_gates,
-                       token_beta_gate=a.token_beta_gate, chord_velocity_geometry=a.chord_velocity_geometry,
+                       token_beta_gate=a.token_beta_gate, chord_velocity_geometry=a.chord_velocity_geometry, chord_state_dtype=a.chord_state_dtype,
                        momentum_velocity_rms_floor=a.momentum_velocity_rms_floor,
                        residual_projection_init=a.residual_projection_init,
                        residual_projection_init_std=a.residual_projection_init_std,
@@ -185,13 +193,10 @@ def main():
             earlier_passes='no_grad_detached',eval_passes=c.feedback_eval_passes)
     step=0;best=float('inf');training_seconds=0.;prior_elapsed=0.;initial_dev=None
     run_id=a.run_id or uuid.uuid4().hex[:8]
-    if a.resume=='auto':
-        a.resume=str(ckpt/'latest.pt') if (ckpt/'latest.pt').exists() else None
     resuming_parent=False
     if a.formal_training and 'continuation' in source:
         assert a.resume, 'The continuation requires its latest checkpoint'
     if a.resume:
-        state=torch.load(a.resume,map_location='cpu',weights_only=False)
         assert asdict(ConnectionConfig.from_checkpoint(state['config']))==asdict(c)
         assert state['data_manifest']==data.manifest
         resuming_parent=check_resume_protocol(state,source,protocol,latest=True)
@@ -250,6 +255,7 @@ def main():
                     ('-token-alpha-gates' if c.token_chord_gates else '')+
                     ('-token-beta-gate' if c.token_beta_gate else '')+
                     (f'-velocity-{c.chord_velocity_geometry}' if c.chord_velocity_geometry != 'parallel_transport' else '')+
+                    ('-bf16-state' if c.chord_state_dtype == 'bfloat16' else '')+
                     ('-geodesic-split' if c.ngpt_velocity_mode == 'lookahead_geodesic_split' else '')+
                     ('-no-weight-norm' if c.residual_mode=='ngpt_hbformer' and not c.ngpt_weight_norm else '')+
                     ('-arc-muon-direction' if a.arc_direction == 'muon' else '-arc' if a.matrix_optimizer == 'arc' else '')+

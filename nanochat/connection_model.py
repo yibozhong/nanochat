@@ -59,6 +59,7 @@ class ConnectionConfig:
     token_chord_gates: bool = False
     token_beta_gate: bool = False
     chord_velocity_geometry: str = 'parallel_transport'
+    chord_state_dtype: str | None = None
 
     def __post_init__(self):
         hbformer = self.residual_mode == 'ngpt_hbformer'
@@ -103,6 +104,13 @@ class ConnectionConfig:
             raise ValueError('Signed component steps require a split chord write')
         if self.token_chord_gates and (self.ngpt_velocity_mode != 'lookahead_split_learned_beta' or self.signed_chord_steps):
             raise ValueError('Token chord gates require positive split steps and learned velocity decay')
+        if self.chord_state_dtype is None:
+            self.chord_state_dtype = 'bfloat16' if self.chord_velocity_geometry == 'project_only' else 'float32'
+        if self.chord_state_dtype not in ('bfloat16', 'float32'):
+            raise ValueError('Unknown Chord state dtype')
+        if self.chord_state_dtype == 'bfloat16' and (self.residual_mode != 'ngpt_lookahead'
+                or self.ngpt_velocity_mode == 'lookahead_geodesic_split'):
+            raise ValueError('BF16 Chord state storage requires spherical lookahead with a chord write')
         if self.chord_velocity_geometry not in ('parallel_transport', 'project_only', 'ambient'):
             raise ValueError('Unknown Chord velocity geometry')
         if self.chord_velocity_geometry != 'parallel_transport' and (
@@ -219,6 +227,7 @@ class ConnectionConfig:
         # Historical checkpoints predating this field used v0=0. Preserve their
         # architecture while newly constructed momentum models default to tokens.
         config.setdefault('velocity_init', 'zero')
+        config.setdefault('chord_state_dtype', 'float32')
         # Never reinterpret an ambient checkpoint as tangent/normalized momentum.
         config.setdefault('ngpt_velocity_mode', 'ambient')
         if config.pop('vocab_gate', False):

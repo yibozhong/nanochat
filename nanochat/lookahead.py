@@ -3,9 +3,18 @@ import math
 
 import torch
 from torch import nn
+from torch.utils.checkpoint import checkpoint
 
 from nanochat.geodesic_residual import geodesic_split_write
 from nanochat.momentum import MomentumModel, NormalizedResidual, normalize_residual, state_dtype, tangent_project
+
+
+def _read(h, v, mu, ambient):
+    offset = mu[0] * state_dtype(v)
+    read = state_dtype(h) + offset
+    if ambient:
+        return normalize_residual(read)
+    return read * torch.rsqrt(1 + offset.square().mean(-1, keepdim=True))
 
 
 class LookaheadResidual(NormalizedResidual):
@@ -33,14 +42,19 @@ class LookaheadResidual(NormalizedResidual):
 
     def query(self, h, v):
         # The tangent-only denominator omits the vanishing cross term.
-        offset = self.mu[0] * v
-        if self.velocity_geometry == 'ambient':
-            return normalize_residual(h + offset)
-        return (h + offset) * torch.rsqrt(1 + offset.square().mean(-1, keepdim=True))
+        ambient = self.velocity_geometry == 'ambient'
+        if h.dtype == torch.bfloat16 and h.is_cuda and h.size(-1) in (128, 512):
+            from nanochat.chord_triton import bf16_query
+            return bf16_query(h, v, self.mu, ambient)
+        if h.dtype == torch.bfloat16 and torch.is_grad_enabled():
+            return checkpoint(_read, h, v, self.mu, ambient, use_reentrant=False, preserve_rng_state=False).to(h.dtype)
+        return _read(h, v, self.mu, ambient).to(h.dtype)
 
     def forward(self, h, v, force):
-        if (self.geodesic or not h.is_cuda or h.dtype != torch.float32 or v.dtype != torch.float32
+        if (self.geodesic or not h.is_cuda or h.dtype not in (torch.bfloat16, torch.float32) or v.dtype != h.dtype
                 or force.dtype not in (torch.bfloat16, torch.float32) or h.size(-1) not in (128, 512)):
+            if h.dtype == torch.bfloat16 and torch.is_grad_enabled():
+                return checkpoint(self.reference_write, h, v, force, use_reentrant=False, preserve_rng_state=False)
             return self.reference_write(h, v, force)
         from nanochat.chord_triton import fused_axis_write, fused_beta_write, fused_gated_write, fused_split_write, fused_write
         perp = self.alpha()
@@ -63,10 +77,11 @@ class LookaheadResidual(NormalizedResidual):
         if self.geodesic:
             return geodesic_split_write(h, v, force, self.alpha(), self.step_size(self.raw_parallel),
                                         self.decay, self.rms_floor)
+        storage_dtype = h.dtype
+        h, v = state_dtype(h), state_dtype(v)
         if self.kappa is None and self.raw_parallel is None:
             new_h = super().forward(h, force)
         else:
-            h, v = state_dtype(h), state_dtype(v)
             delta = normalize_residual(force, self.rms_floor) - h
             # Use an RMS-squared floor to keep the write
             # and its derivatives finite even for an exactly zero velocity.
@@ -108,7 +123,7 @@ class LookaheadResidual(NormalizedResidual):
         velocity = beta * carried + (1 - beta) * chord
         if self.velocity_geometry != 'ambient':
             velocity = tangent_project(new_h, velocity)
-        return new_h, velocity
+        return new_h.to(storage_dtype), velocity.to(storage_dtype)
 
 
 def additive_branch_input(h, v, mu):
@@ -149,7 +164,7 @@ class AdditiveLookaheadResidual(nn.Module):
 
 
 def compile_split_block(block, next_mu, *, first, preview, terminal):
-    """Carry the next BF16 branch input across block boundaries while preserving both FP32 streams."""
+    """Carry the next BF16 branch input across block boundaries with the configured residual stream precision."""
     from nanochat.chord_triton import split_boundary
     attn, mlp = block.attn_residual, block.mlp_residual
 
@@ -199,12 +214,21 @@ class LookaheadModel(MomentumModel):
         return self
 
     def initial_state(self, x, token_ids=None, start=0):
+        if self.config.chord_state_dtype == 'bfloat16' and torch.is_grad_enabled():
+            # Recompute this one projection from the embedding lookup on backward.
+            # Keep its FP32 normalization intermediates out of the activation tape.
+            return checkpoint(self._initial_state, x, token_ids, start, use_reentrant=False, preserve_rng_state=False)
+        return self._initial_state(x, token_ids, start)
+
+    def _initial_state(self, x, token_ids, start):
         h, v = super().initial_state(x, token_ids, start)
         if self.config.residual_mode == 'lookahead_only':
             return h.to(x.dtype), v
-        if self.config.chord_velocity_geometry == 'ambient':
-            return h, v
-        return h, tangent_project(h, v)
+        if self.config.chord_velocity_geometry != 'ambient':
+            v = tangent_project(h, v)
+        if self.config.chord_state_dtype == 'bfloat16':
+            return h.bfloat16(), v.bfloat16()
+        return h, v
 
     @torch.no_grad()
     def residual_metrics(self):

@@ -96,11 +96,73 @@ def _write_values(h, v, force, P, BETA: tl.constexpr, FLOOR2: tl.constexpr,
 
 
 @triton.jit
+def _read_values(h, v, mu, D: tl.constexpr, AMBIENT: tl.constexpr):
+    offset = mu * v
+    read = h + offset
+    sq = _mean(read * read, D) if AMBIENT else 1. + _mean(offset * offset, D)
+    inv = tl.rsqrt(tl.maximum(sq, 1e-12))
+    return read * inv, read, offset, inv, sq
+
+
+@triton.jit
+def _read_vjp(h, v, mu, dq, D: tl.constexpr, AMBIENT: tl.constexpr):
+    unit, read, offset, inv, sq = _read_values(h, v, mu, D, AMBIENT)
+    if AMBIENT:
+        dh = inv * (dq - tl.where(sq >= 1e-12, _mean(dq * unit, D) * unit, 0.))
+        d_offset = dh
+    else:
+        dh = dq * inv
+        d_offset = dh - offset * (_mean(dq * read, D) * inv * inv * inv)
+    return dh, mu * d_offset, tl.sum(v * d_offset, 0)
+
+
+@triton.jit
+def _query_kernel(H, V, MU, Q, DH, DV, DMU, D: tl.constexpr, AMBIENT: tl.constexpr, BACKWARD: tl.constexpr):
+    row = tl.program_id(0)
+    offsets = row.to(tl.int64) * D + tl.arange(0, D)
+    h = tl.load(H + offsets).to(tl.float32)
+    v = tl.load(V + offsets).to(tl.float32)
+    mu = tl.load(MU)
+    if BACKWARD:
+        dh, dv, dmu = _read_vjp(h, v, mu, tl.load(Q + offsets).to(tl.float32), D, AMBIENT)
+        tl.store(DH + offsets, dh)
+        tl.store(DV + offsets, dv)
+        tl.store(DMU + row, dmu)
+    else:
+        tl.store(Q + offsets, _read_values(h, v, mu, D, AMBIENT)[0])
+
+
+class _BF16Query(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, h, v, mu, ambient):
+        q = torch.empty_like(h)
+        _query_kernel[(h.numel() // h.size(-1),)](h, v, mu, q, q, q, mu, h.size(-1), ambient, False,
+                                                  enable_fp_fusion=False)
+        ctx.save_for_backward(h, v, mu)
+        ctx.ambient = ambient
+        return q
+
+    @staticmethod
+    def backward(ctx, dq):
+        h, v, mu = ctx.saved_tensors
+        rows = h.numel() // h.size(-1)
+        dh, dv, partials = torch.empty_like(h), torch.empty_like(v), mu.new_empty((rows,))
+        _query_kernel[(rows,)](h, v, mu, dq.contiguous(), dh, dv, partials, h.size(-1), ctx.ambient, True,
+                              enable_fp_fusion=False)
+        return dh, dv, partials.sum().reshape_as(mu), None
+
+
+def bf16_query(h, v, mu, ambient):
+    return _BF16Query.apply(h.contiguous(), v.contiguous(), mu, ambient)
+
+
+@triton.jit
 def _forward(H, V, F, P, NH, NV, BETA: tl.constexpr, FLOOR2: tl.constexpr,
              D: tl.constexpr, MODE: tl.constexpr, Q, TERMINAL: tl.constexpr,
              PREVIEW: tl.constexpr, GEOMETRY: tl.constexpr):
     offsets = tl.program_id(0).to(tl.int64) * D + tl.arange(0, D)
-    h, v = tl.load(H + offsets), tl.load(V + offsets)
+    h = tl.load(H + offsets).to(tl.float32)
+    v = tl.load(V + offsets).to(tl.float32)
     force = tl.load(F + offsets).to(tl.float32)
     if TERMINAL:
         position = _position(h, v, force, P, FLOOR2, D, MODE)
@@ -112,10 +174,9 @@ def _forward(H, V, F, P, NH, NV, BETA: tl.constexpr, FLOOR2: tl.constexpr,
         tl.store(NH + offsets, new_h)
         tl.store(NV + offsets, new_v)
         if PREVIEW:
-            offset = tl.load(P + 3) * new_v
-            read = new_h + offset
-            read_sq = tl.maximum(_mean(read * read, D), 1e-12) if GEOMETRY == 2 else 1. + _mean(offset * offset, D)
-            q = read * tl.rsqrt(read_sq)
+            h_read = new_h.to(H.dtype.element_ty).to(tl.float32)
+            v_read = new_v.to(V.dtype.element_ty).to(tl.float32)
+            q = _read_values(h_read, v_read, tl.load(P + 3), D, GEOMETRY == 2)[0]
             tl.store(Q + offsets, q.to(tl.bfloat16, fp_downcast_rounding="rtne"))
 
 
@@ -125,9 +186,10 @@ def _backward(H, V, F, P, DNH, DNV, DH, DV, DF, DP, ROWS, BETA: tl.constexpr,
               PREVIEW: tl.constexpr, GEOMETRY: tl.constexpr):
     row = tl.program_id(0)
     offsets = row.to(tl.int64) * D + tl.arange(0, D)
-    h, v = tl.load(H + offsets), tl.load(V + offsets)
+    h = tl.load(H + offsets).to(tl.float32)
+    v = tl.load(V + offsets).to(tl.float32)
     force = tl.load(F + offsets).to(tl.float32)
-    dh_next = tl.load(DNH + offsets)
+    dh_next = tl.load(DNH + offsets).to(tl.float32)
     if TERMINAL:
         new_h, mixed_inv, mixed_sq, target, force_inv, force_sq = _position(h, v, force, P, FLOOR2, D, MODE)
         d_new_h = dh_next
@@ -137,26 +199,19 @@ def _backward(H, V, F, P, DNH, DNV, DH, DV, DF, DP, ROWS, BETA: tl.constexpr,
         (new_h, velocity, radial, bisector, scale, denom, bisector_sq, mixed_inv,
          mixed_sq, target, force_inv, force_sq, carried, beta) = _write_values(h, v, force, P, BETA, FLOOR2, D, MODE, GEOMETRY)
         # Reverse the tangent projection, then the short-arc parallel transport.
-        upstream = tl.load(DNV + offsets)
+        upstream = tl.load(DNV + offsets).to(tl.float32)
         if PREVIEW:
             new_v = velocity - radial * new_h if GEOMETRY != 2 else velocity
             mu = tl.load(P + 3)
-            offset = mu * new_v
-            read = new_h + offset
+            h_read = new_h.to(H.dtype.element_ty).to(tl.float32)
+            v_read = new_v.to(V.dtype.element_ty).to(tl.float32)
             dq = tl.load(DQ + offsets).to(tl.float32)
-            if GEOMETRY == 2:
-                rms2 = _mean(read * read, D)
-                inv = tl.rsqrt(tl.maximum(rms2, 1e-12))
-                unit = read * inv
-                d_offset = inv * (dq - tl.where(rms2 >= 1e-12, _mean(dq * unit, D) * unit, 0.))
-                dh_next += d_offset
-            else:
-                inv = tl.rsqrt(1. + _mean(offset * offset, D))
-                direct = dq * inv
-                d_offset = direct - offset * (_mean(dq * read, D) * inv * inv * inv)
-                dh_next += direct
-            upstream += mu * d_offset
-            tl.store(DP + 3 * ROWS + row, tl.sum(new_v * d_offset, 0))
+            dh_q, dv_q, dmu = _read_vjp(h_read, v_read, mu, dq, D, GEOMETRY == 2)
+            # The preview reads the stored state. Its adjoints cross the same
+            # storage casts as a separate query before merging with other users.
+            dh_next = (dh_next + dh_q.to(H.dtype.element_ty).to(tl.float32)).to(H.dtype.element_ty).to(tl.float32)
+            upstream = (upstream + dv_q.to(V.dtype.element_ty).to(tl.float32)).to(V.dtype.element_ty).to(tl.float32)
+            tl.store(DP + 3 * ROWS + row, dmu)
         if GEOMETRY == 2:
             d_velocity = upstream
             d_chord = (1.0 - beta) * d_velocity
@@ -263,7 +318,8 @@ class _ChordWrite(torch.autograd.Function):
     @staticmethod
     def forward(ctx, h, v, force, params, fixed_beta, floor, mode, geometry):
         width = h.size(-1)
-        assert h.is_cuda and h.dtype == v.dtype == params.dtype == torch.float32
+        assert h.is_cuda and h.dtype == v.dtype and h.dtype in (torch.bfloat16, torch.float32)
+        assert params.dtype == torch.float32
         assert h.shape == v.shape == force.shape and params.numel() == (1, 5, 4, 3, 2)[mode]
         assert width == triton.next_power_of_2(width) and force.dtype in (torch.bfloat16, torch.float32)
         new_h, new_v = torch.empty_like(h), torch.empty_like(v)
