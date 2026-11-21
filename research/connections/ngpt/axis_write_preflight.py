@@ -106,7 +106,8 @@ def endpoint_turns(checkpoint):
 
 
 def profile(root, mode, resume, measure_turns=False, signed_steps=False, token_gates=False, token_beta_gate=False,
-            geometry='parallel_transport', velocity_init='token_position', state_dtype='float32'):
+            geometry='parallel_transport', velocity_init='token_position', state_dtype='float32',
+            fused_read=False, remat=False):
     steps = 128
     out = root/mode
     cmd = [sys.executable, '-m', 'scripts.connection_train', '--variant', 'baseline', '--streams', '1',
@@ -118,6 +119,10 @@ def profile(root, mode, resume, measure_turns=False, signed_steps=False, token_g
            '--steps',str(steps),'--schedule-steps','305176','--microbatch','16','--seed','42',
            '--data-dir','../data','--output-dir',str(out),'--run-id','axis-local-debug']
     cmd.extend(['--chord-velocity-geometry', geometry, '--chord-state-dtype', state_dtype])
+    if fused_read:
+        cmd.append('--fuse-chord-read-norm')
+    if remat:
+        cmd.append('--recompute-chord-force')
     if signed_steps:
         cmd.append('--signed-chord-steps')
     if token_gates:
@@ -136,6 +141,7 @@ def profile(root, mode, resume, measure_turns=False, signed_steps=False, token_g
     assert cfg['model']['ngpt_velocity_mode'] == mode and cfg['logging_backend'] == 'local'
     assert cfg['model']['chord_velocity_geometry'] == geometry and cfg['model']['velocity_init'] == velocity_init
     assert cfg['model']['chord_state_dtype'] == state_dtype
+    assert cfg['model']['fuse_chord_read_norm'] == fused_read and cfg['model']['recompute_chord_force'] == remat
     assert cfg['model']['signed_chord_steps'] == signed_steps
     assert cfg['model']['token_chord_gates'] == token_gates
     assert cfg['model']['token_beta_gate'] == token_beta_gate
@@ -199,6 +205,39 @@ def profile(root, mode, resume, measure_turns=False, signed_steps=False, token_g
     return result
 
 
+def validate_fused_branches(source, gpu, marker, start):
+    assert source['chord_state_dtype'] == 'bfloat16' and source['chord_velocity_geometry'] == 'project_only'
+    assert source['fuse_chord_read_norm'] and not source['recompute_chord_force']
+    env = dict(os.environ, CHORD_TEST_VELOCITY_INIT=source['velocity_init'],
+               CHORD_STORAGE_REPORT='results/chord-storage.json')
+    subprocess.run([sys.executable,'-m','pytest','-q','tests/test_chord_fused_branch.py',
+                    '--junitxml=results/fused-branch-tests.xml'],check=True,env=env)
+    suites = ElementTree.parse('results/fused-branch-tests.xml').getroot().findall('.//testsuite')
+    assert sum(int(s.get('tests')) for s in suites) == 9
+    assert all(int(s.get(k,0)) == 0 for s in suites for k in ('errors','failures','skipped'))
+    arms = {}
+    with tempfile.TemporaryDirectory(prefix='chord-branches-', dir='..') as tmp:
+        # Restart every arm at 32 so compilation and allocator history are matched.
+        for name, fused, remat in (('separate',False,False), ('fused',True,False), ('fused_recompute',True,True)):
+            result = profile(Path(tmp).resolve(), source['ngpt_velocity_mode'], resume=True,
+                             geometry='project_only', velocity_init=source['velocity_init'],
+                             state_dtype='bfloat16', fused_read=fused, remat=remat)
+            if arms:
+                control = arms['separate']
+                assert {k:v for k,v in result['config'].items() if control['config'][k] != v} == {
+                    k:True for k in ('fuse_chord_read_norm','recompute_chord_force') if result['config'][k]}
+                assert result['parameters'] == control['parameters']
+                assert abs(result['initial_dev_ce']-control['initial_dev_ce']) < 1e-4
+            arms[name] = result
+    summary = {name:{k:r[k] for k in ('median_step_seconds','tokens_per_second','peak_allocated_bytes','final_dev_ce')}
+               for name,r in arms.items()}
+    json_write(marker, dict(complete=True, formal_training=False, source=source, gpu=gpu, torch=torch.__version__,
+                            tests=9, timed_steps=[65,128], results=arms, comparison=summary,
+                            residual_memory=json.loads(Path('results/chord-storage.json').read_text()),
+                            evaluation_wall_seconds=time.perf_counter()-start))
+    print('CHORD_FUSED_BENCH_PASSED',json.dumps(summary),flush=True)
+
+
 def main():
     start = time.perf_counter()
     source = json.loads(Path('source.json').read_text())
@@ -224,6 +263,9 @@ def main():
     if marker.exists():
         prior = json.loads(marker.read_text())
         assert prior['complete'] and prior['source'] == source and prior['torch'] == torch.__version__
+        return
+    if source.get('fuse_chord_read_norm'):
+        validate_fused_branches(source, gpu, marker, start)
         return
     suite = 'tests/test_geodesic_write.py' if geodesic else 'tests/test_split_write.py' if split else 'tests/test_axis_write.py'
     if learned_beta:

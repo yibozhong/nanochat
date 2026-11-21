@@ -38,6 +38,8 @@ def main():
                         help='Compare two token-dependent positive steps to the learned-beta control')
     parser.add_argument('--chord-velocity-geometry', choices=('project_only','ambient'),
                         help='Compare endpoint projection or unconstrained velocity to parallel transport')
+    parser.add_argument('--fuse-chord-read-norm', action='store_true',
+                        help='Benchmark separate, fused and force-recomputed Chord then train fused token-only from scratch')
     parser.add_argument('--token-only-velocity', action='store_true',
                         help='Remove the velocity position table from the project-only Chord control')
     parser.add_argument('--token-beta-gate', action='store_true',
@@ -67,6 +69,8 @@ def main():
     if args.token_beta_gate and (not learned_beta or args.token_chord_gates or args.signed_chord_steps):
         parser.error('--token-beta-gate requires the shared positive split learned-beta preset')
     geometry = args.chord_velocity_geometry
+    if args.fuse_chord_read_norm and not args.token_only_velocity:
+        parser.error('--fuse-chord-read-norm requires the token-only velocity experiment')
     if args.token_only_velocity and geometry != 'project_only':
         parser.error('--token-only-velocity requires --chord-velocity-geometry project_only')
     if geometry and (not learned_beta or args.token_beta_gate or args.token_chord_gates or args.signed_chord_steps):
@@ -101,6 +105,8 @@ def main():
             ROOT=HOME_ROOT/f'residual-chord-velocity-{geometry.replace("_","-")}-10b-20261120'
     if args.token_only_velocity:
         ROOT=HOME_ROOT/'residual-chord-velocity-token-only-bf16-10b-20261120'
+        if args.fuse_chord_read_norm:
+            ROOT=HOME_ROOT/'residual-chord-fused-read-token-only-bf16-10b-20261120'
     if arc_optimizer:
         tag = 'arc' if preset == 'arc' else 'arc-muon-direction'
         if preset == 'arc_muon_radius':
@@ -219,8 +225,12 @@ def main():
                           reference_run=control['run_id'], paired_run=control['run_id'],
                           preflight='BF16 h/v storage, long-sequence memory, gradients, cache and restart; 128 steps each for BF16 token-only, FP32 token-only and BF16 token plus position',
                           timing_reference='Historical H200 timing of transported Chord; paired project-only timing in preflight')
-            (ROOT/'comparison-reference.json').write_text(json.dumps(dict(run_id=control['run_id'],
-                summary_path=str(control_dir/'summary.json'), step=steps), indent=2)+'\n')
+            if args.fuse_chord_read_norm:
+                source.update(fuse_chord_read_norm=True, recompute_chord_force=False,
+                              preflight='Fused RMSNorm and projection remat VJPs, compiled cache and resume; 128 same-card steps each for separate, fused, fused+remat; fresh seed42 formal uses fusion only')
+            else:
+                (ROOT/'comparison-reference.json').write_text(json.dumps(dict(run_id=control['run_id'],
+                    summary_path=str(control_dir/'summary.json'), step=steps), indent=2)+'\n')
         elif axis_write:
             reference = HOME_ROOT/'residual-nonzero-ngpt_lookahead-10b-from-scratch-20261117'
             base = json.loads((reference/'summary.json').read_text())
@@ -403,6 +413,9 @@ def main():
         if args.token_only_velocity:
             job_args+=' --token-only-velocity'
             batch_name+='-token-only-bf16'
+        if args.fuse_chord_read_norm:
+            job_args+=' --fuse-chord-read-norm'
+            batch_name+='-fused-read'
         if connection:
             job_args += ' ambient --' + preset
         if arc_optimizer:

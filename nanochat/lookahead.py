@@ -50,7 +50,24 @@ class LookaheadResidual(NormalizedResidual):
             return checkpoint(_read, h, v, self.mu, ambient, use_reentrant=False, preserve_rng_state=False).to(h.dtype)
         return _read(h, v, self.mu, ambient).to(h.dtype)
 
-    def forward(self, h, v, force):
+    def branch_input(self, h, v, dtype, fuse_norm):
+        if fuse_norm and h.is_cuda and h.dtype == dtype == torch.bfloat16 and h.size(-1) in (128, 512):
+            from nanochat.chord_triton import bf16_query
+            return bf16_query(h, v, self.mu, self.velocity_geometry == 'ambient', normalize=True)
+        q = self.query(h, v).to(dtype)
+        return torch.nn.functional.rms_norm(q, (q.size(-1),))
+
+    def projected_write(self, h, v, features, layer, recompute):
+        if not recompute:
+            return self(h, v, layer(features))
+        if not h.is_cuda or h.size(-1) not in (128, 512):
+            return checkpoint(lambda x, y, z: self(x, y, layer(z)), h, v, features,
+                              use_reentrant=False, preserve_rng_state=False)
+        weight = layer.weight.to(features.dtype)
+        force = torch.nn.functional.linear(features, weight)
+        return self(h, v, force, projection=(features, weight))
+
+    def forward(self, h, v, force, projection=()):
         if (self.geodesic or not h.is_cuda or h.dtype not in (torch.bfloat16, torch.float32) or v.dtype != h.dtype
                 or force.dtype not in (torch.bfloat16, torch.float32) or h.size(-1) not in (128, 512)):
             if h.dtype == torch.bfloat16 and torch.is_grad_enabled():
@@ -71,7 +88,7 @@ class LookaheadResidual(NormalizedResidual):
         if self.gate_slopes is not None:
             params = torch.stack((perp, parallel, beta, self.gate_slopes[0], self.gate_slopes[1]))
             return fused_gated_write(h, v, force, params, self.rms_floor)
-        return fused_split_write(h, v, force, torch.stack((perp, parallel, beta)), self.rms_floor, self.velocity_geometry)
+        return fused_split_write(h, v, force, torch.stack((perp, parallel, beta)), self.rms_floor, self.velocity_geometry, projection)
 
     def reference_write(self, h, v, force):
         if self.geodesic:
@@ -193,12 +210,16 @@ def compile_split_block(block, next_mu, *, first, preview, terminal):
 class LookaheadModel(MomentumModel):
     def prepare(self, device='cuda', dtype=torch.bfloat16, compile_blocks=False, *,
                 compile_lookahead_branches=False, chord_kernel='current'):
+        if compile_blocks and torch.device(device).type == 'cuda' and self.config.residual_mode == 'ngpt_lookahead':
+            from nanochat import chord_triton  # Register the backward GEMM before Dynamo tracing.
         super().prepare(device, dtype, compile_blocks, compile_lookahead_branches=compile_lookahead_branches)
         if chord_kernel == 'current':
             return self
         if chord_kernel not in ('terminal', 'boundary', 'both'):
             raise ValueError(f'Unknown Chord kernel {chord_kernel}')
         c = self.config
+        if c.fuse_chord_read_norm or c.recompute_chord_force:
+            raise ValueError('Fused read/norm and force recomputation use the current write kernel')
         if (c.ngpt_velocity_mode != 'lookahead_split_learned_beta' or c.signed_chord_steps or
                 c.token_beta_gate or c.token_chord_gates or c.width not in (128, 512) or
                 torch.device(device).type != 'cuda' or dtype != torch.bfloat16 or not compile_blocks):

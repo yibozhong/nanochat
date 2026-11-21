@@ -60,6 +60,8 @@ class ConnectionConfig:
     token_beta_gate: bool = False
     chord_velocity_geometry: str = 'parallel_transport'
     chord_state_dtype: str | None = None
+    fuse_chord_read_norm: bool = False
+    recompute_chord_force: bool = False
 
     def __post_init__(self):
         hbformer = self.residual_mode == 'ngpt_hbformer'
@@ -106,6 +108,9 @@ class ConnectionConfig:
             raise ValueError('Token chord gates require positive split steps and learned velocity decay')
         if self.chord_state_dtype is None:
             self.chord_state_dtype = 'bfloat16' if self.chord_velocity_geometry == 'project_only' else 'float32'
+        if (self.fuse_chord_read_norm or self.recompute_chord_force) and (
+                self.chord_state_dtype != 'bfloat16' or self.chord_velocity_geometry != 'project_only'):
+            raise ValueError('Fused read/norm and force recomputation require BF16 project-only Chord')
         if self.chord_state_dtype not in ('bfloat16', 'float32'):
             raise ValueError('Unknown Chord state dtype')
         if self.chord_state_dtype == 'bfloat16' and (self.residual_mode != 'ngpt_lookahead'
@@ -298,6 +303,8 @@ class ConnectionBlock(Block):
         self.attn.ve_gate = None
         self.variant = config.variant
         self.residual_mode = config.residual_mode
+        self.fuse_chord_read_norm = config.fuse_chord_read_norm
+        self.recompute_chord_force = config.recompute_chord_force
         self.compiled_attention = self.compiled_mlp = None
         if config.residual_mode != 'vanilla':
             from nanochat.momentum import residual_update
@@ -331,6 +338,13 @@ class ConnectionBlock(Block):
         return self.mlp(norm(h))
 
     def momentum_forward(self, h, v, cos, sin, kv_cache=None, *, attn_update=None, mlp_update=None):
+        if self.fuse_chord_read_norm or self.recompute_chord_force:
+            remat = self.recompute_chord_force and self.training and torch.is_grad_enabled() and kv_cache is None
+            q = self.attn_residual.branch_input(h, v, cos.dtype, self.fuse_chord_read_norm)
+            features = self.attn.output_features(q, None, (cos, sin), (-1, 0), kv_cache)
+            h, v = self.attn_residual.projected_write(h, v, features, self.attn.c_proj, remat)
+            q = self.mlp_residual.branch_input(h, v, cos.dtype, self.fuse_chord_read_norm)
+            return self.mlp_residual.projected_write(h, v, self.mlp.output_features(q), self.mlp.c_proj, remat)
         lookahead = self.residual_mode in ('ngpt_lookahead', 'lookahead_only')
         query = self.attn_residual.query(h, v) if lookahead else h
         force = self.attention_branch(query.to(cos.dtype), cos, sin, kv_cache)

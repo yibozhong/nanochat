@@ -82,9 +82,15 @@ elif [[ "${4:-}" == --chord-velocity-geometry=project_only || "${4:-}" == --chor
     [[ "$TASK_VELOCITY_MODE" == lookahead_split_learned_beta ]]
     TASK_MOMENTUM_ARGS+=("$4")
     TASK_GROUP=chord-velocity-geometry-10b
-    if [[ "$#" == 5 && "$4" == --chord-velocity-geometry=project_only && "$5" == --token-only-velocity ]]; then
+    if [[ "$4" == --chord-velocity-geometry=project_only && "${5:-}" == --token-only-velocity ]]; then
         TASK_MOMENTUM_ARGS+=(--chord-state-dtype bfloat16)
         TASK_GROUP=chord-velocity-token-only-bf16-10b
+        if [[ "$#" == 6 && "$6" == --fuse-chord-read-norm ]]; then
+            TASK_MOMENTUM_ARGS+=(--fuse-chord-read-norm --no-recompute-chord-force)
+            TASK_GROUP=chord-fused-read-token-only-bf16-10b
+        else
+            [[ "$#" == 5 ]]
+        fi
     else
         [[ "$#" == 4 ]]
         TASK_MOMENTUM_ARGS+=(--chord-state-dtype float32)  # Historical geometry controls.
@@ -134,7 +140,7 @@ if [[ "${4:-}" == --extend-to-schedule ]]; then
     tar -xOf parent-results.tar results/ngpt-sm90.json > parent-validation.json
 fi
 cp "$0" results/launcher.sh
-/opt/project/.venv/bin/python - "$TASK_RUN_ID" "$TASK_MODE" "$TASK_VELOCITY_MODE" "$TASK_STEPS" "$TASK_SCHEDULE_STEPS" "${4:-}" "${TASK_ARC_MU:-}" "${TASK_VELOCITY_INIT:-}" <<'PY'
+/opt/project/.venv/bin/python - "$TASK_RUN_ID" "$TASK_MODE" "$TASK_VELOCITY_MODE" "$TASK_STEPS" "$TASK_SCHEDULE_STEPS" "${4:-}" "${TASK_ARC_MU:-}" "${TASK_VELOCITY_INIT:-}" "${6:-}" <<'PY'
 import json,sys
 from pathlib import Path
 s=json.loads(Path('source.json').read_text())
@@ -163,6 +169,9 @@ if geometry or sys.argv[6].startswith('--chord-velocity-geometry='):
     assert geometry in ('project_only','ambient') and sys.argv[6]=='--chord-velocity-geometry='+geometry
     assert s['initial_velocity_projected']==(geometry=='project_only')
 token_only = sys.argv[8]=='token'
+assert s.get('fuse_chord_read_norm',False) == (sys.argv[9]=='--fuse-chord-read-norm')
+if s.get('fuse_chord_read_norm'):
+    assert token_only and s['recompute_chord_force'] is False
 if token_only:
     assert geometry=='project_only' and s['velocity_init']=='token' and s['chord_state_dtype']=='bfloat16'
 chord_control = 'af1c3266' if token_only else '6721b437'

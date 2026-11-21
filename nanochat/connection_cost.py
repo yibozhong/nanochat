@@ -66,8 +66,11 @@ def model_cost(config, batch=1, activation_bytes=2, feedback_passes=None):
             gain_parameters += sites - 1
             # Project the realized chord, compute the two RMS norms and their dot product.
             residual += (sites-1)*(batch*t*(10*d+2)-1)
+        # Reconstruct one D->D attention and one 4D->D MLP output per layer.
+        remat_flops = 10*batch*t*depth*d*d if c.recompute_chord_force else 0
         return dict(estimated_forward_flops=forward+residual,
-            estimated_training_flops=3*(forward+residual),
+            estimated_training_flops=3*(forward+residual)+remat_flops,
+            force_recomputation_flops=remat_flops,
             components_forward=dict(backbone_projections=projections,vocab_head=head,
                 attention=attention,residual_arithmetic=residual),
             additional_parameters=scalars_per_site*sites+embedding_parameters+gain_parameters,

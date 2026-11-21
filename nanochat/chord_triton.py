@@ -117,29 +117,44 @@ def _read_vjp(h, v, mu, dq, D: tl.constexpr, AMBIENT: tl.constexpr):
 
 
 @triton.jit
-def _query_kernel(H, V, MU, Q, DH, DV, DMU, D: tl.constexpr, AMBIENT: tl.constexpr, BACKWARD: tl.constexpr):
+def _query_kernel(H, V, MU, Q, DH, DV, DMU, D: tl.constexpr, AMBIENT: tl.constexpr, BACKWARD: tl.constexpr,
+                  NORM: tl.constexpr):
     row = tl.program_id(0)
     offsets = row.to(tl.int64) * D + tl.arange(0, D)
     h = tl.load(H + offsets).to(tl.float32)
     v = tl.load(V + offsets).to(tl.float32)
     mu = tl.load(MU)
+    if NORM or not BACKWARD:
+        read = _read_values(h, v, mu, D, AMBIENT)[0]
+    if NORM:
+        # Match the BF16 interface and the default opmath epsilon of F.rms_norm.
+        q = read.to(tl.bfloat16).to(tl.float32)
+        inv = tl.rsqrt(_mean(q * q, D) + 1.1920928955078125e-7)
+        normalized = q * inv
     if BACKWARD:
-        dh, dv, dmu = _read_vjp(h, v, mu, tl.load(Q + offsets).to(tl.float32), D, AMBIENT)
+        dq = tl.load(Q + offsets).to(tl.float32)
+        if NORM:
+            dq = ((dq - normalized * _mean(dq * normalized, D)) * inv).to(tl.bfloat16).to(tl.float32)
+        dh, dv, dmu = _read_vjp(h, v, mu, dq, D, AMBIENT)
         tl.store(DH + offsets, dh)
         tl.store(DV + offsets, dv)
         tl.store(DMU + row, dmu)
     else:
-        tl.store(Q + offsets, _read_values(h, v, mu, D, AMBIENT)[0])
+        if NORM:
+            tl.store(Q + offsets, normalized)
+        else:
+            tl.store(Q + offsets, read)
 
 
 class _BF16Query(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, h, v, mu, ambient):
+    def forward(ctx, h, v, mu, ambient, normalize):
         q = torch.empty_like(h)
-        _query_kernel[(h.numel() // h.size(-1),)](h, v, mu, q, q, q, mu, h.size(-1), ambient, False,
+        _query_kernel[(h.numel() // h.size(-1),)](h, v, mu, q, q, q, mu, h.size(-1), ambient, False, normalize,
                                                   enable_fp_fusion=False)
         ctx.save_for_backward(h, v, mu)
         ctx.ambient = ambient
+        ctx.normalize = normalize
         return q
 
     @staticmethod
@@ -147,13 +162,13 @@ class _BF16Query(torch.autograd.Function):
         h, v, mu = ctx.saved_tensors
         rows = h.numel() // h.size(-1)
         dh, dv, partials = torch.empty_like(h), torch.empty_like(v), mu.new_empty((rows,))
-        _query_kernel[(rows,)](h, v, mu, dq.contiguous(), dh, dv, partials, h.size(-1), ctx.ambient, True,
+        _query_kernel[(rows,)](h, v, mu, dq.contiguous(), dh, dv, partials, h.size(-1), ctx.ambient, True, ctx.normalize,
                               enable_fp_fusion=False)
-        return dh, dv, partials.sum().reshape_as(mu), None
+        return dh, dv, partials.sum().reshape_as(mu), None, None
 
 
-def bf16_query(h, v, mu, ambient):
-    return _BF16Query.apply(h.contiguous(), v.contiguous(), mu, ambient)
+def bf16_query(h, v, mu, ambient, normalize=False):
+    return _BF16Query.apply(h.contiguous(), v.contiguous(), mu, ambient, normalize)
 
 
 @triton.jit
@@ -314,9 +329,21 @@ def _backward(H, V, F, P, DNH, DNV, DH, DV, DF, DP, ROWS, BETA: tl.constexpr,
     tl.store(DF + offsets, d_force)
 
 
+# Keep the backward-only GEMM distinct in AOTAutograd's joint graph. CSE of
+# two plain F.linear calls could otherwise retain the forward force tensor.
+@torch.library.custom_op("nanochat::rebuild_chord_force", mutates_args=())
+def _rebuild_force(features: torch.Tensor, weight: torch.Tensor) -> torch.Tensor:
+    return torch.nn.functional.linear(features, weight)
+
+
+@_rebuild_force.register_fake
+def _fake_rebuild_force(features, weight):
+    return features.new_empty((*features.shape[:-1], weight.shape[0]))
+
+
 class _ChordWrite(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, h, v, force, params, fixed_beta, floor, mode, geometry):
+    def forward(ctx, h, v, force, params, fixed_beta, floor, mode, geometry, *projection):
         width = h.size(-1)
         assert h.is_cuda and h.dtype == v.dtype and h.dtype in (torch.bfloat16, torch.float32)
         assert params.dtype == torch.float32
@@ -326,20 +353,29 @@ class _ChordWrite(torch.autograd.Function):
         rows = h.numel() // width
         _forward[(rows,)](h, v, force, params, new_h, new_v, fixed_beta, floor**2,
                           width, mode, params, False, False, geometry, num_warps=4, enable_fp_fusion=False)
-        ctx.save_for_backward(h, v, force, params)
+        ctx.remat = bool(projection)
+        ctx.save_for_backward(h, v, params, *(projection or (force,)))
         ctx.options = fixed_beta, floor**2, width, mode
         ctx.geometry = geometry
         return new_h, new_v
 
     @staticmethod
     def backward(ctx, d_new_h, d_new_v):
-        h, v, force, params = ctx.saved_tensors
+        h, v, params, *saved = ctx.saved_tensors
+        if ctx.remat:
+            # Reuse the original linear node for its VJP. Only its value is
+            # needed here, using the same BF16 activation and cast weight.
+            with torch.no_grad():
+                force = _rebuild_force(saved[0], saved[1])
+        else:
+            force, = saved
         rows = h.numel() // h.size(-1)
         dh, dv, df = torch.empty_like(h), torch.empty_like(v), torch.empty_like(force)
         partials = params.new_empty((params.numel(), rows))
         _backward[(rows,)](h, v, force, params, d_new_h.contiguous(), d_new_v.contiguous(),
                            dh, dv, df, partials, rows, *ctx.options, params, False, False, ctx.geometry, num_warps=4, enable_fp_fusion=False)
-        return dh, dv, df, partials.sum(1).reshape_as(params), None, None, None, None
+        grads = (dh, dv, df, partials.sum(1).reshape_as(params), None, None, None, None)
+        return grads + ((None, None) if ctx.remat else ())
 
 
 class _SplitBoundary(torch.autograd.Function):
@@ -396,9 +432,9 @@ def fused_write(h, v, force, alpha, beta, floor):
     return _ChordWrite.apply(h.contiguous(), v.contiguous(), force.contiguous(), alpha, beta, floor, 0, 0)
 
 
-def fused_split_write(h, v, force, params, floor, geometry='parallel_transport'):
+def fused_split_write(h, v, force, params, floor, geometry='parallel_transport', projection=()):
     """P holds the perpendicular and parallel step sizes and the effective scalar beta."""
-    return _ChordWrite.apply(h.contiguous(), v.contiguous(), force.contiguous(), params, 0., floor, 3, _GEOMETRY[geometry])
+    return _ChordWrite.apply(h.contiguous(), v.contiguous(), force.contiguous(), params, 0., floor, 3, _GEOMETRY[geometry], *projection)
 
 
 def fused_axis_write(h, v, force, params, beta, floor):

@@ -95,6 +95,9 @@ class CausalSelfAttention(nn.Module):
         self.ve_gate = Linear(self.ve_gate_channels, self.n_kv_head, bias=False) if has_ve(layer_idx, config.n_layer) else None
 
     def forward(self, x, ve, cos_sin, window_size, kv_cache):
+        return self.c_proj(self.output_features(x, ve, cos_sin, window_size, kv_cache))
+
+    def output_features(self, x, ve, cos_sin, window_size, kv_cache):
         B, T, C = x.size()
 
         # Project the input to get queries, keys, and values
@@ -135,10 +138,7 @@ class CausalSelfAttention(nn.Module):
             if self.layer_idx == kv_cache.n_layers - 1:
                 kv_cache.advance(T)
 
-        # Re-assemble the heads and project back to residual stream
-        y = y.contiguous().view(B, T, -1)
-        y = self.c_proj(y)
-        return y
+        return y.contiguous().view(B, T, -1)
 
 
 class MLP(nn.Module):
@@ -147,11 +147,11 @@ class MLP(nn.Module):
         self.c_fc = Linear(config.n_embd, 4 * config.n_embd, bias=False)
         self.c_proj = Linear(4 * config.n_embd, config.n_embd, bias=False)
 
+    def output_features(self, x):
+        return F.relu(self.c_fc(x)).square()
+
     def forward(self, x):
-        x = self.c_fc(x)
-        x = F.relu(x).square()
-        x = self.c_proj(x)
-        return x
+        return self.c_proj(self.output_features(x))
 
 
 class Block(nn.Module):

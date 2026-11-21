@@ -16,6 +16,10 @@ Chord 为每个 token 维护球面上的 hidden `h` 和与它垂直的速度 `v`
 --residual-projection-init normal --residual-projection-init-std 0.02
 ```
 
+## 融合与反向重算
+
+在 BF16、`project_only` 配方中，`--fuse-chord-read-norm` 将前瞻读取和分支入口的无权重 RMSNorm 融为一次读写，保留中间 BF16 舍入和原主干的 epsilon。反向从 h、v 和 mu 重建分支读取。`--recompute-chord-force` 可独立启用，默认为关闭。开启后，训练反向会用已经保存的输入与 BF16 权重各重算一次 Attention 输出投影和 FFN down 投影。KV 推理沿用正常投影。两项均使用 `--chord-kernel current`。
+
 ## 初始化与更新顺序
 
 `mean` 沿当前 token 的 hidden 维度取均值。记 `N(x) = x / sqrt(max(mean(x*x), 1e-12))`，`P(h,x) = x - mean(h*x)*h`。正常尺度下，`N` 给出 RMS 为 1、半径为 `sqrt(d_model)` 的向量，`P` 把向量投影到该点的切平面。
