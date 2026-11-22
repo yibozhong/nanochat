@@ -43,6 +43,7 @@ def main():
     velocity = parser.add_mutually_exclusive_group()
     velocity.add_argument('--zero-velocity', action='store_true',
                           help='Start the standard scalar Chord from rest without a velocity table')
+    parser.add_argument('--chord-attnres', action='store_true', help='Mix the current preview with earlier Chord block endpoints')
     parser.add_argument('--match-velocity-table-with-ffn', action='store_true',
                         help='Give the scalar from-rest FFNs exactly the parameter budget of the removed table')
     velocity.add_argument('--token-only-velocity', action='store_true',
@@ -85,6 +86,10 @@ def main():
         parser.error('--token-beta-gate requires the shared positive split learned-beta preset')
     geometry = args.chord_velocity_geometry
     velocity_lr = args.velocity_embedding_lr
+    if args.chord_attnres and (not args.token_only_velocity or not args.fuse_chord_read_norm or
+            args.channel_chord_coefficients or args.zero_init_velocity_embedding or args.chord_velocity_write or
+            args.fixed_first_attention_mu or velocity_lr is not None):
+        parser.error('--chord-attnres uses the fused scalar token-only Chord preset')
     if args.match_velocity_table_with_ffn and not args.zero_velocity:
         parser.error('--match-velocity-table-with-ffn requires --zero-velocity')
     if velocity_lr is not None and (not args.token_only_velocity or not args.fuse_chord_read_norm
@@ -165,6 +170,8 @@ def main():
             tag += '-mu0'
         date_tag = '20261119' if args.no_arc_lookahead else '20261118'
         ROOT = HOME_ROOT/f'optimizer-{tag}-10b-{date_tag}'
+    if args.chord_attnres:
+        ROOT=HOME_ROOT/'residual-chord-attnres-s2-token-bf16-10b-20261122'
     if args.hopper_only:
         ROOT = ROOT.with_name(ROOT.name + '-hopper-only')
     KEY=ROOT.name
@@ -263,7 +270,7 @@ def main():
                           lookahead_mu_init=0., ngpt_velocity_mode='lookahead_transport' if mode=='ngpt_lookahead' else 'ambient', ngpt_weight_norm=False, schedule_steps=STEPS,
                           reference_run='d065c132', backbone_weight_constraint='none',
                           preflight='Zero-gate equality with nGPT, trainable lookahead, tangent geometry, causal KV, gradients, exact resume and same-GPU speed')
-        if (args.channel_chord_coefficients or args.chord_velocity_write or args.fixed_first_attention_mu
+        if (args.chord_attnres or args.channel_chord_coefficients or args.chord_velocity_write or args.fixed_first_attention_mu
                 or args.zero_velocity or args.zero_init_velocity_embedding or velocity_lr is not None):
             control_dir = HOME_ROOT/'residual-chord-fused-read-token-only-bf16-10b-20261120-hopper-only'
             control_id = 'a7163d23'
@@ -276,7 +283,11 @@ def main():
             assert control['velocity_init']=='token' and control['chord_velocity_geometry']==geometry
             source = dict(control, plan=KEY, commit=commit, run_id=run_id, reference_run=control['run_id'],
                           paired_run=control['run_id'])
-            if velocity_lr is not None:
+            if args.chord_attnres:
+                source.update(chord_attnres=True, attnres_block_size=2, depth_history='completed post-MLP spherical endpoints',
+                              preflight='GPU reference VJP, seed parity, causal KV, exact resume, same-card full-step Chord vs direct vs packed endpoint mix; fresh seed42',
+                              timing_reference='Paired same-card full-step medians in chord-attnres-profile.json')
+            elif velocity_lr is not None:
                 assert control.get('channel_chord_coefficients',False)==args.channel_chord_coefficients
                 assert control['velocity_embedding_std']==.02
                 source.update(velocity_embedding_peak_lr=velocity_lr, eval_zero_v0=True,
@@ -537,6 +548,9 @@ def main():
         if args.fuse_chord_read_norm:
             job_args+=' --fuse-chord-read-norm'
             batch_name+='-fused-read'
+        if args.chord_attnres:
+            job_args+=' --chord-attnres'
+            batch_name+='-chordattnres-s2'
         if args.match_velocity_table_with_ffn:
             job_args+=' --match-velocity-table-with-ffn'
             batch_name+='-ffn-param-match'

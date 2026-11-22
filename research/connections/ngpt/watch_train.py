@@ -55,6 +55,16 @@ def collect(root,training):
                 gate=json.load(tar.extractfile(member))
                 assert gate['complete'] and gate['source']==training['source']
                 save(root/Path(member.name).name,gate)
+        if training['source'].get('chord_attnres'):
+            try:
+                member = tar.getmember('results/chord-attnres-profile.json')
+            except KeyError:
+                member = None
+            if member is not None:
+                assert member.isfile() and member.size < 4*1024*1024
+                profile = json.load(tar.extractfile(member))
+                assert profile['source'] == training['source']
+                save(root/'chord-attnres-profile.json', profile)
     summary=root/'summary.json'
     if summary.exists():
         value=json.loads(summary.read_text())

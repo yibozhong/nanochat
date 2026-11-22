@@ -103,6 +103,9 @@ elif [[ "${4:-}" == --chord-velocity-geometry=project_only || "${4:-}" == --chor
             TASK_GROUP=chord-fused-read-token-only-bf16-10b
             if [[ "$#" == 7 && "$7" == --zero-init-velocity-embedding ]]; then
                 TASK_GROUP=chord-scalar-zero-init-velocity-embed-10b
+            elif [[ "$#" == 7 && "$7" == --chord-attnres ]]; then
+                TASK_MOMENTUM_ARGS+=(--chord-attnres --attnres-block-size 2)
+                TASK_GROUP=chord-attnres-s2-10b
             elif [[ "$#" == 7 && "$7" == --chord-velocity-write ]]; then
                 TASK_MOMENTUM_ARGS+=("$7")
                 TASK_GROUP=chord-scalar-rho-v-10b
@@ -235,7 +238,11 @@ chord_control = 'af1c3266' if token_only else '6721b437'
 zero_embed = sys.argv[10]=='--zero-init-velocity-embedding'
 if zero_embed:
     assert token_only and s['velocity_embedding'] and s['velocity_embedding_std']==0
-if channel_coefficients or velocity_write or fixed_first_mu or from_rest or zero_embed or velocity_lr is not None:
+chord_attnres = sys.argv[10]=='--chord-attnres'
+assert chord_attnres == s.get('chord_attnres',False)
+if chord_attnres:
+    assert token_only and s['attnres_block_size']==2
+if chord_attnres or channel_coefficients or velocity_write or fixed_first_mu or from_rest or zero_embed or velocity_lr is not None:
     assert (token_only or from_rest) and s['fuse_chord_read_norm']
     chord_control = '9a7fd31d' if channel_coefficients and (fixed_first_mu or velocity_lr is not None) else 'a7163d23'
 if token_gates or token_beta_gate or geometry:
@@ -363,7 +370,18 @@ if [[ "${TASK_MOMENTUM_ARGS[0]:-}" == --matrix-optimizer ]]; then
     WANDB_MODE=disabled timeout --kill-after=30s 2400 python research/connections/ngpt/arc_preflight.py
     echo "FORMAL_TRAINING_BEGIN arc_optimizer $TASK_RUN_ID"
 else
-    if [[ "${7:-}" == --match-velocity-table-with-ffn ]]; then
+    if [[ "${7:-}" == --chord-attnres ]]; then
+        if ! WANDB_MODE=disabled timeout --kill-after=30s 2400 python -m research.connections.ngpt.chord_attnres_preflight; then
+            echo "PREFLIGHT_NEEDS_REPAIR retaining allocation for 15 minutes" >&2
+            deadline=$((SECONDS+900))
+            while [[ ! -e results/retry-preflight && $SECONDS -lt $deadline ]]; do sleep 2; done
+            [[ -e results/retry-preflight ]] || exit 1
+            rm results/retry-preflight
+            WANDB_MODE=disabled timeout --kill-after=30s 2400 python -m research.connections.ngpt.chord_attnres_preflight
+        fi
+        backend=$(python -c "import json; print(json.load(open('results/chord-attnres-profile.json'))['backend'])")
+        TASK_MODEL_ARGS+=(--chord-attnres-backend "$backend")
+    elif [[ "${7:-}" == --match-velocity-table-with-ffn ]]; then
         if [[ ! -e results/ffn-capacity-checks.passed ]]; then
             WANDB_MODE=disabled timeout --kill-after=30s 1200 python -m pytest -q tests/test_chord_from_rest.py -k 'ffn_capacity or wide_ffn'
             touch results/ffn-capacity-checks.passed

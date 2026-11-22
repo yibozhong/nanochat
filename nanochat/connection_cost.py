@@ -75,6 +75,15 @@ def model_cost(config, batch=1, activation_bytes=2, feedback_passes=None):
             gain_parameters += sites - 1
             # Project the realized chord, compute the two RMS norms and their dot product.
             residual += (sites-1)*(batch*t*(10*d+2)-1)
+        history = 0
+        depth_mix = 0
+        if c.chord_attnres:
+            stride = c.attnres_block_layers
+            history = (depth - 1) // stride
+            gain_parameters += 4*d*max(0, depth-stride)  # two score vectors per mixed sublayer
+            entries = sum(2*(1+i//stride) for i in range(stride, depth))
+            depth_mix = 7*batch*t*d*entries  # same arithmetic convention as Block AttnRes
+            residual += depth_mix
         # Reconstruct the attention and FFN output projections once per layer.
         remat_flops = 2*batch*t*depth*d*(d+c.ffn_width) if c.recompute_chord_force else 0
         extra_ffn_params = 2*depth*d*(c.ffn_width - 4*d)
@@ -84,6 +93,8 @@ def model_cost(config, batch=1, activation_bytes=2, feedback_passes=None):
             components_forward=dict(backbone_projections=projections,vocab_head=head,
                 attention=attention,residual_arithmetic=residual),
             additional_parameters=scalars_per_site*sites+embedding_parameters+gain_parameters+extra_ffn_params,
+            **(dict(depth_attention_forward_flops=depth_mix, endpoint_history_bytes=history*batch*t*d*activation_bytes)
+               if c.chord_attnres else {}),
             ffn_intermediate_width=c.ffn_width, additional_ffn_parameters=extra_ffn_params,
             velocity_embedding_parameters=embedding_parameters,
             live_residual_state_bytes=state_bytes*batch*t*d,

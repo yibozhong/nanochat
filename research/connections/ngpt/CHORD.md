@@ -52,3 +52,9 @@ v_next = P(h_next, beta*v + (1 - beta)*chord)
 对同一批输入，逐子层检查 `mean(h*h) ≈ 1` 和 `mean(h*v) ≈ 0`。把两个步长设为相同值时，写回应化简为 `N(h + alpha*delta)`。对照实现还覆盖非零前瞻、互异步长、速度为零时的梯度，以及整段推理与 KV cache 分段推理的一致性。[PyTorch 更新](../../../nanochat/lookahead.py) · [Triton 前反向](../../../nanochat/chord_triton.py) · [几何与梯度测试](../../../tests/test_chord_velocity_geometry.py) · [分支接线与优化器](../../../nanochat/connection_model.py)
 
 对应的 10B 配方为 8 层、宽 512、4 头、上下文 2048、词表 32768。Attention 输出和 FFN down 投影按标准差 `0.02/sqrt(2*depth)` 初始化。参考训练使用 seed 42、FineWeb-Edu packed 2K、FA2 和 MuonAdamW，每步 16 条序列共 32768 tokens，目标 305176 步。[标量参考训练 a7163d23](https://wandb.ai/yibozhong657-none/nanochat/runs/a7163d23) · [逐通道对照 9a7fd31d](https://wandb.ai/yibozhong657-none/nanochat/runs/9a7fd31d)
+
+### ChordAttnRes
+
+在默认小模型配方上加 `--chord-attnres --attnres-block-size 2` 可启用跨深度读取。每个完整 Attention + FFN 后保存该 token 的 BF16 球面终点 h。每个子层把自己的 BF16 前瞻点 q 和所有已完成块的终点作为候选，用该子层自己的可学习向量打分，沿深度 softmax 后加权求和，再做原有分支 pre-norm。评分前对 key 做 RMS 归一化，value 使用原值。首块仅有 q，沿用默认 Chord 融合读取。初始词嵌入、块内临时状态和最终输出头均不额外加入候选。双步长写回仍以实际 h 为起点，速度来自真实弦位移。历史可反向传播，随当前 forward 结束而释放，逐 token 推理只需原有 KV cache。
+
+`--chord-attnres-backend direct` 的 Triton 算子直接读取各终点张量，`packed` 使用移植自 NeMo 的 AttnRes 算子和按块拼接的历史。两者使用同一组评分参数，8 层 D=512、S=2 时共增加 14,336 个参数。正式实验由同卡预检选择较快的后端，恢复时沿用该选择。

@@ -66,6 +66,8 @@ class ConnectionConfig:
     fuse_chord_read_norm: bool = False
     recompute_chord_force: bool = False
     match_velocity_table_with_ffn: bool = False
+    chord_attnres: bool = False
+    chord_attnres_backend: str = 'direct'
 
     def __post_init__(self):
         hbformer = self.residual_mode == 'ngpt_hbformer'
@@ -216,6 +218,14 @@ class ConnectionConfig:
             raise ValueError('Model dimensions must be positive')
         if self.width % self.heads or (self.width // self.heads) % 2:
             raise ValueError('RoPE requires an even integral head dimension')
+        if self.chord_attnres:
+            if (self.residual_mode != 'ngpt_lookahead' or self.chord_velocity_geometry != 'project_only'
+                    or self.chord_state_dtype != 'bfloat16' or self.recompute_chord_force):
+                raise ValueError('ChordAttnRes requires BF16 project-only Chord with ordinary force writes')
+            if self.width not in (128, 512) or (self.depth-1)//self.attnres_block_layers > 16:
+                raise ValueError('Endpoint kernels support widths 128/512 and at most 16 historical endpoints')
+        if self.chord_attnres_backend not in ('direct', 'packed') or (not self.chord_attnres and self.chord_attnres_backend != 'direct'):
+            raise ValueError('Unknown or inapplicable ChordAttnRes kernel')
         if self.match_velocity_table_with_ffn:
             if self.residual_mode != 'ngpt_lookahead' or self.velocity_init != 'zero':
                 raise ValueError('Matching the velocity table with FFN capacity requires Chord from rest')
@@ -581,7 +591,7 @@ def optimizer_for(model, batch_tokens=32768, *, matrix_optimizer='muon', arc_mu=
                 or name in ('attn_skip_scale', 'mlp_skip_scale') else matrices).append(p)
     if model.stream_head is not None:
         routing.extend(model.stream_head.parameters())
-    if c.variant in ('attnres','attnres_scale'):
+    if c.variant in ('attnres','attnres_scale') or c.chord_attnres:
         routing.extend(model.residual_parameters())
     if routing:
         groups.append(dict(kind='adamw', params=routing, lr=.008*batch_scale*width_scale,
@@ -619,6 +629,9 @@ def optimizer_for(model, batch_tokens=32768, *, matrix_optimizer='muon', arc_mu=
 
 
 def build_connection_model(config):
+    if config.chord_attnres:
+        from nanochat.chord_attnres import ChordAttnResModel
+        return ChordAttnResModel(config)
     if config.residual_mode in ('ngpt_lookahead', 'lookahead_only'):
         from nanochat.lookahead import LookaheadModel
         return LookaheadModel(config)
