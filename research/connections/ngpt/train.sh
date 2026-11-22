@@ -335,7 +335,9 @@ if [[ "${TASK_MOMENTUM_ARGS[0]:-}" == --matrix-optimizer ]]; then
     WANDB_MODE=disabled timeout --kill-after=30s 2400 python research/connections/ngpt/arc_preflight.py
     echo "FORMAL_TRAINING_BEGIN arc_optimizer $TASK_RUN_ID"
 else
-    if [[ "$TASK_VARIANT" == mhc || "$TASK_VARIANT" == attnres ]]; then
+    if [[ "${5:-}" == --zero-velocity ]]; then
+        echo "Starting from-rest Chord directly without a GPU pilot"
+    elif [[ "$TASK_VARIANT" == mhc || "$TASK_VARIANT" == attnres ]]; then
         WANDB_MODE=disabled timeout --kill-after=30s 2400 python -m research.connections.ngpt.connection_init_preflight "${TASK_MODEL_ARGS[@]}"
     elif [[ "$TASK_VELOCITY_MODE" == lookahead_axis_write || "$TASK_VELOCITY_MODE" == lookahead_split_write || "$TASK_VELOCITY_MODE" == lookahead_split_learned_beta || "$TASK_VELOCITY_MODE" == lookahead_geodesic_split ]]; then
         if WANDB_MODE=disabled timeout --kill-after=30s 2400 python -m research.connections.ngpt.axis_write_preflight; then

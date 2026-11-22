@@ -254,7 +254,7 @@ def main():
                           paired_run=control['run_id'])
             if args.zero_velocity:
                 source.update(velocity_init='zero', velocity_embedding=False, initial_velocity_projected=False,
-                              preflight='No velocity table, zero initial velocity, nonzero first chord, fused KV, exact restart and 128 production-shape steps')
+                              preflight='Skipped by request; start formal training at step zero with seed 42')
             elif args.fixed_first_attention_mu:
                 source.update(fixed_first_attention_mu=True,
                               preflight='Fixed first read, embedding gradients, compiled KV, exact restart and 128-step profile; independent seed42 formal')
