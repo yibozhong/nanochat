@@ -501,7 +501,7 @@ class ConnectionModel(nn.Module):
 
 
 def optimizer_for(model, batch_tokens=32768, *, matrix_optimizer='muon', arc_mu=1., arc_beta=.5, arc_direction='raw',
-                  arc_step_scale='fan_out'):
+                  arc_step_scale='fan_out', velocity_embedding_lr=None):
     """Same backbone native LR rules; connector parameters get separate AdamW."""
     if matrix_optimizer != 'arc' and arc_step_scale != 'fan_out':
         raise ValueError('Selecting an Arc step scale requires the Arc matrix optimizer')
@@ -513,6 +513,12 @@ def optimizer_for(model, batch_tokens=32768, *, matrix_optimizer='muon', arc_mu=
             model.config.variant != 'baseline' or model.config.residual_mode != 'vanilla'
             or model.config.latent_feedback or model.config.ngpt_weight_norm):
         raise ValueError('Arc pilot requires the vanilla baseline')
+    velocity_table = getattr(model, 'velocity_embedding', None)
+    if velocity_embedding_lr is not None:
+        if velocity_table is None or model.config.architecture == 'native':
+            raise ValueError('A velocity embedding LR requires a token velocity table')
+        if not math.isfinite(velocity_embedding_lr) or velocity_embedding_lr <= 0:
+            raise ValueError('The velocity embedding peak LR must be positive and finite')
     if model.config.architecture == 'native':
         return model.setup_optimizer(batch_tokens)
     c = model.config
@@ -526,8 +532,12 @@ def optimizer_for(model, batch_tokens=32768, *, matrix_optimizer='muon', arc_mu=
              betas=(.8, .96), eps=1e-10, weight_decay=.01),
         dict(kind='adamw', params=[model.wte.weight], lr=.3*batch_scale*width_scale,
              betas=(.8, .995), eps=1e-10, weight_decay=.001)]
-    if getattr(model, 'velocity_embedding', None) is not None:
-        groups[1]['params'].append(model.velocity_embedding.weight)
+    if velocity_table is not None:
+        if velocity_embedding_lr is None:
+            groups[1]['params'].append(velocity_table.weight)
+        else:
+            groups.append(dict(groups[1], params=[velocity_table.weight], lr=velocity_embedding_lr,
+                               name='velocity_token_embedding'))
     if getattr(model, 'velocity_position_embedding', None) is not None:
         groups[1]['params'].append(model.velocity_position_embedding.weight)
     matrices, routing = [], []

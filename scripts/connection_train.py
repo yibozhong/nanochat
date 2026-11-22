@@ -37,6 +37,23 @@ def check_resume_protocol(state, source, protocol, *, latest):
     return True
 
 
+@torch.no_grad()
+def velocity_usage_metrics(model, data, microbatch, normal_ce):
+    ids, _ = data.batch('dev', 0, microbatch)
+    _, v0 = model.initial_state(model.wte(ids), ids)
+    v0_rms = v0.float().square().mean().sqrt().item()
+    mu = model.blocks[0].attn_residual.mu.item()
+    weight = model.velocity_embedding.weight
+    table_rms = torch.linalg.vector_norm(weight, dtype=torch.float32).item() / math.sqrt(weight.numel())
+    # Only replace the embedding lookup during this dev pass. Training weights
+    # and optimizer state are never touched.
+    with model.velocity_embedding.register_forward_hook(lambda module, args, output: torch.zeros_like(output)):
+        zero_ce, _ = evaluate(model, data, microbatch=microbatch)
+    return {'dev/zero_v0_ce': zero_ce, 'dev/zero_v0_delta_ce': zero_ce - normal_ce,
+            'residual/initial_tangent_velocity_rms': v0_rms, 'residual/first_read_offset_rms': abs(mu)*v0_rms,
+            'residual/velocity_embedding_rms': table_rms}
+
+
 def main():
     p = argparse.ArgumentParser(fromfile_prefix_chars='@')
     p.add_argument('--variant', choices=CONNECTION_VARIANTS, required=True)
@@ -54,6 +71,9 @@ def main():
     p.add_argument('--velocity-init', choices=('zero','token','token_position'), default=None,
                    help='HBFormer and lookahead default to token plus position velocity. Spherical lookahead also supports token-only or zero initial velocity.')
     p.add_argument('--velocity-embedding-std', type=float, default=.02)
+    p.add_argument('--velocity-embedding-lr', type=float,
+                   help='Absolute peak AdamW LR for the velocity token table; follows the normal schedule')
+    p.add_argument('--eval-zero-v0', action='store_true', help='Measure reliance on initial token velocity on packed dev')
     p.add_argument('--momentum-beta-init', type=float, default=.5)
     p.add_argument('--momentum-gamma-init', type=float, default=None)
     p.add_argument('--momentum-eta-init', type=float, default=None,
@@ -179,13 +199,20 @@ def main():
     model=build_connection_model(c).prepare(**prepare_options)
     if a.matched_backbone_init:
         match_vanilla_initialization(model,a.seed)
+    if a.eval_zero_v0 and (c.residual_mode != 'ngpt_lookahead' or c.velocity_init != 'token'):
+        p.error('--eval-zero-v0 requires token-only spherical lookahead')
     opt,wd=optimizer_for(model, matrix_optimizer=a.matrix_optimizer, arc_mu=a.arc_mu, arc_beta=a.arc_beta,
-                         arc_direction=a.arc_direction, arc_step_scale=a.arc_step_scale)
+                         arc_direction=a.arc_direction, arc_step_scale=a.arc_step_scale,
+                         velocity_embedding_lr=a.velocity_embedding_lr)
     initial_groups=[{k:v for k,v in group.items() if k!='params'} for group in opt.param_groups]
     protocol=dict(steps=a.steps,schedule_steps=a.schedule_steps,batch_tokens=32768,
                   microbatch=a.microbatch,grad_accum=rows_per_step//a.microbatch,seed=a.seed,
                   attention_backend=a.attention_backend,matched_backbone_init=a.matched_backbone_init,
                   evaluate_test=a.evaluate_test)
+    if a.velocity_embedding_lr is not None:
+        protocol['velocity_embedding_peak_lr'] = a.velocity_embedding_lr
+    if a.eval_zero_v0:
+        protocol['eval_zero_v0'] = True
     if a.compile_lookahead_branches:
         protocol['lookahead_compilation'] = 'separate_branches'
     if a.matrix_optimizer == 'arc':
@@ -264,6 +291,7 @@ def main():
                     ('-fixed-first-attn-mu1' if c.fixed_first_attention_mu else '')+
                     ('-rho-v' if c.chord_velocity_write else '')+
                     ('-channel-alpha-beta' if c.channel_chord_coefficients else '')+
+                    (f'-vembed-lr{a.velocity_embedding_lr:g}' if a.velocity_embedding_lr is not None else '')+
                     ('-token-beta-gate' if c.token_beta_gate else '')+
                     (f'-velocity-{c.chord_velocity_geometry}' if c.chord_velocity_geometry != 'parallel_transport' else '')+
                     ('-fused-read-norm' if c.fuse_chord_read_norm else '')+
@@ -310,6 +338,10 @@ def main():
             metrics.update(opt.metrics())
         if c.residual_mode != 'vanilla':
             metrics.update(model.residual_metrics())
+        if a.eval_zero_v0 and (step in (250, 1000, a.steps) or step % 5000 == 0):
+            usage = velocity_usage_metrics(model, data, a.microbatch, dev)
+            metrics.update(usage)
+            print('VELOCITY_USAGE ' + json.dumps(dict(step=step, normal_ce=dev, **usage)), flush=True)
         if c.latent_feedback:
             metrics[f'dev/ce_p{c.feedback_eval_passes}']=dev
             if c.feedback_eval_passes != 1:
