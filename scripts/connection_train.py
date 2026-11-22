@@ -260,6 +260,7 @@ def main():
                     ('-learned-beta' if c.ngpt_velocity_mode == 'lookahead_split_learned_beta' else '')+
                     ('-signed-steps' if c.signed_chord_steps else '')+
                     ('-token-alpha-gates' if c.token_chord_gates else '')+
+                    ('-zero-init-velocity-embed' if c.velocity_init=='token' and c.velocity_embedding_std==0 else '')+
                     ('-fixed-first-attn-mu1' if c.fixed_first_attention_mu else '')+
                     ('-rho-v' if c.chord_velocity_write else '')+
                     ('-channel-alpha-beta' if c.channel_chord_coefficients else '')+

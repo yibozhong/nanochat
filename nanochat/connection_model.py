@@ -159,8 +159,8 @@ class ConnectionConfig:
             raise ValueError('Unknown velocity initialization')
         if self.velocity_init == 'token' and self.residual_mode not in ('heavy_ball', 'heavy_ball_rms', 'ngpt_heavy_ball', 'ngpt_lookahead'):
             raise ValueError('Token-only velocity requires heavy ball or spherical lookahead')
-        if not math.isfinite(self.velocity_embedding_std) or self.velocity_embedding_std <= 0:
-            raise ValueError('Velocity embedding initialization must be positive and finite')
+        if not math.isfinite(self.velocity_embedding_std) or self.velocity_embedding_std < 0:
+            raise ValueError('Velocity embedding initialization must be nonnegative and finite')
         if not (math.isfinite(self.momentum_beta_init) and 0 < self.momentum_beta_init < 1):
             raise ValueError('Residual momentum beta must start strictly between zero and one')
         if any(not math.isfinite(x) or x <= 0 for x in (self.momentum_gamma_init, self.momentum_eta_init)):

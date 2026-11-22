@@ -33,7 +33,9 @@ case "$TASK_MODE/$TASK_VELOCITY_MODE" in
         TASK_VELOCITY_INIT=token_position
         if [[ "${5:-}" == --token-only-velocity ]]; then TASK_VELOCITY_INIT=token; fi
         if [[ "${5:-}" == --zero-velocity ]]; then TASK_VELOCITY_INIT=zero; fi
-        TASK_MOMENTUM_ARGS=(--velocity-init "$TASK_VELOCITY_INIT" --velocity-embedding-std .02 --momentum-beta-init .5 --lookahead-mu-init 0)
+        TASK_VELOCITY_STD=.02
+        if [[ "${7:-}" == --zero-init-velocity-embedding ]]; then TASK_VELOCITY_STD=0; fi
+        TASK_MOMENTUM_ARGS=(--velocity-init "$TASK_VELOCITY_INIT" --velocity-embedding-std "$TASK_VELOCITY_STD" --momentum-beta-init .5 --lookahead-mu-init 0)
         TASK_GROUP=ngpt-lookahead-5k
         if [[ "$TASK_VELOCITY_MODE" == lookahead_axis_write ]]; then TASK_GROUP=arc-residual-axis-write-10b; fi
         if [[ "$TASK_VELOCITY_MODE" == lookahead_split_write ]]; then TASK_GROUP=arc-residual-split-write-10b; fi
@@ -93,7 +95,9 @@ elif [[ "${4:-}" == --chord-velocity-geometry=project_only || "${4:-}" == --chor
         if [[ "${6:-}" == --fuse-chord-read-norm ]]; then
             TASK_MOMENTUM_ARGS+=(--fuse-chord-read-norm --no-recompute-chord-force)
             TASK_GROUP=chord-fused-read-token-only-bf16-10b
-            if [[ "$#" == 7 && "$7" == --chord-velocity-write ]]; then
+            if [[ "$#" == 7 && "$7" == --zero-init-velocity-embedding ]]; then
+                TASK_GROUP=chord-scalar-zero-init-velocity-embed-10b
+            elif [[ "$#" == 7 && "$7" == --chord-velocity-write ]]; then
                 TASK_MOMENTUM_ARGS+=("$7")
                 TASK_GROUP=chord-scalar-rho-v-10b
             elif [[ "${7:-}" == --channel-chord-coefficients ]]; then
@@ -207,7 +211,10 @@ assert velocity_write == s.get('chord_velocity_write', False)
 if velocity_write:
     assert not channel_coefficients and s['rho_init']==0 and s['rho_parameterization']=='tanh'
 chord_control = 'af1c3266' if token_only else '6721b437'
-if channel_coefficients or velocity_write or fixed_first_mu or from_rest:
+zero_embed = sys.argv[10]=='--zero-init-velocity-embedding'
+if zero_embed:
+    assert token_only and s['velocity_embedding'] and s['velocity_embedding_std']==0
+if channel_coefficients or velocity_write or fixed_first_mu or from_rest or zero_embed:
     assert (token_only or from_rest) and s['fuse_chord_read_norm']
     chord_control = '9a7fd31d' if fixed_first_mu and channel_coefficients else 'a7163d23'
 if token_gates or token_beta_gate or geometry:
@@ -242,7 +249,7 @@ elif sys.argv[2]=='ngpt_lookahead':
     assert s['lookahead_mu_init']==0 and s['momentum_beta_init']==.5 and s['momentum_beta_trainable']==learned_beta
     if learned_beta:
         assert s['learned_beta_sites']==2*s['model']['depth']-1 and s['beta_parameterization']=='sigmoid'
-    assert s['velocity_init']==sys.argv[8] and s['velocity_embedding_std']==.02
+    assert s['velocity_init']==sys.argv[8] and s['velocity_embedding_std']==(0. if zero_embed else .02)
 elif sys.argv[2]=='ngpt_hbformer':
     import math
     assert s['momentum_eta_init']==1 and not s['momentum_eta_trainable']
@@ -335,8 +342,8 @@ if [[ "${TASK_MOMENTUM_ARGS[0]:-}" == --matrix-optimizer ]]; then
     WANDB_MODE=disabled timeout --kill-after=30s 2400 python research/connections/ngpt/arc_preflight.py
     echo "FORMAL_TRAINING_BEGIN arc_optimizer $TASK_RUN_ID"
 else
-    if [[ "${5:-}" == --zero-velocity ]]; then
-        echo "Starting from-rest Chord directly without a GPU pilot"
+    if [[ "${5:-}" == --zero-velocity || "${7:-}" == --zero-init-velocity-embedding ]]; then
+        echo "Starting Chord training directly without a GPU pilot"
     elif [[ "$TASK_VARIANT" == mhc || "$TASK_VARIANT" == attnres ]]; then
         WANDB_MODE=disabled timeout --kill-after=30s 2400 python -m research.connections.ngpt.connection_init_preflight "${TASK_MODEL_ARGS[@]}"
     elif [[ "$TASK_VELOCITY_MODE" == lookahead_axis_write || "$TASK_VELOCITY_MODE" == lookahead_split_write || "$TASK_VELOCITY_MODE" == lookahead_split_learned_beta || "$TASK_VELOCITY_MODE" == lookahead_geodesic_split ]]; then

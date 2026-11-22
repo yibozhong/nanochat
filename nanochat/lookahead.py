@@ -276,6 +276,10 @@ class LookaheadModel(MomentumModel):
                                   for s in sites]).tolist()
             metrics = {f'residual/sublayer_{i}/{key}': value for i,row in enumerate(values)
                        for key,value in zip(('alpha_perp','alpha_parallel','mu'),row)}
+            if self.velocity_embedding is not None and self.config.velocity_embedding_std == 0:
+                weight = self.velocity_embedding.weight
+                rms = torch.linalg.vector_norm(weight, dtype=torch.float32) / math.sqrt(weight.numel())
+                metrics['residual/velocity_embedding_rms'] = rms.item()
             if sites[0].raw_beta is not None:
                 betas = torch.stack([s.beta().mean() for s in sites if s.raw_beta is not None]).tolist()
                 key = 'beta_at_zero_alignment' if sites[0].beta_gate_slope is not None else 'beta'

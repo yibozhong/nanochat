@@ -45,6 +45,8 @@ def main():
                           help='Start the standard scalar Chord from rest without a velocity table')
     velocity.add_argument('--token-only-velocity', action='store_true',
                         help='Remove the velocity position table from the project-only Chord control')
+    parser.add_argument('--zero-init-velocity-embedding', action='store_true',
+                        help='Initialize the trainable scalar Chord token velocity table to zero')
     parser.add_argument('--fixed-first-attention-mu', action='store_true',
                         help='Fix the first Attention lookahead at one in the standard Chord recipe')
     parser.add_argument('--chord-velocity-write', action='store_true',
@@ -84,6 +86,9 @@ def main():
         parser.error('--chord-velocity-write uses the fused scalar Chord default')
     if args.channel_chord_coefficients and not args.fuse_chord_read_norm:
         parser.error('--channel-chord-coefficients requires the fused default Chord control')
+    if args.zero_init_velocity_embedding and (not args.token_only_velocity or not args.fuse_chord_read_norm
+            or args.fixed_first_attention_mu or args.chord_velocity_write or args.channel_chord_coefficients):
+        parser.error('--zero-init-velocity-embedding uses the standard fused scalar token-only Chord preset')
     if args.zero_velocity and (geometry != 'project_only' or not args.fuse_chord_read_norm
             or args.fixed_first_attention_mu or args.chord_velocity_write or args.channel_chord_coefficients):
         parser.error('--zero-velocity uses the standard scalar fused project-only Chord preset')
@@ -125,6 +130,8 @@ def main():
         ROOT=HOME_ROOT/'residual-chord-velocity-token-only-bf16-10b-20261120'
         if args.fuse_chord_read_norm:
             ROOT=HOME_ROOT/'residual-chord-fused-read-token-only-bf16-10b-20261120'
+    if args.zero_init_velocity_embedding:
+        ROOT=HOME_ROOT/'residual-chord-scalar-zero-init-velocity-embed-10b-20261121'
     if args.zero_velocity:
         ROOT=HOME_ROOT/'residual-chord-scalar-from-rest-10b-20261121'
     if args.chord_velocity_write:
@@ -240,7 +247,8 @@ def main():
                           lookahead_mu_init=0., ngpt_velocity_mode='lookahead_transport' if mode=='ngpt_lookahead' else 'ambient', ngpt_weight_norm=False, schedule_steps=STEPS,
                           reference_run='d065c132', backbone_weight_constraint='none',
                           preflight='Zero-gate equality with nGPT, trainable lookahead, tangent geometry, causal KV, gradients, exact resume and same-GPU speed')
-        if args.channel_chord_coefficients or args.chord_velocity_write or args.fixed_first_attention_mu or args.zero_velocity:
+        if (args.channel_chord_coefficients or args.chord_velocity_write or args.fixed_first_attention_mu
+                or args.zero_velocity or args.zero_init_velocity_embedding):
             control_dir = HOME_ROOT/'residual-chord-fused-read-token-only-bf16-10b-20261120-hopper-only'
             control_id = 'a7163d23'
             if args.fixed_first_attention_mu and args.channel_chord_coefficients:
@@ -252,7 +260,10 @@ def main():
             assert control['velocity_init']=='token' and control['chord_velocity_geometry']==geometry
             source = dict(control, plan=KEY, commit=commit, run_id=run_id, reference_run=control['run_id'],
                           paired_run=control['run_id'])
-            if args.zero_velocity:
+            if args.zero_init_velocity_embedding:
+                source.update(velocity_embedding_std=0.,
+                              preflight='Skipped by request; start formal training at step zero with seed 42')
+            elif args.zero_velocity:
                 source.update(velocity_init='zero', velocity_embedding=False, initial_velocity_projected=False,
                               preflight='Skipped by request; start formal training at step zero with seed 42')
             elif args.fixed_first_attention_mu:
@@ -470,6 +481,9 @@ def main():
         if args.fuse_chord_read_norm:
             job_args+=' --fuse-chord-read-norm'
             batch_name+='-fused-read'
+        if args.zero_init_velocity_embedding:
+            job_args+=' --zero-init-velocity-embedding'
+            batch_name+='-zero-init-velocity-embed'
         if args.chord_velocity_write:
             job_args+=' --chord-velocity-write'
             batch_name+='-rho-v'
