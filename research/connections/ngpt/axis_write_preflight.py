@@ -169,8 +169,9 @@ def profile(root, mode, resume, measure_turns=False, signed_steps=False, token_g
     steps_by_component = {}
     if mode in ('lookahead_split_write','lookahead_split_learned_beta','lookahead_geodesic_split'):
         init, = [e for e in events if e.get('step') == 0 and 'dev/ce' in e]
-        if fixed_first_mu:
-            assert init['residual/sublayer_0/mu'] == end['residual/sublayer_0/mu'] == 1.
+        if fixed_first_mu or velocity_init == 'zero':
+            expected_mu = 1. if fixed_first_mu else 0.
+            assert init['residual/sublayer_0/mu'] == end['residual/sublayer_0/mu'] == expected_mu
             assert init['residual/sublayer_1/mu'] == 0. and end['residual/sublayer_1/mu'] != 0.
         for suffix in ('alpha_parallel','alpha_perp'):
             rates = {k:v for k,v in end.items() if k.endswith('/'+suffix)}
@@ -316,13 +317,16 @@ def main():
         prior = json.loads(marker.read_text())
         assert prior['complete'] and prior['source'] == source and prior['torch'] == torch.__version__
         return
-    if source.get('fixed_first_attention_mu'):
-        subprocess.run([sys.executable, '-m', 'pytest', '-q', 'tests/test_chord_fixed_first_mu.py',
-                        '--junitxml=results/fixed-first-mu-tests.xml'], check=True)
-        with tempfile.TemporaryDirectory(prefix='fixed-first-mu-', dir='..') as tmp:
+    fixed_first_mu = source.get('fixed_first_attention_mu', False)
+    if fixed_first_mu or velocity_init == 'zero':
+        suite = 'chord_fixed_first_mu' if fixed_first_mu else 'chord_from_rest'
+        report = 'fixed-first-mu' if fixed_first_mu else 'chord-from-rest'
+        subprocess.run([sys.executable, '-m', 'pytest', '-q', f'tests/test_{suite}.py',
+                        f'--junitxml=results/{report}-tests.xml'], check=True)
+        with tempfile.TemporaryDirectory(prefix=suite+'-', dir='..') as tmp:
             target = profile(Path(tmp).resolve(), mode, resume=True, geometry=geometry,
                              velocity_init=velocity_init, state_dtype=state_dtype, fused_read=True,
-                             channel_coefficients=source.get('channel_chord_coefficients', False), fixed_first_mu=True)
+                             channel_coefficients=source.get('channel_chord_coefficients', False), fixed_first_mu=fixed_first_mu)
         json_write(marker, dict(complete=True, formal_training=False, source=source, gpu=gpu, torch=torch.__version__,
                                 profile=target, evaluation_wall_seconds=time.perf_counter()-start))
         return

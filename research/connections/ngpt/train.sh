@@ -32,6 +32,7 @@ case "$TASK_MODE/$TASK_VELOCITY_MODE" in
     ngpt_lookahead/lookahead_transport|ngpt_lookahead/lookahead_axis_write|ngpt_lookahead/lookahead_split_write|ngpt_lookahead/lookahead_split_learned_beta|ngpt_lookahead/lookahead_geodesic_split)
         TASK_VELOCITY_INIT=token_position
         if [[ "${5:-}" == --token-only-velocity ]]; then TASK_VELOCITY_INIT=token; fi
+        if [[ "${5:-}" == --zero-velocity ]]; then TASK_VELOCITY_INIT=zero; fi
         TASK_MOMENTUM_ARGS=(--velocity-init "$TASK_VELOCITY_INIT" --velocity-embedding-std .02 --momentum-beta-init .5 --lookahead-mu-init 0)
         TASK_GROUP=ngpt-lookahead-5k
         if [[ "$TASK_VELOCITY_MODE" == lookahead_axis_write ]]; then TASK_GROUP=arc-residual-axis-write-10b; fi
@@ -82,7 +83,11 @@ elif [[ "${4:-}" == --chord-velocity-geometry=project_only || "${4:-}" == --chor
     [[ "$TASK_VELOCITY_MODE" == lookahead_split_learned_beta ]]
     TASK_MOMENTUM_ARGS+=("$4")
     TASK_GROUP=chord-velocity-geometry-10b
-    if [[ "$4" == --chord-velocity-geometry=project_only && "${5:-}" == --token-only-velocity ]]; then
+    if [[ "${5:-}" == --zero-velocity ]]; then
+        [[ "$#" == 6 && "$4" == --chord-velocity-geometry=project_only && "$6" == --fuse-chord-read-norm ]]
+        TASK_MOMENTUM_ARGS+=(--chord-state-dtype bfloat16 --fuse-chord-read-norm --no-recompute-chord-force)
+        TASK_GROUP=chord-scalar-from-rest-10b
+    elif [[ "$4" == --chord-velocity-geometry=project_only && "${5:-}" == --token-only-velocity ]]; then
         TASK_MOMENTUM_ARGS+=(--chord-state-dtype bfloat16)
         TASK_GROUP=chord-velocity-token-only-bf16-10b
         if [[ "${6:-}" == --fuse-chord-read-norm ]]; then
@@ -168,7 +173,8 @@ assert s.get('schedule_steps',305176)==int(sys.argv[5])==305176
 assert s['initialization']=='seed42_from_scratch_no_diagnostic_weights'
 assert s['attention_backend']=='fa2' and s['residual_dynamics']==sys.argv[2]
 assert s['model']==dict(depth=8,width=512,heads=4,sequence_length=2048,vocab_size=32768)
-assert s['velocity_embedding']==(sys.argv[2] in ('ngpt_heavy_ball','heavy_ball_rms','ngpt_hbformer','ngpt_lookahead','lookahead_only')) and s['ngpt_alpha_init']==.05
+from_rest = sys.argv[8]=='zero'
+assert s['velocity_embedding']==(not from_rest and sys.argv[2] in ('ngpt_heavy_ball','heavy_ball_rms','ngpt_hbformer','ngpt_lookahead','lookahead_only')) and s['ngpt_alpha_init']==.05
 assert s['residual_projection_init']=='normal' and s['residual_projection_init_std']==.02
 assert s['ngpt_force_rms_floor']==1e-6
 assert s.get('ngpt_velocity_mode','ambient')==sys.argv[3]
@@ -185,13 +191,13 @@ assert token_beta_gate == s.get('token_beta_gate',False)
 geometry = s.get('chord_velocity_geometry')
 if geometry or sys.argv[6].startswith('--chord-velocity-geometry='):
     assert geometry in ('project_only','ambient') and sys.argv[6]=='--chord-velocity-geometry='+geometry
-    assert s['initial_velocity_projected']==(geometry=='project_only')
+    assert s['initial_velocity_projected']==(geometry=='project_only' and not from_rest)
 token_only = sys.argv[8]=='token'
 assert s.get('fuse_chord_read_norm',False) == (sys.argv[9]=='--fuse-chord-read-norm')
 if s.get('fuse_chord_read_norm'):
-    assert token_only and s['recompute_chord_force'] is False
-if token_only:
-    assert geometry=='project_only' and s['velocity_init']=='token' and s['chord_state_dtype']=='bfloat16'
+    assert (token_only or from_rest) and s['recompute_chord_force'] is False
+if token_only or from_rest:
+    assert geometry=='project_only' and s['velocity_init']==sys.argv[8] and s['chord_state_dtype']=='bfloat16'
 fixed_first_mu = '--fixed-first-attention-mu' in sys.argv[10:]
 assert fixed_first_mu == s.get('fixed_first_attention_mu', False)
 channel_coefficients = sys.argv[10]=='--channel-chord-coefficients'
@@ -201,8 +207,8 @@ assert velocity_write == s.get('chord_velocity_write', False)
 if velocity_write:
     assert not channel_coefficients and s['rho_init']==0 and s['rho_parameterization']=='tanh'
 chord_control = 'af1c3266' if token_only else '6721b437'
-if channel_coefficients or velocity_write or fixed_first_mu:
-    assert token_only and s['fuse_chord_read_norm']
+if channel_coefficients or velocity_write or fixed_first_mu or from_rest:
+    assert (token_only or from_rest) and s['fuse_chord_read_norm']
     chord_control = '9a7fd31d' if fixed_first_mu and channel_coefficients else 'a7163d23'
 if token_gates or token_beta_gate or geometry:
     assert not signed_steps and s['paired_run']==chord_control and s['residual_kernel']=='fused_chord_triton'

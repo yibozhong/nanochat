@@ -40,7 +40,10 @@ def main():
                         help='Compare endpoint projection or unconstrained velocity to parallel transport')
     parser.add_argument('--fuse-chord-read-norm', action='store_true',
                         help='Benchmark separate, fused and force-recomputed Chord then train fused token-only from scratch')
-    parser.add_argument('--token-only-velocity', action='store_true',
+    velocity = parser.add_mutually_exclusive_group()
+    velocity.add_argument('--zero-velocity', action='store_true',
+                          help='Start the standard scalar Chord from rest without a velocity table')
+    velocity.add_argument('--token-only-velocity', action='store_true',
                         help='Remove the velocity position table from the project-only Chord control')
     parser.add_argument('--fixed-first-attention-mu', action='store_true',
                         help='Fix the first Attention lookahead at one in the standard Chord recipe')
@@ -81,8 +84,11 @@ def main():
         parser.error('--chord-velocity-write uses the fused scalar Chord default')
     if args.channel_chord_coefficients and not args.fuse_chord_read_norm:
         parser.error('--channel-chord-coefficients requires the fused default Chord control')
-    if args.fuse_chord_read_norm and not args.token_only_velocity:
-        parser.error('--fuse-chord-read-norm requires the token-only velocity experiment')
+    if args.zero_velocity and (geometry != 'project_only' or not args.fuse_chord_read_norm
+            or args.fixed_first_attention_mu or args.chord_velocity_write or args.channel_chord_coefficients):
+        parser.error('--zero-velocity uses the standard scalar fused project-only Chord preset')
+    if args.fuse_chord_read_norm and not (args.token_only_velocity or args.zero_velocity):
+        parser.error('--fuse-chord-read-norm requires --token-only-velocity or --zero-velocity')
     if args.token_only_velocity and geometry != 'project_only':
         parser.error('--token-only-velocity requires --chord-velocity-geometry project_only')
     if geometry and (not learned_beta or args.token_beta_gate or args.token_chord_gates or args.signed_chord_steps):
@@ -119,6 +125,8 @@ def main():
         ROOT=HOME_ROOT/'residual-chord-velocity-token-only-bf16-10b-20261120'
         if args.fuse_chord_read_norm:
             ROOT=HOME_ROOT/'residual-chord-fused-read-token-only-bf16-10b-20261120'
+    if args.zero_velocity:
+        ROOT=HOME_ROOT/'residual-chord-scalar-from-rest-10b-20261121'
     if args.chord_velocity_write:
         ROOT=HOME_ROOT/'residual-chord-scalar-rho-v-10b-20261121'
     if args.channel_chord_coefficients:
@@ -232,7 +240,7 @@ def main():
                           lookahead_mu_init=0., ngpt_velocity_mode='lookahead_transport' if mode=='ngpt_lookahead' else 'ambient', ngpt_weight_norm=False, schedule_steps=STEPS,
                           reference_run='d065c132', backbone_weight_constraint='none',
                           preflight='Zero-gate equality with nGPT, trainable lookahead, tangent geometry, causal KV, gradients, exact resume and same-GPU speed')
-        if args.channel_chord_coefficients or args.chord_velocity_write or args.fixed_first_attention_mu:
+        if args.channel_chord_coefficients or args.chord_velocity_write or args.fixed_first_attention_mu or args.zero_velocity:
             control_dir = HOME_ROOT/'residual-chord-fused-read-token-only-bf16-10b-20261120-hopper-only'
             control_id = 'a7163d23'
             if args.fixed_first_attention_mu and args.channel_chord_coefficients:
@@ -244,7 +252,10 @@ def main():
             assert control['velocity_init']=='token' and control['chord_velocity_geometry']==geometry
             source = dict(control, plan=KEY, commit=commit, run_id=run_id, reference_run=control['run_id'],
                           paired_run=control['run_id'])
-            if args.fixed_first_attention_mu:
+            if args.zero_velocity:
+                source.update(velocity_init='zero', velocity_embedding=False, initial_velocity_projected=False,
+                              preflight='No velocity table, zero initial velocity, nonzero first chord, fused KV, exact restart and 128 production-shape steps')
+            elif args.fixed_first_attention_mu:
                 source.update(fixed_first_attention_mu=True,
                               preflight='Fixed first read, embedding gradients, compiled KV, exact restart and 128-step profile; independent seed42 formal')
             elif args.chord_velocity_write:
@@ -450,6 +461,9 @@ def main():
         if geometry:
             job_args+=f' --chord-velocity-geometry={geometry}'
             batch_name+='-velocity-'+geometry.replace('_','-')
+        if args.zero_velocity:
+            job_args+=' --zero-velocity'
+            batch_name+='-from-rest'
         if args.token_only_velocity:
             job_args+=' --token-only-velocity'
             batch_name+='-token-only-bf16'

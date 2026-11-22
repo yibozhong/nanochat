@@ -259,7 +259,7 @@ class LookaheadModel(MomentumModel):
         h, v = super().initial_state(x, token_ids, start)
         if self.config.residual_mode == 'lookahead_only':
             return h.to(x.dtype), v
-        if self.config.chord_velocity_geometry != 'ambient':
+        if self.velocity_embedding is not None and self.config.chord_velocity_geometry != 'ambient':
             v = tangent_project(h, v)
         if self.config.chord_state_dtype == 'bfloat16':
             return h.bfloat16(), v.bfloat16()

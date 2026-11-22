@@ -151,8 +151,8 @@ class ConnectionConfig:
         if hbformer and (self.velocity_init != 'token_position' or self.ngpt_velocity_mode == 'ambient'
                          or self.momentum_eta_init != 1 or self.residual_projection_init != 'normal'):
             raise ValueError('ngpt_hbformer requires token_position velocity, parallel transport, fixed unit step and nonzero projections')
-        if lookahead and self.velocity_init not in ('token', 'token_position'):
-            raise ValueError('Lookahead requires a velocity token embedding')
+        if self.residual_mode == 'lookahead_only' and self.velocity_init != 'token_position':
+            raise ValueError('Additive lookahead requires token and position velocity embeddings')
         if self.velocity_init == 'token_position' and not (hbformer or lookahead):
             raise ValueError('Token plus position velocity requires HBFormer or lookahead')
         if self.velocity_init not in ('zero', 'token', 'token_position'):
