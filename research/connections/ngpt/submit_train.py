@@ -54,7 +54,7 @@ def main():
     parser.add_argument('--channel-chord-coefficients', action='store_true',
                         help='Compare per-channel alpha and beta to the fused token-only BF16 Chord')
     parser.add_argument('--velocity-embedding-lr', type=float,
-                        help='Use the channelwise Chord control to test an absolute velocity token table peak LR')
+                        help='Test an absolute velocity token table peak LR against the matching scalar or channel Chord control')
     parser.add_argument('--token-beta-gate', action='store_true',
                         help='Compare token-dependent velocity decay to the positive split learned-beta control')
     parser.add_argument('--hopper-only', action='store_true',
@@ -83,9 +83,10 @@ def main():
         parser.error('--token-beta-gate requires the shared positive split learned-beta preset')
     geometry = args.chord_velocity_geometry
     velocity_lr = args.velocity_embedding_lr
-    if velocity_lr is not None and (not args.channel_chord_coefficients or args.fixed_first_attention_mu
+    if velocity_lr is not None and (not args.token_only_velocity or not args.fuse_chord_read_norm
+            or args.zero_init_velocity_embedding or args.fixed_first_attention_mu or args.chord_velocity_write
             or not math.isfinite(velocity_lr) or velocity_lr <= 0):
-        parser.error('--velocity-embedding-lr requires positive finite LR and the paired channel Chord preset')
+        parser.error('--velocity-embedding-lr requires a positive finite LR and the fused token-only Chord control')
     if args.fixed_first_attention_mu and (not args.fuse_chord_read_norm or args.chord_velocity_write):
         parser.error('--fixed-first-attention-mu uses the fused token-only Chord recipe')
     if args.chord_velocity_write and (args.channel_chord_coefficients or not args.fuse_chord_read_norm):
@@ -144,8 +145,9 @@ def main():
         ROOT=HOME_ROOT/'residual-chord-scalar-rho-v-10b-20261121'
     if args.channel_chord_coefficients:
         ROOT=HOME_ROOT/'residual-chord-channel-alpha-beta-10b-20261121'
-        if velocity_lr is not None:
-            ROOT=HOME_ROOT/f'residual-chord-channel-vembed-lr{velocity_lr:g}-10b-20261122'
+    if velocity_lr is not None:
+        coefficients = 'channel' if args.channel_chord_coefficients else 'scalar'
+        ROOT=HOME_ROOT/f'residual-chord-{coefficients}-vembed-lr{velocity_lr:g}-10b-20261122'
     if args.fixed_first_attention_mu:
         coefficients = 'channel' if args.channel_chord_coefficients else 'scalar'
         ROOT=HOME_ROOT/f'residual-chord-{coefficients}-fixed-first-attn-mu1-10b-20261121'
@@ -256,10 +258,10 @@ def main():
                           reference_run='d065c132', backbone_weight_constraint='none',
                           preflight='Zero-gate equality with nGPT, trainable lookahead, tangent geometry, causal KV, gradients, exact resume and same-GPU speed')
         if (args.channel_chord_coefficients or args.chord_velocity_write or args.fixed_first_attention_mu
-                or args.zero_velocity or args.zero_init_velocity_embedding):
+                or args.zero_velocity or args.zero_init_velocity_embedding or velocity_lr is not None):
             control_dir = HOME_ROOT/'residual-chord-fused-read-token-only-bf16-10b-20261120-hopper-only'
             control_id = 'a7163d23'
-            if (args.fixed_first_attention_mu and args.channel_chord_coefficients) or velocity_lr is not None:
+            if args.channel_chord_coefficients and (args.fixed_first_attention_mu or velocity_lr is not None):
                 control_dir = HOME_ROOT/'residual-chord-channel-alpha-beta-10b-20261121-hopper-only'
                 control_id = '9a7fd31d'
             control = json.loads((control_dir/'bundles/source.json').read_text())
@@ -269,15 +271,23 @@ def main():
             source = dict(control, plan=KEY, commit=commit, run_id=run_id, reference_run=control['run_id'],
                           paired_run=control['run_id'])
             if velocity_lr is not None:
-                assert control['channel_chord_coefficients'] and control['velocity_embedding_std']==.02
-                summary = json.loads((control_dir/'summary.json').read_text())
-                assert summary['complete'] and summary['source']==control
+                assert control.get('channel_chord_coefficients',False)==args.channel_chord_coefficients
+                assert control['velocity_embedding_std']==.02
                 source.update(velocity_embedding_peak_lr=velocity_lr, eval_zero_v0=True,
-                              reference_step_seconds=summary['steady_step_seconds'], reference_gpu=summary['gpu'],
-                              preflight='Reuse completed channel Chord validation; train directly from seed 42',
-                              timing_reference='Completed channel Chord 9a7fd31d')
-                (ROOT/'comparison-reference.json').write_text(json.dumps(dict(run_id=control_id, step=steps,
-                    summary_path=str(control_dir/'summary.json')),indent=2)+'\n')
+                              preflight='Reuse validated Chord configuration; train directly from seed 42',
+                              timing_reference=control['timing_reference'])
+                summary_path = control_dir/'summary.json'
+                if summary_path.exists():
+                    summary = json.loads(summary_path.read_text())
+                    assert summary['complete'] and summary['source']==control
+                    source.update(reference_step_seconds=summary['steady_step_seconds'], reference_gpu=summary['gpu'],
+                                  timing_reference=f'Completed Chord control {control_id}')
+                    (ROOT/'comparison-reference.json').write_text(json.dumps(dict(run_id=control_id, step=steps,
+                        summary_path=str(summary_path)),indent=2)+'\n')
+                else:
+                    stopped = json.loads((control_dir/'stop-summary.json').read_text())
+                    assert stopped['run_id']==control_id and 0 < stopped['checkpoint_step'] < steps
+                    source['reference_checkpoint_step']=stopped['checkpoint_step']
             elif args.zero_init_velocity_embedding:
                 source.update(velocity_embedding_std=0.,
                               preflight='Skipped by request; start formal training at step zero with seed 42')
@@ -508,9 +518,9 @@ def main():
         if args.channel_chord_coefficients:
             job_args+=' --channel-chord-coefficients'
             batch_name+='-channel-alpha-beta'
-            if velocity_lr is not None:
-                job_args+=f' --velocity-embedding-lr={velocity_lr}'
-                batch_name+=f'-vembed-lr{velocity_lr:g}'
+        if velocity_lr is not None:
+            job_args+=f' --velocity-embedding-lr={velocity_lr}'
+            batch_name+=f'-vembed-lr{velocity_lr:g}'
         if args.fixed_first_attention_mu:
             job_args+=' --fixed-first-attention-mu'
             batch_name+='-fixed-first-attn-mu1'

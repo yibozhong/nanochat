@@ -112,6 +112,9 @@ elif [[ "${4:-}" == --chord-velocity-geometry=project_only || "${4:-}" == --chor
                 else
                     [[ "$#" == 7 ]]
                 fi
+            elif [[ "$#" == 7 && "$7" == --velocity-embedding-lr=* ]]; then
+                TASK_MOMENTUM_ARGS+=("$7" --eval-zero-v0)
+                TASK_GROUP=chord-scalar-velocity-lr-10b
             elif [[ "$#" == 7 && "$7" == --fixed-first-attention-mu ]]; then
                 TASK_MOMENTUM_ARGS+=("$7")
                 TASK_GROUP=chord-scalar-fixed-first-attn-mu1-10b
@@ -209,10 +212,10 @@ fixed_first_mu = '--fixed-first-attention-mu' in sys.argv[10:]
 assert fixed_first_mu == s.get('fixed_first_attention_mu', False)
 channel_coefficients = sys.argv[10]=='--channel-chord-coefficients'
 assert channel_coefficients == s.get('channel_chord_coefficients', False)
-velocity_lr = sys.argv[11].removeprefix('--velocity-embedding-lr=') if sys.argv[11].startswith('--velocity-embedding-lr=') else None
+velocity_lr = next((arg.split('=',1)[1] for arg in sys.argv[10:] if arg.startswith('--velocity-embedding-lr=')),None)
 assert (velocity_lr is not None) == ('velocity_embedding_peak_lr' in s)
 if velocity_lr is not None:
-    assert channel_coefficients and s['velocity_embedding_peak_lr']==float(velocity_lr) and s['eval_zero_v0']
+    assert token_only and s['velocity_embedding_peak_lr']==float(velocity_lr) and s['eval_zero_v0']
 velocity_write = sys.argv[10]=='--chord-velocity-write'
 assert velocity_write == s.get('chord_velocity_write', False)
 if velocity_write:
@@ -221,7 +224,7 @@ chord_control = 'af1c3266' if token_only else '6721b437'
 zero_embed = sys.argv[10]=='--zero-init-velocity-embedding'
 if zero_embed:
     assert token_only and s['velocity_embedding'] and s['velocity_embedding_std']==0
-if channel_coefficients or velocity_write or fixed_first_mu or from_rest or zero_embed:
+if channel_coefficients or velocity_write or fixed_first_mu or from_rest or zero_embed or velocity_lr is not None:
     assert (token_only or from_rest) and s['fuse_chord_read_norm']
     chord_control = '9a7fd31d' if channel_coefficients and (fixed_first_mu or velocity_lr is not None) else 'a7163d23'
 if token_gates or token_beta_gate or geometry:
@@ -349,7 +352,7 @@ if [[ "${TASK_MOMENTUM_ARGS[0]:-}" == --matrix-optimizer ]]; then
     WANDB_MODE=disabled timeout --kill-after=30s 2400 python research/connections/ngpt/arc_preflight.py
     echo "FORMAL_TRAINING_BEGIN arc_optimizer $TASK_RUN_ID"
 else
-    if [[ "${5:-}" == --zero-velocity || "${7:-}" == --zero-init-velocity-embedding || "${8:-}" == --velocity-embedding-lr=* ]]; then
+    if [[ "${5:-}" == --zero-velocity || "${7:-}" == --zero-init-velocity-embedding || "${!#}" == --velocity-embedding-lr=* ]]; then
         echo "Starting Chord training directly without a GPU pilot"
     elif [[ "$TASK_VARIANT" == mhc || "$TASK_VARIANT" == attnres ]]; then
         WANDB_MODE=disabled timeout --kill-after=30s 2400 python -m research.connections.ngpt.connection_init_preflight "${TASK_MODEL_ARGS[@]}"
