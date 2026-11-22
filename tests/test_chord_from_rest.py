@@ -4,7 +4,8 @@ from dataclasses import replace
 import pytest
 import torch
 
-from nanochat.connection_model import ConnectionConfig
+from nanochat.connection_cost import model_cost
+from nanochat.connection_model import ConnectionConfig, build_connection_model
 from nanochat.packed_training import seed_all
 from test_chord_fused_branch import test_fused_model as check_fused_model
 from test_momentum import gpu, inputs, make, test_exact_optimizer_checkpoint_next_update
@@ -47,3 +48,35 @@ def test_from_rest_matches_zeroed_table_and_acquires_velocity(setting):
 
 def test_fused_training_and_cached_inference(setting):
     check_fused_model(setting, False)
+
+
+@torch.no_grad()
+def test_ffn_capacity_matches_production_table(setting):
+    c = replace(setting, depth=8, width=512, heads=4, sequence_length=2048, vocab_size=32768)
+    seed_all(42)
+    control = build_connection_model(replace(c, velocity_init='token'))
+    seed_all(42)
+    wide = build_connection_model(replace(c, match_velocity_table_with_ffn=True))
+    assert wide.velocity_embedding is None and wide.velocity_position_embedding is None
+    assert sum(p.numel() for p in control.parameters()) == sum(p.numel() for p in wide.parameters()) == 75_497_535
+    for name, weight in wide.named_parameters():
+        original = control.get_parameter(name)
+        if name.endswith('mlp.c_fc.weight'):
+            assert weight.shape == (4096, 512) and weight[2048:].abs().sum() > 0
+            weight = weight[:2048]
+        if name.endswith('mlp.c_proj.weight'):
+            assert weight.shape == (512, 4096) and weight[:, 2048:].abs().sum() > 0
+            weight = weight[:, :2048]
+        assert torch.equal(weight, original), name
+    new = model_cost(wide.config)
+    assert new['velocity_embedding_parameters'] == 0
+    assert new['additional_ffn_parameters'] == control.velocity_embedding.weight.numel()
+    assert new['estimated_training_flops'] - model_cost(c)['estimated_training_flops'] == (
+        6 * c.sequence_length * new['additional_ffn_parameters'])
+
+
+def test_wide_ffn_training_cache_and_restore(setting, tmp_path):
+    # Same 2x FFN expansion as the 10B recipe on a smaller compiled model.
+    wide = replace(setting, vocab_size=2048, match_velocity_table_with_ffn=True)
+    check_fused_model(wide, False)
+    test_exact_optimizer_checkpoint_next_update(wide, tmp_path)

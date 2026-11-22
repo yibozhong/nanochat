@@ -43,6 +43,8 @@ def main():
     velocity = parser.add_mutually_exclusive_group()
     velocity.add_argument('--zero-velocity', action='store_true',
                           help='Start the standard scalar Chord from rest without a velocity table')
+    parser.add_argument('--match-velocity-table-with-ffn', action='store_true',
+                        help='Give the scalar from-rest FFNs exactly the parameter budget of the removed table')
     velocity.add_argument('--token-only-velocity', action='store_true',
                         help='Remove the velocity position table from the project-only Chord control')
     parser.add_argument('--zero-init-velocity-embedding', action='store_true',
@@ -83,6 +85,8 @@ def main():
         parser.error('--token-beta-gate requires the shared positive split learned-beta preset')
     geometry = args.chord_velocity_geometry
     velocity_lr = args.velocity_embedding_lr
+    if args.match_velocity_table_with_ffn and not args.zero_velocity:
+        parser.error('--match-velocity-table-with-ffn requires --zero-velocity')
     if velocity_lr is not None and (not args.token_only_velocity or not args.fuse_chord_read_norm
             or args.zero_init_velocity_embedding or args.fixed_first_attention_mu or args.chord_velocity_write
             or not math.isfinite(velocity_lr) or velocity_lr <= 0):
@@ -141,6 +145,8 @@ def main():
         ROOT=HOME_ROOT/'residual-chord-scalar-zero-init-velocity-embed-10b-20261121'
     if args.zero_velocity:
         ROOT=HOME_ROOT/'residual-chord-scalar-from-rest-10b-20261121'
+        if args.match_velocity_table_with_ffn:
+            ROOT=HOME_ROOT/'residual-chord-scalar-from-rest-ffn-matched-10b-20261122'
     if args.chord_velocity_write:
         ROOT=HOME_ROOT/'residual-chord-scalar-rho-v-10b-20261121'
     if args.channel_chord_coefficients:
@@ -294,6 +300,28 @@ def main():
             elif args.zero_velocity:
                 source.update(velocity_init='zero', velocity_embedding=False, initial_velocity_projected=False,
                               preflight='Skipped by request; start formal training at step zero with seed 42')
+                if args.match_velocity_table_with_ffn:
+                    narrow_dir = HOME_ROOT/'residual-chord-scalar-from-rest-fresh-10b-20261122-hopper-only'
+                    narrow = json.loads((narrow_dir/'config.json').read_text())
+                    summary = json.loads((narrow_dir/'summary.json').read_text())
+                    assert summary['complete'] and summary['run_id']=='38c77ced' and summary['source']==narrow['source']
+                    assert summary['steps']==steps and not narrow['model']['channel_chord_coefficients']
+                    assert narrow['model']['velocity_init']=='zero' and narrow['source']['paired_run']==control_id
+                    assert all(narrow['model'][k]==v for k,v in source['model'].items())
+                    d, depth, vocab = (source['model'][k] for k in ('width','depth','vocab_size'))
+                    extra, remainder = divmod(vocab, 2*depth)
+                    assert remainder == 0
+                    table = vocab*d
+                    ratio = 1 + 6*table*source['batch_tokens']/narrow['compute_estimate']['estimated_training_flops']
+                    source.update(match_velocity_table_with_ffn=True,
+                                  parameter_match=dict(ffn_width=4*d+extra, total_parameters=narrow['parameters']+table,
+                                                       velocity_table_parameters=table, narrow_run=summary['run_id'],
+                                                       estimated_training_flops_ratio=ratio),
+                                  reference_step_seconds=summary['steady_step_seconds'], reference_gpu=summary['gpu'],
+                                  timing_reference='Completed narrow from-rest Chord; time extrapolated by analytic FLOP ratio',
+                                  preflight='Production parameter and initialization parity, compiled gradients/KV, optimizer restore; fresh seed42')
+                    (ROOT/'comparison-reference.json').write_text(json.dumps(dict(run_id=summary['run_id'],step=steps,
+                        summary_path=str(narrow_dir/'summary.json')),indent=2)+'\n')
             elif args.fixed_first_attention_mu:
                 source.update(fixed_first_attention_mu=True,
                               preflight='Fixed first read, embedding gradients, compiled KV, exact restart and 128-step profile; independent seed42 formal')
@@ -509,6 +537,9 @@ def main():
         if args.fuse_chord_read_norm:
             job_args+=' --fuse-chord-read-norm'
             batch_name+='-fused-read'
+        if args.match_velocity_table_with_ffn:
+            job_args+=' --match-velocity-table-with-ffn'
+            batch_name+='-ffn-param-match'
         if args.zero_init_velocity_embedding:
             job_args+=' --zero-init-velocity-embedding'
             batch_name+='-zero-init-velocity-embed'
@@ -560,6 +591,8 @@ def main():
             wandb_url=f'https://wandb.ai/yibozhong657-none/nanochat/runs/{run_id}')
         if 'reference_step_seconds' in source:
             state['estimated_h200_training_hours']=(steps-source.get('continuation',{}).get('step',0))*source['reference_step_seconds']/3600
+            if args.match_velocity_table_with_ffn:
+                state['estimated_h200_training_hours'] *= source['parameter_match']['estimated_training_flops_ratio']
         else:
             state['estimated_h100_training_hours']=steps*source['prior_h100_reference_step_seconds']/3600
         (ROOT/'submission-intent.json').write_text(json.dumps(state,indent=2)+'\n')

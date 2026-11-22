@@ -6,7 +6,7 @@ def model_cost(config, batch=1, activation_bytes=2, feedback_passes=None):
     if c.architecture!='vanilla' or c.variant not in ('baseline','attnres','attnres_scale','skip_scale'):
         return None
     t,d,depth=c.sequence_length,c.width,c.depth
-    projections=24*batch*t*depth*d*d
+    projections=2*batch*t*depth*(4*d*d + 2*d*c.ffn_width)
     head=2*batch*t*d*c.vocab_size
     attention=4*batch*d*depth*(t*(t+1)//2)
     forward=projections+head+attention
@@ -75,14 +75,16 @@ def model_cost(config, batch=1, activation_bytes=2, feedback_passes=None):
             gain_parameters += sites - 1
             # Project the realized chord, compute the two RMS norms and their dot product.
             residual += (sites-1)*(batch*t*(10*d+2)-1)
-        # Reconstruct one D->D attention and one 4D->D MLP output per layer.
-        remat_flops = 10*batch*t*depth*d*d if c.recompute_chord_force else 0
+        # Reconstruct the attention and FFN output projections once per layer.
+        remat_flops = 2*batch*t*depth*d*(d+c.ffn_width) if c.recompute_chord_force else 0
+        extra_ffn_params = 2*depth*d*(c.ffn_width - 4*d)
         return dict(estimated_forward_flops=forward+residual,
             estimated_training_flops=3*(forward+residual)+remat_flops,
             force_recomputation_flops=remat_flops,
             components_forward=dict(backbone_projections=projections,vocab_head=head,
                 attention=attention,residual_arithmetic=residual),
-            additional_parameters=scalars_per_site*sites+embedding_parameters+gain_parameters,
+            additional_parameters=scalars_per_site*sites+embedding_parameters+gain_parameters+extra_ffn_params,
+            ffn_intermediate_width=c.ffn_width, additional_ffn_parameters=extra_ffn_params,
             velocity_embedding_parameters=embedding_parameters,
             live_residual_state_bytes=state_bytes*batch*t*d,
             accounting='FMA=2; causal attention pairs; residual arithmetic estimate and backward approximated as 2x forward. Scalar transcendentals, division, optimizer (including post-step weight normalization), copies and checkpoint recomputation excluded. Not hardware-measured FLOPs.',

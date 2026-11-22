@@ -65,6 +65,7 @@ class ConnectionConfig:
     chord_state_dtype: str | None = None
     fuse_chord_read_norm: bool = False
     recompute_chord_force: bool = False
+    match_velocity_table_with_ffn: bool = False
 
     def __post_init__(self):
         hbformer = self.residual_mode == 'ngpt_hbformer'
@@ -215,10 +216,20 @@ class ConnectionConfig:
             raise ValueError('Model dimensions must be positive')
         if self.width % self.heads or (self.width // self.heads) % 2:
             raise ValueError('RoPE requires an even integral head dimension')
+        if self.match_velocity_table_with_ffn:
+            if self.residual_mode != 'ngpt_lookahead' or self.velocity_init != 'zero':
+                raise ValueError('Matching the velocity table with FFN capacity requires Chord from rest')
+            if self.vocab_size % (2 * self.depth):
+                raise ValueError('Velocity table parameters must divide evenly between all FFN input/output pairs')
         if self.sinkhorn_iterations < 1:
             raise ValueError('Sinkhorn needs at least one iteration')
         if self.variant not in ('baseline', 'attnres', 'attnres_scale', 'skip_scale') and (self.streams != 4 or self.width % 128):
             raise ValueError('NVIDIA mHC kernels require four streams and width divisible by 128')
+
+    @property
+    def ffn_width(self):
+        extra = self.vocab_size // (2 * self.depth) if self.match_velocity_table_with_ffn else 0
+        return 4 * self.width + extra
 
     @property
     def split_chord_write(self):
@@ -382,6 +393,30 @@ class ConnectionBlock(Block):
         return self.mlp_connection.write(y, skip, post)
 
 
+def _init_ffn_weights(up, down, config):
+    bound = math.sqrt(3 / config.width) * .4
+    nn.init.uniform_(up, -bound, bound)
+    if config.residual_projection_init == 'normal':
+        nn.init.normal_(down, std=config.residual_projection_init_std / math.sqrt(2 * config.depth))
+    else:
+        nn.init.zeros_(down)
+
+
+@torch.no_grad()
+def _widen_chord_ffns(blocks, config):
+    # Grow after the ordinary initialization so every shared parameter, including
+    # the original FFN channels, has the same seed-matched value as the control.
+    for block in blocks:
+        mlp = block.mlp
+        n = mlp.c_fc.out_features
+        up = Linear(config.width, config.ffn_width, bias=False)
+        down = Linear(config.ffn_width, config.width, bias=False)
+        up.weight[:n].copy_(mlp.c_fc.weight)
+        down.weight[:, :n].copy_(mlp.c_proj.weight)
+        _init_ffn_weights(up.weight[n:], down.weight[:, n:], config)
+        mlp.c_fc, mlp.c_proj = up, down
+
+
 class ConnectionModel(nn.Module):
     def __init__(self, config):
         super().__init__()
@@ -408,11 +443,9 @@ class ConnectionModel(nn.Module):
                 nn.init.normal_(b.attn.c_proj.weight, std=config.residual_projection_init_std/math.sqrt(2*config.depth))
             else:
                 nn.init.zeros_(b.attn.c_proj.weight)
-            nn.init.uniform_(b.mlp.c_fc.weight, -s*.4, s*.4)
-            if config.residual_projection_init == 'normal':
-                nn.init.normal_(b.mlp.c_proj.weight, std=config.residual_projection_init_std/math.sqrt(2*config.depth))
-            else:
-                nn.init.zeros_(b.mlp.c_proj.weight)
+            _init_ffn_weights(b.mlp.c_fc.weight, b.mlp.c_proj.weight, config)
+        if config.match_velocity_table_with_ffn:
+            _widen_chord_ffns(self.blocks, config)
         if config.variant not in ('baseline', 'skip_scale'):
             for b in self.blocks:
                 b.attn_connection.reset_parameters(); b.mlp_connection.reset_parameters()
@@ -524,6 +557,7 @@ def optimizer_for(model, batch_tokens=32768, *, matrix_optimizer='muon', arc_mu=
     c = model.config
     batch_scale = math.sqrt(batch_tokens / 2**19)
     width_scale = (c.width / 768) ** -.5
+    # Use the baseline decay schedule for the parameter-matched FFN comparison.
     scaling_params = 12*c.depth*c.width*c.width + c.vocab_size*c.width
     ref_scaling_params = 12*12*768*768 + c.vocab_size*768
     wd = .28*batch_scale*(ref_scaling_params/scaling_params)

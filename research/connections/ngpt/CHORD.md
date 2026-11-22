@@ -39,6 +39,8 @@ v_next = P(h_next, beta*v + (1 - beta)*chord)
 
 实验使用 `--velocity-init zero` 时，模型省去速度表，每个 token 以 `v₀=0` 进入首个 Attention。第一个 FFN 的速度来自首个 Attention 实际位移的切向分量。
 
+在静止起步的配方上加 `--match-velocity-table-with-ffn` 可把速度表的参数均分到各层 FFN。两张无偏置投影使每个新增通道占用 `2 × d_model` 个参数，8 层、宽 512、词表 32768 时，FFN 中间宽度由 2048 增至 4096。模型共 75,497,535 个可训练参数，与标量有表版相同。新增权重参与每个 token 的计算，训练日志中的 FLOPs 估算计入这部分矩阵乘法。
+
 实验选项 `--fixed-first-attention-mu` 把首个 Attention 的前瞻系数全程固定为 1，直接从球面上的 `h0 + v0` 方向读取。初速度表继续学习。从同一 block 的 FFN 起，各子层按原配方学习自己的 μ。
 
 逐通道消融可显式启用 `--channel-chord-coefficients`。此时两个步长和 β 各扩为宽度 d_model 的向量，μ 仍为子层标量。

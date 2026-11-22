@@ -86,9 +86,15 @@ elif [[ "${4:-}" == --chord-velocity-geometry=project_only || "${4:-}" == --chor
     TASK_MOMENTUM_ARGS+=("$4")
     TASK_GROUP=chord-velocity-geometry-10b
     if [[ "${5:-}" == --zero-velocity ]]; then
-        [[ "$#" == 6 && "$4" == --chord-velocity-geometry=project_only && "$6" == --fuse-chord-read-norm ]]
+        [[ "$4" == --chord-velocity-geometry=project_only && "$6" == --fuse-chord-read-norm ]]
         TASK_MOMENTUM_ARGS+=(--chord-state-dtype bfloat16 --fuse-chord-read-norm --no-recompute-chord-force)
         TASK_GROUP=chord-scalar-from-rest-10b
+        if [[ "$#" == 7 && "$7" == --match-velocity-table-with-ffn ]]; then
+            TASK_MOMENTUM_ARGS+=("$7")
+            TASK_GROUP=chord-scalar-from-rest-ffn-matched-10b
+        else
+            [[ "$#" == 6 ]]
+        fi
     elif [[ "$4" == --chord-velocity-geometry=project_only && "${5:-}" == --token-only-velocity ]]; then
         TASK_MOMENTUM_ARGS+=(--chord-state-dtype bfloat16)
         TASK_GROUP=chord-velocity-token-only-bf16-10b
@@ -184,6 +190,11 @@ assert s['initialization']=='seed42_from_scratch_no_diagnostic_weights'
 assert s['attention_backend']=='fa2' and s['residual_dynamics']==sys.argv[2]
 assert s['model']==dict(depth=8,width=512,heads=4,sequence_length=2048,vocab_size=32768)
 from_rest = sys.argv[8]=='zero'
+ffn_match = sys.argv[10]=='--match-velocity-table-with-ffn'
+assert ffn_match == s.get('match_velocity_table_with_ffn',False)
+if ffn_match:
+    assert from_rest and not s.get('channel_chord_coefficients',False)
+    assert s['parameter_match']['ffn_width']==4096 and s['parameter_match']['total_parameters']==75497535
 assert s['velocity_embedding']==(not from_rest and sys.argv[2] in ('ngpt_heavy_ball','heavy_ball_rms','ngpt_hbformer','ngpt_lookahead','lookahead_only')) and s['ngpt_alpha_init']==.05
 assert s['residual_projection_init']=='normal' and s['residual_projection_init_std']==.02
 assert s['ngpt_force_rms_floor']==1e-6
@@ -352,7 +363,12 @@ if [[ "${TASK_MOMENTUM_ARGS[0]:-}" == --matrix-optimizer ]]; then
     WANDB_MODE=disabled timeout --kill-after=30s 2400 python research/connections/ngpt/arc_preflight.py
     echo "FORMAL_TRAINING_BEGIN arc_optimizer $TASK_RUN_ID"
 else
-    if [[ "${5:-}" == --zero-velocity || "${7:-}" == --zero-init-velocity-embedding || "${!#}" == --velocity-embedding-lr=* ]]; then
+    if [[ "${7:-}" == --match-velocity-table-with-ffn ]]; then
+        if [[ ! -e results/ffn-capacity-checks.passed ]]; then
+            WANDB_MODE=disabled timeout --kill-after=30s 1200 python -m pytest -q tests/test_chord_from_rest.py -k 'ffn_capacity or wide_ffn'
+            touch results/ffn-capacity-checks.passed
+        fi
+    elif [[ "${5:-}" == --zero-velocity || "${7:-}" == --zero-init-velocity-embedding || "${!#}" == --velocity-embedding-lr=* ]]; then
         echo "Starting Chord training directly without a GPU pilot"
     elif [[ "$TASK_VARIANT" == mhc || "$TASK_VARIANT" == attnres ]]; then
         WANDB_MODE=disabled timeout --kill-after=30s 2400 python -m research.connections.ngpt.connection_init_preflight "${TASK_MODEL_ARGS[@]}"

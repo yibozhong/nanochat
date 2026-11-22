@@ -71,6 +71,8 @@ def main():
     p.add_argument('--velocity-init', choices=('zero','token','token_position'), default=None,
                    help='HBFormer and lookahead default to token plus position velocity. Spherical lookahead also supports token-only or zero initial velocity.')
     p.add_argument('--velocity-embedding-std', type=float, default=.02)
+    p.add_argument('--match-velocity-table-with-ffn', action='store_true',
+                   help='Give the zero-velocity Chord FFNs exactly the parameter budget of the removed token table')
     p.add_argument('--velocity-embedding-lr', type=float,
                    help='Absolute peak AdamW LR for the velocity token table; follows the normal schedule')
     p.add_argument('--eval-zero-v0', action='store_true', help='Measure reliance on initial token velocity on packed dev')
@@ -163,6 +165,7 @@ def main():
                        latent_feedback=a.latent_feedback, feedback_eval_passes=a.feedback_eval_passes,
                        residual_dynamics=a.residual_dynamics, velocity_init=a.velocity_init,
                        velocity_embedding_std=a.velocity_embedding_std,
+                       match_velocity_table_with_ffn=a.match_velocity_table_with_ffn,
                        momentum_beta_init=a.momentum_beta_init, momentum_gamma_init=a.momentum_gamma_init,
                        momentum_eta_init=a.momentum_eta_init, ngpt_force_rms_floor=a.ngpt_force_rms_floor,
                        fixed_first_attention_mu=a.fixed_first_attention_mu,
@@ -272,6 +275,11 @@ def main():
     from nanochat.connection_cost import model_cost
     cost=model_cost(c,batch=rows_per_step)
     config['compute_estimate']=cost
+    if c.match_velocity_table_with_ffn and 'parameter_match' in source:
+        match = source['parameter_match']
+        assert config['parameters'] == match['total_parameters']
+        assert all(b.mlp.c_fc.out_features == b.mlp.c_proj.in_features == match['ffn_width'] for b in model.blocks)
+        assert cost['additional_ffn_parameters'] == match['velocity_table_parameters'] and model.velocity_embedding is None
     profile_reference=source.get('profile_reference',{}).get(a.variant)
     if profile_reference:
         config['profile_reference']=profile_reference
@@ -291,6 +299,7 @@ def main():
                     ('-fixed-first-attn-mu1' if c.fixed_first_attention_mu else '')+
                     ('-rho-v' if c.chord_velocity_write else '')+
                     ('-channel-alpha-beta' if c.channel_chord_coefficients else '')+
+                    (f'-ffn{c.ffn_width}-matched' if c.match_velocity_table_with_ffn else '')+
                     (f'-vembed-lr{a.velocity_embedding_lr:g}' if a.velocity_embedding_lr is not None else '')+
                     ('-token-beta-gate' if c.token_beta_gate else '')+
                     (f'-velocity-{c.chord_velocity_geometry}' if c.chord_velocity_geometry != 'parallel_transport' else '')+
