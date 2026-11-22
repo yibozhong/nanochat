@@ -54,7 +54,7 @@ def main():
     parser.add_argument('--channel-chord-coefficients', action='store_true',
                         help='Compare per-channel alpha and beta to the fused token-only BF16 Chord')
     parser.add_argument('--velocity-embedding-lr', type=float,
-                        help='Pair the standard channel Chord with an absolute velocity token table peak LR')
+                        help='Use the channelwise Chord control to test an absolute velocity token table peak LR')
     parser.add_argument('--token-beta-gate', action='store_true',
                         help='Compare token-dependent velocity decay to the positive split learned-beta control')
     parser.add_argument('--hopper-only', action='store_true',

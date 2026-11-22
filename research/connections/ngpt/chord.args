@@ -8,7 +8,6 @@
 --chord-velocity-geometry=project_only
 --chord-kernel=current
 --chord-state-dtype=bfloat16
---channel-chord-coefficients
 --velocity-init=token
 --velocity-embedding-std=0.02
 --fuse-chord-read-norm
