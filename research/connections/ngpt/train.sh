@@ -114,6 +114,9 @@ elif [[ "${4:-}" == --chord-velocity-geometry=project_only || "${4:-}" == --chor
                         TASK_GROUP=chord-attnres-s2-block-chords-10b
                     fi
                 fi
+            elif [[ "$#" == 7 && "$7" == --chord-query-only-lookahead ]]; then
+                TASK_MOMENTUM_ARGS+=("$7")
+                TASK_GROUP=chord-query-only-lookahead-10b
             elif [[ "$#" == 7 && "$7" == --chord-velocity-write ]]; then
                 TASK_MOMENTUM_ARGS+=("$7")
                 TASK_GROUP=chord-scalar-rho-v-10b
@@ -256,7 +259,9 @@ chord_attnres = correction or sys.argv[10]=='--chord-attnres'
 assert chord_attnres == s.get('chord_attnres',False)
 if chord_attnres:
     assert token_only and s['attnres_block_size']==2
-if chord_attnres or channel_coefficients or velocity_write or fixed_first_mu or from_rest or zero_embed or velocity_lr is not None:
+query_only = sys.argv[10]=='--chord-query-only-lookahead'
+assert query_only == s.get('chord_query_only_lookahead', False)
+if query_only or chord_attnres or channel_coefficients or velocity_write or fixed_first_mu or from_rest or zero_embed or velocity_lr is not None:
     assert (token_only or from_rest) and s['fuse_chord_read_norm']
     chord_control = '9a7fd31d' if channel_coefficients and (fixed_first_mu or velocity_lr is not None) else 'a7163d23'
 if token_gates or token_beta_gate or geometry:

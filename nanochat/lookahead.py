@@ -228,6 +228,8 @@ class LookaheadModel(MomentumModel):
         if chord_kernel not in ('terminal', 'boundary', 'both'):
             raise ValueError(f'Unknown Chord kernel {chord_kernel}')
         c = self.config
+        if c.chord_query_only_lookahead:
+            raise ValueError('Query-only attention uses the current Chord kernel')
         if c.chord_velocity_write:
             raise ValueError('Direct velocity write uses the current Chord kernel')
         if c.channel_chord_coefficients:

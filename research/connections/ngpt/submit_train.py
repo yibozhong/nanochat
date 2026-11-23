@@ -43,6 +43,7 @@ def main():
     velocity = parser.add_mutually_exclusive_group()
     velocity.add_argument('--zero-velocity', action='store_true',
                           help='Start the standard scalar Chord from rest without a velocity table')
+    parser.add_argument('--chord-query-only-lookahead', action='store_true', help='Pair attention Q-only lookahead with default scalar Chord')
     parser.add_argument('--chord-attnres', action='store_true', help='Mix the current preview with earlier Chord block endpoints')
     parser.add_argument('--chord-history-correction', action='store_true', help='Use a zero-init additive history read with ChordAttnRes')
     parser.add_argument('--chord-history-updates', action='store_true', help='Attend to actual block displacements in the additive history read')
@@ -92,10 +93,12 @@ def main():
         parser.error('--chord-history-updates requires --chord-history-correction')
     if args.chord_history_correction and not args.chord_attnres:
         parser.error('--chord-history-correction requires --chord-attnres')
-    if args.chord_attnres and (not args.token_only_velocity or not args.fuse_chord_read_norm or
+    if args.chord_query_only_lookahead and args.chord_attnres:
+        parser.error('Query-only lookahead is paired against Chord without AttnRes')
+    if (args.chord_attnres or args.chord_query_only_lookahead) and (not args.token_only_velocity or not args.fuse_chord_read_norm or
             args.channel_chord_coefficients or args.zero_init_velocity_embedding or args.chord_velocity_write or
             args.fixed_first_attention_mu or velocity_lr is not None):
-        parser.error('--chord-attnres uses the fused scalar token-only Chord preset')
+        parser.error('These attention ablations use the fused scalar token-only Chord preset')
     if args.match_velocity_table_with_ffn and not args.zero_velocity:
         parser.error('--match-velocity-table-with-ffn requires --zero-velocity')
     if velocity_lr is not None and (not args.token_only_velocity or not args.fuse_chord_read_norm
@@ -181,6 +184,8 @@ def main():
         if args.chord_history_updates:
             tag = 's2-block-chords'
         ROOT=HOME_ROOT/f'residual-chord-attnres-{tag}-token-bf16-10b-20261122'
+    if args.chord_query_only_lookahead:
+        ROOT = HOME_ROOT/'residual-chord-query-only-lookahead-token-bf16-10b-20261123'
     if args.hopper_only:
         ROOT = ROOT.with_name(ROOT.name + '-hopper-only')
     KEY=ROOT.name
@@ -279,7 +284,7 @@ def main():
                           lookahead_mu_init=0., ngpt_velocity_mode='lookahead_transport' if mode=='ngpt_lookahead' else 'ambient', ngpt_weight_norm=False, schedule_steps=STEPS,
                           reference_run='d065c132', backbone_weight_constraint='none',
                           preflight='Zero-gate equality with nGPT, trainable lookahead, tangent geometry, causal KV, gradients, exact resume and same-GPU speed')
-        if (args.chord_attnres or args.channel_chord_coefficients or args.chord_velocity_write or args.fixed_first_attention_mu
+        if (args.chord_attnres or args.chord_query_only_lookahead or args.channel_chord_coefficients or args.chord_velocity_write or args.fixed_first_attention_mu
                 or args.zero_velocity or args.zero_init_velocity_embedding or velocity_lr is not None):
             control_dir = HOME_ROOT/'residual-chord-fused-read-token-only-bf16-10b-20261120-hopper-only'
             control_id = 'a7163d23'
@@ -316,6 +321,10 @@ def main():
                         assert progress['run_id'] == old['run_id']
                         field = 'endpoint_control_checkpoint_step' if args.chord_history_updates else 'softmax_control_checkpoint_step'
                         source[field] = progress['step']
+            elif args.chord_query_only_lookahead:
+                source.update(chord_query_only_lookahead=True,
+                              preflight='Check Q/K/V and FFN inputs, gradients, zero-preview parity, causal cache, exact restart and paired 128-step timing',
+                              timing_reference='Paired scalar and query-only Chord in ngpt-sm90.json')
             elif velocity_lr is not None:
                 assert control.get('channel_chord_coefficients',False)==args.channel_chord_coefficients
                 assert control['velocity_embedding_std']==.02
@@ -577,6 +586,9 @@ def main():
         if args.fuse_chord_read_norm:
             job_args+=' --fuse-chord-read-norm'
             batch_name+='-fused-read'
+        if args.chord_query_only_lookahead:
+            job_args+=' --chord-query-only-lookahead'
+            batch_name+='-q-lookahead-kv-current'
         if args.chord_attnres:
             if args.chord_history_updates:
                 job_args+=' --chord-attnres-updates'

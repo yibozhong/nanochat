@@ -97,14 +97,15 @@ class CausalSelfAttention(nn.Module):
     def forward(self, x, ve, cos_sin, window_size, kv_cache):
         return self.c_proj(self.output_features(x, ve, cos_sin, window_size, kv_cache))
 
-    def output_features(self, x, ve, cos_sin, window_size, kv_cache):
+    def output_features(self, x, ve, cos_sin, window_size, kv_cache, *, kv_input=None):
         B, T, C = x.size()
 
         # Project the input to get queries, keys, and values
         # Shape: (B, T, H, D) - FA3's native layout, no transpose needed!
         q = self.c_q(x).view(B, T, self.n_head, self.head_dim)
-        k = self.c_k(x).view(B, T, self.n_kv_head, self.head_dim)
-        v = self.c_v(x).view(B, T, self.n_kv_head, self.head_dim)
+        kv_input = x if kv_input is None else kv_input
+        k = self.c_k(kv_input).view(B, T, self.n_kv_head, self.head_dim)
+        v = self.c_v(kv_input).view(B, T, self.n_kv_head, self.head_dim)
 
         # Value residual (ResFormer): mix in value embedding with input-dependent gate per head
         if ve is not None:

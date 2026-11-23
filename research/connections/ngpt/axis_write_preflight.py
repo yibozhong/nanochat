@@ -107,7 +107,8 @@ def endpoint_turns(checkpoint):
 
 def profile(root, mode, resume, measure_turns=False, signed_steps=False, token_gates=False, token_beta_gate=False,
             geometry='parallel_transport', velocity_init='token_position', state_dtype='float32',
-            fused_read=False, remat=False, channel_coefficients=False, velocity_write=False, fixed_first_mu=False):
+            fused_read=False, remat=False, channel_coefficients=False, velocity_write=False, fixed_first_mu=False,
+            query_only=False):
     steps = 128
     out = root/mode
     cmd = [sys.executable, '-m', 'scripts.connection_train', '--variant', 'baseline', '--streams', '1',
@@ -119,6 +120,8 @@ def profile(root, mode, resume, measure_turns=False, signed_steps=False, token_g
            '--steps',str(steps),'--schedule-steps','305176','--microbatch','16','--seed','42',
            '--data-dir','../data','--output-dir',str(out),'--run-id','axis-local-debug']
     cmd.extend(['--chord-velocity-geometry', geometry, '--chord-state-dtype', state_dtype])
+    if query_only:
+        cmd.append('--chord-query-only-lookahead')
     if fixed_first_mu:
         cmd.append('--fixed-first-attention-mu')
     if velocity_write:
@@ -151,6 +154,7 @@ def profile(root, mode, resume, measure_turns=False, signed_steps=False, token_g
     assert cfg['model']['fixed_first_attention_mu'] == fixed_first_mu
     assert cfg['model']['channel_chord_coefficients'] == channel_coefficients
     assert cfg['model']['chord_velocity_write'] == velocity_write
+    assert cfg['model']['chord_query_only_lookahead'] == query_only
     assert cfg['model']['signed_chord_steps'] == signed_steps
     assert cfg['model']['token_chord_gates'] == token_gates
     assert cfg['model']['token_beta_gate'] == token_beta_gate
@@ -229,10 +233,10 @@ def profile(root, mode, resume, measure_turns=False, signed_steps=False, token_g
 
 
 def validate_against_scalar_chord(source, gpu, marker, start):
-    velocity_write = source.get('chord_velocity_write', False)
-    label = 'rho_v' if velocity_write else 'channel'
-    flag = 'chord_velocity_write' if velocity_write else 'channel_chord_coefficients'
-    suite = 'test_chord_velocity_write' if velocity_write else 'test_chord_channel_coefficients'
+    flag, label, suite = next((flag, label, suite) for flag, label, suite in (
+        ('chord_query_only_lookahead', 'query_only', 'test_chord_query_only_lookahead'),
+        ('chord_velocity_write', 'rho_v', 'test_chord_velocity_write'),
+        ('channel_chord_coefficients', 'channel', 'test_chord_channel_coefficients')) if source.get(flag))
     xml = f'results/chord-{label}-tests.xml'
     subprocess.run([sys.executable, '-m', 'pytest', '-q', f'tests/{suite}.py', f'--junitxml={xml}'], check=True)
     suites = ElementTree.parse(xml).getroot().findall('.//testsuite')
@@ -241,12 +245,12 @@ def validate_against_scalar_chord(source, gpu, marker, start):
     with tempfile.TemporaryDirectory(prefix='chord-channel-', dir='..') as tmp:
         arms = {name: profile(Path(tmp).resolve(), source['ngpt_velocity_mode'], resume=True,
                               geometry='project_only', velocity_init='token', state_dtype='bfloat16',
-                              fused_read=True, channel_coefficients=enabled and not velocity_write,
-                              velocity_write=enabled and velocity_write)
+                              fused_read=True, channel_coefficients=enabled and label=='channel',
+                              velocity_write=enabled and label=='rho_v', query_only=enabled and label=='query_only')
                 for name, enabled in [('scalar', False), (label, True)]}
     scalar, target = arms['scalar'], arms[label]
     depth, width = source['model']['depth'], source['model']['width']
-    extra = 2*depth if velocity_write else (6*depth - 1)*(width - 1)
+    extra = {'rho_v': 2*depth, 'channel': (6*depth - 1)*(width - 1), 'query_only': 0}[label]
     assert target['parameters'] - scalar['parameters'] == extra
     assert abs(target['initial_dev_ce'] - scalar['initial_dev_ce']) < 1e-4
     assert {**scalar['config'], flag: True} == target['config']
@@ -330,7 +334,7 @@ def main():
         json_write(marker, dict(complete=True, formal_training=False, source=source, gpu=gpu, torch=torch.__version__,
                                 profile=target, evaluation_wall_seconds=time.perf_counter()-start))
         return
-    if source.get('channel_chord_coefficients') or source.get('chord_velocity_write'):
+    if any(source.get(k) for k in ('channel_chord_coefficients', 'chord_velocity_write', 'chord_query_only_lookahead')):
         validate_against_scalar_chord(source, gpu, marker, start)
         return
     if source.get('fuse_chord_read_norm'):

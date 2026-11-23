@@ -71,6 +71,7 @@ def main():
     p.add_argument('--velocity-init', choices=('zero','token','token_position'), default=None,
                    help='HBFormer and lookahead default to token plus position velocity. Spherical lookahead also supports token-only or zero initial velocity.')
     p.add_argument('--velocity-embedding-std', type=float, default=.02)
+    p.add_argument('--chord-query-only-lookahead', action='store_true', help='Read attention Q at the Chord preview and K/V at the current state')
     p.add_argument('--chord-attnres', action='store_true', help='Mix Chord previews with completed block endpoints before each branch')
     p.add_argument('--chord-history-correction', action='store_true',
                    help='Keep the Chord preview and add a zero-initialized gated history-only read before pre-norm')
@@ -172,6 +173,7 @@ def main():
                        residual_dynamics=a.residual_dynamics, velocity_init=a.velocity_init,
                        velocity_embedding_std=a.velocity_embedding_std,
                        match_velocity_table_with_ffn=a.match_velocity_table_with_ffn,
+                       chord_query_only_lookahead=a.chord_query_only_lookahead,
                        chord_attnres=a.chord_attnres, chord_attnres_backend=a.chord_attnres_backend,
                        chord_history_correction=a.chord_history_correction, chord_history_updates=a.chord_history_updates,
                        momentum_beta_init=a.momentum_beta_init, momentum_gamma_init=a.momentum_gamma_init,
@@ -308,6 +310,7 @@ def main():
                     (f'-chordattnres-s{c.attnres_block_size}' if c.chord_attnres else '')+
                     ('-history-correction' if c.chord_history_correction else '')+
                     ('-block-chords' if c.chord_history_updates else '')+
+                    ('-q-lookahead-kv-current' if c.chord_query_only_lookahead else '')+
                     ('-rho-v' if c.chord_velocity_write else '')+
                     ('-channel-alpha-beta' if c.channel_chord_coefficients else '')+
                     (f'-ffn{c.ffn_width}-matched' if c.match_velocity_table_with_ffn else '')+

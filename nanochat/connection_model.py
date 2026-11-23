@@ -70,6 +70,7 @@ class ConnectionConfig:
     chord_attnres_backend: str = 'direct'
     chord_history_correction: bool = False
     chord_history_updates: bool = False
+    chord_query_only_lookahead: bool = False
 
     def __post_init__(self):
         hbformer = self.residual_mode == 'ngpt_hbformer'
@@ -220,6 +221,8 @@ class ConnectionConfig:
             raise ValueError('Model dimensions must be positive')
         if self.width % self.heads or (self.width // self.heads) % 2:
             raise ValueError('RoPE requires an even integral head dimension')
+        if self.chord_query_only_lookahead and (self.residual_mode != 'ngpt_lookahead' or self.chord_attnres):
+            raise ValueError('Query-only lookahead requires spherical Chord without depth attention')
         if self.chord_history_updates and not self.chord_history_correction:
             raise ValueError('Block chord values require the additive history read')
         if self.chord_history_correction and not self.chord_attnres:
@@ -342,6 +345,7 @@ class ConnectionBlock(Block):
         self.residual_mode = config.residual_mode
         self.fuse_chord_read_norm = config.fuse_chord_read_norm
         self.recompute_chord_force = config.recompute_chord_force
+        self.chord_query_only_lookahead = config.chord_query_only_lookahead
         self.compiled_attention = self.compiled_mlp = None
         if config.residual_mode != 'vanilla':
             from nanochat.momentum import residual_update
@@ -375,10 +379,12 @@ class ConnectionBlock(Block):
         return self.mlp(norm(h))
 
     def momentum_forward(self, h, v, cos, sin, kv_cache=None, *, attn_update=None, mlp_update=None):
-        if self.fuse_chord_read_norm or self.recompute_chord_force:
+        if self.fuse_chord_read_norm or self.recompute_chord_force or self.chord_query_only_lookahead:
             remat = self.recompute_chord_force and self.training and torch.is_grad_enabled() and kv_cache is None
             q = self.attn_residual.branch_input(h, v, cos.dtype, self.fuse_chord_read_norm)
-            features = self.attn.output_features(q, None, (cos, sin), (-1, 0), kv_cache)
+            # Share the current state's pre-norm across K and V. Only Q anticipates motion.
+            kv_input = norm(h.to(cos.dtype)) if self.chord_query_only_lookahead else None
+            features = self.attn.output_features(q, None, (cos, sin), (-1, 0), kv_cache, kv_input=kv_input)
             h, v = self.attn_residual.projected_write(h, v, features, self.attn.c_proj, remat)
             q = self.mlp_residual.branch_input(h, v, cos.dtype, self.fuse_chord_read_norm)
             return self.mlp_residual.projected_write(h, v, self.mlp.output_features(q), self.mlp.c_proj, remat)
