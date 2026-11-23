@@ -131,7 +131,7 @@ def _read_vjp(h, v, mu, dq, D: tl.constexpr, AMBIENT: tl.constexpr):
 
 @triton.jit
 def _query_kernel(H, V, MU, Q, DH, DV, DMU, D: tl.constexpr, AMBIENT: tl.constexpr, BACKWARD: tl.constexpr,
-                  NORM: tl.constexpr):
+                  NORM: tl.constexpr, MEMORY, GAIN, DMEM, DGAIN, CORRECTION: tl.constexpr):
     row = tl.program_id(0)
     offsets = row.to(tl.int64) * D + tl.arange(0, D)
     h = tl.load(H + offsets).to(tl.float32)
@@ -142,12 +142,19 @@ def _query_kernel(H, V, MU, Q, DH, DV, DMU, D: tl.constexpr, AMBIENT: tl.constex
     if NORM:
         # Match the BF16 interface and the default opmath epsilon of F.rms_norm.
         q = read.to(tl.bfloat16).to(tl.float32)
+        if CORRECTION:
+            memory = tl.load(MEMORY + offsets).to(tl.float32)
+            gain = tl.load(GAIN)
+            q = (q + gain * memory).to(tl.bfloat16).to(tl.float32)
         inv = tl.rsqrt(_mean(q * q, D) + 1.1920928955078125e-7)
         normalized = q * inv
     if BACKWARD:
         dq = tl.load(Q + offsets).to(tl.float32)
         if NORM:
             dq = ((dq - normalized * _mean(dq * normalized, D)) * inv).to(tl.bfloat16).to(tl.float32)
+        if CORRECTION:
+            tl.store(DMEM + offsets, gain * dq)
+            tl.store(DGAIN + row, tl.sum(dq * memory, 0))
         dh, dv, dmu = _read_vjp(h, v, mu, dq, D, AMBIENT)
         tl.store(DH + offsets, dh)
         tl.store(DV + offsets, dv)
@@ -164,7 +171,7 @@ class _BF16Query(torch.autograd.Function):
     def forward(ctx, h, v, mu, ambient, normalize):
         q = torch.empty_like(h)
         _query_kernel[(h.numel() // h.size(-1),)](h, v, mu, q, q, q, mu, h.size(-1), ambient, False, normalize,
-                                                  enable_fp_fusion=False)
+                                                  None, None, None, None, False, enable_fp_fusion=False)
         ctx.save_for_backward(h, v, mu)
         ctx.ambient = ambient
         ctx.normalize = normalize
@@ -176,12 +183,39 @@ class _BF16Query(torch.autograd.Function):
         rows = h.numel() // h.size(-1)
         dh, dv, partials = torch.empty_like(h), torch.empty_like(v), mu.new_empty((rows,))
         _query_kernel[(rows,)](h, v, mu, dq.contiguous(), dh, dv, partials, h.size(-1), ctx.ambient, True, ctx.normalize,
-                              enable_fp_fusion=False)
+                              None, None, None, None, False, enable_fp_fusion=False)
         return dh, dv, partials.sum().reshape_as(mu), None, None
 
 
 def bf16_query(h, v, mu, ambient, normalize=False):
     return _BF16Query.apply(h.contiguous(), v.contiguous(), mu, ambient, normalize)
+
+
+class _CorrectedQuery(torch.autograd.Function):
+    """Fuse BF16 preview, additive memory read and branch pre-norm in one pass."""
+    @staticmethod
+    def forward(ctx, h, v, mu, memory, gain):
+        rows, d = h.numel() // h.size(-1), h.size(-1)
+        out = torch.empty_like(h)
+        _query_kernel[(rows,)](h, v, mu, out, None, None, None, d, False, False, True,
+                               memory, gain, None, None, True, enable_fp_fusion=False)
+        ctx.save_for_backward(h, v, mu, memory, gain)
+        return out
+
+    @staticmethod
+    def backward(ctx, grad):
+        h, v, mu, memory, gain = ctx.saved_tensors
+        rows, d = h.numel() // h.size(-1), h.size(-1)
+        dh, dv, dm = torch.empty_like(h), torch.empty_like(v), torch.empty_like(memory)
+        partials = mu.new_empty((2, rows))
+        _query_kernel[(rows,)](h, v, mu, grad.contiguous(), dh, dv, partials[0], d, False, True, True,
+                               memory, gain, dm, partials[1], True, enable_fp_fusion=False)
+        grads = partials.sum(1)
+        return dh, dv, grads[:1], dm, grads[1:]
+
+
+def corrected_query(h, v, mu, memory, gain):
+    return _CorrectedQuery.apply(h.contiguous(), v.contiguous(), mu, memory.contiguous(), gain)
 
 
 @triton.jit

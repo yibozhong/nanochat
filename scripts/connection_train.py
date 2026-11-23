@@ -72,6 +72,8 @@ def main():
                    help='HBFormer and lookahead default to token plus position velocity. Spherical lookahead also supports token-only or zero initial velocity.')
     p.add_argument('--velocity-embedding-std', type=float, default=.02)
     p.add_argument('--chord-attnres', action='store_true', help='Mix Chord previews with completed block endpoints before each branch')
+    p.add_argument('--chord-history-correction', action='store_true',
+                   help='Keep the Chord preview and add a zero-initialized gated history-only read before pre-norm')
     p.add_argument('--chord-attnres-backend', choices=('direct','packed'), default='direct')
     p.add_argument('--match-velocity-table-with-ffn', action='store_true',
                    help='Give the zero-velocity Chord FFNs exactly the parameter budget of the removed token table')
@@ -169,6 +171,7 @@ def main():
                        velocity_embedding_std=a.velocity_embedding_std,
                        match_velocity_table_with_ffn=a.match_velocity_table_with_ffn,
                        chord_attnres=a.chord_attnres, chord_attnres_backend=a.chord_attnres_backend,
+                       chord_history_correction=a.chord_history_correction,
                        momentum_beta_init=a.momentum_beta_init, momentum_gamma_init=a.momentum_gamma_init,
                        momentum_eta_init=a.momentum_eta_init, ngpt_force_rms_floor=a.ngpt_force_rms_floor,
                        fixed_first_attention_mu=a.fixed_first_attention_mu,
@@ -301,6 +304,7 @@ def main():
                     ('-zero-init-velocity-embed' if c.velocity_init=='token' and c.velocity_embedding_std==0 else '')+
                     ('-fixed-first-attn-mu1' if c.fixed_first_attention_mu else '')+
                     (f'-chordattnres-s{c.attnres_block_size}' if c.chord_attnres else '')+
+                    ('-history-correction' if c.chord_history_correction else '')+
                     ('-rho-v' if c.chord_velocity_write else '')+
                     ('-channel-alpha-beta' if c.channel_chord_coefficients else '')+
                     (f'-ffn{c.ffn_width}-matched' if c.match_velocity_table_with_ffn else '')+

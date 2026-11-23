@@ -103,9 +103,13 @@ elif [[ "${4:-}" == --chord-velocity-geometry=project_only || "${4:-}" == --chor
             TASK_GROUP=chord-fused-read-token-only-bf16-10b
             if [[ "$#" == 7 && "$7" == --zero-init-velocity-embedding ]]; then
                 TASK_GROUP=chord-scalar-zero-init-velocity-embed-10b
-            elif [[ "$#" == 7 && "$7" == --chord-attnres ]]; then
+            elif [[ "$#" == 7 && ( "$7" == --chord-attnres || "$7" == --chord-attnres-correction ) ]]; then
                 TASK_MOMENTUM_ARGS+=(--chord-attnres --attnres-block-size 2)
                 TASK_GROUP=chord-attnres-s2-10b
+                if [[ "$7" == --chord-attnres-correction ]]; then
+                    TASK_MOMENTUM_ARGS+=(--chord-history-correction)
+                    TASK_GROUP=chord-attnres-s2-history-correction-10b
+                fi
             elif [[ "$#" == 7 && "$7" == --chord-velocity-write ]]; then
                 TASK_MOMENTUM_ARGS+=("$7")
                 TASK_GROUP=chord-scalar-rho-v-10b
@@ -238,7 +242,11 @@ chord_control = 'af1c3266' if token_only else '6721b437'
 zero_embed = sys.argv[10]=='--zero-init-velocity-embedding'
 if zero_embed:
     assert token_only and s['velocity_embedding'] and s['velocity_embedding_std']==0
-chord_attnres = sys.argv[10]=='--chord-attnres'
+correction = sys.argv[10]=='--chord-attnres-correction'
+assert correction == s.get('chord_history_correction', False)
+if correction:
+    assert s['history_gain_init'] == 0 and s['comparison_run']=='75ac5ae5'
+chord_attnres = correction or sys.argv[10]=='--chord-attnres'
 assert chord_attnres == s.get('chord_attnres',False)
 if chord_attnres:
     assert token_only and s['attnres_block_size']==2
@@ -370,7 +378,7 @@ if [[ "${TASK_MOMENTUM_ARGS[0]:-}" == --matrix-optimizer ]]; then
     WANDB_MODE=disabled timeout --kill-after=30s 2400 python research/connections/ngpt/arc_preflight.py
     echo "FORMAL_TRAINING_BEGIN arc_optimizer $TASK_RUN_ID"
 else
-    if [[ "${7:-}" == --chord-attnres ]]; then
+    if [[ "${7:-}" == --chord-attnres || "${7:-}" == --chord-attnres-correction ]]; then
         if ! WANDB_MODE=disabled timeout --kill-after=30s 2400 python -m research.connections.ngpt.chord_attnres_preflight; then
             echo "PREFLIGHT_NEEDS_REPAIR retaining allocation for 15 minutes" >&2
             deadline=$((SECONDS+900))

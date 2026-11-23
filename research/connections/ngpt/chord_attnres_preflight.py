@@ -28,11 +28,13 @@ def main():
         if prev['complete']:
             print('Restored validated SM90 profile and fixed training backend:', prev['backend'], flush=True)
             return
+    correction = source.get('chord_history_correction', False)
     report = dict(source=source, complete=False, formal_training=False, gpu=gpu.name, gpu_uuid=str(gpu.uuid),
                   torch=torch.__version__, triton=triton.__version__, warmup=WARMUP, measured=MEASURE,
                   tokens_per_step=TOKENS, rounds={k: [] for k in ('chord', 'direct', 'packed')})
     json_write(output, report)
     subprocess.run([sys.executable, '-m', 'pytest', '-xq', 'tests/test_chord_attnres.py',
+                    *(['tests/test_chord_history_correction.py'] if correction else []),
                     '--junitxml=results/chord-attnres-tests.xml'], check=True)
     configure_attention('fa2')
     torch.backends.cuda.matmul.allow_tf32 = False
@@ -49,13 +51,15 @@ def main():
             gc.collect()
             torch.cuda.empty_cache()
             seed_all(source['seed'])
-            cfg = base if name == 'chord' else replace(base, chord_attnres=True, chord_attnres_backend=name)
+            cfg = base if name == 'chord' else replace(base, chord_attnres=True, chord_attnres_backend=name,
+                                                       chord_history_correction=correction)
             model = build_connection_model(cfg).prepare(compile_blocks=True)
             row = time_steps(model, data)
             del model
             assert all(math.isfinite(row[k]) for k in ('initial_ce','final_ce','median_ms'))
             assert row['final_ce'] < row['initial_ce'] and row['median_ms'] > 0
-            assert row['parameters'] == 75_497_535 + (0 if name=='chord' else 14*2*512)
+            extra = 12*2*512 + 14 if correction else 14*2*512
+            assert row['parameters'] == 75_497_535 + (0 if name=='chord' else extra)
             report['rounds'][name].append(row)
             json_write(output, report)
             print('CHORD_ATTNRES_TIMING', name, row['median_ms'], row['peak_bytes'], flush=True)

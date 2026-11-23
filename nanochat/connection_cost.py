@@ -80,9 +80,16 @@ def model_cost(config, batch=1, activation_bytes=2, feedback_passes=None):
         if c.chord_attnres:
             stride = c.attnres_block_layers
             history = (depth - 1) // stride
-            gain_parameters += 4*d*max(0, depth-stride)  # two score vectors per mixed sublayer
-            entries = sum(2*(1+i//stride) for i in range(stride, depth))
-            depth_mix = 7*batch*t*d*entries  # same arithmetic convention as Block AttnRes
+            if c.chord_history_correction:
+                mixed_sites = 2*max(0, depth-stride)
+                # A single endpoint needs a learned gain but no score parameters or softmax.
+                gain_parameters += mixed_sites + 4*d*max(0, depth-2*stride)
+                scored_entries = sum(2*(i//stride) for i in range(2*stride, depth))
+                depth_mix = batch*t*d*(7*scored_entries + 2*mixed_sites)
+            else:
+                gain_parameters += 4*d*max(0, depth-stride)
+                entries = sum(2*(1+i//stride) for i in range(stride, depth))
+                depth_mix = 7*batch*t*d*entries
             residual += depth_mix
         # Reconstruct the attention and FFN output projections once per layer.
         remat_flops = 2*batch*t*depth*d*(d+c.ffn_width) if c.recompute_chord_force else 0

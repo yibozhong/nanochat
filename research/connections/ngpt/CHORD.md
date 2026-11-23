@@ -58,3 +58,5 @@ v_next = P(h_next, beta*v + (1 - beta)*chord)
 在默认小模型配方上加 `--chord-attnres --attnres-block-size 2` 可启用跨深度读取。每个完整 Attention + FFN 后保存该 token 的 BF16 球面终点 h。每个子层把自己的 BF16 前瞻点 q 和所有已完成块的终点作为候选，用该子层自己的可学习向量打分，沿深度 softmax 后加权求和，再做原有分支 pre-norm。评分前对 key 做 RMS 归一化，value 使用原值。首块仅有 q，沿用默认 Chord 融合读取。初始词嵌入、块内临时状态和最终输出头均不额外加入候选。双步长写回仍以实际 h 为起点，速度来自真实弦位移。历史可反向传播，随当前 forward 结束而释放，逐 token 推理只需原有 KV cache。
 
 `--chord-attnres-backend direct` 的 Triton 算子直接读取各终点张量，`packed` 使用移植自 NeMo 的 AttnRes 算子和按块拼接的历史。两者使用同一组评分参数，8 层 D=512、S=2 时共增加 14,336 个参数。正式实验由同卡预检选择较快的后端，恢复时沿用该选择。
+
+加 `--chord-history-correction` 可将读取改为 `pre_norm(q + g * m)`。其中 m 是仅对已完成块终点做深度 softmax 得到的 BF16 历史表示，q 有系数固定为 1 的直通路径。每个可读到历史的子层独立学习一个从 0 开始的有符号标量 g，归入与 Chord 标量相同的 AdamW 组。只有一个终点时直接使用它；有两个及以上终点才学习评分向量。BF16 前瞻、历史加法和分支 pre-norm 由 Chord Triton 读取内核融合。step 0 对齐相同 seed 的原 Chord，g 可立即接收梯度；历史评分器随 g 离开零开始学习。W&B 验证日志记录各子层的 `history_gain`。

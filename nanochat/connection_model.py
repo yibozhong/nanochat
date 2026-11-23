@@ -68,6 +68,7 @@ class ConnectionConfig:
     match_velocity_table_with_ffn: bool = False
     chord_attnres: bool = False
     chord_attnres_backend: str = 'direct'
+    chord_history_correction: bool = False
 
     def __post_init__(self):
         hbformer = self.residual_mode == 'ngpt_hbformer'
@@ -218,6 +219,8 @@ class ConnectionConfig:
             raise ValueError('Model dimensions must be positive')
         if self.width % self.heads or (self.width // self.heads) % 2:
             raise ValueError('RoPE requires an even integral head dimension')
+        if self.chord_history_correction and not self.chord_attnres:
+            raise ValueError('A Chord history correction requires ChordAttnRes')
         if self.chord_attnres:
             if (self.residual_mode != 'ngpt_lookahead' or self.chord_velocity_geometry != 'project_only'
                     or self.chord_state_dtype != 'bfloat16' or self.recompute_chord_force):

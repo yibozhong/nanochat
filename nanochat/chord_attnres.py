@@ -17,16 +17,46 @@ def _mlp_write(block, h, v, read):
     return block.mlp_residual(h, v, block.mlp_branch(read))
 
 
+def _attention_write_normalized(block, h, v, read, cos, sin, cache):
+    return block.attn_residual(h, v, block.attn(read, None, (cos, sin), (-1, 0), cache))
+
+
+def _mlp_write_normalized(block, h, v, read):
+    return block.mlp_residual(h, v, block.mlp(read))
+
+
+class HistoryCorrection(nn.Module):
+    def __init__(self, width, entries):
+        super().__init__()
+        self.gain = nn.Parameter(torch.zeros(1))
+        self.scorer = AttnResMix(width) if entries > 1 else None
+
+    def forward(self, history, packed, shape):
+        if self.scorer is None:
+            memory = history[:, 0] if packed else history[0]
+        elif packed:
+            memory = self.scorer(history[:, -1], history[:, :-1])
+        else:
+            from nanochat.chord_attnres_triton import mix_endpoints
+            memory = mix_endpoints(history[-1], history[:-1], self.scorer)
+        return memory.reshape(shape)
+
+
 class ChordAttnResModel(LookaheadModel):
     def __init__(self, config):
         super().__init__(config)
         # Before the first completed block q is the only candidate. Both the read
         # and its backward are identity, so there are no score parameters there.
         self.first_mix = min(config.attnres_block_layers, config.depth)
-        self.depth_reads = nn.ModuleList([
-            nn.ModuleList([AttnResMix(config.width), AttnResMix(config.width)])
-            for _ in range(self.first_mix, config.depth)
-        ])
+        self.depth_reads = nn.ModuleList()
+        for i in range(self.first_mix, config.depth):
+            if config.chord_history_correction:
+                readers = [HistoryCorrection(config.width, i // config.attnres_block_layers) for _ in range(2)]
+            else:
+                readers = [AttnResMix(config.width) for _ in range(2)]
+            self.depth_reads.append(nn.ModuleList(readers))
+        self.attention_write = _attention_write_normalized if config.chord_history_correction else _attention_write
+        self.mlp_write = _mlp_write_normalized if config.chord_history_correction else _mlp_write
         self.compiled_mixed = None
 
     def residual_parameters(self):
@@ -40,8 +70,8 @@ class ChordAttnResModel(LookaheadModel):
             # Compile branches independently of the number of history entries.
             options = dict(dynamic=False, fullgraph=True, options={'emulate_precision_casts': True})
             self.compiled_mixed = [
-                (torch.compile(partial(_attention_write, b), **options),
-                 torch.compile(partial(_mlp_write, b), **options))
+                (torch.compile(partial(self.attention_write, b), **options),
+                 torch.compile(partial(self.mlp_write, b), **options))
                 for b in self.blocks[self.first_mix:]
             ]
         else:
@@ -54,11 +84,31 @@ class ChordAttnResModel(LookaheadModel):
         if self.compiled_mixed is not None and kv_cache is None:
             attention, mlp = self.compiled_mixed[index - self.first_mix]
         else:
-            attention, mlp = partial(_attention_write, b), partial(_mlp_write, b)
-        read = self._mix(readers[0], b.attn_residual.query(h, v), history)
+            attention, mlp = partial(self.attention_write, b), partial(self.mlp_write, b)
+        read = self._read(readers[0], b.attn_residual, h, v, history)
         h, v = attention(h, v, read, cos, sin, kv_cache)
-        read = self._mix(readers[1], b.mlp_residual.query(h, v), history)
+        read = self._read(readers[1], b.mlp_residual, h, v, history)
         return mlp(h, v, read)
+
+    def _read(self, reader, site, h, v, history):
+        if not self.config.chord_history_correction:
+            return self._mix(reader, site.query(h, v), history)
+        memory = reader(history, self.config.chord_attnres_backend == 'packed', h.shape)
+        if h.is_cuda and self.config.fuse_chord_read_norm:
+            from nanochat.chord_triton import corrected_query
+            return corrected_query(h, v, site.mu, memory, reader.gain)
+        q = site.query(h, v)
+        read = (q.float() + reader.gain * memory.float()).to(q.dtype)
+        return torch.nn.functional.rms_norm(read, (read.size(-1),))
+
+    @torch.no_grad()
+    def residual_metrics(self):
+        metrics = super().residual_metrics()
+        if self.config.chord_history_correction and len(self.depth_reads):
+            gains = torch.cat([r.gain for layer in self.depth_reads for r in layer]).tolist()
+            for i, gain in enumerate(gains, start=2*self.first_mix):
+                metrics[f'residual/sublayer_{i}/history_gain'] = gain
+        return metrics
 
     def _mix(self, reader, q, history):
         if self.config.chord_attnres_backend == 'packed':
