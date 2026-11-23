@@ -69,11 +69,12 @@ class ChordAttnResModel(LookaheadModel):
         if compile_blocks:
             # Compile branches independently of the number of history entries.
             options = dict(dynamic=False, fullgraph=True, options={'emulate_precision_casts': True})
-            self.compiled_mixed = [
-                (torch.compile(partial(self.attention_write, b), **options),
-                 torch.compile(partial(self.mlp_write, b), **options))
-                for b in self.blocks[self.first_mix:]
-            ]
+            # Compile the actual functions, then bind the blocks. Compiling partials
+            # puts unrelated read/write variants in Dynamo's same wrapper-code cache.
+            attention = torch.compile(self.attention_write, **options)
+            mlp = torch.compile(self.mlp_write, **options)
+            self.compiled_mixed = [(partial(attention, b), partial(mlp, b))
+                                   for b in self.blocks[self.first_mix:]]
         else:
             self.compiled_mixed = None
         return self
