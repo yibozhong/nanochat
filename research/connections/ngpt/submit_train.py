@@ -45,6 +45,7 @@ def main():
                           help='Start the standard scalar Chord from rest without a velocity table')
     parser.add_argument('--chord-attnres', action='store_true', help='Mix the current preview with earlier Chord block endpoints')
     parser.add_argument('--chord-history-correction', action='store_true', help='Use a zero-init additive history read with ChordAttnRes')
+    parser.add_argument('--chord-history-updates', action='store_true', help='Attend to actual block displacements in the additive history read')
     parser.add_argument('--match-velocity-table-with-ffn', action='store_true',
                         help='Give the scalar from-rest FFNs exactly the parameter budget of the removed table')
     velocity.add_argument('--token-only-velocity', action='store_true',
@@ -87,6 +88,8 @@ def main():
         parser.error('--token-beta-gate requires the shared positive split learned-beta preset')
     geometry = args.chord_velocity_geometry
     velocity_lr = args.velocity_embedding_lr
+    if args.chord_history_updates and not args.chord_history_correction:
+        parser.error('--chord-history-updates requires --chord-history-correction')
     if args.chord_history_correction and not args.chord_attnres:
         parser.error('--chord-history-correction requires --chord-attnres')
     if args.chord_attnres and (not args.token_only_velocity or not args.fuse_chord_read_norm or
@@ -175,6 +178,8 @@ def main():
         ROOT = HOME_ROOT/f'optimizer-{tag}-10b-{date_tag}'
     if args.chord_attnres:
         tag = 's2-history-correction' if args.chord_history_correction else 's2'
+        if args.chord_history_updates:
+            tag = 's2-block-chords'
         ROOT=HOME_ROOT/f'residual-chord-attnres-{tag}-token-bf16-10b-20261122'
     if args.hopper_only:
         ROOT = ROOT.with_name(ROOT.name + '-hopper-only')
@@ -292,20 +297,25 @@ def main():
                               preflight='GPU reference VJP, seed parity, causal KV, exact resume, same-card full-step Chord vs direct vs packed endpoint mix; fresh seed42',
                               timing_reference='Paired same-card full-step medians in chord-attnres-profile.json')
                 if args.chord_history_correction:
-                    original = HOME_ROOT/'residual-chord-attnres-s2-token-bf16-10b-20261122-hopper-only'
+                    original_tag = 's2-history-correction' if args.chord_history_updates else 's2'
+                    original = HOME_ROOT/f'residual-chord-attnres-{original_tag}-token-bf16-10b-20261122-hopper-only'
                     old = json.loads((original/'bundles/source.json').read_text())
                     for key in ('model','seed','initialization','steps','batch_tokens','microbatch','dataset_revision',
                                 'attnres_block_size','chord_velocity_geometry','velocity_init','paired_run'):
                         assert old[key] == source[key], key
                     source.update(chord_history_correction=True, history_gain_init=0., comparison_run=old['run_id'],
                                   preflight='Zero-gain Chord parity, gate and scorer gradients, both Triton paths, causal KV, restart and paired full-step costs')
+                    if args.chord_history_updates:
+                        assert old['chord_history_correction'] and not old.get('chord_history_updates')
+                        source.update(chord_history_updates=True, depth_history='completed block displacements h_end - h_start')
                     if (original/'summary.json').exists():
                         (ROOT/'comparison-reference.json').write_text(json.dumps(dict(run_id=old['run_id'], step=steps,
                             summary_path=str(original/'summary.json')),indent=2)+'\n')
                     elif (original/'progress.json').exists():
                         progress = json.loads((original/'progress.json').read_text())
                         assert progress['run_id'] == old['run_id']
-                        source['softmax_control_checkpoint_step'] = progress['step']
+                        field = 'endpoint_control_checkpoint_step' if args.chord_history_updates else 'softmax_control_checkpoint_step'
+                        source[field] = progress['step']
             elif velocity_lr is not None:
                 assert control.get('channel_chord_coefficients',False)==args.channel_chord_coefficients
                 assert control['velocity_embedding_std']==.02
@@ -568,8 +578,12 @@ def main():
             job_args+=' --fuse-chord-read-norm'
             batch_name+='-fused-read'
         if args.chord_attnres:
-            job_args+=' --chord-attnres-correction' if args.chord_history_correction else ' --chord-attnres'
-            batch_name+='-chordattnres-s2-correction' if args.chord_history_correction else '-chordattnres-s2'
+            if args.chord_history_updates:
+                job_args+=' --chord-attnres-updates'
+                batch_name+='-chordattnres-s2-block-chords'
+            else:
+                job_args+=' --chord-attnres-correction' if args.chord_history_correction else ' --chord-attnres'
+                batch_name+='-chordattnres-s2-correction' if args.chord_history_correction else '-chordattnres-s2'
         if args.match_velocity_table_with_ffn:
             job_args+=' --match-velocity-table-with-ffn'
             batch_name+='-ffn-param-match'

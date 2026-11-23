@@ -32,7 +32,11 @@ def test_corrected_query_and_gradient(d,g):
 
 @pytest.mark.parametrize('backend',['direct','packed'])
 def test_zero_start_opens_and_restarts(setting,backend,tmp_path):
-    c = replace(setting,chord_history_correction=True,chord_attnres_backend=backend)
+    check_training_and_resume(setting,backend,tmp_path)
+
+
+def check_training_and_resume(setting,backend,tmp_path,*,updates=False):
+    c = replace(setting,chord_history_correction=True,chord_history_updates=updates,chord_attnres_backend=backend)
     seed_all(42)
     base = make(replace(setting,chord_attnres=False),compiled=True)
     seed_all(42)

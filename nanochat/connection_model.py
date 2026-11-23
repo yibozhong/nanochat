@@ -69,6 +69,7 @@ class ConnectionConfig:
     chord_attnres: bool = False
     chord_attnres_backend: str = 'direct'
     chord_history_correction: bool = False
+    chord_history_updates: bool = False
 
     def __post_init__(self):
         hbformer = self.residual_mode == 'ngpt_hbformer'
@@ -219,6 +220,8 @@ class ConnectionConfig:
             raise ValueError('Model dimensions must be positive')
         if self.width % self.heads or (self.width // self.heads) % 2:
             raise ValueError('RoPE requires an even integral head dimension')
+        if self.chord_history_updates and not self.chord_history_correction:
+            raise ValueError('Block chord values require the additive history read')
         if self.chord_history_correction and not self.chord_attnres:
             raise ValueError('A Chord history correction requires ChordAttnRes')
         if self.chord_attnres:

@@ -127,6 +127,7 @@ class ChordAttnResModel(LookaheadModel):
         h, v = self.initial_state(x, token_ids, start)
         cos, sin = self.cos[:, start:start+x.shape[1]], self.sin[:, start:start+x.shape[1]]
         history = ()
+        block_start = h if self.config.chord_history_updates else None
         states = [] if return_layers else None
         for i, b in enumerate(self.blocks):
             if i < self.first_mix:
@@ -139,9 +140,15 @@ class ChordAttnResModel(LookaheadModel):
             if states is not None:
                 states.append(h)
             if (i+1) % self.config.attnres_block_layers == 0 and i+1 < self.config.depth:
+                value = h
+                if block_start is not None:
+                    # Subtract the actual stored states after spherical writes.
+                    # Both endpoints retain their autograd edges.
+                    value = h - block_start
+                    block_start = h
                 if self.config.chord_attnres_backend == 'packed':
-                    endpoint = h.flatten(0, 1).unsqueeze(1)
-                    history = endpoint if i+1 == self.first_mix else torch.cat((history, endpoint), dim=1)
+                    value = value.flatten(0, 1).unsqueeze(1)
+                    history = value if i+1 == self.first_mix else torch.cat((history, value), dim=1)
                 else:
-                    history = (*history, h)
+                    history = (*history, value)
         return (h, torch.stack(states, dim=2)) if states is not None else h

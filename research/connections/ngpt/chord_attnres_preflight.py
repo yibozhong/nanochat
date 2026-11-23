@@ -35,6 +35,7 @@ def main():
     json_write(output, report)
     subprocess.run([sys.executable, '-m', 'pytest', '-xq', 'tests/test_chord_attnres.py',
                     *(['tests/test_chord_history_correction.py'] if correction else []),
+                    *(['tests/test_chord_history_updates.py'] if source.get('chord_history_updates') else []),
                     '--junitxml=results/chord-attnres-tests.xml'], check=True)
     configure_attention('fa2')
     torch.backends.cuda.matmul.allow_tf32 = False
@@ -52,7 +53,8 @@ def main():
             torch.cuda.empty_cache()
             seed_all(source['seed'])
             cfg = base if name == 'chord' else replace(base, chord_attnres=True, chord_attnres_backend=name,
-                                                       chord_history_correction=correction)
+                                                       chord_history_correction=correction,
+                                                       chord_history_updates=source.get('chord_history_updates', False))
             model = build_connection_model(cfg).prepare(compile_blocks=True)
             row = time_steps(model, data)
             del model

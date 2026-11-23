@@ -86,6 +86,8 @@ def model_cost(config, batch=1, activation_bytes=2, feedback_passes=None):
                 gain_parameters += mixed_sites + 4*d*max(0, depth-2*stride)
                 scored_entries = sum(2*(i//stride) for i in range(2*stride, depth))
                 depth_mix = batch*t*d*(7*scored_entries + 2*mixed_sites)
+                if c.chord_history_updates:
+                    depth_mix += batch*t*d*history  # One subtraction per stored coordinate.
             else:
                 gain_parameters += 4*d*max(0, depth-stride)
                 entries = sum(2*(1+i//stride) for i in range(stride, depth))
