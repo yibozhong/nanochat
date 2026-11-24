@@ -238,8 +238,10 @@ def corrected_query(h, v, mu, memory, gain):
 @triton.jit
 def _forward(H, V, F, P, NH, NV, BETA: tl.constexpr, FLOOR2: tl.constexpr,
              D: tl.constexpr, MODE: tl.constexpr, Q, TERMINAL: tl.constexpr,
-             PREVIEW: tl.constexpr, GEOMETRY: tl.constexpr):
+             PREVIEW: tl.constexpr, GEOMETRY: tl.constexpr, TOKEN_CONTROLS: tl.constexpr = False):
     offsets = tl.program_id(0).to(tl.int64) * D + tl.arange(0, D)
+    if TOKEN_CONTROLS:
+        P += tl.program_id(0).to(tl.int64) * 6 + 1
     h = tl.load(H + offsets).to(tl.float32)
     v = tl.load(V + offsets).to(tl.float32)
     force = tl.load(F + offsets).to(tl.float32)
@@ -262,8 +264,23 @@ def _forward(H, V, F, P, NH, NV, BETA: tl.constexpr, FLOOR2: tl.constexpr,
 @triton.jit
 def _backward(H, V, F, P, DNH, DNV, DH, DV, DF, DP, ROWS, BETA: tl.constexpr,
               FLOOR2: tl.constexpr, D: tl.constexpr, MODE: tl.constexpr, DQ, TERMINAL: tl.constexpr,
-              PREVIEW: tl.constexpr, GEOMETRY: tl.constexpr, ROW_TILE: tl.constexpr = 1):
+              PREVIEW: tl.constexpr, GEOMETRY: tl.constexpr, ROW_TILE: tl.constexpr = 1,
+              TOKEN_CONTROLS: tl.constexpr = False):
     row = tl.program_id(0)
+    # Shared controls accumulate one gradient per token for a later reduction.
+    # Token controls instead write their own [mu, perp, par, a, b, c] row.
+    if TOKEN_CONTROLS:
+        P += row.to(tl.int64) * 6 + 1
+        dp_row = DP + row.to(tl.int64) * 6 + 1
+        dp_stride = 1
+        tl.store(dp_row - 1, 0.)  # mu enters the preview only
+        if TERMINAL:
+            tl.store(dp_row + 2, 0.)
+            tl.store(dp_row + 3, 0.)
+            tl.store(dp_row + 4, 0.)
+    else:
+        dp_row = DP + row
+        dp_stride = ROWS
     if MODE == 5:
         # Reduce coefficient gradients over a small tile of tokens before writing
         # them out. No atomics or full [tokens, parameters] gradient buffer.
@@ -316,9 +333,9 @@ def _backward(H, V, F, P, DNH, DNV, DH, DV, DF, DP, ROWS, BETA: tl.constexpr,
             b, c = tl.load(P + 3), tl.load(P + 4)
             du_dot = _mean(d_velocity * v, D)
             gb = du_dot * along
-            tl.store(DP + 2 * ROWS + row, D * du_dot)
-            tl.store(DP + 3 * ROWS + row, D * gb)
-            tl.store(DP + 4 * ROWS + row, D * (_mean(d_velocity * chord, D) - gb))
+            tl.store(dp_row + 2 * dp_stride, D * du_dot)
+            tl.store(dp_row + 3 * dp_stride, D * gb)
+            tl.store(dp_row + 4 * dp_stride, D * (_mean(d_velocity * chord, D) - gb))
             # Differentiate the moving axis, both tangent projections and the quotient.
             z = (b - c) * du_dot / den
             du = z * (d - tl.where(u2 >= 1e-12, 2. * along * u, 0.))
@@ -426,8 +443,8 @@ def _backward(H, V, F, P, DNH, DNV, DH, DV, DF, DP, ROWS, BETA: tl.constexpr,
         if_unclamped = mixed_sq >= 1e-12
         base_dir -= tl.where(if_unclamped, _mean(base_dir * new_h, D) * new_h, 0.)
         axis_dir -= tl.where(if_unclamped, _mean(axis_dir * new_h, D) * new_h, 0.)
-        tl.store(DP + row, mixed_inv * tl.sum(d_new_h * base_dir, 0))
-        tl.store(DP + ROWS + row, mixed_inv * tl.sum(d_new_h * axis_dir, 0))
+        tl.store(dp_row, mixed_inv * tl.sum(d_new_h * base_dir, 0))
+        tl.store(dp_row + dp_stride, mixed_inv * tl.sum(d_new_h * axis_dir, 0))
         if (MODE == 3 or MODE == 6) and not TERMINAL:
             tl.store(DP + 2 * ROWS + row, tl.sum(d_velocity * (carried - (new_h - h)), 0))
     else:
@@ -499,6 +516,35 @@ class _ChordWrite(torch.autograd.Function):
                            num_warps=8 if channel_mode else 4, enable_fp_fusion=False)
         grads = (dh, dv, df, partials.sum(1).reshape_as(params), None, None, None, None)
         return grads + ((None, None) if ctx.remat else ())
+
+
+class TokenWrite(torch.autograd.Function):
+    """Use the same native three-scalar write with a separate control row per token."""
+    @staticmethod
+    def forward(ctx, h, v, force, controls, floor, terminal):
+        h, v, force = h.contiguous(), v.contiguous(), force.contiguous()
+        width = h.size(-1)
+        rows = h.numel() // width
+        nh = torch.empty_like(h)
+        nv = None if terminal else torch.empty_like(v)
+        _forward[(rows,)](h, v, force, controls, nh, nv, 0., floor**2, width, 7,
+                          controls, terminal, False, 1, TOKEN_CONTROLS=True,
+                          num_warps=4, enable_fp_fusion=False)
+        ctx.save_for_backward(h, v, force, controls)
+        ctx.floor2, ctx.terminal = floor**2, terminal
+        return nh, nv
+
+    @staticmethod
+    def backward(ctx, dnh, dnv):
+        h, v, force, controls = ctx.saved_tensors
+        width = h.size(-1)
+        rows = h.numel() // width
+        dh, dv, df = torch.empty_like(h), torch.empty_like(v), torch.empty_like(force)
+        dc = torch.empty_like(controls)
+        _backward[(rows,)](h, v, force, controls, dnh.contiguous(), None if ctx.terminal else dnv.contiguous(),
+                           dh, dv, df, dc, rows, 0., ctx.floor2, width, 7, controls, ctx.terminal,
+                           False, 1, TOKEN_CONTROLS=True, num_warps=4, enable_fp_fusion=False)
+        return dh, dv, df, dc, None, None
 
 
 class _SplitBoundary(torch.autograd.Function):

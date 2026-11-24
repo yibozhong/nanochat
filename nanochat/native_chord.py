@@ -15,22 +15,37 @@ def enter_sphere(mixed, velocity):
 class NativeChordLayer(nn.Module):
     def __init__(self, config, terminal):
         super().__init__()
-        split = config.native_chord_write == 'three_scalar'
-        self.attention = LookaheadResidual(config, split_velocity=split)
-        self.ffn = LookaheadResidual(config, velocity_consumed=not terminal, split_velocity=split)
+        self.token_controls = config.native_chord_write == 'token_vnorm'
+        if self.token_controls:
+            from nanochat.chord_token_controls import TokenControlledSite
+            self.attention = TokenControlledSite(config)
+            self.ffn = TokenControlledSite(config, velocity_consumed=not terminal)
+        else:
+            split = config.native_chord_write == 'three_scalar'
+            self.attention = LookaheadResidual(config, split_velocity=split)
+            self.ffn = LookaheadResidual(config, velocity_consumed=not terminal, split_velocity=split)
         self.terminal = terminal
         self.fuse_norm = config.fuse_chord_read_norm
         self.enter = enter_sphere
 
     def forward(self, block, velocity, mixed, ve, cos_sin, window_size, kv_cache):
         h, v = self.enter(mixed, velocity)
-        q = self.attention.branch_input(h, v, mixed.dtype, self.fuse_norm)
+        if self.token_controls:
+            q, controls = self.attention.read(h, v)
+        else:
+            q = self.attention.branch_input(h, v, mixed.dtype, self.fuse_norm)
         attn = block.compiled_attention if kv_cache is None else None
         force = (attn or block.attn)(q, ve, cos_sin, window_size, kv_cache)
-        h, v = self.attention(h, v, force)
-        q = self.ffn.branch_input(h, v, mixed.dtype, self.fuse_norm)
+        if self.token_controls:
+            h, v = self.attention.write(h, v, force, controls)
+            q, controls = self.ffn.read(h, v)
+        else:
+            h, v = self.attention(h, v, force)
+            q = self.ffn.branch_input(h, v, mixed.dtype, self.fuse_norm)
         mlp = block.compiled_mlp if kv_cache is None else None
         force = (mlp or block.mlp)(q)
+        if self.token_controls:
+            return self.ffn.write(h, v, force, controls)
         if self.terminal and h.is_cuda and h.size(-1) in (128, 512):
             from nanochat.chord_triton import split_boundary
             return split_boundary(self.ffn, h, v, force, None), None
@@ -60,6 +75,15 @@ class NativeChord(nn.Module):
         result = {}
         for i, layer in enumerate(self.layers):
             for name, site in [('attn', layer.attention), ('ffn', layer.ffn)]:
+                if layer.token_controls:
+                    from nanochat.chord_token_controls import CONTROL_NAMES
+                    if site.eval_control_moments is not None:
+                        std, mean = (x.tolist() for x in site.eval_control_moments)
+                        for j, control in enumerate(CONTROL_NAMES[:site.token_weight.shape[0]]):
+                            prefix = f'chord/layer_{i}/{name}/{control}'
+                            result[f'{prefix}_token_mean'] = mean[j]
+                            result[f'{prefix}_token_std'] = std[j]
+                    continue
                 if site.raw_beta is None:
                     continue
                 prefix = f'chord/layer_{i}/{name}'

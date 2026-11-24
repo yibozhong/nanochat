@@ -30,8 +30,12 @@ assert s['run_id'] == sys.argv[1] and s['steps'] == 305176 and s['seed'] == 42
 assert s['architecture'] == 'native' and s['initialization'] == 'fresh'
 if sys.argv[2] == 'mhc':
     assert s['connection_variant'] == 'mhc' and s['streams'] == 4
+elif sys.argv[2] == 'token_vnorm':
+    assert s['native_chord_write'] == 'token_vnorm' and s['gate_velocity_rms_eps'] == 1e-6
 else:
     assert sys.argv[2] == 'chord' and s['native_chord_write'] == 'three_scalar'
+assert isinstance(s['model_args'], list) and all(a.startswith('--') for a in s['model_args'])
+Path('model.args').write_text('\n'.join(s['model_args']) + '\n')
 if Path('results/train/summary.json').exists():
     r = json.loads(Path('results/train/summary.json').read_text())
     assert r['complete'] and r['source'] == s and r['steps'] == s['steps'] and r['run_id'] == s['run_id']
@@ -50,14 +54,17 @@ import os
 from kernels import get_kernel
 assert hasattr(get_kernel('varunneal/flash-attention-3', revision=os.environ['NANOCHAT_FA3_REVISION']).flash_attn_interface, 'flash_attn_func')
 PY
-recipe_dir=research/connections/native/chord
+mapfile -t model_args < "$TASK_ROOT/model.args"
 training_args=(--schedule-steps 305176 --seed 42 --microbatch 16 --data-dir ../data)
 if [[ "$recipe" == mhc ]]; then
-    mapfile -t model_args < "$recipe_dir/mhc.args"
     group=native-mhc-normal-init
     WANDB_MODE=disabled timeout --kill-after=30s 2400 python -m research.connections.ngpt.connection_init_preflight "${model_args[@]}" "${training_args[@]}"
+elif [[ "$recipe" == token_vnorm ]]; then
+    group=native-chord-token-controls-vnorm
+    if [[ ! -f results/native-chord-token-vnorm-sm90.json ]]; then
+        WANDB_MODE=disabled timeout --kill-after=30s 2400 python -m research.connections.native.chord.preflight --token-vnorm
+    fi
 else
-    mapfile -t model_args < "$recipe_dir/train.args"
     group=native-chord-three-scalar
     if [[ ! -f results/native-chord-sm90.json ]]; then
         WANDB_MODE=disabled timeout --kill-after=30s 2400 python -m research.connections.native.chord.preflight

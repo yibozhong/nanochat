@@ -71,7 +71,7 @@ def main():
     p.add_argument('--velocity-init', choices=('zero','token','token_position'), default=None,
                    help='HBFormer and lookahead default to token plus position velocity. Spherical lookahead also supports token-only or zero initial velocity.')
     p.add_argument('--velocity-embedding-std', type=float, default=.02)
-    p.add_argument('--native-chord-write', choices=('tied','three_scalar'))
+    p.add_argument('--native-chord-write', choices=('tied','three_scalar','token_vnorm'))
     p.add_argument('--chord-query-only-lookahead', action='store_true', help='Read attention Q at the Chord preview and K/V at the current state')
     p.add_argument('--chord-attnres', action='store_true', help='Mix Chord previews with completed block endpoints before each branch')
     p.add_argument('--chord-history-correction', action='store_true',

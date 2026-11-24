@@ -1,4 +1,5 @@
 """One-allocation native Chord gate. Runs locally on the GPU, without W&B."""
+import argparse
 import gc
 import math
 import statistics
@@ -56,12 +57,20 @@ def paired_and_causal(model, tied, ids):
     model.eval()
     tied.eval()
     h = model.hidden(ids)
-    torch.testing.assert_close(h, tied.hidden(ids), rtol=0, atol=0)
+    baseline_h = tied.hidden(ids)
+    if model.config.native_chord_write == 'token_vnorm':
+        # The tiled token read and scalar read have different FP32 reduction trees.
+        torch.testing.assert_close(h, baseline_h, rtol=.01, atol=.016)
+        assert (h.float()-baseline_h.float()).norm() < .002 * baseline_h.float().norm()
+    else:
+        torch.testing.assert_close(h, baseline_h, rtol=0, atol=0)
     # Activate lookahead and anisotropic writes, plus native smear, for causality and KV.
     model.native.smear_lambda.fill_(.2)
     for layer in model.chord.layers:
         for site in (layer.attention, layer.ffn):
             site.mu.fill_(.3)
+            if layer.token_controls:
+                site.token_weight.normal_(std=.03/model.config.width**.5)
             if site.writes is not None:
                 site.writes.copy_(site.writes.new_tensor([.35, .8]))
     h = model.hidden(ids)
@@ -81,11 +90,11 @@ def make(c, compile_blocks):
     return build_connection_model(c).prepare(compile_blocks=compile_blocks)
 
 
-def speed_and_resume(c, data, folder):
+def speed_and_resume(c, data, folder, *, check_resume, steps):
     model = make(c, True)
     opt, wd = optimizer_for(model)
     times = []
-    for step in range(16):
+    for step in range(steps):
         schedule(opt, step, 305176, wd)
         torch.cuda.synchronize()
         start = time.perf_counter()
@@ -93,16 +102,21 @@ def speed_and_resume(c, data, folder):
         torch.cuda.synchronize()
         times.append(time.perf_counter()-start)
     assert math.isfinite(loss)
-    if c.native_chord_write == 'three_scalar':
+    if check_resume:
         active = [s for layer in model.chord.layers for s in (layer.attention, layer.ffn) if s.writes is not None]
         assert len(active) == 2*c.depth-1
         assert all(s.writes.grad is not None and bool((s.writes.grad != 0).all()) for s in active)
         assert all(s.raw_beta.grad is not None and s.raw_beta.grad.abs().item() > 0 for s in active)
+        if c.native_chord_write == 'token_vnorm':
+            for layer in model.chord.layers:
+                for site in (layer.attention, layer.ffn):
+                    grad = site.token_weight.grad
+                    assert grad is not None and (grad.float().norm(dim=-1) > 0).all()
         path = folder/'local.pt'
-        torch.save(snapshot(model, opt, 16, config=asdict(c)), path)
-        schedule(opt, 16, 305176, wd)
-        target = train_step(model, opt, data, 16)
-        coefficients = model.residual_metrics()
+        torch.save(snapshot(model, opt, steps, config=asdict(c)), path)
+        schedule(opt, steps, 305176, wd)
+        target = train_step(model, opt, data, steps)
+        coefficients = {k:v.detach().clone() for k,v in model.chord.layers.named_parameters()}
         del opt, model, active
         gc.collect()
         state = torch.load(path, map_location='cpu', weights_only=False)
@@ -114,23 +128,32 @@ def speed_and_resume(c, data, folder):
         schedule(opt, state['step'], 305176, wd)
         replay = train_step(restored, opt, data, state['step'])
         assert abs(replay-target) < 2e-5, (replay, target)
-        assert max(abs(v-coefficients[k]) for k,v in restored.residual_metrics().items()) < 2e-5
-    return dict(seconds_per_step=statistics.median(times[5:]), final_train_ce=loss)
+        for name, value in restored.chord.layers.named_parameters():
+            torch.testing.assert_close(value, coefficients[name], rtol=1e-4, atol=2e-5)
+    return dict(steps=steps, seconds_per_step=statistics.median(times[5:]), final_train_ce=loss)
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--token-vnorm', action='store_true')
+    token = parser.parse_args().token_vnorm
     configure_attention('fa3')
     seed_all(42)
-    kernel_checks()
+    if token:
+        from research.connections.native.chord.token_control_checks import check_token_controls
+        check_token_controls()
+    else:
+        kernel_checks()
     c = ConnectionConfig(architecture='native', variant='baseline', streams=1,
-        native_chord_write='three_scalar', residual_dynamics='ngpt_lookahead',
+        native_chord_write='token_vnorm' if token else 'three_scalar', residual_dynamics='ngpt_lookahead',
         ngpt_velocity_mode='lookahead_split_learned_beta', chord_velocity_geometry='project_only',
         velocity_init='token', fuse_chord_read_norm=True, ngpt_force_rms_floor=1e-6)
-    control = replace(c, native_chord_write='tied')
+    control = replace(c, native_chord_write='three_scalar' if token else 'tied')
     data = PackedData('../data')
     model, tied = make(c, False), make(control, False)
     assert set(model.native.value_embeds) == {'1','3','5','7'}
-    assert sum(p.numel() for p in model.parameters()) - sum(p.numel() for p in tied.parameters()) == 30
+    extra = 2*c.width*(6*(2*c.depth-1) + 3) if token else 30
+    assert sum(p.numel() for p in model.parameters()) - sum(p.numel() for p in tied.parameters()) == extra
     ids = data.batch('train', 0, 1)[0][:, :32]
     paired_and_causal(model, tied, ids)
     del model, tied
@@ -138,11 +161,12 @@ def main():
     result = {}
     with tempfile.TemporaryDirectory(dir='..') as tmp:
         for cfg in (control, c):
-            result[cfg.native_chord_write] = speed_and_resume(cfg, data, Path(tmp))
+            result[cfg.native_chord_write] = speed_and_resume(cfg, data, Path(tmp), check_resume=(cfg == c), steps=128 if token else 16)
             print(cfg.native_chord_write, result[cfg.native_chord_write], flush=True)
     result.update(gpu=torch.cuda.get_device_name(), kernel_vjp='passed', restart='passed',
-                  initialization_parity='passed', causal_and_kv='passed', extra_parameters=30)
-    json_write('results/native-chord-sm90.json', result)
+                  initialization_parity='passed', causal_and_kv='passed', extra_parameters=extra)
+    filename = 'native-chord-token-vnorm-sm90.json' if token else 'native-chord-sm90.json'
+    json_write(Path('results') / filename, result)
     print('NATIVE_CHORD_PREFLIGHT_PASS', result, flush=True)
 
 

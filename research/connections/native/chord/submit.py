@@ -12,7 +12,8 @@ REPO = HERE.parents[3]
 HOME = Path.home()
 ASSETS = HOME / 'nanochat-runtime-assets'
 KEYS = {'chord': 'native-chord-three-scalar-token-bf16-10b-20261123',
-        'mhc': 'native-mhc-normal-init-10b-20261123'}
+        'mhc': 'native-mhc-normal-init-10b-20261123',
+        'token_vnorm': 'native-chord-token-controls-vnorm-10b-20261124'}
 
 
 def run(*args, cwd=REPO):
@@ -54,6 +55,12 @@ def submit(recipe, root):
     if recipe == 'mhc':
         source.update(connection_variant='mhc', streams=4, sinkhorn_iterations=20,
                       residual_projection_init='normal', output_projection_actual_std=.005)
+    elif recipe == 'token_vnorm':
+        flags = source['model_args']
+        flags[flags.index('--native-chord-write=three_scalar')] = '--native-chord-write=token_vnorm'
+        source.update(native_chord_write='token_vnorm', velocity_init='token',
+                      gate_velocity_rms_eps=1e-6, gate_weight_init=0., extra_parameters=95232,
+                      gate_reference='lululu39/NextTransformer@753b013')
     else:
         source.update(native_chord_write='three_scalar', velocity_init='token')
     job_args = f'{run_id} {recipe}'
