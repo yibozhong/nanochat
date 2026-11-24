@@ -90,6 +90,18 @@ def make(c, compile_blocks):
     return build_connection_model(c).prepare(compile_blocks=compile_blocks)
 
 
+def assert_exact_state(expected, actual):
+    from torch.utils._pytree import tree_flatten
+    expected_values, expected_structure = tree_flatten(expected)
+    actual_values, actual_structure = tree_flatten(actual)
+    assert expected_structure == actual_structure
+    for left, right in zip(expected_values, actual_values):
+        if isinstance(left, torch.Tensor):
+            assert left.dtype == right.dtype and left.device == right.device and torch.equal(left, right)
+        else:
+            assert left == right
+
+
 def speed_and_resume(c, data, folder, *, check_resume, steps):
     model = make(c, True)
     opt, wd = optimizer_for(model)
@@ -114,22 +126,40 @@ def speed_and_resume(c, data, folder, *, check_resume, steps):
                     assert grad is not None and (grad.float().norm(dim=-1) > 0).all()
         path = folder/'local.pt'
         torch.save(snapshot(model, opt, steps, config=asdict(c)), path)
-        schedule(opt, steps, 305176, wd)
-        target = train_step(model, opt, data, steps)
-        coefficients = {k:v.detach().clone() for k,v in model.chord.layers.named_parameters()}
-        del opt, model, active
-        gc.collect()
         state = torch.load(path, map_location='cpu', weights_only=False)
         restored = make(ConnectionConfig.from_checkpoint(state['config']), True)
-        opt, wd = optimizer_for(restored)
+        other_opt, other_wd = optimizer_for(restored)
         restored.load_state_dict(state['model'])
-        opt.load_state_dict(state['optimizer'])
-        restore_rng(state['rng'])
-        schedule(opt, state['step'], 305176, wd)
-        replay = train_step(restored, opt, data, state['step'])
+        other_opt.load_state_dict(state['optimizer'])
+        assert state['step'] == steps and restored.config == c and other_wd == wd
+        assert_exact_state(model.state_dict(), restored.state_dict())
+        assert_exact_state(opt.state_dict(), other_opt.state_dict())
+        rng = state.pop('rng')
+        del state
+        # Both models run the real NTP forward and backward at the resumed data
+        # row. Isolate optimizer restoration from independent BF16 reductions:
+        # the native resume oracle applies precisely the same already-finite gradients.
+        def replay_gradients(optimizer, args, kwargs):
+            for (name, live), (other_name, other) in zip(model.named_parameters(), restored.named_parameters()):
+                assert name == other_name and (live.grad is None) == (other.grad is None)
+                if live.grad is not None:
+                    other.grad.copy_(live.grad)
+
+        restore_rng(rng)
+        schedule(opt, steps, 305176, wd)
+        target = train_step(model, opt, data, steps)
+        restore_rng(rng)
+        schedule(other_opt, steps, 305176, wd)
+        hook = other_opt.register_step_pre_hook(replay_gradients)
+        try:
+            replay = train_step(restored, other_opt, data, steps)
+        finally:
+            hook.remove()
         assert abs(replay-target) < 2e-5, (replay, target)
-        for name, value in restored.chord.layers.named_parameters():
-            torch.testing.assert_close(value, coefficients[name], rtol=1e-4, atol=2e-5)
+        assert_exact_state(model.state_dict(), restored.state_dict())
+        assert_exact_state(opt.state_dict(), other_opt.state_dict())
+        print(f'Resume verified at {steps}: exact loaded states and fixed-gradient update; '
+              f'next batch CE {target:.8f} / {replay:.8f}', flush=True)
     return dict(steps=steps, seconds_per_step=statistics.median(times[5:]), final_train_ce=loss)
 
 
@@ -163,7 +193,7 @@ def main():
         for cfg in (control, c):
             result[cfg.native_chord_write] = speed_and_resume(cfg, data, Path(tmp), check_resume=(cfg == c), steps=128 if token else 16)
             print(cfg.native_chord_write, result[cfg.native_chord_write], flush=True)
-    result.update(gpu=torch.cuda.get_device_name(), kernel_vjp='passed', restart='passed',
+    result.update(gpu=torch.cuda.get_device_name(), kernel_vjp='passed', restart='exact state and fixed-gradient update, paired next-batch CE',
                   initialization_parity='passed', causal_and_kv='passed', extra_parameters=extra)
     filename = 'native-chord-token-vnorm-sm90.json' if token else 'native-chord-sm90.json'
     json_write(Path('results') / filename, result)
