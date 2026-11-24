@@ -125,8 +125,8 @@ if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--recipe', choices=KEYS, default='chord')
     recipe = parser.parse_args().recipe
-    root = HOME / KEYS[recipe]
-    root.mkdir(exist_ok=True)
+    root = HOME / 'nanochat-experiments' / KEYS[recipe]
+    root.mkdir(parents=True, exist_ok=True)
     with (root/'submit.lock').open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         submit(recipe, root)

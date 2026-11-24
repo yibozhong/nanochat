@@ -15,6 +15,7 @@ from policy import RANK, require_gpus
 REPO=Path(__file__).resolve().parents[3]
 HOME_ROOT=Path('/home/yzhong239')
 ASSETS=HOME_ROOT/'nanochat-runtime-assets'
+EXPERIMENTS_ROOT=HOME_ROOT/'nanochat-experiments'
 PRESETS={'mhc':'vanilla', 'attnres':'vanilla', 'arc':'vanilla', 'arc_muon':'vanilla', 'arc_muon_radius':'vanilla', 'vanilla':'vanilla', 'ngpt':'ngpt', 'ngpt_momentum':'ngpt_heavy_ball',
          'ngpt_momentum_transport_rms':'ngpt_heavy_ball', 'heavy_ball_rms':'heavy_ball_rms',
          'ngpt_hbformer':'ngpt_hbformer', 'ngpt_hbformer_no_wn':'ngpt_hbformer',
@@ -132,45 +133,45 @@ def main():
     budget = '5k-steps' if steps == 5000 else '10b'
     if args.fresh_10b:
         budget='10b-from-scratch'
-    ROOT=HOME_ROOT/f'residual-nonzero-{preset}-{budget}-20261117'
+    ROOT=EXPERIMENTS_ROOT/f'residual-nonzero-{preset}-{budget}-20261117'
     connection = preset in ('mhc', 'attnres')
     if connection and not args.hopper_only:
         parser.error('The matched connection runs use full H100/H200')
     if connection:
-        ROOT = HOME_ROOT/f'residual-nonzero-{preset}-{budget}-20261120'
+        ROOT = EXPERIMENTS_ROOT/f'residual-nonzero-{preset}-{budget}-20261120'
     if axis_write:
         tag = 'geodesic-split' if geodesic else 'split' if split_write else 'axis'
         if learned_beta:
             tag = 'split-learned-beta'
         if args.signed_chord_steps:
             tag = 'split-learned-beta-signed'
-        ROOT=HOME_ROOT/f'residual-arc-{tag}-write-10b-20261119'
+        ROOT=EXPERIMENTS_ROOT/f'residual-arc-{tag}-write-10b-20261119'
         if args.token_chord_gates:
-            ROOT=HOME_ROOT/'residual-chord-token-alpha-gates-10b-20261120'
+            ROOT=EXPERIMENTS_ROOT/'residual-chord-token-alpha-gates-10b-20261120'
         if args.token_beta_gate:
-            ROOT=HOME_ROOT/'residual-chord-token-beta-gate-10b-20261120'
+            ROOT=EXPERIMENTS_ROOT/'residual-chord-token-beta-gate-10b-20261120'
         if geometry:
-            ROOT=HOME_ROOT/f'residual-chord-velocity-{geometry.replace("_","-")}-10b-20261120'
+            ROOT=EXPERIMENTS_ROOT/f'residual-chord-velocity-{geometry.replace("_","-")}-10b-20261120'
     if args.token_only_velocity:
-        ROOT=HOME_ROOT/'residual-chord-velocity-token-only-bf16-10b-20261120'
+        ROOT=EXPERIMENTS_ROOT/'residual-chord-velocity-token-only-bf16-10b-20261120'
         if args.fuse_chord_read_norm:
-            ROOT=HOME_ROOT/'residual-chord-fused-read-token-only-bf16-10b-20261120'
+            ROOT=EXPERIMENTS_ROOT/'residual-chord-fused-read-token-only-bf16-10b-20261120'
     if args.zero_init_velocity_embedding:
-        ROOT=HOME_ROOT/'residual-chord-scalar-zero-init-velocity-embed-10b-20261121'
+        ROOT=EXPERIMENTS_ROOT/'residual-chord-scalar-zero-init-velocity-embed-10b-20261121'
     if args.zero_velocity:
-        ROOT=HOME_ROOT/'residual-chord-scalar-from-rest-10b-20261121'
+        ROOT=EXPERIMENTS_ROOT/'residual-chord-scalar-from-rest-10b-20261121'
         if args.match_velocity_table_with_ffn:
-            ROOT=HOME_ROOT/'residual-chord-scalar-from-rest-ffn-matched-10b-20261122'
+            ROOT=EXPERIMENTS_ROOT/'residual-chord-scalar-from-rest-ffn-matched-10b-20261122'
     if args.chord_velocity_write:
-        ROOT=HOME_ROOT/'residual-chord-scalar-rho-v-10b-20261121'
+        ROOT=EXPERIMENTS_ROOT/'residual-chord-scalar-rho-v-10b-20261121'
     if args.channel_chord_coefficients:
-        ROOT=HOME_ROOT/'residual-chord-channel-alpha-beta-10b-20261121'
+        ROOT=EXPERIMENTS_ROOT/'residual-chord-channel-alpha-beta-10b-20261121'
     if velocity_lr is not None:
         coefficients = 'channel' if args.channel_chord_coefficients else 'scalar'
-        ROOT=HOME_ROOT/f'residual-chord-{coefficients}-vembed-lr{velocity_lr:g}-10b-20261122'
+        ROOT=EXPERIMENTS_ROOT/f'residual-chord-{coefficients}-vembed-lr{velocity_lr:g}-10b-20261122'
     if args.fixed_first_attention_mu:
         coefficients = 'channel' if args.channel_chord_coefficients else 'scalar'
-        ROOT=HOME_ROOT/f'residual-chord-{coefficients}-fixed-first-attn-mu1-10b-20261121'
+        ROOT=EXPERIMENTS_ROOT/f'residual-chord-{coefficients}-fixed-first-attn-mu1-10b-20261121'
     if arc_optimizer:
         tag = 'arc' if preset == 'arc' else 'arc-muon-direction'
         if preset == 'arc_muon_radius':
@@ -178,18 +179,18 @@ def main():
         if args.no_arc_lookahead:
             tag += '-mu0'
         date_tag = '20261119' if args.no_arc_lookahead else '20261118'
-        ROOT = HOME_ROOT/f'optimizer-{tag}-10b-{date_tag}'
+        ROOT = EXPERIMENTS_ROOT/f'optimizer-{tag}-10b-{date_tag}'
     if args.chord_attnres:
         tag = 's2-history-correction' if args.chord_history_correction else 's2'
         if args.chord_history_updates:
             tag = 's2-block-chords'
-        ROOT=HOME_ROOT/f'residual-chord-attnres-{tag}-token-bf16-10b-20261122'
+        ROOT=EXPERIMENTS_ROOT/f'residual-chord-attnres-{tag}-token-bf16-10b-20261122'
     if args.chord_query_only_lookahead:
-        ROOT = HOME_ROOT/'residual-chord-query-only-lookahead-token-bf16-10b-20261123'
+        ROOT = EXPERIMENTS_ROOT/'residual-chord-query-only-lookahead-token-bf16-10b-20261123'
     if args.hopper_only:
         ROOT = ROOT.with_name(ROOT.name + '-hopper-only')
     KEY=ROOT.name
-    ROOT.mkdir(exist_ok=True)
+    ROOT.mkdir(parents=True, exist_ok=True)
     with (ROOT/'submit.lock').open('a') as lock:
         fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
         assert not any((ROOT/n).exists() for n in ('STOPPED','STOPPED.json'))
@@ -237,7 +238,7 @@ def main():
             source.update(hopper_only=True, scheduling='Full H100/H200 only at startup and on resume')
             del source['compatible_fallback_backend']
         if connection:
-            base = json.loads((HOME_ROOT/'residual-nonzero-vanilla-10b-20261117/summary.json').read_text())
+            base = json.loads((EXPERIMENTS_ROOT/'residual-nonzero-vanilla-10b-20261117/summary.json').read_text())
             assert base['complete'] and base['run_id']=='2eac64db' and base['steps']==steps
             for key in ('model','steps','seed','microbatch','batch_tokens','attention_backend','dataset_revision',
                         'data_uri','residual_projection_init','residual_projection_init_std','output_projection_actual_std'):
@@ -254,7 +255,7 @@ def main():
             (ROOT/'comparison-reference.json').write_text(json.dumps(dict(run_id=base['run_id'],
                 dev_ce=base['final_dev_ce'], dev_tokens=base['dev_tokens'], step=steps), indent=2)+'\n')
         if arc_optimizer:
-            base = json.loads((HOME_ROOT/'residual-nonzero-vanilla-10b-20261117/summary.json').read_text())
+            base = json.loads((EXPERIMENTS_ROOT/'residual-nonzero-vanilla-10b-20261117/summary.json').read_text())
             assert base['complete'] and base['run_id'] == '2eac64db' and base['steps'] == steps
             for key in ('model', 'seed', 'batch_tokens', 'microbatch', 'residual_projection_init',
                         'residual_projection_init_std', 'dataset_revision', 'residual_dynamics'):
@@ -286,10 +287,10 @@ def main():
                           preflight='Zero-gate equality with nGPT, trainable lookahead, tangent geometry, causal KV, gradients, exact resume and same-GPU speed')
         if (args.chord_attnres or args.chord_query_only_lookahead or args.channel_chord_coefficients or args.chord_velocity_write or args.fixed_first_attention_mu
                 or args.zero_velocity or args.zero_init_velocity_embedding or velocity_lr is not None):
-            control_dir = HOME_ROOT/'residual-chord-fused-read-token-only-bf16-10b-20261120-hopper-only'
+            control_dir = EXPERIMENTS_ROOT/'residual-chord-fused-read-token-only-bf16-10b-20261120-hopper-only'
             control_id = 'a7163d23'
             if args.channel_chord_coefficients and (args.fixed_first_attention_mu or velocity_lr is not None):
-                control_dir = HOME_ROOT/'residual-chord-channel-alpha-beta-10b-20261121-hopper-only'
+                control_dir = EXPERIMENTS_ROOT/'residual-chord-channel-alpha-beta-10b-20261121-hopper-only'
                 control_id = '9a7fd31d'
             control = json.loads((control_dir/'bundles/source.json').read_text())
             assert control['run_id']==control_id and control['fuse_chord_read_norm'] and not control['recompute_chord_force']
@@ -303,7 +304,7 @@ def main():
                               timing_reference='Paired same-card full-step medians in chord-attnres-profile.json')
                 if args.chord_history_correction:
                     original_tag = 's2-history-correction' if args.chord_history_updates else 's2'
-                    original = HOME_ROOT/f'residual-chord-attnres-{original_tag}-token-bf16-10b-20261122-hopper-only'
+                    original = EXPERIMENTS_ROOT/f'residual-chord-attnres-{original_tag}-token-bf16-10b-20261122-hopper-only'
                     old = json.loads((original/'bundles/source.json').read_text())
                     for key in ('model','seed','initialization','steps','batch_tokens','microbatch','dataset_revision',
                                 'attnres_block_size','chord_velocity_geometry','velocity_init','paired_run'):
@@ -350,7 +351,7 @@ def main():
                 source.update(velocity_init='zero', velocity_embedding=False, initial_velocity_projected=False,
                               preflight='Skipped by request; start formal training at step zero with seed 42')
                 if args.match_velocity_table_with_ffn:
-                    narrow_dir = HOME_ROOT/'residual-chord-scalar-from-rest-fresh-10b-20261122-hopper-only'
+                    narrow_dir = EXPERIMENTS_ROOT/'residual-chord-scalar-from-rest-fresh-10b-20261122-hopper-only'
                     narrow = json.loads((narrow_dir/'config.json').read_text())
                     summary = json.loads((narrow_dir/'summary.json').read_text())
                     assert summary['complete'] and summary['run_id']=='38c77ced' and summary['source']==narrow['source']
@@ -381,7 +382,7 @@ def main():
                 source.update(channel_chord_coefficients=True,
                               preflight='Channel VJP, compiled cache and exact optimizer resume; matched scalar and channel 128-step profiles; fresh seed42 formal')
         elif args.token_only_velocity:
-            control_dir = HOME_ROOT/'residual-chord-velocity-project-only-10b-20261120-hopper-only'
+            control_dir = EXPERIMENTS_ROOT/'residual-chord-velocity-project-only-10b-20261120-hopper-only'
             control = json.loads((control_dir/'bundles/source.json').read_text())
             assert control['run_id']=='af1c3266' and control['velocity_init']=='token_position'
             assert control['chord_velocity_geometry']==geometry and control['initial_velocity_projected']
@@ -399,7 +400,7 @@ def main():
                 (ROOT/'comparison-reference.json').write_text(json.dumps(dict(run_id=control['run_id'],
                     summary_path=str(control_dir/'summary.json'), step=steps), indent=2)+'\n')
         elif axis_write:
-            reference = HOME_ROOT/'residual-nonzero-ngpt_lookahead-10b-from-scratch-20261117'
+            reference = EXPERIMENTS_ROOT/'residual-nonzero-ngpt_lookahead-10b-from-scratch-20261117'
             base = json.loads((reference/'summary.json').read_text())
             assert base['complete'] and base['run_id'] == 'd4293868' and base['source']['ngpt_velocity_mode'] == 'lookahead_transport'
             for key in ('model','seed','training_tokens','microbatch','batch_tokens','schedule_steps','data_uri',
@@ -411,7 +412,7 @@ def main():
                           reference_gpu=base['gpu'], timing_reference='Prior Arc Residual; matched control timed during preflight')
             if split_write:
                 control_tag = 'split' if geodesic or learned_beta else 'axis'
-                paired = json.loads((HOME_ROOT/f'residual-arc-{control_tag}-write-10b-20261119-hopper-only/bundles/source.json').read_text())
+                paired = json.loads((EXPERIMENTS_ROOT/f'residual-arc-{control_tag}-write-10b-20261119-hopper-only/bundles/source.json').read_text())
                 assert paired['ngpt_velocity_mode'] == f'lookahead_{control_tag}_write' and paired['reference_run'] == base['run_id']
                 source.update(ngpt_velocity_mode=preset.removeprefix('ngpt_'), paired_run=paired['run_id'],
                               parallel_step_init=.05, perpendicular_step_init=.05, step_parameterization='independent_softplus',
@@ -426,7 +427,7 @@ def main():
                                   learned_beta_sites=2*source['model']['depth']-1,
                                   preflight='Fixed-beta init parity, beta gradients, causal KV, optimizer restart; paired 128 steps versus fixed-beta chord split')
                     if args.signed_chord_steps or args.token_chord_gates or args.token_beta_gate or geometry:
-                        control_dir = HOME_ROOT/'residual-arc-split-learned-beta-write-10b-20261119-hopper-only'
+                        control_dir = EXPERIMENTS_ROOT/'residual-arc-split-learned-beta-write-10b-20261119-hopper-only'
                         control = json.loads((control_dir/'bundles/source.json').read_text())
                         for key in ('model','seed','training_tokens','batch_tokens','microbatch','dataset_revision',
                                     'schedule_steps','ngpt_velocity_mode','momentum_beta_init','learned_beta_sites',
@@ -492,7 +493,7 @@ def main():
                           preflight='9 Euclidean velocity RMS tests; target128, vanilla and transport_rms 32 each; exact CLI resume',
                           timing_reference='estimate from prior H100 residual diagnostics; measure same GPU in preflight')
         if preset=='ngpt_momentum_transport_rms':
-            report_path=HOME_ROOT/'ngpt-transport-rms-debug-20261117/validation.json'
+            report_path=EXPERIMENTS_ROOT/'ngpt-transport-rms-debug-20261117/validation.json'
             report=json.loads(report_path.read_text())
             assert report['complete'] and report['exit_code']==0 and report['resume']['complete']
             assert report['tests']==dict(tests=57, failures=0, errors=0, skipped=0)
@@ -520,7 +521,7 @@ def main():
             assert profile['batch_tokens']==source['batch_tokens'] and profile['attention_backend']=='fa2'
             shutil.copy2(report_path,bundle/'transport-validation.json')
         if full_lookahead:
-            parent=HOME_ROOT/f'residual-nonzero-{preset}-5k-steps-20261117'
+            parent=EXPERIMENTS_ROOT/f'residual-nonzero-{preset}-5k-steps-20261117'
             summary=json.loads((parent/'summary.json').read_text())
             previous=json.loads((parent/'state.json').read_text())
             old=summary['source']

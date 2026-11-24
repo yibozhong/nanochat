@@ -8,7 +8,7 @@ import time
 
 REPO=Path(__file__).resolve().parents[3]
 ASSETS=Path('/home/yzhong239/nanochat-runtime-assets')
-ROOT=Path('/home/yzhong239/ngpt-transport-rms-debug-20261117')
+ROOT=Path.home()/'nanochat-experiments'/'ngpt-transport-rms-debug-20261117'
 KEY=ROOT.name
 
 
@@ -17,7 +17,7 @@ def command(args,cwd=REPO):
 
 
 def main():
-    ROOT.mkdir(exist_ok=True)
+    ROOT.mkdir(parents=True, exist_ok=True)
     with (ROOT/'submit.lock').open('a') as lock:
         fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
         assert not any((ROOT/n).exists() for n in ('STOPPED','STOPPED.json'))

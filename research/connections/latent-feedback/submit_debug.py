@@ -8,7 +8,7 @@ import time
 
 REPO=Path(__file__).resolve().parents[3]
 ASSETS=Path('/home/yzhong239/nanochat-runtime-assets')
-ROOT=Path('/home/yzhong239/latent-feedback-debug-20261113')
+ROOT=Path.home()/'nanochat-experiments'/'latent-feedback-debug-20261113'
 KEY=ROOT.name
 
 
@@ -17,7 +17,7 @@ def command(args,cwd=REPO):
 
 
 def main():
-    ROOT.mkdir(exist_ok=True)
+    ROOT.mkdir(parents=True, exist_ok=True)
     with (ROOT/'submit.lock').open('a') as lock:
         fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
         assert not (ROOT/'STOPPED').exists()

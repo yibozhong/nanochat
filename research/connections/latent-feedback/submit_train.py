@@ -12,7 +12,7 @@ from policy import RANK, require_gpus
 REPO=Path(__file__).resolve().parents[3]
 HOME_ROOT=Path('/home/yzhong239')
 ASSETS=HOME_ROOT/'nanochat-runtime-assets'
-ROOT=HOME_ROOT/'latent-feedback-10b-20261113'
+ROOT=HOME_ROOT/'nanochat-experiments'/'latent-feedback-10b-20261113'
 KEY=ROOT.name
 STEPS=305176
 
@@ -22,7 +22,7 @@ def command(args,cwd=REPO):
 
 
 def main():
-    ROOT.mkdir(exist_ok=True)
+    ROOT.mkdir(parents=True, exist_ok=True)
     with (ROOT/'submit.lock').open('a') as lock:
         fcntl.flock(lock,fcntl.LOCK_EX|fcntl.LOCK_NB)
         assert not any((ROOT/n).exists() for n in ('STOPPED','STOPPED.json'))
