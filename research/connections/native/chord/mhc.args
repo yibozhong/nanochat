@@ -1,0 +1,13 @@
+--variant=mhc
+--architecture=native
+--streams=4
+--sinkhorn-iterations=20
+--connection-backend=nvidia
+--attention-kernel=original
+--attention-backend=fa3
+--window-pattern=SSSL
+--residual-projection-init=normal
+--residual-projection-init-std=0.02
+--matched-backbone-init
+--no-activation-checkpoint
+--no-fused-connection-grad

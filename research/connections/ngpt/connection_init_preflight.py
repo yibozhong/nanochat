@@ -19,6 +19,9 @@ def main():
         return
 
     test = f'tests/test_nonzero_residual.py::test_matched_connection_initialization[{variant}]'
+    architecture = source.get('architecture', 'vanilla')
+    if architecture == 'native':
+        test = 'tests/test_native_connections.py::test_native_normal_projection_init_matches_chord'
     subprocess.run([sys.executable, '-m', 'pytest', '-q', test], check=True)
     with tempfile.TemporaryDirectory(prefix='connection-init-', dir='..') as work:
         out = Path(work).resolve()
@@ -37,7 +40,8 @@ def main():
         assert all(math.isfinite(row['loss']) for row in rows)
         assert summary['complete'] and summary['source'] == source and summary['variant'] == variant
         assert math.isfinite(summary['final_dev_ce']) and summary['final_dev_ce'] < summary['initial_dev_ce']
-        assert config['logging_backend'] == 'local' and config['actual_attention_backend'] == 'fa2'
+        assert config['logging_backend'] == 'local' and config['actual_attention_backend'] == source['attention_backend']
+        assert config['model']['architecture'] == architecture
         assert config['gpu_capability'] == [9, 0] and config['model']['variant'] == variant
         assert config['model']['residual_projection_init'] == 'normal' and config['protocol']['matched_backbone_init']
         report = dict(complete=True, source=source, gpu=config['gpu'], resume_step=12,

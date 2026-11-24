@@ -43,12 +43,9 @@ class NativeConnectionModel(nn.Module):
             if dtype != torch.bfloat16:
                 raise ValueError('NVIDIA connections require BF16 activations')
         self.native.to_empty(device=device)
-        self.native.init_weights()
-        if self.config.residual_projection_init == 'normal':
-            std = self.config.residual_projection_init_std / math.sqrt(2 * self.config.depth)
-            for block in self.native.transformer.h:
-                nn.init.normal_(block.attn.c_proj.weight, std=std)
-                nn.init.normal_(block.mlp.c_proj.weight, std=std)
+        std = (self.config.residual_projection_init_std / math.sqrt(2 * self.config.depth)
+               if self.config.residual_projection_init == 'normal' else None)
+        self.native.init_weights(residual_projection_std=std)
         if self.chord is not None:
             self.chord.prepare(self.config, self.native, device, dtype, compile_blocks)
         elif compile_blocks:

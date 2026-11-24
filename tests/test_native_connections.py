@@ -108,6 +108,24 @@ def test_full_size_backbone_initialization_and_optimizer_groups():
         adamw_shape_dtype_variants=len(shapes), compiler_recompile_limit=compiler_config.recompile_limit))
 
 
+def test_native_normal_projection_init_matches_chord():
+    common = dict(architecture='native', residual_projection_init='normal')
+    seed_all(42)
+    mhc = build_connection_model(ConnectionConfig(**common, variant='mhc', streams=4)).prepare()
+    seed_all(42)
+    chord = build_connection_model(ConnectionConfig(**common, variant='baseline', streams=1,
+        native_chord_write='three_scalar', residual_dynamics='ngpt_lookahead',
+        ngpt_velocity_mode='lookahead_split_learned_beta', chord_velocity_geometry='project_only',
+        velocity_init='token', fuse_chord_read_norm=True, ngpt_force_rms_floor=1e-6)).prepare()
+    actual = dict(mhc.native.named_parameters())
+    for name, expected in chord.native.named_parameters():
+        assert torch.equal(actual[name], expected), name
+    for block in mhc.native.transformer.h:
+        for proj in (block.attn.c_proj, block.mlp.c_proj):
+            assert .0049 < proj.weight.std().item() < .0051
+    assert mhc.chord is None
+
+
 def test_streamwise_native_extras_reduce_to_original_model():
     reference = native()
     exercise_features(reference)

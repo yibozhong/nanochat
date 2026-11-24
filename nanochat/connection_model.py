@@ -90,9 +90,8 @@ class ConnectionConfig:
             raise ValueError('Unknown residual output projection initialization')
         if not math.isfinite(self.residual_projection_init_std) or self.residual_projection_init_std <= 0:
             raise ValueError('Residual output projection initialization std must be positive and finite')
-        if self.residual_projection_init != 'zero' and ((self.architecture == 'native' and self.variant != 'baseline')
-                or self.variant not in ('baseline', 'mhc', 'attnres') or self.latent_feedback):
-            raise ValueError('Random output initialization requires baseline, vanilla mHC, or vanilla AttnRes')
+        if self.residual_projection_init != 'zero' and (self.variant not in ('baseline', 'mhc', 'attnres') or self.latent_feedback):
+            raise ValueError('Random output initialization requires baseline, mHC, or vanilla AttnRes')
         if self.residual_dynamics not in ('vanilla', 'heavy_ball', 'heavy_ball_rms', 'ngpt_heavy_ball', 'ngpt_hbformer', 'ngpt', 'ngpt_lookahead', 'lookahead_only'):
             raise ValueError('Unknown residual dynamics')
         if not math.isfinite(self.ngpt_alpha_init) or not 0 < self.ngpt_alpha_init < 1:

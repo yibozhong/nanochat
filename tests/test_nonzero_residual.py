@@ -96,7 +96,7 @@ def test_legacy_initialization_defaults():
     assert ConnectionConfig.from_checkpoint(old).residual_projection_init == 'zero'
     for fields in ({'residual_projection_init':'bad'}, {'residual_projection_init_std':0},
                    {'residual_projection_init_std':float('nan')},
-                   {'residual_projection_init':'normal', 'architecture':'native'}):
+                   {'residual_projection_init':'normal', 'variant':'mhc_no_sinkhorn'}):
         with pytest.raises(ValueError):
             ConnectionConfig(**fields)
 

@@ -242,7 +242,7 @@ class GPT(nn.Module):
             self.stream_head = NvidiaHyperHead(config.n_embd, 4, use_tf32=config.connection_backend == "nvidia")
 
     @torch.no_grad()
-    def init_weights(self):
+    def init_weights(self, *, residual_projection_std=None):
         """
         Initialize the full model in this one function for maximum clarity.
 
@@ -307,6 +307,13 @@ class GPT(nn.Module):
             self.transformer.wte.to(dtype=COMPUTE_DTYPE)
             for ve in self.value_embeds.values():
                 ve.to(dtype=COMPUTE_DTYPE)
+
+        # Draw the optional nonzero projections after the native trunk and before
+        # connector-specific parameters, pairing Chord and mHC at the same seed.
+        if residual_projection_std is not None:
+            for block in self.transformer.h:
+                nn.init.normal_(block.attn.c_proj.weight, std=residual_projection_std)
+                nn.init.normal_(block.mlp.c_proj.weight, std=residual_projection_std)
 
         # Initialize connectors last so the same seed gives exactly the same
         # native backbone, including value embeddings and all scalar/gate params.
