@@ -90,7 +90,9 @@ class NativeConnectionModel(nn.Module):
             embeddings = next(g for g in opt.param_groups if any(p is self.native.transformer.wte.weight for p in g['params']))
             embeddings['params'].append(self.chord.velocity_embedding.weight)
             head = next(g for g in opt.param_groups if any(p is self.native.lm_head.weight for p in g['params']))
-            opt.add_param_group(dict(head, params=list(self.chord.layers.parameters()), weight_decay=0.))
+            control_lr = self.config.native_chord_control_lr or head['initial_lr']
+            opt.add_param_group(dict(head, params=list(self.chord.layers.parameters()), lr=control_lr,
+                                     initial_lr=control_lr, weight_decay=0.))
             from torch._dynamo import config as compiler_config
             signatures = {(p.shape, p.dtype) for g in opt.param_groups if g['kind'] == 'adamw' for p in g['params']}
             compiler_config.recompile_limit = max(compiler_config.recompile_limit, 2 * len(signatures))

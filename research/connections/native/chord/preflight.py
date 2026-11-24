@@ -58,7 +58,7 @@ def paired_and_causal(model, tied, ids):
     tied.eval()
     h = model.hidden(ids)
     baseline_h = tied.hidden(ids)
-    if model.config.native_chord_write == 'token_bounded':
+    if model.config.native_chord_write in ('token_bounded', 'token_h'):
         for layer in model.chord.layers:
             for site in (layer.attention, layer.ffn):
                 std, mean = site.eval_control_moments
@@ -111,6 +111,11 @@ def assert_exact_state(expected, actual):
 def speed_and_resume(c, data, folder, *, check_resume, steps):
     model = make(c, True)
     opt, wd = optimizer_for(model)
+    if c.native_chord_control_lr is not None:
+        controls = {id(p) for p in model.chord.layers.parameters()}
+        group, = [g for g in opt.param_groups if any(id(p) in controls for p in g['params'])]
+        assert {id(p) for p in group['params']} == controls and group['kind'] == 'adamw'
+        assert group['initial_lr'] == group['lr'] == c.native_chord_control_lr
     times = []
     for step in range(steps):
         schedule(opt, step, 305176, wd)
@@ -174,25 +179,30 @@ def main():
     modes = parser.add_mutually_exclusive_group()
     modes.add_argument('--token-vnorm', dest='mode', action='store_const', const='token_vnorm')
     modes.add_argument('--token-bounded', dest='mode', action='store_const', const='token_bounded')
-    mode = parser.parse_args().mode or 'three_scalar'
+    modes.add_argument('--token-h', dest='mode', action='store_const', const='token_h')
+    parser.add_argument('--native-chord-control-lr', type=float)
+    args = parser.parse_args()
+    mode = args.mode or 'three_scalar'
     token = mode != 'three_scalar'
     configure_attention('fa3')
     seed_all(42)
     if token:
         from research.connections.native.chord.token_control_checks import check_token_controls
-        check_token_controls(bounded=(mode == 'token_bounded'))
+        check_token_controls(bounded=(mode == 'token_bounded'), position_only=(mode == 'token_h'))
     else:
         kernel_checks()
     c = ConnectionConfig(architecture='native', variant='baseline', streams=1,
-        native_chord_write=mode, residual_dynamics='ngpt_lookahead',
+        native_chord_write=mode, native_chord_control_lr=args.native_chord_control_lr, residual_dynamics='ngpt_lookahead',
         ngpt_velocity_mode='lookahead_split_learned_beta', chord_velocity_geometry='project_only',
         velocity_init='token', fuse_chord_read_norm=True, ngpt_force_rms_floor=1e-6)
-    comparison = {'three_scalar': 'tied', 'token_vnorm': 'three_scalar', 'token_bounded': 'token_vnorm'}
+    comparison = {'three_scalar': 'tied', 'token_vnorm': 'three_scalar', 'token_bounded': 'token_vnorm',
+                  'token_h': 'token_vnorm'}
     control = replace(c, native_chord_write=comparison[mode])
     data = PackedData('../data')
     model, tied = make(c, False), make(control, False)
     assert set(model.native.value_embeds) == {'1','3','5','7'}
-    extra = {'three_scalar': 30, 'token_vnorm': 2*c.width*(6*(2*c.depth-1) + 3), 'token_bounded': 0}[mode]
+    one_stream = c.width * (6*(2*c.depth-1) + 3)
+    extra = {'three_scalar': 30, 'token_vnorm': 2*one_stream, 'token_bounded': 0, 'token_h': -one_stream}[mode]
     assert sum(p.numel() for p in model.parameters()) - sum(p.numel() for p in tied.parameters()) == extra
     ids = data.batch('train', 0, 1)[0][:, :32]
     paired_and_causal(model, tied, ids)

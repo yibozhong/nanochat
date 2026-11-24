@@ -14,7 +14,8 @@ ASSETS = HOME / 'nanochat-runtime-assets'
 KEYS = {'chord': 'native-chord-three-scalar-token-bf16-10b-20261123',
         'mhc': 'native-mhc-normal-init-10b-20261123',
         'token_vnorm': 'native-chord-token-controls-vnorm-10b-20261124',
-        'token_bounded': 'native-chord-token-controls-bounded-10b-20261124'}
+        'token_bounded': 'native-chord-token-controls-bounded-10b-20261124',
+        'token_h': 'native-chord-token-h-only-low-lr-10b-20261124'}
 
 
 def run(*args, cwd=REPO):
@@ -56,11 +57,16 @@ def submit(recipe, root):
     if recipe == 'mhc':
         source.update(connection_variant='mhc', streams=4, sinkhorn_iterations=20,
                       residual_projection_init='normal', output_projection_actual_std=.005)
-    elif recipe in ('token_vnorm', 'token_bounded'):
+    elif recipe in ('token_vnorm', 'token_bounded', 'token_h'):
         flags = source['model_args']
         flags[flags.index('--native-chord-write=three_scalar')] = f'--native-chord-write={recipe}'
         source.update(native_chord_write=recipe, velocity_init='token', gate_weight_init=0., extra_parameters=95232)
-        if recipe == 'token_bounded':
+        if recipe == 'token_h':
+            control_lr = 0.000848528137423857
+            flags.append(f'--native-chord-control-lr={control_lr}')
+            source.update(gate_input='current_sublayer_h', native_chord_control_lr=control_lr,
+                          extra_parameters=47616, control_maps=['linear','softplus','softplus','sigmoid','linear','linear'])
+        elif recipe == 'token_bounded':
             source.update(gate_reference='lululu39/NextTransformer@c31127b', gate_input_norm='joint_h_v',
                           gate_joint_rms_eps=1e-6, control_ranges={'mu': [-3, 3], 'alpha': [0, 1],
                                                                  'beta': [0, 1], 'gamma': [0, 2]})

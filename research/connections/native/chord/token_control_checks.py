@@ -24,7 +24,7 @@ def check_vjp(expected, actual, inputs, *, bounded_read=False):
     return lhs, rhs
 
 
-def check_token_controls(*, bounded=False):
+def check_token_controls(*, bounded=False, position_only=False):
     torch.manual_seed(714)
     D = 512
     def rand(*shape):
@@ -35,19 +35,24 @@ def check_token_controls(*, bounded=False):
         v[:, 1:8] *= .0001
         v[:, 8:16] *= .01
         v[:, 16:24] *= 16
-        w = rand(3 if terminal else 6, 2, D) * (.1/D**.5)
+        w = rand(3 if terminal else 6, 1 if position_only else 2, D) * (.1/D**.5)
         mu = rand(1) * .2
         steps = torch.tensor([-2.8, -2.3], device='cuda')
         beta, gains = (None, None) if terminal else (rand(1), rand(2))
         args = (h, v, w, mu, steps, beta, gains)
         leaves = [x.requires_grad_() for x in args if x is not None]
         q, p = TokenRead.apply(*args, bounded)
+        if position_only:
+            dh, dv = torch.autograd.grad(p, (h, v), torch.randn_like(p), retain_graph=True)
+            assert torch.count_nonzero(dv) == 0 and torch.count_nonzero(dh) > 0
         gx, gy = check_vjp(reference_read(*args, bounded), (q, p), leaves, bounded_read=bounded)
         for group in (slice(0, 1), slice(1, 8), slice(8, 16), slice(16, 24), slice(24, None)):
             g, ref = gx[1][:, group].float(), gy[1][:, group].float()
             assert (g-ref).norm() < .02 * ref.norm().clamp_min(1e-6)
         with torch.no_grad():
-            if bounded:
+            if position_only:
+                z = h.float() @ w[0, 0]
+            elif bounded:
                 inv = ((h.float().square() + v.float().square()).mean(-1) / 2 + GATE_EPS).rsqrt()
                 z = (h.float() @ w[0, 0] + v.float() @ w[0, 1]) * inv
             else:
@@ -56,8 +61,17 @@ def check_token_controls(*, bounded=False):
             raw_mu = z + mu
             expected_mu = 3 * (raw_mu / 3).tanh() if bounded else raw_mu
             torch.testing.assert_close(p[..., 0], expected_mu, atol=1e-6, rtol=2e-5)
-            q2, p2 = TokenRead.apply(8*h if bounded else h, 8*v, *args[2:], bounded)
-            torch.testing.assert_close(p[:, 24:], p2[:, 24:], atol=2e-6, rtol=2e-5)
+            changed_v = v.roll(3, 1) if position_only else 8*v
+            q2, p2 = TokenRead.apply(8*h if bounded else h, changed_v, *args[2:], bounded)
+            if position_only:
+                assert torch.equal(p, p2)
+                if not terminal:
+                    _, outside_bounds = TokenRead.apply(h, v, w, mu + 10, steps + 10, beta,
+                                                       gains.new_tensor([-5., 5.]), False)
+                    assert (outside_bounds[..., 0] > 3).all() and (outside_bounds[..., 1:3] > 1).all()
+                    assert (outside_bounds[..., 4] < 0).all() and (outside_bounds[..., 5] > 2).all()
+            else:
+                torch.testing.assert_close(p[:, 24:], p2[:, 24:], atol=2e-6, rtol=2e-5)
             if bounded:
                 q2, _ = TokenRead.apply(h, 8*v, *args[2:], True)
             assert (q[:, 24:].float()-q2[:, 24:].float()).abs().max() > .05

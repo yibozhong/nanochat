@@ -14,7 +14,9 @@ CONTROL_NAMES = ('mu', 'alpha_perp', 'alpha_parallel', 'history', 'parallel_writ
 def reference_read(h, v, weight, mu, steps, beta, gains, bounded=False):
     position = h.to(weight.dtype)
     velocity = v.to(weight.dtype)
-    if bounded:
+    if weight.shape[1] == 1:
+        z = F.linear(position, weight[:, 0])
+    elif bounded:
         joined = torch.cat((position, velocity), dim=-1)
         gate = F.rms_norm(joined, (joined.size(-1),), eps=GATE_EPS)
         z = F.linear(gate, weight.flatten(1))
@@ -67,7 +69,8 @@ class TokenControlledSite(LookaheadResidual):
                 self.mu.fill_(3 * math.atanh(config.lookahead_mu_init / 3))
                 if self.writes is not None:
                     self.writes.fill_(math.log(gain / (2 - gain)))
-        self.token_weight = torch.nn.Parameter(torch.zeros(3 if self.terminal else 6, 2, config.width))
+        inputs = 1 if config.native_chord_write == 'token_h' else 2
+        self.token_weight = torch.nn.Parameter(torch.zeros(3 if self.terminal else 6, inputs, config.width))
         self.eval_control_moments = None
 
     def read(self, h, v):

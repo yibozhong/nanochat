@@ -71,7 +71,9 @@ def main():
     p.add_argument('--velocity-init', choices=('zero','token','token_position'), default=None,
                    help='HBFormer and lookahead default to token plus position velocity. Spherical lookahead also supports token-only or zero initial velocity.')
     p.add_argument('--velocity-embedding-std', type=float, default=.02)
-    p.add_argument('--native-chord-write', choices=('tied','three_scalar','token_vnorm','token_bounded'))
+    p.add_argument('--native-chord-write', choices=('tied','three_scalar','token_vnorm','token_bounded','token_h'))
+    p.add_argument('--native-chord-control-lr', type=float,
+                   help='Absolute peak AdamW LR for Chord controls, excluding the velocity embedding')
     p.add_argument('--chord-query-only-lookahead', action='store_true', help='Read attention Q at the Chord preview and K/V at the current state')
     p.add_argument('--chord-attnres', action='store_true', help='Mix Chord previews with completed block endpoints before each branch')
     p.add_argument('--chord-history-correction', action='store_true',
@@ -170,6 +172,7 @@ def main():
                        attnres_block_size=a.attnres_block_size,
                        attention_kernel=a.attention_kernel,
                        architecture=a.architecture, window_pattern=a.window_pattern, native_chord_write=a.native_chord_write,
+                       native_chord_control_lr=a.native_chord_control_lr,
                        latent_feedback=a.latent_feedback, feedback_eval_passes=a.feedback_eval_passes,
                        residual_dynamics=a.residual_dynamics, velocity_init=a.velocity_init,
                        velocity_embedding_std=a.velocity_embedding_std,

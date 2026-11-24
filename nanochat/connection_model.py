@@ -72,8 +72,13 @@ class ConnectionConfig:
     chord_history_updates: bool = False
     chord_query_only_lookahead: bool = False
     native_chord_write: str | None = None
+    native_chord_control_lr: float | None = None
 
     def __post_init__(self):
+        if self.native_chord_control_lr is not None and (
+                self.native_chord_write is None or not math.isfinite(self.native_chord_control_lr)
+                or self.native_chord_control_lr <= 0):
+            raise ValueError('A native Chord control LR requires native Chord and a positive finite peak LR')
         hbformer = self.residual_mode == 'ngpt_hbformer'
         lookahead = self.residual_mode in ('ngpt_lookahead', 'lookahead_only')
         if self.fixed_first_attention_mu and self.residual_mode != 'ngpt_lookahead':
@@ -173,10 +178,10 @@ class ConnectionConfig:
             raise ValueError('Residual momentum gamma and eta must start positive and finite')
         if self.native_chord_write == 'token_bounded' and abs(self.lookahead_mu_init) >= 3:
             raise ValueError('Bounded Chord lookahead must start strictly between -3 and 3')
-        if self.native_chord_write in ('token_vnorm', 'token_bounded') and not self.fuse_chord_read_norm:
+        if self.native_chord_write in ('token_vnorm', 'token_bounded', 'token_h') and not self.fuse_chord_read_norm:
             raise ValueError('Native token-conditioned Chord uses the fused preview/norm read')
         if self.native_chord_write is not None:
-            if (self.native_chord_write not in ('tied', 'three_scalar', 'token_vnorm', 'token_bounded') or self.architecture != 'native'
+            if (self.native_chord_write not in ('tied', 'three_scalar', 'token_vnorm', 'token_bounded', 'token_h') or self.architecture != 'native'
                     or self.residual_mode != 'ngpt_lookahead' or self.ngpt_velocity_mode != 'lookahead_split_learned_beta'
                     or self.chord_velocity_geometry != 'project_only' or self.velocity_init != 'token'
                     or self.chord_state_dtype != 'bfloat16' or self.streams != 1 or self.recompute_chord_force

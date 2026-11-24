@@ -31,10 +31,13 @@ from nanochat.chord_token_controls import GATE_EPS
 
 
 @triton.jit
-def _project(h, v, W, lane, D: tl.constexpr, k: tl.constexpr):
-    wh = tl.load(W + (2 * k) * D + lane, lane < D, 0.0)
-    wv = tl.load(W + (2 * k + 1) * D + lane, lane < D, 0.0)
-    return tl.sum(h * wh[None, :] + v * wv[None, :], 1)
+def _project(h, v, W, lane, D: tl.constexpr, k: tl.constexpr, INPUTS: tl.constexpr):
+    wh = tl.load(W + (INPUTS * k) * D + lane, lane < D, 0.0)
+    projection = h * wh[None, :]
+    if INPUTS == 2:
+        wv = tl.load(W + (2 * k + 1) * D + lane, lane < D, 0.0)
+        projection += v * wv[None, :]
+    return tl.sum(projection, 1)
 
 
 @triton.jit
@@ -57,6 +60,7 @@ def _parameter_partials(
     BR: tl.constexpr,
     BC: tl.constexpr,
     BOUNDED: tl.constexpr,
+    INPUTS: tl.constexpr,
 ):
     tile = tl.program_id(0)
     stream = tl.program_id(1)
@@ -94,7 +98,7 @@ def _parameter_partials(
         lo = (z - hi.to(tl.float32)).to(tl.bfloat16)
         sums = tl.dot(tl.trans(hi), x, sums)
         sums = tl.dot(tl.trans(lo), x, sums)
-    ptrs = ((split * K + controls[:, None].to(tl.int64)) * 2 + stream) * D + col[
+    ptrs = ((split * K + controls[:, None].to(tl.int64)) * INPUTS + stream) * D + col[
         None, :
     ]
     tl.store(PW + ptrs, sums, (controls[:, None] < K) & (col[None, :] < D))
@@ -116,15 +120,16 @@ def _finish_parameters(
     K: tl.constexpr,
     BS: tl.constexpr,
     BC: tl.constexpr,
+    INPUTS: tl.constexpr,
 ):
     tile = tl.program_id(0)
     stream = tl.program_id(1)
     k = tl.program_id(2)
     col = tile * BC + tl.arange(0, BC)
     split = tl.arange(0, BS)
-    ptrs = ((split[:, None].to(tl.int64) * K + k) * 2 + stream) * D + col[None, :]
+    ptrs = ((split[:, None].to(tl.int64) * K + k) * INPUTS + stream) * D + col[None, :]
     part = tl.load(PW + ptrs, (split[:, None] < SPLITS) & (col[None, :] < D), 0.0)
-    tl.store(DW + (2 * k + stream) * D + col, tl.sum(part, 0), col < D)
+    tl.store(DW + (INPUTS * k + stream) * D + col, tl.sum(part, 0), col < D)
     if tile == 0 and stream == 0:
         val = tl.sum(tl.load(PB + split * K + k, split < SPLITS, 0.0), 0)
         if k == 0:
@@ -156,6 +161,7 @@ def _token_read_forward(
     BD: tl.constexpr,
     EPS: tl.constexpr,
     BOUNDED: tl.constexpr,
+    INPUTS: tl.constexpr,
 ):
     row = tl.program_id(0) * BT + tl.arange(0, BT)
     lane = tl.arange(0, BD)
@@ -163,24 +169,27 @@ def _token_read_forward(
     mask = (row[:, None] < ROWS) & (lane[None, :] < D)
     h = tl.load(H + ix, mask, 0.0).to(tl.float32)
     v = tl.load(V + ix, mask, 0.0).to(tl.float32)
-    if BOUNDED:
+    if INPUTS == 1:
+        scale = 1.0
+        gate_v = v  # unused by the position-only projection
+    elif BOUNDED:
         scale = tl.rsqrt(tl.sum(h * h + v * v, 1) / (2 * D) + EPS)
         gate_v = v
     else:
         scale = 1.0
         gate_v = v * tl.rsqrt(tl.sum(v * v, 1) / D + EPS)[:, None]
-    mu = tl.load(MU) + scale * _project(h, gate_v, W, lane, D, 0)
-    ap = tl.load(STEPS) + scale * _project(h, gate_v, W, lane, D, 1)
-    al = tl.load(STEPS + 1) + scale * _project(h, gate_v, W, lane, D, 2)
+    mu = tl.load(MU) + scale * _project(h, gate_v, W, lane, D, 0, INPUTS)
+    ap = tl.load(STEPS) + scale * _project(h, gate_v, W, lane, D, 1, INPUTS)
+    al = tl.load(STEPS + 1) + scale * _project(h, gate_v, W, lane, D, 2, INPUTS)
     if BOUNDED:
         mu = 3.0 * libdevice.tanh(mu / 3.0)
         ap, al = tl.sigmoid(ap), tl.sigmoid(al)
     else:
         ap, al = _positive(ap), _positive(al)
     if K == 6:
-        beta = tl.sigmoid(tl.load(BETA) + scale * _project(h, gate_v, W, lane, D, 3))
-        gp = tl.load(GAINS) + scale * _project(h, gate_v, W, lane, D, 4)
-        gt = tl.load(GAINS + 1) + scale * _project(h, gate_v, W, lane, D, 5)
+        beta = tl.sigmoid(tl.load(BETA) + scale * _project(h, gate_v, W, lane, D, 3, INPUTS))
+        gp = tl.load(GAINS) + scale * _project(h, gate_v, W, lane, D, 4, INPUTS)
+        gt = tl.load(GAINS + 1) + scale * _project(h, gate_v, W, lane, D, 5, INPUTS)
         if BOUNDED:
             gp, gt = 2.0 * tl.sigmoid(gp), 2.0 * tl.sigmoid(gt)
     else:
@@ -217,6 +226,7 @@ def _token_read_backward(
     BD: tl.constexpr,
     EPS: tl.constexpr,
     BOUNDED: tl.constexpr,
+    INPUTS: tl.constexpr,
 ):
     row = tl.program_id(0) * BT + tl.arange(0, BT)
     lane = tl.arange(0, BD)
@@ -230,9 +240,11 @@ def _token_read_backward(
         tl.store(grad_row + K, gate_inv, row < ROWS)
         grad_gate_h = tl.full((BT, BD), 0.0, tl.float32)
     else:
-        gate_inv = tl.rsqrt(tl.sum(v * v, 1) / D + EPS)
         grad_row = DZ + row.to(tl.int64) * K
-    gate_v = v * gate_inv[:, None]
+        if INPUTS == 2:
+            gate_inv = tl.rsqrt(tl.sum(v * v, 1) / D + EPS)
+    if INPUTS == 2:
+        gate_v = v * gate_inv[:, None]
     offc = row.to(tl.int64) * 6
     mu = tl.load(C + offc, row < ROWS, 0.0)
     off = mu[:, None] * v
@@ -273,22 +285,24 @@ def _token_read_backward(
             gamma = tl.load(C + offc + k, row < ROWS, 0.0)
             g *= gamma * (1.0 - 0.5 * gamma)
         tl.store(grad_row + k, g, row < ROWS)
-        if not BOUNDED:
+        if INPUTS == 2 and not BOUNDED:
             tl.store(grad_row + k + ROWS * K, g * gate_inv, row < ROWS)
-        wh = tl.load(W + 2 * k * D + lane, lane < D, 0.0)
-        wv = tl.load(W + (2 * k + 1) * D + lane, lane < D, 0.0)
+        wh = tl.load(W + INPUTS * k * D + lane, lane < D, 0.0)
         if BOUNDED:
             grad_gate_h += g[:, None] * wh[None, :]
         else:
             dh += g[:, None] * wh[None, :]
-        grad_gate_v += g[:, None] * wv[None, :]
+        if INPUTS == 2:
+            wv = tl.load(W + (2 * k + 1) * D + lane, lane < D, 0.0)
+            grad_gate_v += g[:, None] * wv[None, :]
     if BOUNDED:
         gate_h = h * gate_inv[:, None]
         radial = tl.sum(grad_gate_h * gate_h + grad_gate_v * gate_v, 1) / (2 * D)
         dh += gate_inv[:, None] * (grad_gate_h - radial[:, None] * gate_h)
-    else:
+    elif INPUTS == 2:
         radial = tl.sum(grad_gate_v * gate_v, 1) / D
-    dv += gate_inv[:, None] * (grad_gate_v - radial[:, None] * gate_v)
+    if INPUTS == 2:
+        dv += gate_inv[:, None] * (grad_gate_v - radial[:, None] * gate_v)
     tl.store(DH + ix, dh, mask)
     tl.store(DV + ix, dv, mask)
 
@@ -320,6 +334,7 @@ class TokenRead(torch.autograd.Function):
             triton.next_power_of_2(dim),
             GATE_EPS,
             bounded,
+            weight.shape[1],
             enable_fp_fusion=False,
         )
         ctx.save_for_backward(h, v, weight, controls)
@@ -334,7 +349,8 @@ class TokenRead(torch.autograd.Function):
         count = weight.shape[0]
         rows = h.numel() // dim
         dh, dv = torch.empty_like(h), torch.empty_like(v)
-        dz = weight.new_empty((rows, count + 1) if ctx.bounded else (2, rows, count))
+        inputs = weight.shape[1]
+        dz = weight.new_empty((rows, count + 1) if ctx.bounded else (inputs, rows, count))
         tile = min(4, max(1, 4096 // triton.next_power_of_2(dim)))
         _token_read_backward[(triton.cdiv(rows, tile),)](
             h,
@@ -353,6 +369,7 @@ class TokenRead(torch.autograd.Function):
             triton.next_power_of_2(dim),
             GATE_EPS,
             ctx.bounded,
+            inputs,
             enable_fp_fusion=False,
         )
         dw = torch.empty_like(weight)
@@ -363,12 +380,12 @@ class TokenRead(torch.autograd.Function):
         chunk = 256
         cols = 64
         splits = triton.cdiv(rows, chunk)
-        pw = weight.new_empty((splits, count, 2, dim))
+        pw = weight.new_empty((splits, count, inputs, dim))
         pb = weight.new_empty((splits, count))
-        _parameter_partials[(triton.cdiv(dim, cols), 2, splits)](
-            h, v, dz, pw, pb, rows, dim, count, chunk, 32, cols, ctx.bounded
+        _parameter_partials[(triton.cdiv(dim, cols), inputs, splits)](
+            h, v, dz, pw, pb, rows, dim, count, chunk, 32, cols, ctx.bounded, inputs
         )
-        _finish_parameters[(triton.cdiv(dim, cols), 2, count)](
+        _finish_parameters[(triton.cdiv(dim, cols), inputs, count)](
             pw,
             pb,
             dw,
@@ -381,5 +398,6 @@ class TokenRead(torch.autograd.Function):
             count,
             triton.next_power_of_2(splits),
             cols,
+            inputs,
         )
         return (dh, dv, dw, dm, ds, db, dg, None)[:len(ctx.needs_input_grad)]

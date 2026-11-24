@@ -30,9 +30,12 @@ assert s['run_id'] == sys.argv[1] and s['steps'] == 305176 and s['seed'] == 42
 assert s['architecture'] == 'native' and s['initialization'] == 'fresh'
 if sys.argv[2] == 'mhc':
     assert s['connection_variant'] == 'mhc' and s['streams'] == 4
-elif sys.argv[2] in ('token_vnorm', 'token_bounded'):
+elif sys.argv[2] in ('token_vnorm', 'token_bounded', 'token_h'):
     assert s['native_chord_write'] == sys.argv[2]
-    if sys.argv[2] == 'token_bounded':
+    if sys.argv[2] == 'token_h':
+        assert s['gate_input'] == 'current_sublayer_h'
+        assert f"--native-chord-control-lr={s['native_chord_control_lr']}" in s['model_args']
+    elif sys.argv[2] == 'token_bounded':
         assert s['gate_input_norm'] == 'joint_h_v' and s['gate_joint_rms_eps'] == 1e-6
     else:
         assert s['gate_velocity_rms_eps'] == 1e-6
@@ -64,11 +67,15 @@ training_args=(--schedule-steps 305176 --seed 42 --microbatch 16 --data-dir ../d
 if [[ "$recipe" == mhc ]]; then
     group=native-mhc-normal-init
     WANDB_MODE=disabled timeout --kill-after=30s 2400 python -m research.connections.ngpt.connection_init_preflight "${model_args[@]}" "${training_args[@]}"
-elif [[ "$recipe" == token_vnorm || "$recipe" == token_bounded ]]; then
+elif [[ "$recipe" == token_vnorm || "$recipe" == token_bounded || "$recipe" == token_h ]]; then
     mode="${recipe//_/-}"
     group="native-chord-token-controls-${recipe#token_}"
     if [[ ! -f "results/native-chord-$mode-sm90.json" ]]; then
-        WANDB_MODE=disabled timeout --kill-after=30s 2400 python -m research.connections.native.chord.preflight "--$mode"
+        preflight_args=("--$mode")
+        for arg in "${model_args[@]}"; do
+            if [[ "$arg" == --native-chord-control-lr=* ]]; then preflight_args+=("$arg"); fi
+        done
+        WANDB_MODE=disabled timeout --kill-after=30s 2400 python -m research.connections.native.chord.preflight "${preflight_args[@]}"
     fi
 else
     group=native-chord-three-scalar
