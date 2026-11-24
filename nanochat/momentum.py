@@ -119,6 +119,9 @@ class NormalizedHeavyBall(HeavyBall):
 
 
 def residual_update(config, *, velocity_consumed=True, fixed_unit_mu=False):
+    if config.chord_six_controls == 'small_dynamic':
+        from nanochat.chord_token_controls import TokenControlledSite
+        return TokenControlledSite(config, velocity_consumed=velocity_consumed)
     if config.ngpt_velocity_mode == 'lookahead_token_single':
         from nanochat.chord_single_step import SingleStepSite
         return SingleStepSite(config, velocity_consumed)
@@ -127,7 +130,8 @@ def residual_update(config, *, velocity_consumed=True, fixed_unit_mu=False):
         return AdditiveLookaheadResidual(config)
     if config.residual_mode == 'ngpt_lookahead':
         from nanochat.lookahead import LookaheadResidual
-        return LookaheadResidual(config, velocity_consumed=velocity_consumed, fixed_unit_mu=fixed_unit_mu)
+        return LookaheadResidual(config, velocity_consumed=velocity_consumed, fixed_unit_mu=fixed_unit_mu,
+                                 split_velocity=config.chord_six_controls == 'static')
     return {'heavy_ball': HeavyBall, 'heavy_ball_rms': HeavyBall, 'ngpt_heavy_ball': NormalizedHeavyBall,
             'ngpt_hbformer': NormalizedHeavyBall, 'ngpt': NormalizedResidual}[config.residual_mode](config)
 
@@ -224,7 +228,7 @@ class MomentumModel(ConnectionModel):
         self.compiled_steps = None
         if compile_blocks:
             options = dict(dynamic=False, fullgraph=True, options={'emulate_precision_casts': True})
-            if self.config.ngpt_velocity_mode == 'lookahead_token_single':
+            if self.blocks[0].token_controls:
                 for block in self.blocks:
                     block.compiled_attention = torch.compile(block.attn.forward, **options)
                     block.compiled_mlp = torch.compile(block.mlp.forward, **options)

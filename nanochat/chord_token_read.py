@@ -27,7 +27,7 @@ import triton
 import triton.language as tl
 from triton.language.extra.cuda import libdevice
 
-from nanochat.chord_token_controls import GATE_EPS
+from nanochat.chord_token_controls import GATE_EPS, SMALL_DYNAMIC_SCALE
 
 
 @triton.jit
@@ -162,6 +162,7 @@ def _token_read_forward(
     EPS: tl.constexpr,
     BOUNDED: tl.constexpr,
     INPUTS: tl.constexpr,
+    MODULATION: tl.constexpr,
 ):
     row = tl.program_id(0) * BT + tl.arange(0, BT)
     lane = tl.arange(0, BD)
@@ -170,7 +171,7 @@ def _token_read_forward(
     h = tl.load(H + ix, mask, 0.0).to(tl.float32)
     v = tl.load(V + ix, mask, 0.0).to(tl.float32)
     if INPUTS == 1:
-        scale = 1.0
+        scale = MODULATION * tl.rsqrt(tl.sum(h * h, 1) / D + EPS) if MODULATION != 0. else 1.0
         gate_v = v  # unused by the position-only projection
     elif BOUNDED:
         scale = tl.rsqrt(tl.sum(h * h + v * v, 1) / (2 * D) + EPS)
@@ -227,6 +228,7 @@ def _token_read_backward(
     EPS: tl.constexpr,
     BOUNDED: tl.constexpr,
     INPUTS: tl.constexpr,
+    MODULATION: tl.constexpr,
 ):
     row = tl.program_id(0) * BT + tl.arange(0, BT)
     lane = tl.arange(0, BD)
@@ -234,10 +236,15 @@ def _token_read_backward(
     mask = (row[:, None] < ROWS) & (lane[None, :] < D)
     h = tl.load(H + ix, mask, 0.0).to(tl.float32)
     v = tl.load(V + ix, mask, 0.0).to(tl.float32)
-    if BOUNDED:
-        gate_inv = tl.rsqrt(tl.sum(h * h + v * v, 1) / (2 * D) + EPS)
+    if BOUNDED or MODULATION != 0.:
+        if MODULATION != 0.:
+            gate_inv = tl.rsqrt(tl.sum(h * h, 1) / D + EPS)
+            weight_scale = MODULATION * gate_inv
+        else:
+            gate_inv = tl.rsqrt(tl.sum(h * h + v * v, 1) / (2 * D) + EPS)
+            weight_scale = gate_inv
         grad_row = DZ + row.to(tl.int64) * (K + 1)
-        tl.store(grad_row + K, gate_inv, row < ROWS)
+        tl.store(grad_row + K, weight_scale, row < ROWS)
         grad_gate_h = tl.full((BT, BD), 0.0, tl.float32)
     else:
         grad_row = DZ + row.to(tl.int64) * K
@@ -288,14 +295,18 @@ def _token_read_backward(
         if INPUTS == 2 and not BOUNDED:
             tl.store(grad_row + k + ROWS * K, g * gate_inv, row < ROWS)
         wh = tl.load(W + INPUTS * k * D + lane, lane < D, 0.0)
-        if BOUNDED:
+        if BOUNDED or MODULATION != 0.:
             grad_gate_h += g[:, None] * wh[None, :]
         else:
             dh += g[:, None] * wh[None, :]
         if INPUTS == 2:
             wv = tl.load(W + (2 * k + 1) * D + lane, lane < D, 0.0)
             grad_gate_v += g[:, None] * wv[None, :]
-    if BOUNDED:
+    if MODULATION != 0.:
+        gate_h = h * gate_inv[:, None]
+        radial = tl.sum(grad_gate_h * gate_h, 1) / D
+        dh += weight_scale[:, None] * (grad_gate_h - radial[:, None] * gate_h)
+    elif BOUNDED:
         gate_h = h * gate_inv[:, None]
         radial = tl.sum(grad_gate_h * gate_h + grad_gate_v * gate_v, 1) / (2 * D)
         dh += gate_inv[:, None] * (grad_gate_h - radial[:, None] * gate_h)
@@ -310,13 +321,14 @@ def _token_read_backward(
 class TokenRead(torch.autograd.Function):
     @staticmethod
     @torch.amp.custom_fwd(device_type="cuda")
-    def forward(ctx, h, v, weight, mu, steps, beta, gains, bounded=False):
+    def forward(ctx, h, v, weight, mu, steps, beta, gains, bounded=False, small_dynamic=False):
         h, v = h.contiguous(), v.contiguous()
         dim = h.shape[-1]
         count = weight.shape[0]
         rows = h.numel() // dim
         query = torch.empty_like(h)
         controls = weight.new_empty((*h.shape[:-1], 6))
+        ctx.modulation = SMALL_DYNAMIC_SCALE if small_dynamic else 0.0
         _token_read_forward[(triton.cdiv(rows, 4),)](
             h,
             v,
@@ -335,6 +347,7 @@ class TokenRead(torch.autograd.Function):
             GATE_EPS,
             bounded,
             weight.shape[1],
+            ctx.modulation,
             enable_fp_fusion=False,
         )
         ctx.save_for_backward(h, v, weight, controls)
@@ -350,7 +363,8 @@ class TokenRead(torch.autograd.Function):
         rows = h.numel() // dim
         dh, dv = torch.empty_like(h), torch.empty_like(v)
         inputs = weight.shape[1]
-        dz = weight.new_empty((rows, count + 1) if ctx.bounded else (inputs, rows, count))
+        scaled_weight_gradient = ctx.bounded or bool(ctx.modulation)
+        dz = weight.new_empty((rows, count + 1) if scaled_weight_gradient else (inputs, rows, count))
         tile = min(4, max(1, 4096 // triton.next_power_of_2(dim)))
         _token_read_backward[(triton.cdiv(rows, tile),)](
             h,
@@ -370,6 +384,7 @@ class TokenRead(torch.autograd.Function):
             GATE_EPS,
             ctx.bounded,
             inputs,
+            ctx.modulation,
             enable_fp_fusion=False,
         )
         dw = torch.empty_like(weight)
@@ -383,7 +398,7 @@ class TokenRead(torch.autograd.Function):
         pw = weight.new_empty((splits, count, inputs, dim))
         pb = weight.new_empty((splits, count))
         _parameter_partials[(triton.cdiv(dim, cols), inputs, splits)](
-            h, v, dz, pw, pb, rows, dim, count, chunk, 32, cols, ctx.bounded, inputs
+            h, v, dz, pw, pb, rows, dim, count, chunk, 32, cols, scaled_weight_gradient, inputs
         )
         _finish_parameters[(triton.cdiv(dim, cols), inputs, count)](
             pw,
@@ -400,4 +415,4 @@ class TokenRead(torch.autograd.Function):
             cols,
             inputs,
         )
-        return (dh, dv, dw, dm, ds, db, dg, None)[:len(ctx.needs_input_grad)]
+        return (dh, dv, dw, dm, ds, db, dg, None, None)[:len(ctx.needs_input_grad)]

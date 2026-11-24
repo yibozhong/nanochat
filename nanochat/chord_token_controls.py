@@ -8,21 +8,30 @@ from nanochat.lookahead import LookaheadResidual
 from nanochat.momentum import normalize_residual, tangent_project
 
 GATE_EPS = 1e-6
+SMALL_DYNAMIC_SCALE = 0.01
 CONTROL_NAMES = ('mu', 'alpha_perp', 'alpha_parallel', 'history', 'parallel_write', 'perpendicular_write')
 
 
-def reference_read(h, v, weight, mu, steps, beta, gains, bounded=False):
+def reference_read(h, v, weight, mu, steps, beta, gains, bounded=False, small_dynamic=False):
     position = h.to(weight.dtype)
     velocity = v.to(weight.dtype)
     if weight.shape[1] == 1:
-        z = F.linear(position, weight[:, 0])
+        if small_dynamic:
+            position_gate = F.rms_norm(position, (h.shape[-1],), eps=GATE_EPS)
+            z = SMALL_DYNAMIC_SCALE * F.linear(position_gate, weight[:, 0])
+        else:
+            z = F.linear(position, weight[:, 0])
     elif bounded:
         joined = torch.cat((position, velocity), dim=-1)
         gate = F.rms_norm(joined, (joined.size(-1),), eps=GATE_EPS)
         z = F.linear(gate, weight.flatten(1))
     else:
         gate_v = velocity * (velocity.square().mean(-1, keepdim=True) + GATE_EPS).rsqrt()
-        z = F.linear(position, weight[:, 0]) + F.linear(gate_v, weight[:, 1])
+        if small_dynamic:
+            position_gate = F.rms_norm(position, (h.shape[-1],), eps=GATE_EPS)
+            z = SMALL_DYNAMIC_SCALE * F.linear(position_gate, weight[:, 0])
+        else:
+            z = F.linear(position, weight[:, 0]) + F.linear(gate_v, weight[:, 1])
     m = z[..., :1] + mu
     raw_steps = z[..., 1:3] + steps
     alpha = raw_steps.sigmoid() if bounded else F.softplus(raw_steps)
@@ -69,7 +78,8 @@ class TokenControlledSite(LookaheadResidual):
                 self.mu.fill_(3 * math.atanh(config.lookahead_mu_init / 3))
                 if self.writes is not None:
                     self.writes.fill_(math.log(gain / (2 - gain)))
-        inputs = 1 if config.native_chord_write == 'token_h' else 2
+        self.small_dynamic = config.chord_six_controls == 'small_dynamic'
+        inputs = 1 if self.small_dynamic or config.native_chord_write == 'token_h' else 2
         self.token_weight = torch.nn.Parameter(torch.zeros(3 if self.terminal else 6, inputs, config.width))
         self.eval_control_moments = None
 
@@ -80,7 +90,7 @@ class TokenControlledSite(LookaheadResidual):
             read = TokenRead.apply
         else:
             read = reference_read
-        q, controls = read(h, v, self.token_weight, self.mu, steps, self.raw_beta, self.writes, self.bounded)
+        q, controls = read(h, v, self.token_weight, self.mu, steps, self.raw_beta, self.writes, self.bounded, self.small_dynamic)
         if not self.training and not torch.is_grad_enabled():
             # Keep just the token dispersion and mean of controls from the validation minibatch.
             self.eval_control_moments = torch.std_mean(controls.flatten(0, -2), dim=0, correction=0)

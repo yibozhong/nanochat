@@ -111,6 +111,8 @@ def main():
     p.add_argument('--token-chord-gates', action='store_true', help='Modulate positive split steps by independent per-token cosine gates')
     p.add_argument('--chord-velocity-geometry', choices=('parallel_transport','project_only','ambient'),
                    default='parallel_transport', help='How Chord carries velocity to the next sublayer')
+    p.add_argument('--chord-six-controls', choices=('off', 'static', 'small_dynamic'), default='off',
+                   help='Use independent velocity write gains with static or token-corrected controls')
     p.add_argument('--chord-velocity-write', action='store_true', help='Add a learned scalar rho times the old velocity before Chord retraction')
     p.add_argument('--channel-chord-coefficients', action='store_true', help='Learn both Chord step sizes and velocity decay independently per channel')
     p.add_argument('--token-beta-gate', action='store_true', help='Gate velocity decay by per-token tangent alignment')
@@ -185,7 +187,7 @@ def main():
                        fixed_first_attention_mu=a.fixed_first_attention_mu,
                        lookahead_mu_init=a.lookahead_mu_init, ngpt_alpha_init=a.ngpt_alpha_init, ngpt_weight_norm=a.ngpt_weight_norm,
                        ngpt_velocity_mode=a.ngpt_velocity_mode, signed_chord_steps=a.signed_chord_steps, token_chord_gates=a.token_chord_gates,
-                       chord_velocity_write=a.chord_velocity_write, channel_chord_coefficients=a.channel_chord_coefficients, token_beta_gate=a.token_beta_gate, chord_velocity_geometry=a.chord_velocity_geometry, chord_state_dtype=a.chord_state_dtype,
+                       chord_six_controls=a.chord_six_controls, chord_velocity_write=a.chord_velocity_write, channel_chord_coefficients=a.channel_chord_coefficients, token_beta_gate=a.token_beta_gate, chord_velocity_geometry=a.chord_velocity_geometry, chord_state_dtype=a.chord_state_dtype,
                        fuse_chord_read_norm=a.fuse_chord_read_norm, recompute_chord_force=a.recompute_chord_force,
                        momentum_velocity_rms_floor=a.momentum_velocity_rms_floor,
                        residual_projection_init=a.residual_projection_init,
@@ -317,6 +319,7 @@ def main():
                     ('-history-correction' if c.chord_history_correction else '')+
                     ('-block-chords' if c.chord_history_updates else '')+
                     ('-q-lookahead-kv-current' if c.chord_query_only_lookahead else '')+
+                    (f'-six-{c.chord_six_controls}' if c.chord_six_controls != 'off' else '')+
                     ('-rho-v' if c.chord_velocity_write else '')+
                     ('-channel-alpha-beta' if c.channel_chord_coefficients else '')+
                     (f'-ffn{c.ffn_width}-matched' if c.match_velocity_table_with_ffn else '')+

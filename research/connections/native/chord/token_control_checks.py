@@ -24,13 +24,15 @@ def check_vjp(expected, actual, inputs, *, bounded_read=False):
     return lhs, rhs
 
 
-def check_token_controls(*, bounded=False, position_only=False):
+def check_token_controls(*, bounded=False, position_only=False, small_dynamic=False):
     torch.manual_seed(714)
     D = 512
     def rand(*shape):
         return torch.randn(shape, device='cuda')
     for terminal in (False, True):
         h, v = rand(2, 71, D).bfloat16(), rand(2, 71, D).bfloat16()
+        if small_dynamic:
+            h[:, :8] *= .125
         v[:, 0] = 0
         v[:, 1:8] *= .0001
         v[:, 8:16] *= .01
@@ -41,33 +43,37 @@ def check_token_controls(*, bounded=False, position_only=False):
         beta, gains = (None, None) if terminal else (rand(1), rand(2))
         args = (h, v, w, mu, steps, beta, gains)
         leaves = [x.requires_grad_() for x in args if x is not None]
-        q, p = TokenRead.apply(*args, bounded)
+        q, p = TokenRead.apply(*args, bounded, small_dynamic)
         if position_only:
             dh, dv = torch.autograd.grad(p, (h, v), torch.randn_like(p), retain_graph=True)
             assert torch.count_nonzero(dv) == 0 and torch.count_nonzero(dh) > 0
-        gx, gy = check_vjp(reference_read(*args, bounded), (q, p), leaves, bounded_read=bounded)
+        gx, gy = check_vjp(reference_read(*args, bounded, small_dynamic), (q, p), leaves, bounded_read=bounded or small_dynamic)
         for group in (slice(0, 1), slice(1, 8), slice(8, 16), slice(16, 24), slice(24, None)):
             g, ref = gx[1][:, group].float(), gy[1][:, group].float()
             assert (g-ref).norm() < .02 * ref.norm().clamp_min(1e-6)
         with torch.no_grad():
             if position_only:
                 z = h.float() @ w[0, 0]
+                if small_dynamic:
+                    z *= .01 * (h.float().square().mean(-1) + GATE_EPS).rsqrt()
             elif bounded:
                 inv = ((h.float().square() + v.float().square()).mean(-1) / 2 + GATE_EPS).rsqrt()
                 z = (h.float() @ w[0, 0] + v.float() @ w[0, 1]) * inv
             else:
                 gate_v = torch.nn.functional.rms_norm(v.float(), (D,), eps=GATE_EPS)
-                z = h.float() @ w[0, 0] + gate_v @ w[0, 1]
+                z = h.float() @ w[0, 0]
+                if small_dynamic:
+                    z *= .01 * (h.float().square().mean(-1) + GATE_EPS).rsqrt() + gate_v @ w[0, 1]
             raw_mu = z + mu
             expected_mu = 3 * (raw_mu / 3).tanh() if bounded else raw_mu
             torch.testing.assert_close(p[..., 0], expected_mu, atol=1e-6, rtol=2e-5)
             changed_v = v.roll(3, 1) if position_only else 8*v
-            q2, p2 = TokenRead.apply(8*h if bounded else h, changed_v, *args[2:], bounded)
+            q2, p2 = TokenRead.apply(8*h if bounded else h, changed_v, *args[2:], bounded, small_dynamic)
             if position_only:
                 assert torch.equal(p, p2)
                 if not terminal:
                     _, outside_bounds = TokenRead.apply(h, v, w, mu + 10, steps + 10, beta,
-                                                       gains.new_tensor([-5., 5.]), False)
+                                                       gains.new_tensor([-5., 5.]), False, small_dynamic)
                     assert (outside_bounds[..., 0] > 3).all() and (outside_bounds[..., 1:3] > 1).all()
                     assert (outside_bounds[..., 4] < 0).all() and (outside_bounds[..., 5] > 2).all()
             else:

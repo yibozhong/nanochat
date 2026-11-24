@@ -63,6 +63,15 @@ def model_cost(config, batch=1, activation_bytes=2, feedback_passes=None):
             outputs = 3 * sites - 1
             gain_parameters += d * outputs + sites - 1
             residual += batch*t*(sites*(2*d-1) + outputs*(2*d+1))
+        if c.chord_six_controls != 'off':
+            gain_parameters += 2*(sites - 1)
+            # Independent along/across writes require the old velocity and
+            # displacement projected onto the new tangent space and one dot ratio.
+            residual += batch*t*(sites - 1)*(18*d - 4)
+            if c.chord_six_controls == 'small_dynamic':
+                outputs = 6*sites - 3
+                gain_parameters += outputs*d
+                residual += batch*t*(sites*(2*d - 1) + outputs*(2*d + 2))
         if c.chord_query_only_lookahead:
             residual += batch*t*depth*(3*d-1)  # Additional shared RMSNorm for K/V.
         if c.chord_velocity_write:

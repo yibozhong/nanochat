@@ -26,13 +26,16 @@ trap finish EXIT
 import json, sys
 from pathlib import Path
 s = json.loads(Path('source.json').read_text())
-single = sys.argv[2] == 'vanilla_single'
+vanilla = sys.argv[2] in ('vanilla_single', 'vanilla_small_dynamic')
 assert s['run_id'] == sys.argv[1] and s['schedule_steps'] == 305176 and s['seed'] == 42
-assert s['steps'] in ((0, 5000, 305176) if single else (305176,))
-assert s['architecture'] == ('vanilla' if single else 'native') and s['initialization'] == 'fresh'
-if single:
+assert s['steps'] in ((0, 5000, 305176) if vanilla else (305176,))
+assert s['architecture'] == ('vanilla' if vanilla else 'native') and s['initialization'] == 'fresh'
+if vanilla:
     assert s['attention_backend'] == 'fa2' and s['formal_training'] == bool(s['steps'])
-    assert '--ngpt-velocity-mode=lookahead_token_single' in s['model_args']
+    if sys.argv[2] == 'vanilla_small_dynamic':
+        assert '--chord-six-controls=small_dynamic' in s['model_args'] and s['next_run'] == 'faea35e6'
+    else:
+        assert '--ngpt-velocity-mode=lookahead_token_single' in s['model_args']
 elif sys.argv[2] == 'mhc':
     assert s['connection_variant'] == 'mhc' and s['streams'] == 4
 elif sys.argv[2] in ('token_vnorm', 'token_bounded', 'token_h'):
@@ -61,7 +64,7 @@ PY
 [[ ! -f results/train/summary.json ]] || exit 0
 tar -xf source.tar
 source nanochat-src/research/connections/runtime/packed_worker_env.sh
-if [[ "$recipe" == vanilla_single ]]; then
+if [[ "$recipe" == vanilla_single || "$recipe" == vanilla_small_dynamic ]]; then
     export NANOCHAT_DISABLE_FA3=1
 else
     export HF_HOME="$TASK_ROOT/fa3-cache" NANOCHAT_FA3_REVISION=de87b9b5af06dd9984df595bef90b2eba44b181a
@@ -75,11 +78,18 @@ fi
 mapfile -t model_args < "$TASK_ROOT/model.args"
 training_args=(--schedule-steps 305176 --seed 42 --microbatch 16 --data-dir ../data)
 steps=305176
-if [[ "$recipe" == vanilla_single ]]; then
+if [[ "$recipe" == vanilla_single || "$recipe" == vanilla_small_dynamic ]]; then
     group=vanilla-chord-h-only-single-step
+    report=results/vanilla-single-sm90.json
+    preflight_args=()
+    if [[ "$recipe" == vanilla_small_dynamic ]]; then
+        group=vanilla-chord-h-only-small-dynamic
+        report=results/vanilla-small-dynamic-sm90.json
+        preflight_args=(--small-dynamic)
+    fi
     steps=$(python -c "import json; print(json.load(open('source.json'))['steps'])")
-    if [[ ! -f results/vanilla-single-sm90.json ]]; then
-        WANDB_MODE=disabled timeout --kill-after=30s 2400 python -m research.connections.ngpt.single_step_preflight
+    if [[ ! -f "$report" ]]; then
+        WANDB_MODE=disabled timeout --kill-after=30s 2400 python -m research.connections.ngpt.single_step_preflight "${preflight_args[@]}"
     fi
     if [[ "$steps" == 0 ]]; then exit 0; fi
 elif [[ "$recipe" == mhc ]]; then

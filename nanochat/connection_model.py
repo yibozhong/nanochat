@@ -61,6 +61,7 @@ class ConnectionConfig:
     token_beta_gate: bool = False
     channel_chord_coefficients: bool = False
     chord_velocity_write: bool = False
+    chord_six_controls: str = 'off'
     chord_velocity_geometry: str = 'parallel_transport'
     chord_state_dtype: str | None = None
     fuse_chord_read_norm: bool = False
@@ -117,6 +118,14 @@ class ConnectionConfig:
             raise ValueError('Transported velocity LayerNorm requires the unit-step HBFormer')
         if self.residual_mode == 'lookahead_only' and self.ngpt_velocity_mode != 'ambient':
             raise ValueError('Additive lookahead uses Euclidean velocity')
+        if self.chord_six_controls not in ('off', 'static', 'small_dynamic'):
+            raise ValueError('Unknown six-coefficient Chord setting')
+        if self.chord_six_controls != 'off' and (self.architecture != 'vanilla'
+                or self.ngpt_velocity_mode != 'lookahead_split_learned_beta' or not self.fuse_chord_read_norm
+                or self.chord_velocity_geometry != 'project_only' or self.recompute_chord_force
+                or self.channel_chord_coefficients or self.chord_velocity_write or self.chord_attnres
+                or self.chord_query_only_lookahead or self.fixed_first_attention_mu):
+            raise ValueError('Six-coefficient Chord requires vanilla BF16 scalar project-only updates')
         token_single = self.ngpt_velocity_mode == 'lookahead_token_single'
         if token_single and (self.architecture != 'vanilla' or self.chord_velocity_geometry != 'project_only'
                 or not self.fuse_chord_read_norm or self.recompute_chord_force or self.channel_chord_coefficients
@@ -369,7 +378,7 @@ class ConnectionBlock(Block):
         self.fuse_chord_read_norm = config.fuse_chord_read_norm
         self.recompute_chord_force = config.recompute_chord_force
         self.chord_query_only_lookahead = config.chord_query_only_lookahead
-        self.token_single = config.ngpt_velocity_mode == 'lookahead_token_single'
+        self.token_controls = config.ngpt_velocity_mode == 'lookahead_token_single' or config.chord_six_controls == 'small_dynamic'
         self.compiled_attention = self.compiled_mlp = None
         if config.residual_mode != 'vanilla':
             from nanochat.momentum import residual_update
@@ -403,7 +412,7 @@ class ConnectionBlock(Block):
         return self.mlp(norm(h))
 
     def momentum_forward(self, h, v, cos, sin, kv_cache=None, *, attn_update=None, mlp_update=None):
-        if self.token_single:
+        if self.token_controls:
             q, controls = self.attn_residual.read(h, v)
             attn = self.compiled_attention if kv_cache is None else None
             force = (attn or self.attn)(q, None, (cos, sin), (-1, 0), kv_cache)

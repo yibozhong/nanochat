@@ -1,5 +1,7 @@
 """Same-allocation GPU checks for vanilla h-only, three-control Chord."""
+import argparse
 import gc
+import math
 import statistics
 import time
 from dataclasses import asdict, replace
@@ -15,7 +17,7 @@ from nanochat.connection_model import ConnectionConfig, build_connection_model, 
 from nanochat.engine import KVCache
 from nanochat.packed_training import PackedData, evaluate, json_write, restore_rng, seed_all, snapshot, train_step
 from research.connections.native.chord.preflight import assert_exact_state, connector_group
-from research.connections.native.chord.token_control_checks import check_vjp
+from research.connections.native.chord.token_control_checks import check_token_controls, check_vjp
 
 
 def kernel_checks(c):
@@ -48,18 +50,21 @@ def make(c, compiled):
 @torch.no_grad()
 def initialization_and_cache(c, baseline, data):
     m, b = make(c, False).eval(), make(baseline, False).eval()
+    small_dynamic = c.chord_six_controls == 'small_dynamic'
     for name, p in m.named_parameters():
-        if '_residual.' not in name:
+        if (small_dynamic and not name.endswith('.token_weight')) or '_residual.' not in name:
             assert torch.equal(p, b.get_parameter(name)), name
     ids = data.batch('dev', 0, 1)[0][:, :32].contiguous()
     hidden, control = m.hidden(ids), b.hidden(ids)
     assert (hidden.float()-control.float()).norm() < .003 * control.float().norm()
     for block in m.blocks:
         for site in (block.attn_residual, block.mlp_residual):
-            std, mean = site.eval_moments
-            torch.testing.assert_close(mean, mean.new_tensor([0, .05, .5]))
+            std, mean = site.eval_control_moments if small_dynamic else site.eval_moments
+            expected = [0, .05, .05, .5, .5, .5] if small_dynamic else [0, .05, .5]
+            torch.testing.assert_close(mean, mean.new_tensor(expected))
             assert torch.count_nonzero(std)==0
-            site.weight.normal_(std=.2/c.width**.5)
+            weight = site.token_weight if small_dynamic else site.weight
+            weight.normal_(std=(20 if small_dynamic else .2)/c.width**.5)
     hidden = m.hidden(ids)
     changed = ids.clone()
     changed[:, 16:] = ids[:, 16:].roll(1, 1)
@@ -76,6 +81,9 @@ def benchmark(c, data, verify_resume):
     opt, wd = optimizer_for(model)
     group = connector_group(opt, (p for b in model.blocks for site in (b.attn_residual, b.mlp_residual)
                                   for p in site.parameters()))
+    expected_lr = .008 * (32768 / 2**19)**.5 * (c.width / 768)**-.5
+    assert group['kind'] == 'adamw' and math.isclose(group['initial_lr'], expected_lr)
+    assert group['betas'] == (.8, .96) and group['weight_decay'] == 0
     times = []
     steps = 64
     torch.cuda.reset_peak_memory_stats()
@@ -83,17 +91,26 @@ def benchmark(c, data, verify_resume):
         schedule(opt, step, 305176, wd)
         torch.cuda.synchronize()
         start = time.perf_counter()
-        loss = train_step(model, opt, data, step)
+        try:
+            loss = train_step(model, opt, data, step)
+        except FloatingPointError as error:
+            bad = [name for name, p in model.named_parameters()
+                   if p.grad is not None and not torch.isfinite(p.grad).all()]
+            raise FloatingPointError(f'{c.ngpt_velocity_mode}/{c.chord_six_controls} at step {step}: '
+                                     f'nonfinite gradients in {bad}') from error
         torch.cuda.synchronize()
         times.append(time.perf_counter()-start)
     result = dict(steps=steps, median_step_s=statistics.median(times[16:]),
                   peak_allocated_bytes=torch.cuda.max_memory_allocated(), last_train_ce=loss,
                   control_peak_lr=group['initial_lr'])
     result['dev_ce'], result['dev_tokens'] = evaluate(model, data, max_rows=64)
+    assert math.isfinite(result['dev_ce'])
+    print('64_STEP_MEASUREMENT', c.ngpt_velocity_mode, c.chord_six_controls, result, flush=True)
     if verify_resume:
         for block in model.blocks:
             for site in (block.attn_residual, block.mlp_residual):
-                assert (site.weight.grad.float().norm(dim=-1)>0).all()
+                weight = site.token_weight if c.chord_six_controls == 'small_dynamic' else site.weight
+                assert (weight.grad.flatten(1).norm(dim=1)>0).all()
         with TemporaryDirectory(dir='..') as tmp:
             path = Path(tmp)/'resume.pt'
             torch.save(snapshot(model, opt, steps, config=asdict(c)), path)
@@ -129,25 +146,36 @@ def benchmark(c, data, verify_resume):
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--small-dynamic', action='store_true')
+    small_dynamic = parser.parse_args().small_dynamic
     configure_attention('fa2')
     torch.backends.cuda.matmul.allow_tf32 = False
     c = ConnectionConfig(streams=1, residual_dynamics='ngpt_lookahead', ngpt_velocity_mode='lookahead_token_single',
                          chord_velocity_geometry='project_only', velocity_init='token',
                          fuse_chord_read_norm=True, ngpt_force_rms_floor=1e-6)
     baseline = replace(c, ngpt_velocity_mode='lookahead_split_learned_beta')
+    if small_dynamic:
+        c = replace(baseline, chord_six_controls='small_dynamic')
+        baseline = replace(baseline, chord_six_controls='static')
     data = PackedData('../data')
     seed_all(42)
-    kernel_checks(c)
+    if small_dynamic:
+        check_token_controls(position_only=True, small_dynamic=True)
+    else:
+        kernel_checks(c)
     initialization_and_cache(c, baseline, data)
     result = dict(gpu=torch.cuda.get_device_name(), kernel_vjp=True, cache_and_causal=True)
-    for key, cfg in [('static_chord', baseline), ('token_single', c)]:
+    name = 'small_dynamic' if small_dynamic else 'token_single'
+    for key, cfg in [(name, c), ('static_chord', baseline)]:
         gc.collect()
         torch.cuda.empty_cache()
-        result[key] = benchmark(cfg, data, key=='token_single')
+        result[key] = benchmark(cfg, data, key==name)
         print(key, result[key], flush=True)
-    result['step_time_ratio'] = result['token_single']['median_step_s']/result['static_chord']['median_step_s']
-    assert result['token_single']['control_peak_lr'] == result['static_chord']['control_peak_lr']
-    json_write(Path('results/vanilla-single-sm90.json'), result)
+    result['step_time_ratio'] = result[name]['median_step_s']/result['static_chord']['median_step_s']
+    assert result[name]['control_peak_lr'] == result['static_chord']['control_peak_lr']
+    report = 'vanilla-small-dynamic-sm90.json' if small_dynamic else 'vanilla-single-sm90.json'
+    json_write(Path('results')/report, result)
     print('VANILLA_SINGLE_PREFLIGHT_PASS', result, flush=True)
 
 

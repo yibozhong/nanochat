@@ -283,6 +283,16 @@ class LookaheadModel(MomentumModel):
     @torch.no_grad()
     def residual_metrics(self):
         sites = [site for b in self.blocks for site in (b.attn_residual, b.mlp_residual)]
+        if self.config.chord_six_controls == 'small_dynamic':
+            from nanochat.chord_token_controls import CONTROL_NAMES
+            metrics = {}
+            for i, site in enumerate(sites):
+                if site.eval_control_moments is not None:
+                    std, mean = (x.tolist() for x in site.eval_control_moments)
+                    for j, name in enumerate(CONTROL_NAMES[:site.token_weight.size(0)]):
+                        metrics[f'residual/sublayer_{i}/{name}_token_mean'] = mean[j]
+                        metrics[f'residual/sublayer_{i}/{name}_token_std'] = std[j]
+            return metrics
         if self.config.ngpt_velocity_mode == 'lookahead_token_single':
             metrics = {}
             for i, site in enumerate(sites):

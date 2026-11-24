@@ -238,7 +238,7 @@ def corrected_query(h, v, mu, memory, gain):
 @triton.jit
 def _forward(H, V, F, P, NH, NV, BETA: tl.constexpr, FLOOR2: tl.constexpr,
              D: tl.constexpr, MODE: tl.constexpr, Q, TERMINAL: tl.constexpr,
-             PREVIEW: tl.constexpr, GEOMETRY: tl.constexpr, TOKEN_CONTROLS: tl.constexpr = False):
+             PREVIEW: tl.constexpr, GEOMETRY: tl.constexpr, TOKEN_CONTROLS: tl.constexpr):
     offsets = tl.program_id(0).to(tl.int64) * D + tl.arange(0, D)
     if TOKEN_CONTROLS:
         P += tl.program_id(0).to(tl.int64) * 6 + 1
@@ -264,8 +264,8 @@ def _forward(H, V, F, P, NH, NV, BETA: tl.constexpr, FLOOR2: tl.constexpr,
 @triton.jit
 def _backward(H, V, F, P, DNH, DNV, DH, DV, DF, DP, ROWS, BETA: tl.constexpr,
               FLOOR2: tl.constexpr, D: tl.constexpr, MODE: tl.constexpr, DQ, TERMINAL: tl.constexpr,
-              PREVIEW: tl.constexpr, GEOMETRY: tl.constexpr, ROW_TILE: tl.constexpr = 1,
-              TOKEN_CONTROLS: tl.constexpr = False):
+              PREVIEW: tl.constexpr, GEOMETRY: tl.constexpr, ROW_TILE: tl.constexpr,
+              TOKEN_CONTROLS: tl.constexpr):
     row = tl.program_id(0)
     # Shared controls accumulate one gradient per token for a later reduction.
     # Token controls instead write their own [mu, perp, par, a, b, c] row.
@@ -482,7 +482,7 @@ class _ChordWrite(torch.autograd.Function):
         new_h, new_v = torch.empty_like(h), torch.empty_like(v)
         rows = h.numel() // width
         _forward[(rows,)](h, v, force, params, new_h, new_v, fixed_beta, floor**2,
-                          width, mode, params, False, False, geometry, num_warps=4, enable_fp_fusion=False)
+                          width, mode, params, False, False, geometry, False, num_warps=4, enable_fp_fusion=False)
         ctx.remat = len(projection) == 2
         if ctx.remat:
             features, weight = projection
@@ -512,7 +512,7 @@ class _ChordWrite(torch.autograd.Function):
         shape = (3, tiles, h.size(-1)) if channel_mode else (params.numel(), rows)
         partials = params.new_empty(shape)
         _backward[(tiles,)](h, v, force, params, d_new_h.contiguous(), d_new_v.contiguous(),
-                           dh, dv, df, partials, rows, *ctx.options, params, False, False, ctx.geometry, row_tile,
+                           dh, dv, df, partials, rows, *ctx.options, params, False, False, ctx.geometry, row_tile, False,
                            num_warps=8 if channel_mode else 4, enable_fp_fusion=False)
         grads = (dh, dv, df, partials.sum(1).reshape_as(params), None, None, None, None)
         return grads + ((None, None) if ctx.remat else ())
@@ -543,7 +543,7 @@ class TokenWrite(torch.autograd.Function):
         dc = torch.empty_like(controls)
         _backward[(rows,)](h, v, force, controls, dnh.contiguous(), None if ctx.terminal else dnv.contiguous(),
                            dh, dv, df, dc, rows, 0., ctx.floor2, width, 7, controls, ctx.terminal,
-                           False, 1, TOKEN_CONTROLS=True, num_warps=4, enable_fp_fusion=False)
+                           False, 1, 1, TOKEN_CONTROLS=True, num_warps=4, enable_fp_fusion=False)
         return dh, dv, df, dc, None, None
 
 
@@ -556,7 +556,7 @@ class _SplitBoundary(torch.autograd.Function):
         nv = params if terminal else torch.empty_like(v)
         q = params if terminal else torch.empty_like(h, dtype=torch.bfloat16)
         _forward[(h.numel() // width,)](h, v, force, params, nh, nv, 0., floor**2, width, 3,
-                                        q, terminal, not terminal, geometry, num_warps=4, enable_fp_fusion=False)
+                                        q, terminal, not terminal, geometry, False, num_warps=4, enable_fp_fusion=False)
         ctx.save_for_backward(h, v, force, params)
         ctx.floor2 = floor**2
         ctx.geometry = geometry
@@ -574,7 +574,7 @@ class _SplitBoundary(torch.autograd.Function):
         dnv = params if terminal else grads[1].contiguous()
         dq = params if terminal else grads[2].contiguous()
         _backward[(rows,)](h, v, force, params, dnh, dnv, dh, dv, df, partials, rows,
-                           0., ctx.floor2, width, 3, dq, terminal, not terminal, ctx.geometry,
+                           0., ctx.floor2, width, 3, dq, terminal, not terminal, ctx.geometry, 1, False,
                            num_warps=4, enable_fp_fusion=False)
         return dh, dv, df, partials.sum(1), None, None, None
 
