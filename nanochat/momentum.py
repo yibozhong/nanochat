@@ -119,6 +119,9 @@ class NormalizedHeavyBall(HeavyBall):
 
 
 def residual_update(config, *, velocity_consumed=True, fixed_unit_mu=False):
+    if config.ngpt_velocity_mode == 'lookahead_token_single':
+        from nanochat.chord_single_step import SingleStepSite
+        return SingleStepSite(config, velocity_consumed)
     if config.residual_mode == 'lookahead_only':
         from nanochat.lookahead import AdditiveLookaheadResidual
         return AdditiveLookaheadResidual(config)
@@ -221,7 +224,11 @@ class MomentumModel(ConnectionModel):
         self.compiled_steps = None
         if compile_blocks:
             options = dict(dynamic=False, fullgraph=True, options={'emulate_precision_casts': True})
-            if compile_lookahead_branches:
+            if self.config.ngpt_velocity_mode == 'lookahead_token_single':
+                for block in self.blocks:
+                    block.compiled_attention = torch.compile(block.attn.forward, **options)
+                    block.compiled_mlp = torch.compile(block.mlp.forward, **options)
+            elif compile_lookahead_branches:
                 from nanochat.lookahead import compile_additive_step
                 self.compiled_steps = [compile_additive_step(b, options) for b in self.blocks]
             elif self.config.ngpt_velocity_mode == 'transport_layernorm' or self.config.residual_mode == 'lookahead_only':

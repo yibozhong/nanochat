@@ -13,7 +13,7 @@ finish() {
     status=$?
     trap - EXIT
     if [[ $status != 0 && $status != 85 ]]; then
-        echo "Native $recipe failed ($status), retaining GPU for debugging for 900 seconds" >&2
+        echo "$recipe failed ($status), retaining GPU for debugging for 900 seconds" >&2
         sleep 900
     fi
     for dir in checkpoints results; do
@@ -26,9 +26,14 @@ trap finish EXIT
 import json, sys
 from pathlib import Path
 s = json.loads(Path('source.json').read_text())
-assert s['run_id'] == sys.argv[1] and s['steps'] == 305176 and s['seed'] == 42
-assert s['architecture'] == 'native' and s['initialization'] == 'fresh'
-if sys.argv[2] == 'mhc':
+single = sys.argv[2] == 'vanilla_single'
+assert s['run_id'] == sys.argv[1] and s['schedule_steps'] == 305176 and s['seed'] == 42
+assert s['steps'] in ((0, 5000, 305176) if single else (305176,))
+assert s['architecture'] == ('vanilla' if single else 'native') and s['initialization'] == 'fresh'
+if single:
+    assert s['attention_backend'] == 'fa2' and s['formal_training'] == bool(s['steps'])
+    assert '--ngpt-velocity-mode=lookahead_token_single' in s['model_args']
+elif sys.argv[2] == 'mhc':
     assert s['connection_variant'] == 'mhc' and s['streams'] == 4
 elif sys.argv[2] in ('token_vnorm', 'token_bounded', 'token_h'):
     assert s['native_chord_write'] == sys.argv[2]
@@ -56,16 +61,28 @@ PY
 [[ ! -f results/train/summary.json ]] || exit 0
 tar -xf source.tar
 source nanochat-src/research/connections/runtime/packed_worker_env.sh
-export HF_HOME="$TASK_ROOT/fa3-cache" NANOCHAT_FA3_REVISION=de87b9b5af06dd9984df595bef90b2eba44b181a
-unset NANOCHAT_DISABLE_FA3
-HF_HUB_OFFLINE=0 python - <<'PY'
+if [[ "$recipe" == vanilla_single ]]; then
+    export NANOCHAT_DISABLE_FA3=1
+else
+    export HF_HOME="$TASK_ROOT/fa3-cache" NANOCHAT_FA3_REVISION=de87b9b5af06dd9984df595bef90b2eba44b181a
+    unset NANOCHAT_DISABLE_FA3
+    HF_HUB_OFFLINE=0 python - <<'PY'
 import os
 from kernels import get_kernel
 assert hasattr(get_kernel('varunneal/flash-attention-3', revision=os.environ['NANOCHAT_FA3_REVISION']).flash_attn_interface, 'flash_attn_func')
 PY
+fi
 mapfile -t model_args < "$TASK_ROOT/model.args"
 training_args=(--schedule-steps 305176 --seed 42 --microbatch 16 --data-dir ../data)
-if [[ "$recipe" == mhc ]]; then
+steps=305176
+if [[ "$recipe" == vanilla_single ]]; then
+    group=vanilla-chord-h-only-single-step
+    steps=$(python -c "import json; print(json.load(open('source.json'))['steps'])")
+    if [[ ! -f results/vanilla-single-sm90.json ]]; then
+        WANDB_MODE=disabled timeout --kill-after=30s 2400 python -m research.connections.ngpt.single_step_preflight
+    fi
+    if [[ "$steps" == 0 ]]; then exit 0; fi
+elif [[ "$recipe" == mhc ]]; then
     group=native-mhc-normal-init
     WANDB_MODE=disabled timeout --kill-after=30s 2400 python -m research.connections.ngpt.connection_init_preflight "${model_args[@]}" "${training_args[@]}"
 elif [[ "$recipe" == token_vnorm || "$recipe" == token_bounded || "$recipe" == token_h ]]; then
@@ -82,6 +99,6 @@ else
     fi
 fi
 echo "FORMAL_TRAINING_BEGIN $group $run_id"
-python -m scripts.connection_train "${model_args[@]}" "${training_args[@]}" --steps 305176 \
+python -m scripts.connection_train "${model_args[@]}" "${training_args[@]}" --steps "$steps" \
     --evaluate-test --output-dir results/train --checkpoint-dir ../checkpoints \
     --formal-training --wandb-group "$group" --run-id "$run_id" --resume auto --segment-seconds 1800

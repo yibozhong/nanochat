@@ -1,4 +1,4 @@
-"""Submit one native Chord or matched mHC run on a full Hopper."""
+"""Submit a native Chord/mHC or vanilla single-step Chord experiment on Hopper."""
 import argparse
 import fcntl
 import json
@@ -11,7 +11,8 @@ HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[3]
 HOME = Path.home()
 ASSETS = HOME / 'nanochat-runtime-assets'
-KEYS = {'chord': 'native-chord-three-scalar-token-bf16-10b-20261123',
+KEYS = {'vanilla_single': 'vanilla-chord-h-only-single-step-10b-20261124',
+        'chord': 'native-chord-three-scalar-token-bf16-10b-20261123',
         'mhc': 'native-mhc-normal-init-10b-20261123',
         'token_vnorm': 'native-chord-token-controls-vnorm-10b-20261124',
         'token_bounded': 'native-chord-token-controls-bounded-10b-20261124',
@@ -26,9 +27,9 @@ def save(path, value):
     path.write_text(json.dumps(value, indent=2) + '\n')
 
 
-def submit(recipe, root):
+def submit(recipe, root, steps=305176):
     key = root.name
-    ad_key = 'NativeMhcKey' if recipe == 'mhc' else 'NativeChordKey'
+    ad_key = {'vanilla_single': 'VanillaChordKey', 'mhc': 'NativeMhcKey'}.get(recipe, 'NativeChordKey')
     if (root/'state.json').exists():
         print((root/'state.json').read_text())
         return
@@ -54,7 +55,15 @@ def submit(recipe, root):
         data_uri=data['data_uri'],
         dataset_revision=data['manifest']['dataset_revision'], tokenizer=data['manifest']['tokenizer'],
         runtime='mhc-official-runtime-7546767.tar.gz + frozen uv.lock', checkpoint_seconds=1800)
-    if recipe == 'mhc':
+    if recipe == 'vanilla_single':
+        flags = (HERE.parents[1]/'ngpt/chord.args').read_text().splitlines()
+        flags[flags.index('--ngpt-velocity-mode=lookahead_split_learned_beta')] = '--ngpt-velocity-mode=lookahead_token_single'
+        source.update(architecture='vanilla', model_args=flags, attention_backend='fa2', window_pattern='L',
+                      model_variant='lookahead_token_single', velocity_init='token', residual_projection_init='normal',
+                      gate_reference='lululu39/NextTransformer@98321666f4b56e39447b3ee0d8b59e935c310df4',
+                      steps=steps, training_tokens=steps*32768, formal_training=bool(steps),
+                      control_optimizer_reference='vanilla_chord', reference_run='a7163d23')
+    elif recipe == 'mhc':
         source.update(connection_variant='mhc', streams=4, sinkhorn_iterations=20,
                       residual_projection_init='normal', output_projection_actual_std=.005)
     elif recipe in ('token_vnorm', 'token_bounded', 'token_h'):
@@ -100,7 +109,7 @@ def submit(recipe, root):
     (root/'train.sub').write_text('\n'.join(lines)+'\n')
     run('condor_submit','-dry-run','dry-run.ad','train.sub',cwd=root)
     state = dict(run_id=run_id, source=source, status='intent',
-                 wandb_url=f'https://wandb.ai/yibozhong657-none/nanochat/runs/{run_id}')
+                 wandb_url=f'https://wandb.ai/yibozhong657-none/nanochat/runs/{run_id}' if steps else None)
     save(root/'submission-intent.json', state)
     job = run('condor_submit','-terse','train.sub',cwd=root).split()[0]
     state.update(job=job,status='held_for_audit')
@@ -124,9 +133,17 @@ def submit(recipe, root):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--recipe', choices=KEYS, default='chord')
-    recipe = parser.parse_args().recipe
-    root = HOME / 'nanochat-experiments' / KEYS[recipe]
+    parser.add_argument('--steps', type=int, choices=(0, 5000, 305176), default=305176,
+                        help='Vanilla single-step budget; zero runs only the offline GPU checks')
+    args = parser.parse_args()
+    recipe = args.recipe
+    if recipe != 'vanilla_single' and args.steps != 305176:
+        parser.error('--steps applies only to the vanilla single-step experiment')
+    key = KEYS[recipe]
+    if args.steps != 305176:
+        key = key.replace('10b', '5k' if args.steps else 'debug')
+    root = HOME / 'nanochat-experiments' / key
     root.mkdir(parents=True, exist_ok=True)
     with (root/'submit.lock').open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        submit(recipe, root)
+        submit(recipe, root, args.steps)

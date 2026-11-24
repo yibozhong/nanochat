@@ -58,6 +58,11 @@ def model_cost(config, batch=1, activation_bytes=2, feedback_passes=None):
         if c.ngpt_velocity_mode == 'lookahead_split_learned_beta':
             gain_parameters += sites - 1  # Final FFN velocity does not reach the logits.
             residual += sites - 1  # 1 - beta, shared across tokens; sigmoid excluded.
+        if c.ngpt_velocity_mode == 'lookahead_token_single':
+            # Base lookahead already includes mu/alpha biases; terminal FFN omits beta.
+            outputs = 3 * sites - 1
+            gain_parameters += d * outputs + sites - 1
+            residual += batch*t*(sites*(2*d-1) + outputs*(2*d+1))
         if c.chord_query_only_lookahead:
             residual += batch*t*depth*(3*d-1)  # Additional shared RMSNorm for K/V.
         if c.chord_velocity_write:

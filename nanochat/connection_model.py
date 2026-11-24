@@ -117,7 +117,13 @@ class ConnectionConfig:
             raise ValueError('Transported velocity LayerNorm requires the unit-step HBFormer')
         if self.residual_mode == 'lookahead_only' and self.ngpt_velocity_mode != 'ambient':
             raise ValueError('Additive lookahead uses Euclidean velocity')
-        spherical_lookahead = self.split_chord_write or self.ngpt_velocity_mode in ('lookahead_transport', 'lookahead_axis_write', 'lookahead_geodesic_split')
+        token_single = self.ngpt_velocity_mode == 'lookahead_token_single'
+        if token_single and (self.architecture != 'vanilla' or self.chord_velocity_geometry != 'project_only'
+                or not self.fuse_chord_read_norm or self.recompute_chord_force or self.channel_chord_coefficients
+                or self.chord_attnres or self.chord_query_only_lookahead or self.chord_velocity_write
+                or self.fixed_first_attention_mu):
+            raise ValueError('Single-step token Chord uses vanilla BF16 fused project-only updates')
+        spherical_lookahead = token_single or self.split_chord_write or self.ngpt_velocity_mode in ('lookahead_transport', 'lookahead_axis_write', 'lookahead_geodesic_split')
         if self.signed_chord_steps and not self.split_chord_write:
             raise ValueError('Signed component steps require a split chord write')
         if self.token_chord_gates and (self.ngpt_velocity_mode != 'lookahead_split_learned_beta' or self.signed_chord_steps):
@@ -134,7 +140,7 @@ class ConnectionConfig:
             raise ValueError('BF16 Chord state storage requires spherical lookahead with a chord write')
         if self.chord_velocity_geometry not in ('parallel_transport', 'project_only', 'ambient'):
             raise ValueError('Unknown Chord velocity geometry')
-        if self.chord_velocity_geometry != 'parallel_transport' and (
+        if not token_single and self.chord_velocity_geometry != 'parallel_transport' and (
                 self.ngpt_velocity_mode != 'lookahead_split_learned_beta' or self.signed_chord_steps
                 or self.token_chord_gates or self.token_beta_gate):
             raise ValueError('Velocity geometry ablations require positive split steps and layerwise beta')
@@ -363,6 +369,7 @@ class ConnectionBlock(Block):
         self.fuse_chord_read_norm = config.fuse_chord_read_norm
         self.recompute_chord_force = config.recompute_chord_force
         self.chord_query_only_lookahead = config.chord_query_only_lookahead
+        self.token_single = config.ngpt_velocity_mode == 'lookahead_token_single'
         self.compiled_attention = self.compiled_mlp = None
         if config.residual_mode != 'vanilla':
             from nanochat.momentum import residual_update
@@ -396,6 +403,14 @@ class ConnectionBlock(Block):
         return self.mlp(norm(h))
 
     def momentum_forward(self, h, v, cos, sin, kv_cache=None, *, attn_update=None, mlp_update=None):
+        if self.token_single:
+            q, controls = self.attn_residual.read(h, v)
+            attn = self.compiled_attention if kv_cache is None else None
+            force = (attn or self.attn)(q, None, (cos, sin), (-1, 0), kv_cache)
+            h, v = self.attn_residual.write(h, v, force, controls)
+            q, controls = self.mlp_residual.read(h, v)
+            force = (self.compiled_mlp or self.mlp)(q)
+            return self.mlp_residual.write(h, v, force, controls)
         if self.fuse_chord_read_norm or self.recompute_chord_force or self.chord_query_only_lookahead:
             remat = self.recompute_chord_force and self.training and torch.is_grad_enabled() and kv_cache is None
             q = self.attn_residual.branch_input(h, v, cos.dtype, self.fuse_chord_read_norm)

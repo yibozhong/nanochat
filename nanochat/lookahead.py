@@ -283,6 +283,15 @@ class LookaheadModel(MomentumModel):
     @torch.no_grad()
     def residual_metrics(self):
         sites = [site for b in self.blocks for site in (b.attn_residual, b.mlp_residual)]
+        if self.config.ngpt_velocity_mode == 'lookahead_token_single':
+            metrics = {}
+            for i, site in enumerate(sites):
+                if site.eval_moments is not None:
+                    std, mean = site.eval_moments
+                    for j, name in enumerate(('mu', 'alpha', 'beta')[:site.weight.size(0)]):
+                        metrics[f'residual/sublayer_{i}/{name}_token_mean'] = mean[j].item()
+                        metrics[f'residual/sublayer_{i}/{name}_token_std'] = std[j].item()
+            return metrics
         if self.config.residual_mode == 'lookahead_only':
             mus = torch.stack([site.mu[0] for site in sites]).tolist()
             return {f'residual/sublayer_{i}/mu': value for i, value in enumerate(mus)}
