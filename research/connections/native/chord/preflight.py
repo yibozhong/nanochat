@@ -58,7 +58,13 @@ def paired_and_causal(model, tied, ids):
     tied.eval()
     h = model.hidden(ids)
     baseline_h = tied.hidden(ids)
-    if model.config.native_chord_write == 'token_vnorm':
+    if model.config.native_chord_write == 'token_bounded':
+        for layer in model.chord.layers:
+            for site in (layer.attention, layer.ffn):
+                std, mean = site.eval_control_moments
+                torch.testing.assert_close(mean, mean.new_tensor([0, .05, .05, .5, .5, .5]))
+                assert torch.count_nonzero(std) == 0
+    if model.chord.layers[0].token_controls:
         # The tiled token read and scalar read have different FP32 reduction trees.
         torch.testing.assert_close(h, baseline_h, rtol=.01, atol=.016)
         assert (h.float()-baseline_h.float()).norm() < .002 * baseline_h.float().norm()
@@ -119,7 +125,7 @@ def speed_and_resume(c, data, folder, *, check_resume, steps):
         assert len(active) == 2*c.depth-1
         assert all(s.writes.grad is not None and bool((s.writes.grad != 0).all()) for s in active)
         assert all(s.raw_beta.grad is not None and s.raw_beta.grad.abs().item() > 0 for s in active)
-        if c.native_chord_write == 'token_vnorm':
+        if model.chord.layers[0].token_controls:
             for layer in model.chord.layers:
                 for site in (layer.attention, layer.ffn):
                     grad = site.token_weight.grad
@@ -165,24 +171,28 @@ def speed_and_resume(c, data, folder, *, check_resume, steps):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument('--token-vnorm', action='store_true')
-    token = parser.parse_args().token_vnorm
+    modes = parser.add_mutually_exclusive_group()
+    modes.add_argument('--token-vnorm', dest='mode', action='store_const', const='token_vnorm')
+    modes.add_argument('--token-bounded', dest='mode', action='store_const', const='token_bounded')
+    mode = parser.parse_args().mode or 'three_scalar'
+    token = mode != 'three_scalar'
     configure_attention('fa3')
     seed_all(42)
     if token:
         from research.connections.native.chord.token_control_checks import check_token_controls
-        check_token_controls()
+        check_token_controls(bounded=(mode == 'token_bounded'))
     else:
         kernel_checks()
     c = ConnectionConfig(architecture='native', variant='baseline', streams=1,
-        native_chord_write='token_vnorm' if token else 'three_scalar', residual_dynamics='ngpt_lookahead',
+        native_chord_write=mode, residual_dynamics='ngpt_lookahead',
         ngpt_velocity_mode='lookahead_split_learned_beta', chord_velocity_geometry='project_only',
         velocity_init='token', fuse_chord_read_norm=True, ngpt_force_rms_floor=1e-6)
-    control = replace(c, native_chord_write='three_scalar' if token else 'tied')
+    comparison = {'three_scalar': 'tied', 'token_vnorm': 'three_scalar', 'token_bounded': 'token_vnorm'}
+    control = replace(c, native_chord_write=comparison[mode])
     data = PackedData('../data')
     model, tied = make(c, False), make(control, False)
     assert set(model.native.value_embeds) == {'1','3','5','7'}
-    extra = 2*c.width*(6*(2*c.depth-1) + 3) if token else 30
+    extra = {'three_scalar': 30, 'token_vnorm': 2*c.width*(6*(2*c.depth-1) + 3), 'token_bounded': 0}[mode]
     assert sum(p.numel() for p in model.parameters()) - sum(p.numel() for p in tied.parameters()) == extra
     ids = data.batch('train', 0, 1)[0][:, :32]
     paired_and_causal(model, tied, ids)
@@ -195,7 +205,7 @@ def main():
             print(cfg.native_chord_write, result[cfg.native_chord_write], flush=True)
     result.update(gpu=torch.cuda.get_device_name(), kernel_vjp='passed', restart='exact state and fixed-gradient update, paired next-batch CE',
                   initialization_parity='passed', causal_and_kv='passed', extra_parameters=extra)
-    filename = 'native-chord-token-vnorm-sm90.json' if token else 'native-chord-sm90.json'
+    filename = f"native-chord-{mode.replace('_', '-')}-sm90.json" if token else 'native-chord-sm90.json'
     json_write(Path('results') / filename, result)
     print('NATIVE_CHORD_PREFLIGHT_PASS', result, flush=True)
 

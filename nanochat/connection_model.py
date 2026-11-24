@@ -171,10 +171,12 @@ class ConnectionConfig:
             raise ValueError('Residual momentum beta must start strictly between zero and one')
         if any(not math.isfinite(x) or x <= 0 for x in (self.momentum_gamma_init, self.momentum_eta_init)):
             raise ValueError('Residual momentum gamma and eta must start positive and finite')
-        if self.native_chord_write == 'token_vnorm' and not self.fuse_chord_read_norm:
+        if self.native_chord_write == 'token_bounded' and abs(self.lookahead_mu_init) >= 3:
+            raise ValueError('Bounded Chord lookahead must start strictly between -3 and 3')
+        if self.native_chord_write in ('token_vnorm', 'token_bounded') and not self.fuse_chord_read_norm:
             raise ValueError('Native token-conditioned Chord uses the fused preview/norm read')
         if self.native_chord_write is not None:
-            if (self.native_chord_write not in ('tied', 'three_scalar', 'token_vnorm') or self.architecture != 'native'
+            if (self.native_chord_write not in ('tied', 'three_scalar', 'token_vnorm', 'token_bounded') or self.architecture != 'native'
                     or self.residual_mode != 'ngpt_lookahead' or self.ngpt_velocity_mode != 'lookahead_split_learned_beta'
                     or self.chord_velocity_geometry != 'project_only' or self.velocity_init != 'token'
                     or self.chord_state_dtype != 'bfloat16' or self.streams != 1 or self.recompute_chord_force

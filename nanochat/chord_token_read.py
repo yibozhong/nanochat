@@ -1,4 +1,4 @@
-"""Fused per-token Chord controls, adapted from lululu39/NextTransformer at 753b013.
+"""Fused per-token Chord controls, adapted from NextTransformer (753b013 and c31127b).
 
 MIT License
 
@@ -56,11 +56,16 @@ def _parameter_partials(
     CHUNK: tl.constexpr,
     BR: tl.constexpr,
     BC: tl.constexpr,
+    BOUNDED: tl.constexpr,
 ):
     tile = tl.program_id(0)
     stream = tl.program_id(1)
     split = tl.program_id(2)
-    DZ += stream * ROWS * K
+    if BOUNDED:
+        stride = K + 1
+    else:
+        stride = K
+        DZ += stream * ROWS * K
     col = tile * BC + tl.arange(0, BC)
     controls = tl.arange(0, 16)
     sums = tl.full((16, BC), 0, tl.float32)
@@ -74,17 +79,21 @@ def _parameter_partials(
         else:
             x = tl.load(V + ptrs, valid, 0)
         z = tl.load(
-            DZ + row[:, None].to(tl.int64) * K + controls[None, :],
+            DZ + row[:, None].to(tl.int64) * stride + controls[None, :],
             (row[:, None] < ROWS) & (controls[None, :] < K),
             0.0,
         )
         # Two BF16 limbs retain small FP32 control gradients in tensor-core dot products.
+        if tile == 0 and stream == 0:
+            biases += tl.sum(z, 0)
+        if BOUNDED:
+            # Both weight gradients use the common inverse RMS; the bias does not.
+            inv = tl.load(DZ + row.to(tl.int64) * stride + K, row < ROWS, 0.0)
+            z *= inv[:, None]
         hi = z.to(tl.bfloat16)
         lo = (z - hi.to(tl.float32)).to(tl.bfloat16)
         sums = tl.dot(tl.trans(hi), x, sums)
         sums = tl.dot(tl.trans(lo), x, sums)
-        if tile == 0 and stream == 0:
-            biases += tl.sum(z, 0)
     ptrs = ((split * K + controls[:, None].to(tl.int64)) * 2 + stream) * D + col[
         None, :
     ]
@@ -146,6 +155,7 @@ def _token_read_forward(
     BT: tl.constexpr,
     BD: tl.constexpr,
     EPS: tl.constexpr,
+    BOUNDED: tl.constexpr,
 ):
     row = tl.program_id(0) * BT + tl.arange(0, BT)
     lane = tl.arange(0, BD)
@@ -153,15 +163,26 @@ def _token_read_forward(
     mask = (row[:, None] < ROWS) & (lane[None, :] < D)
     h = tl.load(H + ix, mask, 0.0).to(tl.float32)
     v = tl.load(V + ix, mask, 0.0).to(tl.float32)
-    gate_inv = tl.rsqrt(tl.sum(v * v, 1) / D + EPS)
-    gate_v = v * gate_inv[:, None]
-    mu = tl.load(MU) + _project(h, gate_v, W, lane, D, 0)
-    ap = _positive(tl.load(STEPS) + _project(h, gate_v, W, lane, D, 1))
-    al = _positive(tl.load(STEPS + 1) + _project(h, gate_v, W, lane, D, 2))
+    if BOUNDED:
+        scale = tl.rsqrt(tl.sum(h * h + v * v, 1) / (2 * D) + EPS)
+        gate_v = v
+    else:
+        scale = 1.0
+        gate_v = v * tl.rsqrt(tl.sum(v * v, 1) / D + EPS)[:, None]
+    mu = tl.load(MU) + scale * _project(h, gate_v, W, lane, D, 0)
+    ap = tl.load(STEPS) + scale * _project(h, gate_v, W, lane, D, 1)
+    al = tl.load(STEPS + 1) + scale * _project(h, gate_v, W, lane, D, 2)
+    if BOUNDED:
+        mu = 3.0 * libdevice.tanh(mu / 3.0)
+        ap, al = tl.sigmoid(ap), tl.sigmoid(al)
+    else:
+        ap, al = _positive(ap), _positive(al)
     if K == 6:
-        beta = tl.sigmoid(tl.load(BETA) + _project(h, gate_v, W, lane, D, 3))
-        gp = tl.load(GAINS) + _project(h, gate_v, W, lane, D, 4)
-        gt = tl.load(GAINS + 1) + _project(h, gate_v, W, lane, D, 5)
+        beta = tl.sigmoid(tl.load(BETA) + scale * _project(h, gate_v, W, lane, D, 3))
+        gp = tl.load(GAINS) + scale * _project(h, gate_v, W, lane, D, 4)
+        gt = tl.load(GAINS + 1) + scale * _project(h, gate_v, W, lane, D, 5)
+        if BOUNDED:
+            gp, gt = 2.0 * tl.sigmoid(gp), 2.0 * tl.sigmoid(gt)
     else:
         beta, gp, gt = 0.5, 0.5, 0.5
     dest = C + row.to(tl.int64) * 6
@@ -195,6 +216,7 @@ def _token_read_backward(
     BT: tl.constexpr,
     BD: tl.constexpr,
     EPS: tl.constexpr,
+    BOUNDED: tl.constexpr,
 ):
     row = tl.program_id(0) * BT + tl.arange(0, BT)
     lane = tl.arange(0, BD)
@@ -202,7 +224,14 @@ def _token_read_backward(
     mask = (row[:, None] < ROWS) & (lane[None, :] < D)
     h = tl.load(H + ix, mask, 0.0).to(tl.float32)
     v = tl.load(V + ix, mask, 0.0).to(tl.float32)
-    gate_inv = tl.rsqrt(tl.sum(v * v, 1) / D + EPS)
+    if BOUNDED:
+        gate_inv = tl.rsqrt(tl.sum(h * h + v * v, 1) / (2 * D) + EPS)
+        grad_row = DZ + row.to(tl.int64) * (K + 1)
+        tl.store(grad_row + K, gate_inv, row < ROWS)
+        grad_gate_h = tl.full((BT, BD), 0.0, tl.float32)
+    else:
+        gate_inv = tl.rsqrt(tl.sum(v * v, 1) / D + EPS)
+        grad_row = DZ + row.to(tl.int64) * K
     gate_v = v * gate_inv[:, None]
     offc = row.to(tl.int64) * 6
     mu = tl.load(C + offc, row < ROWS, 0.0)
@@ -229,21 +258,36 @@ def _token_read_backward(
         g = tl.load(DC + offc + k, row < ROWS, 0.0)
         if k == 0:
             g += query_mu_grad
+            if BOUNDED:
+                g *= 1.0 - (mu / 3.0) * (mu / 3.0)
         elif k == 1 or k == 2:
             alpha = tl.load(C + offc + k, row < ROWS, 0.0)
-            g *= -libdevice.expm1(-alpha)
+            if BOUNDED:
+                g *= alpha * (1.0 - alpha)
+            else:
+                g *= -libdevice.expm1(-alpha)
         elif k == 3:
             beta = tl.load(C + offc + 3, row < ROWS, 0.5)
             g *= beta * (1.0 - beta)
-        dst = DZ + row.to(tl.int64) * K + k
-        tl.store(dst, g, row < ROWS)
-        # grad_Wv = (dz * gate_inv).T @ v, reusing the original BF16 velocity.
-        tl.store(dst + ROWS * K, g * gate_inv, row < ROWS)
+        elif BOUNDED:
+            gamma = tl.load(C + offc + k, row < ROWS, 0.0)
+            g *= gamma * (1.0 - 0.5 * gamma)
+        tl.store(grad_row + k, g, row < ROWS)
+        if not BOUNDED:
+            tl.store(grad_row + k + ROWS * K, g * gate_inv, row < ROWS)
         wh = tl.load(W + 2 * k * D + lane, lane < D, 0.0)
         wv = tl.load(W + (2 * k + 1) * D + lane, lane < D, 0.0)
-        dh += g[:, None] * wh[None, :]
+        if BOUNDED:
+            grad_gate_h += g[:, None] * wh[None, :]
+        else:
+            dh += g[:, None] * wh[None, :]
         grad_gate_v += g[:, None] * wv[None, :]
-    radial = tl.sum(grad_gate_v * gate_v, 1) / D
+    if BOUNDED:
+        gate_h = h * gate_inv[:, None]
+        radial = tl.sum(grad_gate_h * gate_h + grad_gate_v * gate_v, 1) / (2 * D)
+        dh += gate_inv[:, None] * (grad_gate_h - radial[:, None] * gate_h)
+    else:
+        radial = tl.sum(grad_gate_v * gate_v, 1) / D
     dv += gate_inv[:, None] * (grad_gate_v - radial[:, None] * gate_v)
     tl.store(DH + ix, dh, mask)
     tl.store(DV + ix, dv, mask)
@@ -252,7 +296,7 @@ def _token_read_backward(
 class TokenRead(torch.autograd.Function):
     @staticmethod
     @torch.amp.custom_fwd(device_type="cuda")
-    def forward(ctx, h, v, weight, mu, steps, beta, gains):
+    def forward(ctx, h, v, weight, mu, steps, beta, gains, bounded=False):
         h, v = h.contiguous(), v.contiguous()
         dim = h.shape[-1]
         count = weight.shape[0]
@@ -275,9 +319,11 @@ class TokenRead(torch.autograd.Function):
             4,
             triton.next_power_of_2(dim),
             GATE_EPS,
+            bounded,
             enable_fp_fusion=False,
         )
         ctx.save_for_backward(h, v, weight, controls)
+        ctx.bounded = bounded
         return query, controls
 
     @staticmethod
@@ -288,7 +334,7 @@ class TokenRead(torch.autograd.Function):
         count = weight.shape[0]
         rows = h.numel() // dim
         dh, dv = torch.empty_like(h), torch.empty_like(v)
-        dz = weight.new_empty((2, rows, count))
+        dz = weight.new_empty((rows, count + 1) if ctx.bounded else (2, rows, count))
         tile = min(4, max(1, 4096 // triton.next_power_of_2(dim)))
         _token_read_backward[(triton.cdiv(rows, tile),)](
             h,
@@ -306,6 +352,7 @@ class TokenRead(torch.autograd.Function):
             tile,
             triton.next_power_of_2(dim),
             GATE_EPS,
+            ctx.bounded,
             enable_fp_fusion=False,
         )
         dw = torch.empty_like(weight)
@@ -319,7 +366,7 @@ class TokenRead(torch.autograd.Function):
         pw = weight.new_empty((splits, count, 2, dim))
         pb = weight.new_empty((splits, count))
         _parameter_partials[(triton.cdiv(dim, cols), 2, splits)](
-            h, v, dz, pw, pb, rows, dim, count, chunk, 32, cols
+            h, v, dz, pw, pb, rows, dim, count, chunk, 32, cols, ctx.bounded
         )
         _finish_parameters[(triton.cdiv(dim, cols), 2, count)](
             pw,
@@ -335,4 +382,4 @@ class TokenRead(torch.autograd.Function):
             triton.next_power_of_2(splits),
             cols,
         )
-        return dh, dv, dw, dm, ds, db, dg
+        return (dh, dv, dw, dm, ds, db, dg, None)[:len(ctx.needs_input_grad)]

@@ -15,7 +15,7 @@ def enter_sphere(mixed, velocity):
 class NativeChordLayer(nn.Module):
     def __init__(self, config, terminal):
         super().__init__()
-        self.token_controls = config.native_chord_write == 'token_vnorm'
+        self.token_controls = config.native_chord_write in ('token_vnorm', 'token_bounded')
         if self.token_controls:
             from nanochat.chord_token_controls import TokenControlledSite
             self.attention = TokenControlledSite(config)
