@@ -71,6 +71,7 @@ class ConnectionConfig:
     chord_history_correction: bool = False
     chord_history_updates: bool = False
     chord_query_only_lookahead: bool = False
+    native_chord_write: str | None = None
 
     def __post_init__(self):
         hbformer = self.residual_mode == 'ngpt_hbformer'
@@ -89,9 +90,9 @@ class ConnectionConfig:
             raise ValueError('Unknown residual output projection initialization')
         if not math.isfinite(self.residual_projection_init_std) or self.residual_projection_init_std <= 0:
             raise ValueError('Residual output projection initialization std must be positive and finite')
-        if self.residual_projection_init != 'zero' and (self.architecture != 'vanilla'
+        if self.residual_projection_init != 'zero' and ((self.architecture == 'native' and self.variant != 'baseline')
                 or self.variant not in ('baseline', 'mhc', 'attnres') or self.latent_feedback):
-            raise ValueError('Random output initialization requires vanilla baseline, mHC, or AttnRes')
+            raise ValueError('Random output initialization requires baseline, vanilla mHC, or vanilla AttnRes')
         if self.residual_dynamics not in ('vanilla', 'heavy_ball', 'heavy_ball_rms', 'ngpt_heavy_ball', 'ngpt_hbformer', 'ngpt', 'ngpt_lookahead', 'lookahead_only'):
             raise ValueError('Unknown residual dynamics')
         if not math.isfinite(self.ngpt_alpha_init) or not 0 < self.ngpt_alpha_init < 1:
@@ -171,7 +172,15 @@ class ConnectionConfig:
             raise ValueError('Residual momentum beta must start strictly between zero and one')
         if any(not math.isfinite(x) or x <= 0 for x in (self.momentum_gamma_init, self.momentum_eta_init)):
             raise ValueError('Residual momentum gamma and eta must start positive and finite')
-        if self.residual_mode != 'vanilla' and (self.architecture != 'vanilla' or self.variant != 'baseline'
+        if self.native_chord_write is not None:
+            if (self.native_chord_write not in ('tied', 'three_scalar') or self.architecture != 'native'
+                    or self.residual_mode != 'ngpt_lookahead' or self.ngpt_velocity_mode != 'lookahead_split_learned_beta'
+                    or self.chord_velocity_geometry != 'project_only' or self.velocity_init != 'token'
+                    or self.chord_state_dtype != 'bfloat16' or self.streams != 1 or self.recompute_chord_force
+                    or self.channel_chord_coefficients or self.chord_velocity_write or self.chord_attnres
+                    or self.chord_query_only_lookahead or self.match_velocity_table_with_ffn or self.fixed_first_attention_mu):
+                raise ValueError('Native Chord uses the scalar BF16 project-only token-velocity configuration')
+        if self.residual_mode != 'vanilla' and ((self.architecture != 'vanilla' and self.native_chord_write is None) or self.variant != 'baseline'
                 or self.latent_feedback or self.attention_kernel != 'original' or self.fused_connection_grad):
             raise ValueError('Residual dynamics require the vanilla baseline and original attention')
         if self.feedback_source not in ('top','layers') or self.feedback_attention_backend not in ('torch','triton'):
@@ -641,6 +650,9 @@ def optimizer_for(model, batch_tokens=32768, *, matrix_optimizer='muon', arc_mu=
 
 
 def build_connection_model(config):
+    if config.architecture == 'native':
+        from nanochat.native_connection_model import NativeConnectionModel
+        return NativeConnectionModel(config)
     if config.chord_attnres:
         from nanochat.chord_attnres import ChordAttnResModel
         return ChordAttnResModel(config)
@@ -662,9 +674,6 @@ def build_connection_model(config):
     if config.variant == 'attnres':
         from nanochat.attention_residuals import AttnResModel
         return AttnResModel(config)
-    if config.architecture == 'native':
-        from nanochat.native_connection_model import NativeConnectionModel
-        return NativeConnectionModel(config)
     return ConnectionModel(config)
 
 

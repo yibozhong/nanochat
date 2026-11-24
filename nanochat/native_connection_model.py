@@ -30,6 +30,10 @@ class NativeConnectionModel(nn.Module):
         # one native initialization. Connector initialization comes last.
         with torch.device('meta'):
             self.native = GPT(native)
+        self.chord = None
+        if config.native_chord_write is not None:
+            from nanochat.native_chord import NativeChord
+            self.chord = NativeChord(config)
 
     def prepare(self, device='cuda', dtype=torch.bfloat16, compile_blocks=False):
         if dtype != COMPUTE_DTYPE:
@@ -40,13 +44,23 @@ class NativeConnectionModel(nn.Module):
                 raise ValueError('NVIDIA connections require BF16 activations')
         self.native.to_empty(device=device)
         self.native.init_weights()
-        if compile_blocks:
+        if self.config.residual_projection_init == 'normal':
+            std = self.config.residual_projection_init_std / math.sqrt(2 * self.config.depth)
+            for block in self.native.transformer.h:
+                nn.init.normal_(block.attn.c_proj.weight, std=std)
+                nn.init.normal_(block.mlp.c_proj.weight, std=std)
+        if self.chord is not None:
+            self.chord.prepare(self.config, self.native, device, dtype, compile_blocks)
+        elif compile_blocks:
             self.native.compile_branches()
         return self
 
     def hidden(self, idx, kv_cache=None):
         self.native.config.activation_checkpoint = self.config.activation_checkpoint
-        return self.native.hidden(idx, kv_cache)
+        return self.native.hidden(idx, kv_cache, chord=self.chord)
+
+    def residual_metrics(self):
+        return self.chord.metrics()
 
     def forward(self, idx, targets=None, dense=False, kv_cache=None):
         h = self.hidden(idx, kv_cache)
@@ -74,6 +88,15 @@ class NativeConnectionModel(nn.Module):
         wd = .28 * scale * (reference_counts['transformer_matrices'] + reference_counts['lm_head']) / scaling_params
         opt = self.native.setup_optimizer(unembedding_lr=.008*scale, embedding_lr=.3*scale,
             matrix_lr=.02*scale, scalar_lr=.5*scale, weight_decay=wd)
+        if self.chord is not None:
+            # Inherit the native token embedding and unembedding LR policies.
+            embeddings = next(g for g in opt.param_groups if any(p is self.native.transformer.wte.weight for p in g['params']))
+            embeddings['params'].append(self.chord.velocity_embedding.weight)
+            head = next(g for g in opt.param_groups if any(p is self.native.lm_head.weight for p in g['params']))
+            opt.add_param_group(dict(head, params=list(self.chord.layers.parameters()), weight_decay=0.))
+            from torch._dynamo import config as compiler_config
+            signatures = {(p.shape, p.dtype) for g in opt.param_groups if g['kind'] == 'adamw' for p in g['params']}
+            compiler_config.recompile_limit = max(compiler_config.recompile_limit, 2 * len(signatures))
         ids = [id(p) for g in opt.param_groups for p in g['params']]
         assert len(ids) == len(set(ids)) and set(ids) == {id(p) for p in self.parameters()}
         return opt, wd

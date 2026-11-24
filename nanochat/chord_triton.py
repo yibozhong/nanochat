@@ -2,7 +2,7 @@
 
 Compile-time modes: 0 isotropic, 1 token alpha gates, 2 token beta gate,
 3 split steps with shared beta, 4 single step with a parallel-axis correction, 5 channel-wise split steps and beta,
-6 scalar split steps and beta with a direct velocity write.
+6 scalar split steps and beta with a direct velocity write, 7 independent tangent velocity coefficients.
 """
 import torch
 import triton
@@ -65,7 +65,7 @@ def _position(h, v, force, P, FLOOR2: tl.constexpr,
     elif MODE == 4:
         along = _mean(delta * v, D) / tl.maximum(_mean(v * v, D), 1e-12)
         mixed = h + tl.load(P) * (delta + (tl.load(P + 1) * along) * v)
-    elif MODE == 2 or MODE == 3 or MODE == 5 or MODE == 6:
+    elif MODE == 2 or MODE == 3 or MODE == 5 or MODE == 6 or MODE == 7:
         if MODE == 5:
             channels = tl.arange(0, D)
             perp, par = tl.load(P + channels), tl.load(P + D + channels)
@@ -85,6 +85,16 @@ def _position(h, v, force, P, FLOOR2: tl.constexpr,
 
 
 @triton.jit
+def _tangent_axis(n, v, chord, D: tl.constexpr):
+    vn, dn = _mean(v * n, D), _mean(chord * n, D)
+    u, d = v - vn * n, chord - dn * n
+    u2 = _mean(u * u, D)
+    den = tl.maximum(u2, 1e-12)
+    along = _mean(u * d, D) / den
+    return u, d, vn, dn, u2, den, along
+
+
+@triton.jit
 def _write_values(h, v, force, P, BETA: tl.constexpr, FLOOR2: tl.constexpr,
                   D: tl.constexpr, MODE: tl.constexpr, GEOMETRY: tl.constexpr):
     new_h, mixed_inv, mixed_sq, target, force_inv, force_sq = _position(h, v, force, P, FLOOR2, D, MODE)
@@ -98,11 +108,18 @@ def _write_values(h, v, force, P, BETA: tl.constexpr, FLOOR2: tl.constexpr,
         beta = tl.sigmoid(tl.load(P + 2) + tl.load(P + 3) * geometry[0])
     elif MODE == 5:
         beta = tl.load(P + 2 * D + tl.arange(0, D))
-    elif MODE == 1 or MODE == 3 or MODE == 6:
+    elif MODE == 1 or MODE == 3 or MODE == 6 or MODE == 7:
         beta = tl.load(P + 2)
     else:
         beta = BETA
-    velocity = beta * carried + (1.0 - beta) * (new_h - h)
+    if MODE == 7:
+        chord = new_h - h
+        along = _tangent_axis(new_h, v, chord, D)[6]
+        b, c = tl.load(P + 3), tl.load(P + 4)
+        # Project once after mixing. P(v) and P(chord) define the axis above.
+        velocity = beta * v + c * chord + ((b - c) * along) * v
+    else:
+        velocity = beta * carried + (1.0 - beta) * (new_h - h)
     radial = _mean(new_h * velocity, D) if GEOMETRY != 2 else 0.
     return (new_h, velocity, radial, bisector, scale, denom, bisector_sq,
             mixed_inv, mixed_sq, target, force_inv, force_sq, carried, beta)
@@ -293,6 +310,24 @@ def _backward(H, V, F, P, DNH, DNV, DH, DV, DF, DP, ROWS, BETA: tl.constexpr,
             d_chord = (1.0 - beta) * d_velocity
             d_new_h = dh_next + (d_chord - radial * upstream - dot * velocity)
         d_carried = beta * d_velocity
+        if MODE == 7:
+            chord = new_h - h
+            u, d, vn, dn, u2, den, along = _tangent_axis(new_h, v, chord, D)
+            b, c = tl.load(P + 3), tl.load(P + 4)
+            du_dot = _mean(d_velocity * v, D)
+            gb = du_dot * along
+            tl.store(DP + 2 * ROWS + row, D * du_dot)
+            tl.store(DP + 3 * ROWS + row, D * gb)
+            tl.store(DP + 4 * ROWS + row, D * (_mean(d_velocity * chord, D) - gb))
+            # Differentiate the moving axis, both tangent projections and the quotient.
+            z = (b - c) * du_dot / den
+            du = z * (d - tl.where(u2 >= 1e-12, 2. * along * u, 0.))
+            dd = z * u
+            un, cn = _mean(du * new_h, D), _mean(dd * new_h, D)
+            d_carried = (beta + (b - c) * along) * d_velocity + du - un * new_h
+            d_chord = c * d_velocity + dd - cn * new_h
+            d_new_h = dh_next + d_chord - radial * upstream - dot * velocity
+            d_new_h -= vn * du + un * v + dn * dd + cn * chord
         if MODE == 2:
             chord = new_h - h
             cosine, recent, chord_radial, h2, r2, inv = _history_alignment(new_h, carried, chord, D)
@@ -359,7 +394,7 @@ def _backward(H, V, F, P, DNH, DNV, DH, DV, DF, DP, ROWS, BETA: tl.constexpr,
         tl.store(DP + stride + tile_offset, tl.sum(tl.where(live, d_mixed * par_dir, 0.), 0))
         tl.store(DP + 2 * stride + tile_offset,
                  tl.sum(tl.where(live, d_velocity * (carried - (new_h - h)), 0.), 0))
-    elif MODE == 2 or MODE == 3 or MODE == 4 or MODE == 6:
+    elif MODE == 2 or MODE == 3 or MODE == 4 or MODE == 6 or MODE == 7:
         perp = tl.load(P)
         if MODE == 4:
             kappa = tl.load(P + 1)
@@ -425,7 +460,7 @@ class _ChordWrite(torch.autograd.Function):
         width = h.size(-1)
         assert h.is_cuda and h.dtype == v.dtype and h.dtype in (torch.bfloat16, torch.float32)
         assert params.dtype == torch.float32
-        assert h.shape == v.shape == force.shape and params.numel() == (1, 5, 4, 3, 2, 3 * width, 4)[mode]
+        assert h.shape == v.shape == force.shape and params.numel() == (1, 5, 4, 3, 2, 3 * width, 4, 5)[mode]
         assert width == triton.next_power_of_2(width) and force.dtype in (torch.bfloat16, torch.float32)
         new_h, new_v = torch.empty_like(h), torch.empty_like(v)
         rows = h.numel() // width
@@ -521,10 +556,13 @@ def fused_write(h, v, force, alpha, beta, floor):
 
 
 def fused_split_write(h, v, force, params, floor, geometry='parallel_transport', projection=()):
-    """Pack both steps and beta, optionally followed by the scalar velocity-write coefficient."""
+    """Pack the position steps and velocity coefficients for this write policy."""
     mode = 5 if params.ndim == 2 else 3
     if params.shape == (4,):
         mode = 6
+    elif params.shape == (5,):
+        assert geometry == 'project_only'
+        mode = 7
     return _ChordWrite.apply(h.contiguous(), v.contiguous(), force.contiguous(), params, 0., floor, mode, _GEOMETRY[geometry], *projection)
 
 

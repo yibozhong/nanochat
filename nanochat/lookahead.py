@@ -18,7 +18,7 @@ def _read(h, v, mu, ambient):
 
 
 class LookaheadResidual(NormalizedResidual):
-    def __init__(self, config, *, velocity_consumed=True, fixed_unit_mu=False):
+    def __init__(self, config, *, velocity_consumed=True, fixed_unit_mu=False, split_velocity=False):
         super().__init__(config)
         if fixed_unit_mu:
             self.register_buffer('mu', torch.ones(1, dtype=torch.float32), persistent=False)
@@ -33,6 +33,8 @@ class LookaheadResidual(NormalizedResidual):
         self.velocity_geometry = config.chord_velocity_geometry
         self.decay = config.momentum_beta_init
         self.gate_slopes = nn.Parameter(torch.zeros(2, dtype=torch.float32)) if config.token_chord_gates else None
+        self.writes = (nn.Parameter(torch.full((2,), 1 - self.decay, dtype=torch.float32))
+                       if split_velocity and velocity_consumed else None)
         self.raw_beta = None
         self.beta_gate_slope = None
         if config.ngpt_velocity_mode == 'lookahead_split_learned_beta' and velocity_consumed:
@@ -93,6 +95,8 @@ class LookaheadResidual(NormalizedResidual):
             params = torch.stack((perp, parallel, beta, self.gate_slopes[0], self.gate_slopes[1]))
             return fused_gated_write(h, v, force, params, self.rms_floor)
         coefficients = (perp, parallel, beta)
+        if self.writes is not None:
+            coefficients += tuple(self.writes.unbind())
         if self.raw_rho is not None:
             coefficients += (self.raw_rho[0].tanh(),)
         return fused_split_write(h, v, force, torch.stack(coefficients), self.rms_floor, self.velocity_geometry, projection)
@@ -147,7 +151,16 @@ class LookaheadResidual(NormalizedResidual):
             inv_recent = recent.square().mean(-1, keepdim=True).clamp_min(1e-12).rsqrt()
             alignment = (carried * recent).mean(-1, keepdim=True) * (inv_history * inv_recent)
             beta = torch.sigmoid(self.raw_beta[0] + self.beta_gate_slope[0] * alignment)
-        velocity = beta * carried + (1 - beta) * chord
+        if self.writes is None:
+            velocity = beta * carried + (1 - beta) * chord
+        else:
+            # Resolve the realized displacement in the endpoint tangent plane.
+            # At rest, the parallel component is zero and the new direction gets c.
+            u = tangent_project(new_h, carried)
+            d = tangent_project(new_h, chord)
+            along = (u * d).mean(-1, keepdim=True) / u.square().mean(-1, keepdim=True).clamp_min(1e-12)
+            b, c = self.writes.unbind()
+            velocity = beta * carried + c * chord + ((b - c) * along) * carried
         if self.velocity_geometry != 'ambient':
             velocity = tangent_project(new_h, velocity)
         return new_h.to(storage_dtype), velocity.to(storage_dtype)

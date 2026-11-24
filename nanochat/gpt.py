@@ -551,7 +551,7 @@ class GPT(nn.Module):
             group["initial_lr"] = group["lr"]
         return optimizer
 
-    def hidden(self, idx, kv_cache=None):
+    def hidden(self, idx, kv_cache=None, *, chord=None):
         B, T = idx.size()
         if self.stream_head is not None:
             from nanochat.nvidia_connections import check_nvidia_device
@@ -598,6 +598,8 @@ class GPT(nn.Module):
             from nanochat.nvidia_connections import expand_streams
             x = expand_streams(x)
         x0 = x  # save initial normalized embedding for x0 residual
+        if chord is not None:
+            velocity = chord.velocity_embedding(idx)
         n_layer = self.config.n_layer
         backout_layer = n_layer // 2  # cache at halfway point
         x_backout = None
@@ -605,11 +607,19 @@ class GPT(nn.Module):
             x = self.resid_lambdas[i] * x + self.x0_lambdas[i] * x0
             ve = self.value_embeds[str(i)](idx).to(x.dtype) if str(i) in self.value_embeds else None
             fn = self.compiled_blocks[i] if self.compiled_blocks is not None else block
+            args = (x, ve, cos_sin, self.window_sizes[i], kv_cache)
+            if chord is not None:
+                fn = chord.layers[i]
+                args = (block, velocity, *args)
             if self.config.activation_checkpoint and self.training and torch.is_grad_enabled():
                 from torch.utils.checkpoint import checkpoint
-                x = checkpoint(fn, x, ve, cos_sin, self.window_sizes[i], None, use_reentrant=False)
+                result = checkpoint(fn, *args, use_reentrant=False)
             else:
-                x = fn(x, ve, cos_sin, self.window_sizes[i], kv_cache)
+                result = fn(*args)
+            if chord is None:
+                x = result
+            else:
+                x, velocity = result
             if i == backout_layer:
                 x_backout = x
         # Subtract mid-layer residual to remove low-level features before logit projection

@@ -71,6 +71,7 @@ def main():
     p.add_argument('--velocity-init', choices=('zero','token','token_position'), default=None,
                    help='HBFormer and lookahead default to token plus position velocity. Spherical lookahead also supports token-only or zero initial velocity.')
     p.add_argument('--velocity-embedding-std', type=float, default=.02)
+    p.add_argument('--native-chord-write', choices=('tied','three_scalar'))
     p.add_argument('--chord-query-only-lookahead', action='store_true', help='Read attention Q at the Chord preview and K/V at the current state')
     p.add_argument('--chord-attnres', action='store_true', help='Mix Chord previews with completed block endpoints before each branch')
     p.add_argument('--chord-history-correction', action='store_true',
@@ -168,7 +169,7 @@ def main():
                        sequence_length=a.sequence_length, compact_routing=a.compact_routing,
                        attnres_block_size=a.attnres_block_size,
                        attention_kernel=a.attention_kernel,
-                       architecture=a.architecture, window_pattern=a.window_pattern,
+                       architecture=a.architecture, window_pattern=a.window_pattern, native_chord_write=a.native_chord_write,
                        latent_feedback=a.latent_feedback, feedback_eval_passes=a.feedback_eval_passes,
                        residual_dynamics=a.residual_dynamics, velocity_init=a.velocity_init,
                        velocity_embedding_std=a.velocity_embedding_std,
@@ -299,6 +300,7 @@ def main():
                 name=f'{a.architecture}-{a.variant}'+('-ngpt' if c.residual_mode == 'ngpt' else
                     f'-{c.residual_mode}-v0-{c.velocity_init}' if c.residual_mode != 'vanilla' else
                     '-layer-feedback' if c.feedback_source=='layers' else '-feedback' if c.latent_feedback else '')+
+                    (f'-{c.native_chord_write}-write' if c.native_chord_write else '')+
                     ('-velocity-ln' if c.ngpt_velocity_mode == 'transport_layernorm' else '')+
                     ('-axis-write' if c.ngpt_velocity_mode == 'lookahead_axis_write' else '')+
                     ('-split-write' if c.split_chord_write else '')+
