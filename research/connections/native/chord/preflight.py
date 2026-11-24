@@ -108,13 +108,28 @@ def assert_exact_state(expected, actual):
             assert left == right
 
 
+def connector_group(optimizer, parameters):
+    ids = {id(p) for p in parameters}
+    group, = [g for g in optimizer.param_groups if any(id(p) in ids for p in g['params'])]
+    assert {id(p) for p in group['params']} == ids
+    return {k: v for k, v in group.items() if k != 'params'}
+
+
 def speed_and_resume(c, data, folder, *, check_resume, steps):
     model = make(c, True)
     opt, wd = optimizer_for(model)
-    if c.native_chord_control_lr is not None:
-        controls = {id(p) for p in model.chord.layers.parameters()}
-        group, = [g for g in opt.param_groups if any(id(p) in controls for p in g['params'])]
-        assert {id(p) for p in group['params']} == controls and group['kind'] == 'adamw'
+    if c.native_chord_write == 'token_h' and c.native_chord_control_lr is None:
+        # Resolve the actual mHC group at the paired model shape, without training a second mHC.
+        mhc = build_connection_model(ConnectionConfig(architecture='native', variant='mhc', streams=4,
+            width=c.width, depth=c.depth, heads=c.heads, vocab_size=c.vocab_size, sequence_length=c.sequence_length))
+        ref_opt, _ = optimizer_for(mhc)
+        group = connector_group(opt, model.chord.layers.parameters())
+        assert group['kind'] == 'adamw' and group == connector_group(ref_opt, mhc.native.connection_parameters())
+        print('NATIVE_MHC_ROUTER_OPTIMIZER_MATCH', group, flush=True)
+        del ref_opt, mhc
+    elif c.native_chord_control_lr is not None:
+        group = connector_group(opt, model.chord.layers.parameters())
+        assert group['kind'] == 'adamw'
         assert group['initial_lr'] == group['lr'] == c.native_chord_control_lr
     times = []
     for step in range(steps):

@@ -15,7 +15,7 @@ KEYS = {'chord': 'native-chord-three-scalar-token-bf16-10b-20261123',
         'mhc': 'native-mhc-normal-init-10b-20261123',
         'token_vnorm': 'native-chord-token-controls-vnorm-10b-20261124',
         'token_bounded': 'native-chord-token-controls-bounded-10b-20261124',
-        'token_h': 'native-chord-token-h-only-low-lr-10b-20261124'}
+        'token_h': 'native-chord-token-h-only-native-lr-10b-20261124'}
 
 
 def run(*args, cwd=REPO):
@@ -62,9 +62,7 @@ def submit(recipe, root):
         flags[flags.index('--native-chord-write=three_scalar')] = f'--native-chord-write={recipe}'
         source.update(native_chord_write=recipe, velocity_init='token', gate_weight_init=0., extra_parameters=95232)
         if recipe == 'token_h':
-            control_lr = 0.000848528137423857
-            flags.append(f'--native-chord-control-lr={control_lr}')
-            source.update(gate_input='current_sublayer_h', native_chord_control_lr=control_lr,
+            source.update(gate_input='current_sublayer_h', control_optimizer_reference='nanochat_native_mhc_router',
                           extra_parameters=47616, control_maps=['linear','softplus','softplus','sigmoid','linear','linear'])
         elif recipe == 'token_bounded':
             source.update(gate_reference='lululu39/NextTransformer@c31127b', gate_input_norm='joint_h_v',
