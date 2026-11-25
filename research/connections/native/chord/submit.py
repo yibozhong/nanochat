@@ -11,7 +11,8 @@ HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[3]
 HOME = Path.home()
 ASSETS = HOME / 'nanochat-runtime-assets'
-KEYS = {'vanilla_small_dynamic': 'vanilla-chord-h-only-small-dynamic-10b-20261124',
+KEYS = {'vanilla_minimal': 'vanilla-chord-minimal-static-10b-20261124',
+        'vanilla_small_dynamic': 'vanilla-chord-h-only-small-dynamic-10b-20261124',
         'vanilla_single': 'vanilla-chord-h-only-single-step-10b-20261124',
         'chord': 'native-chord-three-scalar-token-bf16-10b-20261123',
         'mhc': 'native-mhc-normal-init-10b-20261123',
@@ -30,7 +31,7 @@ def save(path, value):
 
 def submit(recipe, root, steps=305176):
     key = root.name
-    ad_key = {'vanilla_small_dynamic': 'VanillaChordKey', 'vanilla_single': 'VanillaChordKey', 'mhc': 'NativeMhcKey'}.get(recipe, 'NativeChordKey')
+    ad_key = {'vanilla_minimal': 'VanillaChordKey', 'vanilla_small_dynamic': 'VanillaChordKey', 'vanilla_single': 'VanillaChordKey', 'mhc': 'NativeMhcKey'}.get(recipe, 'NativeChordKey')
     if (root/'state.json').exists():
         print((root/'state.json').read_text())
         return
@@ -56,21 +57,26 @@ def submit(recipe, root, steps=305176):
         data_uri=data['data_uri'],
         dataset_revision=data['manifest']['dataset_revision'], tokenizer=data['manifest']['tokenizer'],
         runtime='mhc-official-runtime-7546767.tar.gz + frozen uv.lock', checkpoint_seconds=1800)
-    if recipe in ('vanilla_single', 'vanilla_small_dynamic'):
+    if recipe in ('vanilla_single', 'vanilla_small_dynamic', 'vanilla_minimal'):
         flags = (HERE.parents[1]/'ngpt/chord.args').read_text().splitlines()
-        if recipe == 'vanilla_small_dynamic':
+        if recipe == 'vanilla_minimal':
+            variant = 'lookahead_minimal'
+            flags[flags.index('--ngpt-velocity-mode=lookahead_split_learned_beta')] = '--ngpt-velocity-mode='+variant
+            flags = [flag for flag in flags if not flag.startswith(('--ngpt-alpha-init=', '--ngpt-force-rms-floor='))]
+            source.update(residual_update='normalize(h + raw_branch)', control_parameters=31,
+                          paired_preflight='default static Chord', control_peak_lr=.008*.25*(768/512)**.5)
+        elif recipe == 'vanilla_small_dynamic':
             flags.append('--chord-six-controls=small_dynamic')
-            revision = '0abdf278c64d1ff4ed445fcd6c22b90f4085c52d'
+            source['gate_reference'] = 'lululu39/NextTransformer@0abdf278c64d1ff4ed445fcd6c22b90f4085c52d'
             variant = 'small_dynamic'
             source.update(next_run='faea35e6', gate_input='RMSNorm(h)', modulation=.01,
                           paired_preflight='static six-coefficient Chord', control_peak_lr=.008*.25*(768/512)**.5)
         else:
             flags[flags.index('--ngpt-velocity-mode=lookahead_split_learned_beta')] = '--ngpt-velocity-mode=lookahead_token_single'
-            revision = '98321666f4b56e39447b3ee0d8b59e935c310df4'
+            source['gate_reference'] = 'lululu39/NextTransformer@98321666f4b56e39447b3ee0d8b59e935c310df4'
             variant = 'lookahead_token_single'
         source.update(architecture='vanilla', model_args=flags, attention_backend='fa2', window_pattern='L',
                       model_variant=variant, velocity_init='token', residual_projection_init='normal',
-                      gate_reference='lululu39/NextTransformer@'+revision,
                       steps=steps, training_tokens=steps*32768, formal_training=bool(steps),
                       control_optimizer_reference='vanilla_chord', reference_run='a7163d23')
     elif recipe == 'mhc':
@@ -147,7 +153,7 @@ if __name__ == '__main__':
                         help='Vanilla single-step budget; zero runs only the offline GPU checks')
     args = parser.parse_args()
     recipe = args.recipe
-    if recipe not in ('vanilla_single', 'vanilla_small_dynamic') and args.steps != 305176:
+    if recipe not in ('vanilla_single', 'vanilla_small_dynamic', 'vanilla_minimal') and args.steps != 305176:
         parser.error('--steps applies only to the vanilla single-step experiment')
     key = KEYS[recipe]
     if args.steps != 305176:

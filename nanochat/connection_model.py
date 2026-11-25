@@ -126,13 +126,13 @@ class ConnectionConfig:
                 or self.channel_chord_coefficients or self.chord_velocity_write or self.chord_attnres
                 or self.chord_query_only_lookahead or self.fixed_first_attention_mu):
             raise ValueError('Six-coefficient Chord requires vanilla BF16 scalar project-only updates')
-        token_single = self.ngpt_velocity_mode == 'lookahead_token_single'
-        if token_single and (self.architecture != 'vanilla' or self.chord_velocity_geometry != 'project_only'
+        simple_chord = self.ngpt_velocity_mode in ('lookahead_token_single', 'lookahead_minimal')
+        if simple_chord and (self.architecture != 'vanilla' or self.chord_velocity_geometry != 'project_only'
                 or not self.fuse_chord_read_norm or self.recompute_chord_force or self.channel_chord_coefficients
                 or self.chord_attnres or self.chord_query_only_lookahead or self.chord_velocity_write
                 or self.fixed_first_attention_mu):
-            raise ValueError('Single-step token Chord uses vanilla BF16 fused project-only updates')
-        spherical_lookahead = token_single or self.split_chord_write or self.ngpt_velocity_mode in ('lookahead_transport', 'lookahead_axis_write', 'lookahead_geodesic_split')
+            raise ValueError('This Chord mode uses vanilla BF16 fused project-only updates')
+        spherical_lookahead = simple_chord or self.split_chord_write or self.ngpt_velocity_mode in ('lookahead_transport', 'lookahead_axis_write', 'lookahead_geodesic_split')
         if self.signed_chord_steps and not self.split_chord_write:
             raise ValueError('Signed component steps require a split chord write')
         if self.token_chord_gates and (self.ngpt_velocity_mode != 'lookahead_split_learned_beta' or self.signed_chord_steps):
@@ -149,7 +149,7 @@ class ConnectionConfig:
             raise ValueError('BF16 Chord state storage requires spherical lookahead with a chord write')
         if self.chord_velocity_geometry not in ('parallel_transport', 'project_only', 'ambient'):
             raise ValueError('Unknown Chord velocity geometry')
-        if not token_single and self.chord_velocity_geometry != 'parallel_transport' and (
+        if not simple_chord and self.chord_velocity_geometry != 'parallel_transport' and (
                 self.ngpt_velocity_mode != 'lookahead_split_learned_beta' or self.signed_chord_steps
                 or self.token_chord_gates or self.token_beta_gate):
             raise ValueError('Velocity geometry ablations require positive split steps and layerwise beta')

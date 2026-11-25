@@ -16,6 +16,8 @@ def model_cost(config, batch=1, activation_bytes=2, feedback_passes=None):
         # Coefficient scalar work and sqrt/division are excluded here.
         sites=2*depth
         per_site={'heavy_ball':5*d, 'heavy_ball_rms':8*d-1, 'ngpt_heavy_ball':12*d-2, 'ngpt_hbformer':25*d-6, 'ngpt':9*d-2, 'ngpt_lookahead':29*d-6, 'lookahead_only':7*d}[c.residual_mode]
+        if c.ngpt_velocity_mode == 'lookahead_minimal':
+            per_site = 9*d - 2  # Normalize h+mu*v (5d-1) and h+F (4d-1).
         initial=3*d-1
         if c.ngpt_velocity_mode == 'lookahead_geodesic_split':
             # Leading vector arithmetic per token: read 5d, sphere log ~8d,
@@ -46,6 +48,10 @@ def model_cost(config, batch=1, activation_bytes=2, feedback_passes=None):
         scalars_per_site = {'ngpt':1, 'ngpt_hbformer':2, 'ngpt_lookahead':2, 'lookahead_only':1}.get(c.residual_mode, 3)
         if c.ngpt_velocity_mode == 'lookahead_geodesic_split':
             scalars_per_site += 1
+        if c.ngpt_velocity_mode == 'lookahead_minimal':
+            scalars_per_site = 1  # mu everywhere; beta only where velocity is consumed.
+            gain_parameters += sites - 1
+            residual += (sites - 1)*(batch*t*(8*d-1) + 1)  # chord EMA and tangent projection
         if c.ngpt_velocity_mode == 'lookahead_axis_write' or c.split_chord_write:
             # Two dot products, multiply the projection by its coefficient,
             # then scale v and add. Mean/division scalar work is excluded.

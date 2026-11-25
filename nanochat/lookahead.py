@@ -17,6 +17,37 @@ def _read(h, v, mu, ambient):
     return read * torch.rsqrt(1 + offset.square().mean(-1, keepdim=True))
 
 
+class MinimalChordResidual(nn.Module):
+    """Read once at RMS(h + mu*v), then retract the raw branch output."""
+    def __init__(self, config, velocity_consumed):
+        super().__init__()
+        self.mu = nn.Parameter(torch.tensor([config.lookahead_mu_init], dtype=torch.float32))
+        self.raw_beta = (nn.Parameter(torch.tensor([config.momentum_beta_init], dtype=torch.float32).logit())
+                         if velocity_consumed else None)
+
+    def branch_input(self, h, v, dtype, fuse_norm):
+        if fuse_norm and h.is_cuda and h.dtype == torch.bfloat16 and h.size(-1) in (128, 512):
+            from nanochat.chord_triton import bf16_query
+            # Use the norm of the actual sum, including BF16 tangency roundoff.
+            return bf16_query(h, v, self.mu, ambient=True).to(dtype)
+        return normalize_residual(state_dtype(h) + self.mu * state_dtype(v)).to(dtype)
+
+    def forward(self, h, v, force):
+        position = state_dtype(h)
+        mixed = position + state_dtype(force)
+        rms2 = mixed.square().mean(-1, keepdim=True)
+        # At cancellation the direction is undefined. Keep the previous position.
+        new = torch.where(rms2 >= 1e-12, mixed * rms2.clamp_min(1e-12).rsqrt(), position)
+        if self.raw_beta is None:  # Terminal velocity does not reach the logits.
+            return new.to(h.dtype), None
+        beta = self.raw_beta.sigmoid()
+        velocity = beta * state_dtype(v) + (1 - beta) * (new - position)
+        return new.to(h.dtype), tangent_project(new, velocity).to(v.dtype)
+
+    def projected_write(self, h, v, features, layer, recompute):
+        return self(h, v, layer(features))
+
+
 class LookaheadResidual(NormalizedResidual):
     def __init__(self, config, *, velocity_consumed=True, fixed_unit_mu=False, split_velocity=False):
         super().__init__(config)
@@ -283,6 +314,11 @@ class LookaheadModel(MomentumModel):
     @torch.no_grad()
     def residual_metrics(self):
         sites = [site for b in self.blocks for site in (b.attn_residual, b.mlp_residual)]
+        if self.config.ngpt_velocity_mode == 'lookahead_minimal':
+            mus = torch.cat([site.mu for site in sites]).tolist()
+            betas = torch.cat([site.raw_beta for site in sites if site.raw_beta is not None]).sigmoid().tolist()
+            return {**{f'residual/sublayer_{i}/mu': value for i, value in enumerate(mus)},
+                    **{f'residual/sublayer_{i}/beta': value for i, value in enumerate(betas)}}
         if self.config.chord_six_controls == 'small_dynamic':
             from nanochat.chord_token_controls import CONTROL_NAMES
             metrics = {}

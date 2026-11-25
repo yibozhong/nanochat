@@ -90,7 +90,7 @@ def main():
     p.add_argument('--momentum-gamma-init', type=float, default=None)
     p.add_argument('--momentum-eta-init', type=float, default=None,
                    help='HBFormer fixes eta=1. Other modes learn eta from their configured initial value.')
-    p.add_argument('--ngpt-velocity-mode', choices=('ambient','transport_rms','transport_layernorm','lookahead_transport','lookahead_axis_write','lookahead_split_write','lookahead_split_learned_beta','lookahead_geodesic_split','lookahead_token_single'), default=None,
+    p.add_argument('--ngpt-velocity-mode', choices=('ambient','transport_rms','transport_layernorm','lookahead_transport','lookahead_axis_write','lookahead_split_write','lookahead_split_learned_beta','lookahead_geodesic_split','lookahead_token_single','lookahead_minimal'), default=None,
                    help='New nGPT momentum defaults to transport_rms; old checkpoints require ambient')
     p.add_argument('--momentum-velocity-rms-floor', type=float, default=.1)
     p.add_argument('--ngpt-force-rms-floor', type=float, default=.1)
@@ -309,6 +309,7 @@ def main():
                     ('-velocity-ln' if c.ngpt_velocity_mode == 'transport_layernorm' else '')+
                     ('-axis-write' if c.ngpt_velocity_mode == 'lookahead_axis_write' else '')+
                     ('-split-write' if c.split_chord_write else '')+
+                    ('-minimal-static-raw' if c.ngpt_velocity_mode == 'lookahead_minimal' else '')+
                     ('-token-h-single-step' if c.ngpt_velocity_mode == 'lookahead_token_single' else '')+
                     ('-learned-beta' if c.ngpt_velocity_mode == 'lookahead_split_learned_beta' else '')+
                     ('-signed-steps' if c.signed_chord_steps else '')+

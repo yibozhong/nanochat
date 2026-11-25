@@ -109,8 +109,13 @@ def benchmark(c, data, verify_resume):
     if verify_resume:
         for block in model.blocks:
             for site in (block.attn_residual, block.mlp_residual):
-                weight = site.token_weight if c.chord_six_controls == 'small_dynamic' else site.weight
-                assert (weight.grad.flatten(1).norm(dim=1)>0).all()
+                if c.ngpt_velocity_mode == 'lookahead_minimal':
+                    assert site.mu.grad is not None and site.mu.grad.abs().item() > 0
+                    if site.raw_beta is not None:
+                        assert site.raw_beta.grad is not None and site.raw_beta.grad.abs().item() > 0
+                else:
+                    weight = site.token_weight if c.chord_six_controls == 'small_dynamic' else site.weight
+                    assert (weight.grad.flatten(1).norm(dim=1)>0).all()
         with TemporaryDirectory(dir='..') as tmp:
             path = Path(tmp)/'resume.pt'
             torch.save(snapshot(model, opt, steps, config=asdict(c)), path)

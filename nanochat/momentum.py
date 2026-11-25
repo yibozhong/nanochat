@@ -122,6 +122,9 @@ def residual_update(config, *, velocity_consumed=True, fixed_unit_mu=False):
     if config.chord_six_controls == 'small_dynamic':
         from nanochat.chord_token_controls import TokenControlledSite
         return TokenControlledSite(config, velocity_consumed=velocity_consumed)
+    if config.ngpt_velocity_mode == 'lookahead_minimal':
+        from nanochat.lookahead import MinimalChordResidual
+        return MinimalChordResidual(config, velocity_consumed)
     if config.ngpt_velocity_mode == 'lookahead_token_single':
         from nanochat.chord_single_step import SingleStepSite
         return SingleStepSite(config, velocity_consumed)
