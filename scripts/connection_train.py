@@ -93,6 +93,8 @@ def main():
     p.add_argument('--ngpt-velocity-mode', choices=('ambient','transport_rms','transport_layernorm','lookahead_transport','lookahead_axis_write','lookahead_split_write','lookahead_split_learned_beta','lookahead_geodesic_split','lookahead_token_single','lookahead_minimal'), default=None,
                    help='New nGPT momentum defaults to transport_rms; old checkpoints require ambient')
     p.add_argument('--momentum-velocity-rms-floor', type=float, default=.1)
+    p.add_argument('--chord-update-based', action='store_true',
+                   help='Split the normalized force itself along and across velocity before adding to h')
     p.add_argument('--normalize-minimal-force', action='store_true',
                    help='Use the default Chord lookahead read and RMS-normalize F before the no-alpha addition')
     p.add_argument('--ngpt-force-rms-floor', type=float, default=.1)
@@ -186,6 +188,7 @@ def main():
                        chord_history_correction=a.chord_history_correction, chord_history_updates=a.chord_history_updates,
                        momentum_beta_init=a.momentum_beta_init, momentum_gamma_init=a.momentum_gamma_init,
                        momentum_eta_init=a.momentum_eta_init, ngpt_force_rms_floor=a.ngpt_force_rms_floor,
+                       chord_update_based=a.chord_update_based,
                        normalize_minimal_force=a.normalize_minimal_force, fixed_first_attention_mu=a.fixed_first_attention_mu,
                        lookahead_mu_init=a.lookahead_mu_init, ngpt_alpha_init=a.ngpt_alpha_init, ngpt_weight_norm=a.ngpt_weight_norm,
                        ngpt_velocity_mode=a.ngpt_velocity_mode, signed_chord_steps=a.signed_chord_steps, token_chord_gates=a.token_chord_gates,
@@ -311,6 +314,7 @@ def main():
                     ('-velocity-ln' if c.ngpt_velocity_mode == 'transport_layernorm' else '')+
                     ('-axis-write' if c.ngpt_velocity_mode == 'lookahead_axis_write' else '')+
                     ('-split-write' if c.split_chord_write else '')+
+                    ('-update-based' if c.chord_update_based else '')+
                     ('-norm-force-no-alpha' if c.normalize_minimal_force else
                      '-minimal-static-raw' if c.ngpt_velocity_mode == 'lookahead_minimal' else '')+
                     ('-token-h-single-step' if c.ngpt_velocity_mode == 'lookahead_token_single' else '')+

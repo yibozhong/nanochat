@@ -11,7 +11,8 @@ HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[3]
 HOME = Path.home()
 ASSETS = HOME / 'nanochat-runtime-assets'
-KEYS = {'vanilla_norm_no_alpha': 'vanilla-chord-norm-force-no-alpha-10b-20261124',
+KEYS = {'vanilla_split_update': 'vanilla-chord-split-update-10b-20261125',
+        'vanilla_norm_no_alpha': 'vanilla-chord-norm-force-no-alpha-10b-20261124',
         'vanilla_minimal': 'vanilla-chord-minimal-static-10b-20261124',
         'vanilla_small_dynamic': 'vanilla-chord-h-only-small-dynamic-10b-20261124',
         'vanilla_single': 'vanilla-chord-h-only-single-step-10b-20261124',
@@ -74,6 +75,11 @@ def submit(recipe, root, steps=305176):
                 flags = [flag for flag in flags if not flag.startswith('--ngpt-force-rms-floor=')]
                 source['residual_update'] = 'normalize(h + raw_branch)'
             source.update(control_parameters=31,
+                          paired_preflight='default static Chord', control_peak_lr=.008*.25*(768/512)**.5)
+        elif recipe == 'vanilla_split_update':
+            variant = 'lookahead_split_learned_beta'
+            flags.append('--chord-update-based')
+            source.update(residual_update='split(normalize(force))', control_parameters=63,
                           paired_preflight='default static Chord', control_peak_lr=.008*.25*(768/512)**.5)
         elif recipe == 'vanilla_small_dynamic':
             flags.append('--chord-six-controls=small_dynamic')

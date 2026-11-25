@@ -37,6 +37,9 @@ if vanilla:
         if sys.argv[2] == 'vanilla_norm_no_alpha':
             assert s['residual_projection_init'] == 'normal' and '--residual-projection-init=normal' in s['model_args']
             assert '--normalize-minimal-force' in s['model_args'] and '--ngpt-force-rms-floor=1e-6' in s['model_args']
+    elif sys.argv[2] == 'vanilla_split_update':
+        assert '--chord-update-based' in s['model_args'] and s['control_parameters'] == 63
+        assert '--ngpt-velocity-mode=lookahead_split_learned_beta' in s['model_args']
     elif sys.argv[2] == 'vanilla_small_dynamic':
         assert '--chord-six-controls=small_dynamic' in s['model_args'] and s['next_run'] == 'faea35e6'
     else:
@@ -92,6 +95,10 @@ if [[ "$recipe" == vanilla_* ]]; then
         group=vanilla-chord-h-only-small-dynamic
         report=results/vanilla-small-dynamic-sm90.json
         preflight_args=(--small-dynamic)
+    elif [[ "$recipe" == vanilla_split_update ]]; then
+        group=vanilla-chord-split-update
+        report=results/vanilla-split-update-sm90.json
+        preflight_module=research.connections.ngpt.split_update_preflight
     elif [[ "$recipe" == vanilla_minimal || "$recipe" == vanilla_norm_no_alpha ]]; then
         group=vanilla-chord-minimal-static
         report=results/vanilla-minimal-sm90.json

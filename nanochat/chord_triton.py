@@ -2,7 +2,8 @@
 
 Compile-time modes: 0 isotropic, 1 token alpha gates, 2 token beta gate,
 3 split steps with shared beta, 4 single step with a parallel-axis correction, 5 channel-wise split steps and beta,
-6 scalar split steps and beta with a direct velocity write, 7 independent tangent velocity coefficients.
+6 scalar split steps and beta with a direct velocity write, 7 independent tangent velocity coefficients,
+8 scalar split steps applied directly to the normalized force.
 """
 import torch
 import triton
@@ -57,7 +58,7 @@ def _position(h, v, force, P, FLOOR2: tl.constexpr,
     force_sq = _mean(force * force, D)
     force_inv = tl.rsqrt(tl.maximum(force_sq, FLOOR2))
     target = force * force_inv
-    delta = target - h
+    delta = target if MODE == 8 else target - h
     if MODE == 1:
         split = _split(delta, v, P, D)
         perp, par, along = split[0], split[1], split[2]
@@ -65,7 +66,7 @@ def _position(h, v, force, P, FLOOR2: tl.constexpr,
     elif MODE == 4:
         along = _mean(delta * v, D) / tl.maximum(_mean(v * v, D), 1e-12)
         mixed = h + tl.load(P) * (delta + (tl.load(P + 1) * along) * v)
-    elif MODE == 2 or MODE == 3 or MODE == 5 or MODE == 6 or MODE == 7:
+    elif MODE == 2 or MODE == 3 or MODE == 5 or MODE == 6 or MODE == 7 or MODE == 8:
         if MODE == 5:
             channels = tl.arange(0, D)
             perp, par = tl.load(P + channels), tl.load(P + D + channels)
@@ -108,7 +109,7 @@ def _write_values(h, v, force, P, BETA: tl.constexpr, FLOOR2: tl.constexpr,
         beta = tl.sigmoid(tl.load(P + 2) + tl.load(P + 3) * geometry[0])
     elif MODE == 5:
         beta = tl.load(P + 2 * D + tl.arange(0, D))
-    elif MODE == 1 or MODE == 3 or MODE == 6 or MODE == 7:
+    elif MODE == 1 or MODE == 3 or MODE == 6 or MODE == 7 or MODE == 8:
         beta = tl.load(P + 2)
     else:
         beta = BETA
@@ -370,7 +371,7 @@ def _backward(H, V, F, P, DNH, DNV, DH, DV, DF, DP, ROWS, BETA: tl.constexpr,
 
     dot_h = _mean(d_new_h * new_h, D)
     d_mixed = mixed_inv * (d_new_h - tl.where(mixed_sq >= 1e-12, new_h * dot_h, 0.0))
-    delta = target - h
+    delta = target if MODE == 8 else target - h
     if MODE == 1:
         perp, par, along, cosine, gp, gq, inv_norms, den, v2, delta2 = _split(delta, v, P, D)
         dot_v = _mean(d_mixed * v, D)
@@ -411,7 +412,7 @@ def _backward(H, V, F, P, DNH, DNV, DH, DV, DF, DP, ROWS, BETA: tl.constexpr,
         tl.store(DP + stride + tile_offset, tl.sum(tl.where(live, d_mixed * par_dir, 0.), 0))
         tl.store(DP + 2 * stride + tile_offset,
                  tl.sum(tl.where(live, d_velocity * (carried - (new_h - h)), 0.), 0))
-    elif MODE == 2 or MODE == 3 or MODE == 4 or MODE == 6 or MODE == 7:
+    elif MODE == 2 or MODE == 3 or MODE == 4 or MODE == 6 or MODE == 7 or MODE == 8:
         perp = tl.load(P)
         if MODE == 4:
             kappa = tl.load(P + 1)
@@ -429,7 +430,8 @@ def _backward(H, V, F, P, DNH, DNV, DH, DV, DF, DP, ROWS, BETA: tl.constexpr,
             v_weight += tl.load(P + 3)
             tl.store(DP + 3 * ROWS + row, D * dot_v)
         d_v += v_weight * d_mixed + d_dot * (delta - tl.where(v2 >= 1e-12, 2. * along * v, 0.))
-        d_h += d_mixed - d_delta
+        # Only a target displacement has a direct -h path through delta.
+        d_h += d_mixed if MODE == 8 else d_mixed - d_delta
         # Contract the normalization Jacobian with the step directions first.
         # For a radial write its angular derivative vanishes; projecting the
         # upstream adjoint first would sum large cancelling terms at zero chord.
@@ -445,7 +447,7 @@ def _backward(H, V, F, P, DNH, DNV, DH, DV, DF, DP, ROWS, BETA: tl.constexpr,
         axis_dir -= tl.where(if_unclamped, _mean(axis_dir * new_h, D) * new_h, 0.)
         tl.store(dp_row, mixed_inv * tl.sum(d_new_h * base_dir, 0))
         tl.store(dp_row + dp_stride, mixed_inv * tl.sum(d_new_h * axis_dir, 0))
-        if (MODE == 3 or MODE == 6) and not TERMINAL:
+        if (MODE == 3 or MODE == 6 or MODE == 8) and not TERMINAL:
             tl.store(DP + 2 * ROWS + row, tl.sum(d_velocity * (carried - (new_h - h)), 0))
     else:
         alpha = tl.load(P)
@@ -477,7 +479,7 @@ class _ChordWrite(torch.autograd.Function):
         width = h.size(-1)
         assert h.is_cuda and h.dtype == v.dtype and h.dtype in (torch.bfloat16, torch.float32)
         assert params.dtype == torch.float32
-        assert h.shape == v.shape == force.shape and params.numel() == (1, 5, 4, 3, 2, 3 * width, 4, 5)[mode]
+        assert h.shape == v.shape == force.shape and params.numel() == (1, 5, 4, 3, 2, 3 * width, 4, 5, 3)[mode]
         assert width == triton.next_power_of_2(width) and force.dtype in (torch.bfloat16, torch.float32)
         new_h, new_v = torch.empty_like(h), torch.empty_like(v)
         rows = h.numel() // width
@@ -580,6 +582,8 @@ class _SplitBoundary(torch.autograd.Function):
 
 
 def split_boundary(site, h, v, force, next_mu):
+    if site.update_based:
+        raise ValueError('Update-based writes use fused_split_write')
     params = [site.alpha(), site.step_size(site.raw_parallel)]
     if next_mu is not None:
         params.extend((site.beta(), next_mu[0]))
@@ -601,10 +605,13 @@ def fused_write(h, v, force, alpha, beta, floor):
     return _ChordWrite.apply(h.contiguous(), v.contiguous(), force.contiguous(), alpha, beta, floor, 0, 0)
 
 
-def fused_split_write(h, v, force, params, floor, geometry='parallel_transport', projection=()):
+def fused_split_write(h, v, force, params, floor, geometry='parallel_transport', projection=(), *, update_based=False):
     """Pack the position steps and velocity coefficients for this write policy."""
     mode = 5 if params.ndim == 2 else 3
-    if params.shape == (4,):
+    if update_based:
+        assert params.shape == (3,)
+        mode = 8
+    elif params.shape == (4,):
         mode = 6
     elif params.shape == (5,):
         assert geometry == 'project_only'

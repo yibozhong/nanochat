@@ -109,7 +109,10 @@ def benchmark(c, data, verify_resume):
     if verify_resume:
         for block in model.blocks:
             for site in (block.attn_residual, block.mlp_residual):
-                if c.ngpt_velocity_mode == 'lookahead_minimal':
+                if c.chord_update_based:
+                    for param in site.parameters():
+                        assert param.grad is not None and torch.isfinite(param.grad).all()
+                elif c.ngpt_velocity_mode == 'lookahead_minimal':
                     assert site.mu.grad is not None and site.mu.grad.abs().item() > 0
                     if site.raw_beta is not None:
                         assert site.raw_beta.grad is not None and site.raw_beta.grad.abs().item() > 0

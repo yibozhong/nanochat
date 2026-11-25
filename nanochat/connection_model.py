@@ -75,6 +75,7 @@ class ConnectionConfig:
     chord_query_only_lookahead: bool = False
     native_chord_write: str | None = None
     native_chord_control_lr: float | None = None
+    chord_update_based: bool = False
 
     def __post_init__(self):
         if self.native_chord_control_lr is not None and (
@@ -127,6 +128,11 @@ class ConnectionConfig:
                 or self.channel_chord_coefficients or self.chord_velocity_write or self.chord_attnres
                 or self.chord_query_only_lookahead or self.fixed_first_attention_mu):
             raise ValueError('Six-coefficient Chord requires vanilla BF16 scalar project-only updates')
+        if self.chord_update_based and (
+                self.architecture != 'vanilla' or self.ngpt_velocity_mode != 'lookahead_split_learned_beta'
+                or self.chord_six_controls != 'off' or self.channel_chord_coefficients
+                or self.token_chord_gates or self.token_beta_gate or self.chord_velocity_write):
+            raise ValueError('Update-based Chord requires vanilla split steps and scalar velocity retention')
         if self.normalize_minimal_force and self.ngpt_velocity_mode != 'lookahead_minimal':
             raise ValueError('Normalized no-alpha writes require minimal Chord')
         simple_chord = self.ngpt_velocity_mode in ('lookahead_token_single', 'lookahead_minimal')

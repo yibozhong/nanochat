@@ -81,6 +81,7 @@ class LookaheadResidual(_ChordLookaheadRead, NormalizedResidual):
             self.register_buffer('mu', torch.ones(1, dtype=torch.float32), persistent=False)
         else:
             self.mu = nn.Parameter(torch.tensor([config.lookahead_mu_init], dtype=torch.float32))
+        self.update_based = config.chord_update_based
         self.kappa = (nn.Parameter(torch.zeros(1, dtype=torch.float32))
                       if config.ngpt_velocity_mode == 'lookahead_axis_write' else None)
         self.raw_rho = nn.Parameter(torch.zeros(1, dtype=torch.float32)) if config.chord_velocity_write else None
@@ -139,7 +140,8 @@ class LookaheadResidual(_ChordLookaheadRead, NormalizedResidual):
             coefficients += tuple(self.writes.unbind())
         if self.raw_rho is not None:
             coefficients += (self.raw_rho[0].tanh(),)
-        return fused_split_write(h, v, force, torch.stack(coefficients), self.rms_floor, self.velocity_geometry, projection)
+        return fused_split_write(h, v, force, torch.stack(coefficients), self.rms_floor, self.velocity_geometry, projection,
+                                 update_based=self.update_based)
 
     def reference_write(self, h, v, force):
         if self.geodesic:
@@ -150,7 +152,8 @@ class LookaheadResidual(_ChordLookaheadRead, NormalizedResidual):
         if self.kappa is None and self.raw_parallel is None:
             new_h = super().forward(h, force)
         else:
-            delta = normalize_residual(force, self.rms_floor) - h
+            direction = normalize_residual(force, self.rms_floor)
+            delta = direction if self.update_based else direction - h
             # Use an RMS-squared floor to keep the write
             # and its derivatives finite even for an exactly zero velocity.
             dot = (delta * v).mean(-1, keepdim=True)
@@ -281,6 +284,8 @@ class LookaheadModel(MomentumModel):
         if chord_kernel not in ('terminal', 'boundary', 'both'):
             raise ValueError(f'Unknown Chord kernel {chord_kernel}')
         c = self.config
+        if c.chord_update_based:
+            raise ValueError('Update-based split writes use the current Chord kernel')
         if c.chord_query_only_lookahead:
             raise ValueError('Query-only attention uses the current Chord kernel')
         if c.chord_velocity_write:

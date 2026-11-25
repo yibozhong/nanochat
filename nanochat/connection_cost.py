@@ -20,6 +20,8 @@ def model_cost(config, batch=1, activation_bytes=2, feedback_passes=None):
             per_site = 9*d - 2  # Normalize h+mu*v (5d-1) and h+F (4d-1).
             if c.normalize_minimal_force:
                 per_site += 2*(3*d - 1)  # Default Chord branch pre-norm and the normalized force.
+        if c.chord_update_based:
+            per_site -= d  # The normalized force enters the split without subtracting h.
         initial=3*d-1
         if c.ngpt_velocity_mode == 'lookahead_geodesic_split':
             # Leading vector arithmetic per token: read 5d, sphere log ~8d,
