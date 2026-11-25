@@ -13,7 +13,7 @@ from torch.nn import functional as F
 from torch.utils.checkpoint import checkpoint
 
 from nanochat.connection_model import ConnectionModel
-from nanochat.gpt import norm
+from nanochat.gpt import Linear, norm
 
 
 def state_dtype(x):
@@ -196,6 +196,11 @@ class MomentumModel(ConnectionModel):
         # Allocate after the backbone to preserve seed-matched initialization.
         self.velocity_embedding = None
         self.velocity_position_embedding = None
+        self.velocity_projection = None
+        if config.velocity_init == 'projected_h0':
+            self.velocity_projection = Linear(config.width, config.width, bias=False)
+            # Unit-RMS h0 gives W h0 the same expected coordinate variance as the velocity table.
+            nn.init.normal_(self.velocity_projection.weight, std=config.velocity_embedding_std / math.sqrt(config.width))
         if config.velocity_init in ('token', 'token_position'):
             self.velocity_embedding = nn.Embedding(config.vocab_size, config.width)
             nn.init.normal_(self.velocity_embedding.weight, std=config.velocity_embedding_std)
@@ -254,6 +259,8 @@ class MomentumModel(ConnectionModel):
 
     def initial_state(self, x, token_ids=None, start=0):
         h = normalize_residual(x) if self.config.residual_mode in ('ngpt_heavy_ball', 'ngpt_hbformer', 'ngpt_lookahead') else state_dtype(norm(x))
+        if self.velocity_projection is not None:
+            return h, state_dtype(self.velocity_projection(h.to(x.dtype)))
         if self.velocity_embedding is None:
             return h, torch.zeros_like(h)
         if token_ids is None:

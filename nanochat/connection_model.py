@@ -195,8 +195,11 @@ class ConnectionConfig:
             raise ValueError('Additive lookahead requires token and position velocity embeddings')
         if self.velocity_init == 'token_position' and not (hbformer or lookahead):
             raise ValueError('Token plus position velocity requires HBFormer or lookahead')
-        if self.velocity_init not in ('zero', 'token', 'token_position'):
+        if self.velocity_init not in ('zero', 'token', 'token_position', 'projected_h0'):
             raise ValueError('Unknown velocity initialization')
+        if self.velocity_init == 'projected_h0' and (self.architecture != 'vanilla'
+                or self.residual_mode != 'ngpt_lookahead' or self.chord_velocity_geometry == 'ambient'):
+            raise ValueError('Projected h0 velocity requires vanilla spherical lookahead with tangent velocity')
         if self.velocity_init == 'token' and self.residual_mode not in ('heavy_ball', 'heavy_ball_rms', 'ngpt_heavy_ball', 'ngpt_lookahead'):
             raise ValueError('Token-only velocity requires heavy ball or spherical lookahead')
         if not math.isfinite(self.velocity_embedding_std) or self.velocity_embedding_std < 0:
@@ -656,6 +659,8 @@ def optimizer_for(model, batch_tokens=32768, *, matrix_optimizer='muon', arc_mu=
     if getattr(model, 'velocity_position_embedding', None) is not None:
         groups[1]['params'].append(model.velocity_position_embedding.weight)
     matrices, routing = [], []
+    if getattr(model, 'velocity_projection', None) is not None:
+        matrices.append(model.velocity_projection.weight)
     for b in model.blocks:
         for name, p in b.named_parameters():
             (routing if '_connection.' in name or name.startswith(('attn_residual.', 'mlp_residual.'))

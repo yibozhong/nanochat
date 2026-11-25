@@ -85,12 +85,44 @@ def geometry(c):
     torch.testing.assert_close(df, (probe.float()-probe.float().mean(-1, True)).bfloat16(), atol=1e-5, rtol=.004)
 
 
+def check_projected_h0(model, ids):
+    table_model = make(replace(model.config, velocity_init='token'), False)
+    for name, param in model.named_parameters():
+        if name != 'velocity_projection.weight':
+            assert torch.equal(param, table_model.get_parameter(name)), name
+    weight = model.velocity_projection.weight
+    assert model.velocity_projection.bias is None and model.velocity_embedding is model.velocity_position_embedding is None
+    assert weight.shape == (model.config.width, model.config.width)
+    x = model.wte(ids).detach().requires_grad_()
+    h, v = model.initial_state(x)
+    # Different positive scales per token expose an accidental W @ raw_embedding.
+    scales = x.new_tensor([.25, 1., 2., 8.]).repeat(ids.size(1)//4).view(1, -1, 1)
+    with torch.no_grad():
+        for actual, scaled in zip((h, v), model.initial_state(x * scales)):
+            torch.testing.assert_close(actual, scaled, rtol=0, atol=0)
+    xd, wd = (a.detach().double().requires_grad_() for a in (x, weight))
+    hd = xd / xd.square().mean(-1, True).sqrt()
+    raw = F.linear(hd, wd)
+    vd = raw - hd * (hd * raw).mean(-1, True)
+    probe = torch.randn_like(v)
+    got = torch.autograd.grad(v, (x, weight), probe)
+    expected = torch.autograd.grad(vd, (xd, wd), probe.double())
+    for a, b in zip((h, v, *got), (hd, vd, *expected)):
+        assert (a.double()-b).norm() <= .012*b.norm()
+    assert (h.float()*v.float()).mean(-1).abs().max() < 1e-4
+    assert abs(v.float().square().mean().sqrt().item()/model.config.velocity_embedding_std - 1) < .1
+
+
 def check_model(c, data):
     model = make(c, False)
     ids, targets = (t[:, :32].contiguous() for t in data.batch('dev', 0, 1))
     loss = model(ids, targets)
     loss.backward()
-    assert torch.isfinite(loss) and model.velocity_embedding.weight.count_nonzero() > 0
+    assert torch.isfinite(loss)
+    if c.velocity_init == 'projected_h0':
+        check_projected_h0(model, ids)
+    else:
+        assert model.velocity_embedding.weight.count_nonzero() > 0
     grad_norm = torch.stack([p.grad.float().norm() for p in model.parameters() if p.grad is not None]).norm()
     assert torch.isfinite(grad_norm)
     for block in model.blocks:
@@ -102,6 +134,11 @@ def check_model(c, data):
                 branch.weight.normal_(std=.005)
                 site.mu.fill_(.4)
                 site.token_weight.normal_(std=.02)
+    if c.velocity_init == 'projected_h0':
+        model.zero_grad(set_to_none=True)
+        model(ids, targets).backward()
+        grad = model.velocity_projection.weight.grad
+        assert grad is not None and torch.isfinite(grad).all() and grad.norm() > 0
     model.eval()
     with torch.no_grad():
         hidden = model.hidden(ids)
@@ -122,22 +159,31 @@ def main():
     source = json.loads(Path('source.json').read_text())
     baseline_flags = Path('research/connections/ngpt/chord.args').read_text().splitlines()
     flags = [flag.replace('projection-init=normal', 'projection-init=zero') for flag in baseline_flags]
+    projected = source['velocity_init'] == 'projected_h0'
+    if projected:
+        flags[flags.index('--velocity-init=token')] = '--velocity-init=projected_h0'
     assert source['model_args'] == flags + ['--chord-update-based', '--chord-soft-force-tau=0.05',
                                             '--chord-six-controls=learned_dynamic']
     control = ConnectionConfig(streams=1, residual_dynamics='ngpt_lookahead', velocity_init='token',
                                ngpt_velocity_mode='lookahead_split_learned_beta', chord_update_based=True,
                                chord_velocity_geometry='project_only', fuse_chord_read_norm=True, ngpt_force_rms_floor=1e-6)
     c = replace(control, residual_projection_init='zero', chord_six_controls='learned_dynamic', chord_soft_force_tau=.05)
+    run, reference = 'next_soft', 'scalar_update'
+    report = 'vanilla-next-soft-sm90.json'
+    if projected:
+        control, c = c, replace(c, velocity_init='projected_h0')
+        run, reference = 'projected_h0', 'next_soft_token'
+        report = 'vanilla-next-soft-projected-h0-sm90.json'
     data = PackedData('../data')
     geometry(c)
     result = dict(gpu=torch.cuda.get_device_name(), short_batch_init_grad_norm=check_model(c, data),
                   checked_lookahead_and_force_gradients=True, checked_causal_and_cache=True)
-    for name, cfg in [('next_soft', c), ('scalar_update', control)]:
+    for name, cfg in [(run, c), (reference, control)]:
         gc.collect()
         torch.cuda.empty_cache()
-        result[name] = benchmark(cfg, data, verify_resume=name=='next_soft')
-    result['step_time_ratio'] = result['next_soft']['median_step_s']/result['scalar_update']['median_step_s']
-    json_write(Path('results/vanilla-next-soft-sm90.json'), result)
+        result[name] = benchmark(cfg, data, verify_resume=name==run)
+    result['step_time_ratio'] = result[run]['median_step_s']/result[reference]['median_step_s']
+    json_write(Path('results')/report, result)
     print('NEXT_SOFT_PREFLIGHT_PASS', result, flush=True)
 
 

@@ -79,6 +79,10 @@ def initialization_and_cache(c, baseline, data):
 def benchmark(c, data, verify_resume):
     model = make(c, True)
     opt, wd = optimizer_for(model)
+    if c.velocity_init == 'projected_h0':
+        matrix, = (g for g in opt.param_groups if any(p is model.velocity_projection.weight for p in g['params']))
+        assert matrix['kind'] == 'muon' and math.isclose(matrix['initial_lr'], .005)
+        assert any(p is model.blocks[0].attn.c_q.weight for p in matrix['params'])
     group = connector_group(opt, (p for b in model.blocks for site in (b.attn_residual, b.mlp_residual)
                                   for p in site.parameters()))
     expected_lr = .008 * (32768 / 2**19)**.5 * (c.width / 768)**-.5

@@ -68,9 +68,10 @@ def main():
                    help='Multiply matrix LR by sqrt(fan_out) or by the fixed initial Frobenius norm of each matrix')
     p.add_argument('--arc-mu', type=float, default=1., help='Lookahead in units of the displacement EMA')
     p.add_argument('--arc-beta', type=float, default=.5, help='Transported displacement EMA decay')
-    p.add_argument('--velocity-init', choices=('zero','token','token_position'), default=None,
-                   help='HBFormer and lookahead default to token plus position velocity. Spherical lookahead also supports token-only or zero initial velocity.')
-    p.add_argument('--velocity-embedding-std', type=float, default=.02)
+    p.add_argument('--velocity-init', choices=('zero','token','token_position','projected_h0'), default=None,
+                   help='projected_h0 uses a shared bias-free transform of the normalized initial hidden state in spherical lookahead.')
+    p.add_argument('--velocity-embedding-std', type=float, default=.02,
+                   help='Velocity table initialization std, or target pre-projection velocity RMS for projected_h0.')
     p.add_argument('--native-chord-write', choices=('tied','three_scalar','token_vnorm','token_bounded','token_h'))
     p.add_argument('--native-chord-control-lr', type=float,
                    help='Absolute peak AdamW LR for Chord controls, excluding the velocity embedding')

@@ -43,7 +43,9 @@ def model_cost(config, batch=1, activation_bytes=2, feedback_passes=None):
             # Centering (mean + subtract) and per-channel affine gain vs. RMS.
             per_site += 3*d-1
             gain_parameters = d*sites
-        residual=batch*t*(sites*per_site+initial)
+        projection_parameters = d*d if c.velocity_init == 'projected_h0' else 0
+        projection_flops = 2*batch*t*projection_parameters
+        residual=batch*t*(sites*per_site+initial) + projection_flops
         embedding_parameters=c.vocab_size*d if c.velocity_init=='token' else 0
         if c.velocity_init == 'token_position':
             residual += batch*t*d  # v0 = token + position
@@ -126,19 +128,22 @@ def model_cost(config, batch=1, activation_bytes=2, feedback_passes=None):
             residual += depth_mix
         # Reconstruct the attention and FFN output projections once per layer.
         remat_flops = 2*batch*t*depth*d*(d+c.ffn_width) if c.recompute_chord_force else 0
+        init_remat_flops = projection_flops if c.chord_state_dtype == 'bfloat16' else 0
         extra_ffn_params = 2*depth*d*(c.ffn_width - 4*d)
         return dict(estimated_forward_flops=forward+residual,
-            estimated_training_flops=3*(forward+residual)+remat_flops,
+            estimated_training_flops=3*(forward+residual)+remat_flops+init_remat_flops,
             force_recomputation_flops=remat_flops,
+            initial_velocity_recomputation_flops=init_remat_flops,
             components_forward=dict(backbone_projections=projections,vocab_head=head,
                 attention=attention,residual_arithmetic=residual),
-            additional_parameters=scalars_per_site*sites+embedding_parameters+gain_parameters+extra_ffn_params,
+            additional_parameters=scalars_per_site*sites+embedding_parameters+projection_parameters+gain_parameters+extra_ffn_params,
             **(dict(depth_attention_forward_flops=depth_mix, endpoint_history_bytes=history*batch*t*d*activation_bytes)
                if c.chord_attnres else {}),
             ffn_intermediate_width=c.ffn_width, additional_ffn_parameters=extra_ffn_params,
             velocity_embedding_parameters=embedding_parameters,
+            velocity_projection_parameters=projection_parameters,
             live_residual_state_bytes=state_bytes*batch*t*d,
-            accounting='FMA=2; causal attention pairs; residual arithmetic estimate and backward approximated as 2x forward. Scalar transcendentals, division, optimizer (including post-step weight normalization), copies and checkpoint recomputation excluded. Not hardware-measured FLOPs.',
+            accounting='FMA=2; causal attention pairs; residual arithmetic estimate and backward approximated as 2x forward. Includes force and initial-velocity matrix recomputation where enabled. Scalar transcendentals, division, optimizer, copies and other rematerialization excluded. Not hardware-measured FLOPs.',
             memory_note='Live hidden and velocity where used. Additive lookahead uses a backbone-dtype hidden and FP32 velocity. Autograd intermediates, embedding/optimizer bandwidth and allocator peak must be measured.')
     if c.latent_feedback:
         backbone=projections+attention

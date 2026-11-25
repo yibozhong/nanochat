@@ -37,10 +37,12 @@ if vanilla:
         if sys.argv[2] == 'vanilla_norm_no_alpha':
             assert s['residual_projection_init'] == 'normal' and '--residual-projection-init=normal' in s['model_args']
             assert '--normalize-minimal-force' in s['model_args'] and '--ngpt-force-rms-floor=1e-6' in s['model_args']
-    elif sys.argv[2] == 'vanilla_next_soft':
+    elif sys.argv[2] in ('vanilla_next_soft', 'vanilla_next_soft_h0'):
         assert s['next_run'] == '2574b7dc' and s['residual_projection_init'] == 'zero'
+        velocity = 'token' if sys.argv[2] == 'vanilla_next_soft' else 'projected_h0'
+        assert s['velocity_init'] == velocity
         assert {'--chord-update-based', '--chord-soft-force-tau=0.05', '--chord-six-controls=learned_dynamic',
-                '--residual-projection-init=zero', '--velocity-init=token'} <= set(s['model_args'])
+                '--residual-projection-init=zero', f'--velocity-init={velocity}'} <= set(s['model_args'])
     elif sys.argv[2] == 'vanilla_split_update':
         assert '--chord-update-based' in s['model_args'] and s['control_parameters'] == 63
         assert '--ngpt-velocity-mode=lookahead_split_learned_beta' in s['model_args']
@@ -99,10 +101,14 @@ if [[ "$recipe" == vanilla_* ]]; then
         group=vanilla-chord-h-only-small-dynamic
         report=results/vanilla-small-dynamic-sm90.json
         preflight_args=(--small-dynamic)
-    elif [[ "$recipe" == vanilla_next_soft ]]; then
+    elif [[ "$recipe" == vanilla_next_soft || "$recipe" == vanilla_next_soft_h0 ]]; then
         group=vanilla-chord-next-soft-update
         report=results/vanilla-next-soft-sm90.json
         preflight_module=research.connections.ngpt.next_soft_preflight
+        if [[ "$recipe" == vanilla_next_soft_h0 ]]; then
+            group=vanilla-chord-next-soft-projected-h0
+            report=results/vanilla-next-soft-projected-h0-sm90.json
+        fi
     elif [[ "$recipe" == vanilla_split_update ]]; then
         group=vanilla-chord-split-update
         report=results/vanilla-split-update-sm90.json
