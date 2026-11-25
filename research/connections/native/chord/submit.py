@@ -59,8 +59,11 @@ def submit(recipe, root, steps=305176):
         runtime='mhc-official-runtime-7546767.tar.gz + frozen uv.lock', checkpoint_seconds=1800)
     if recipe in ('vanilla_single', 'vanilla_small_dynamic', 'vanilla_minimal'):
         flags = (HERE.parents[1]/'ngpt/chord.args').read_text().splitlines()
+        projection_init = 'normal'
         if recipe == 'vanilla_minimal':
             variant = 'lookahead_minimal'
+            projection_init = 'zero'
+            flags[flags.index('--residual-projection-init=normal')] = '--residual-projection-init=zero'
             flags[flags.index('--ngpt-velocity-mode=lookahead_split_learned_beta')] = '--ngpt-velocity-mode='+variant
             flags = [flag for flag in flags if not flag.startswith(('--ngpt-alpha-init=', '--ngpt-force-rms-floor='))]
             source.update(residual_update='normalize(h + raw_branch)', control_parameters=31,
@@ -76,7 +79,7 @@ def submit(recipe, root, steps=305176):
             source['gate_reference'] = 'lululu39/NextTransformer@98321666f4b56e39447b3ee0d8b59e935c310df4'
             variant = 'lookahead_token_single'
         source.update(architecture='vanilla', model_args=flags, attention_backend='fa2', window_pattern='L',
-                      model_variant=variant, velocity_init='token', residual_projection_init='normal',
+                      model_variant=variant, velocity_init='token', residual_projection_init=projection_init,
                       steps=steps, training_tokens=steps*32768, formal_training=bool(steps),
                       control_optimizer_reference='vanilla_chord', reference_run='a7163d23')
     elif recipe == 'mhc':

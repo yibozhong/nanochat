@@ -2,6 +2,7 @@
 from dataclasses import replace
 from pathlib import Path
 import gc
+import json
 import math
 
 import torch
@@ -86,6 +87,7 @@ def model_checks(c, control, data):
         assert cache.get_pos() == ids.size(1)
         torch.testing.assert_close(torch.cat((prefix,last),1), h, atol=.04, rtol=.025)
     zero = make(replace(c,residual_projection_init='zero'),False)
+    assert zero.velocity_embedding.weight.count_nonzero() > 0
     loss = zero(ids, labels)
     loss.backward()
     assert torch.isfinite(loss)
@@ -103,8 +105,15 @@ def main():
     control = replace(c,ngpt_velocity_mode='lookahead_split_learned_beta',ngpt_force_rms_floor=1e-6)
     data = PackedData('../data')
     geometry(c)
+    # Exercise causality and KV with active (nonzero) branches before checking zero-init gradients.
     model_checks(c, control, data)
-    result = dict(gpu=torch.cuda.get_device_name(), geometry_vjp=True, zero_output_init=True, causal_and_cache=True)
+    c = replace(c, residual_projection_init='zero')
+    if Path('source.json').exists():
+        source = json.loads(Path('source.json').read_text())
+        assert source['residual_projection_init'] == c.residual_projection_init
+        assert '--residual-projection-init=zero' in source['model_args']
+    result = dict(gpu=torch.cuda.get_device_name(), geometry_vjp=True, zero_output_init=True, causal_and_cache=True,
+                  minimal_residual_projection_init=c.residual_projection_init)
     for name, cfg in [('minimal', c), ('default_chord', control)]:
         gc.collect()
         torch.cuda.empty_cache()

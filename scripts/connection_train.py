@@ -335,7 +335,7 @@ def main():
                     ('-arc-muon-direction' if a.arc_direction == 'muon' else '-arc' if a.matrix_optimizer == 'arc' else '')+
                     ('-radius-step' if a.arc_step_scale == 'radius' else '')+
                     ('-mu0' if a.matrix_optimizer == 'arc' and a.arc_mu == 0 else '')+
-                    (f'-init-{c.residual_projection_init}' if c.residual_projection_init != 'zero' else '')+
+                    (f'-init-{c.residual_projection_init}' if c.residual_projection_init != 'zero' or c.ngpt_velocity_mode == 'lookahead_minimal' else '')+
                     f'-{c.sequence_length}ctx-{a.steps}steps',id=run_id,resume='allow',config=config)
     run=training_run(formal_training=a.formal_training, local_dir=out/"diagnostics", **kwargs)
     if a.formal_training and resuming_parent:
