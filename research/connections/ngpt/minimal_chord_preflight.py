@@ -1,4 +1,5 @@
-"""Hopper preflight for raw-force Chord with scalar lookahead and retention."""
+"""Hopper preflight for no-alpha Chord with raw or normalized branch outputs."""
+import argparse
 from dataclasses import replace
 from pathlib import Path
 import gc
@@ -35,8 +36,13 @@ def geometry(c):
         site.raw_beta.fill_(.7)
     q = site.branch_input(h, v, h.dtype, True)
     n, nv = site(h, v, f)
-    q_ref = unit(h.float() + site.mu*v.float())
-    n_ref = unit(h.float() + f.float())
+    if c.normalize_minimal_force:
+        offset = site.mu * v.float()
+        preview = (h.float() + offset) / (1 + offset.square().mean(-1, keepdim=True)).sqrt()
+        q_ref = norm(preview.bfloat16())
+    else:
+        q_ref = unit(h.float() + site.mu*v.float())
+    n_ref = unit(h.float() + (unit(f) if c.normalize_minimal_force else f.float()))
     beta = site.raw_beta.sigmoid()
     mix = beta*v.float() + (1-beta)*(n_ref-h.float())
     nv_ref = mix - n_ref*(n_ref*mix).mean(-1, keepdim=True)
@@ -45,9 +51,14 @@ def geometry(c):
     with torch.no_grad():
         assert (n.float().square().mean(-1)-1).abs().max() < .004
         assert (n.float()*nv.float()).mean(-1).abs().max() < .004
-        assert (site(h,v,2*f)[0].float()-n.float()).norm() > .1 * n.float().norm()
-        # Keep an existing position when the sum has no direction.
-        assert torch.equal(site(h,v,-h)[0], h)
+        scaled, _ = site(h, v, 2*f)
+        if c.normalize_minimal_force:
+            torch.testing.assert_close(scaled, n, atol=0, rtol=0)
+        else:
+            assert (scaled.float()-n.float()).norm() > .1 * n.float().norm()
+        # An exactly unit BF16 vector and its antipode cancel in both variants.
+        pole = torch.ones_like(h)
+        assert torch.equal(site(pole, v, -pole)[0], pole)
         torch.testing.assert_close(site(h,v,torch.zeros_like(f))[0].float(),
                                    unit(h).bfloat16().float(), atol=.016, rtol=.003)
 
@@ -64,14 +75,16 @@ def model_checks(c, control, data):
         assert sum(p.numel() for s in sites for p in s.parameters()) == 2*len(sites)-1
         assert all(s.mu.item()==0 for s in sites)
         assert all(s.raw_beta.sigmoid().item()==.5 for s in sites[:-1]) and sites[-1].raw_beta is None
-        # At mu=0 all position updates are ordinary projected residual additions.
+        # Independent forward oracle at the initial mu, including both norms on the normalized-force route.
         expected = m.initial_state(m.wte(ids), ids)[0]
         cos_sin = (m.cos[:, :ids.size(1)], m.sin[:, :ids.size(1)])
         for b in m.blocks:
-            a = b.attn(unit(expected).bfloat16(), None, cos_sin, (-1, 0), None)
-            expected = unit(expected.float() + a.float()).bfloat16()
-            f = b.mlp(unit(expected).bfloat16())
-            expected = unit(expected.float() + f.float()).bfloat16()
+            q = norm(expected) if c.normalize_minimal_force else unit(expected).bfloat16()
+            a = b.attn(q, None, cos_sin, (-1, 0), None)
+            expected = unit(expected.float() + (unit(a) if c.normalize_minimal_force else a.float())).bfloat16()
+            q = norm(expected) if c.normalize_minimal_force else unit(expected).bfloat16()
+            f = b.mlp(q)
+            expected = unit(expected.float() + (unit(f) if c.normalize_minimal_force else f.float())).bfloat16()
         ref = norm(expected)
         actual = m.hidden(ids)
         assert (actual.float()-ref.float()).norm() < .015 * ref.float().norm()
@@ -86,40 +99,52 @@ def model_checks(c, control, data):
         last = m.hidden(ids[:, -1:], cache)
         assert cache.get_pos() == ids.size(1)
         torch.testing.assert_close(torch.cat((prefix,last),1), h, atol=.04, rtol=.025)
-    zero = make(replace(c,residual_projection_init='zero'),False)
-    assert zero.velocity_embedding.weight.count_nonzero() > 0
-    loss = zero(ids, labels)
+    init = 'normal' if c.normalize_minimal_force else 'zero'
+    fresh = make(replace(c, residual_projection_init=init), False)
+    assert fresh.velocity_embedding.weight.count_nonzero() > 0
+    loss = fresh(ids, labels)
     loss.backward()
     assert torch.isfinite(loss)
-    for b in zero.blocks:
+    for b in fresh.blocks:
         for proj in (b.attn.c_proj, b.mlp.c_proj):
-            assert proj.weight.count_nonzero()==0
-            assert torch.isfinite(proj.weight.grad).all() and proj.weight.grad.count_nonzero()>0
+            assert bool(proj.weight.count_nonzero()) == (init == 'normal')
+            assert torch.isfinite(proj.weight.grad).all() and proj.weight.grad.count_nonzero() > 0
+        if c.normalize_minimal_force:
+            for weight in (b.attn.c_v.weight, b.mlp.c_fc.weight):
+                assert torch.isfinite(weight.grad).all() and weight.grad.count_nonzero() > 0
 
 
 def main():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--normalize-force', action='store_true')
+    normalized = parser.parse_args().normalize_force
     configure_attention('fa2')
     seed_all(42)
     c = ConnectionConfig(streams=1, residual_dynamics='ngpt_lookahead', ngpt_velocity_mode='lookahead_minimal',
                          chord_velocity_geometry='project_only',velocity_init='token',fuse_chord_read_norm=True)
     control = replace(c,ngpt_velocity_mode='lookahead_split_learned_beta',ngpt_force_rms_floor=1e-6)
+    if normalized:
+        c = replace(c, normalize_minimal_force=True, ngpt_force_rms_floor=control.ngpt_force_rms_floor)
     data = PackedData('../data')
     geometry(c)
-    # Exercise causality and KV with active (nonzero) branches before checking zero-init gradients.
+    # Exercise causal and cached inference with active branches, then test the formal initialization.
     model_checks(c, control, data)
-    c = replace(c, residual_projection_init='zero')
+    c = replace(c, residual_projection_init='normal' if normalized else 'zero')
     if Path('source.json').exists():
         source = json.loads(Path('source.json').read_text())
         assert source['residual_projection_init'] == c.residual_projection_init
-        assert '--residual-projection-init=zero' in source['model_args']
-    result = dict(gpu=torch.cuda.get_device_name(), geometry_vjp=True, zero_output_init=True, causal_and_cache=True,
+        assert '--residual-projection-init='+c.residual_projection_init in source['model_args']
+        assert ('--normalize-minimal-force' in source['model_args']) == normalized
+    result = dict(gpu=torch.cuda.get_device_name(), geometry_vjp=True, first_branch_gradients=True,
+                  zero_output_init=not normalized, normalized_branch=normalized, causal_and_cache=True,
                   minimal_residual_projection_init=c.residual_projection_init)
     for name, cfg in [('minimal', c), ('default_chord', control)]:
         gc.collect()
         torch.cuda.empty_cache()
         result[name] = benchmark(cfg, data, name=='minimal')
     result['step_time_ratio'] = result['minimal']['median_step_s']/result['default_chord']['median_step_s']
-    json_write(Path('results/vanilla-minimal-sm90.json'), result)
+    report = 'vanilla-norm-force-no-alpha-sm90.json' if normalized else 'vanilla-minimal-sm90.json'
+    json_write(Path('results')/report, result)
     print('VANILLA_MINIMAL_PREFLIGHT_PASS', result, flush=True)
 
 

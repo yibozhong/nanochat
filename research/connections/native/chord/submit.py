@@ -11,7 +11,8 @@ HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[3]
 HOME = Path.home()
 ASSETS = HOME / 'nanochat-runtime-assets'
-KEYS = {'vanilla_minimal': 'vanilla-chord-minimal-static-10b-20261124',
+KEYS = {'vanilla_norm_no_alpha': 'vanilla-chord-norm-force-no-alpha-10b-20261124',
+        'vanilla_minimal': 'vanilla-chord-minimal-static-10b-20261124',
         'vanilla_small_dynamic': 'vanilla-chord-h-only-small-dynamic-10b-20261124',
         'vanilla_single': 'vanilla-chord-h-only-single-step-10b-20261124',
         'chord': 'native-chord-three-scalar-token-bf16-10b-20261123',
@@ -31,7 +32,7 @@ def save(path, value):
 
 def submit(recipe, root, steps=305176):
     key = root.name
-    ad_key = {'vanilla_minimal': 'VanillaChordKey', 'vanilla_small_dynamic': 'VanillaChordKey', 'vanilla_single': 'VanillaChordKey', 'mhc': 'NativeMhcKey'}.get(recipe, 'NativeChordKey')
+    ad_key = 'VanillaChordKey' if recipe.startswith('vanilla_') else ('NativeMhcKey' if recipe == 'mhc' else 'NativeChordKey')
     if (root/'state.json').exists():
         print((root/'state.json').read_text())
         return
@@ -57,16 +58,22 @@ def submit(recipe, root, steps=305176):
         data_uri=data['data_uri'],
         dataset_revision=data['manifest']['dataset_revision'], tokenizer=data['manifest']['tokenizer'],
         runtime='mhc-official-runtime-7546767.tar.gz + frozen uv.lock', checkpoint_seconds=1800)
-    if recipe in ('vanilla_single', 'vanilla_small_dynamic', 'vanilla_minimal'):
+    if recipe.startswith('vanilla_'):
         flags = (HERE.parents[1]/'ngpt/chord.args').read_text().splitlines()
         projection_init = 'normal'
-        if recipe == 'vanilla_minimal':
+        if recipe in ('vanilla_minimal', 'vanilla_norm_no_alpha'):
             variant = 'lookahead_minimal'
-            projection_init = 'zero'
-            flags[flags.index('--residual-projection-init=normal')] = '--residual-projection-init=zero'
             flags[flags.index('--ngpt-velocity-mode=lookahead_split_learned_beta')] = '--ngpt-velocity-mode='+variant
-            flags = [flag for flag in flags if not flag.startswith(('--ngpt-alpha-init=', '--ngpt-force-rms-floor='))]
-            source.update(residual_update='normalize(h + raw_branch)', control_parameters=31,
+            flags = [flag for flag in flags if not flag.startswith('--ngpt-alpha-init=')]
+            if recipe == 'vanilla_norm_no_alpha':
+                flags.append('--normalize-minimal-force')
+                source.update(residual_update='normalize(h + normalize(branch))', output_projection_actual_std=.005)
+            else:
+                projection_init = 'zero'
+                flags[flags.index('--residual-projection-init=normal')] = '--residual-projection-init=zero'
+                flags = [flag for flag in flags if not flag.startswith('--ngpt-force-rms-floor=')]
+                source['residual_update'] = 'normalize(h + raw_branch)'
+            source.update(control_parameters=31,
                           paired_preflight='default static Chord', control_peak_lr=.008*.25*(768/512)**.5)
         elif recipe == 'vanilla_small_dynamic':
             flags.append('--chord-six-controls=small_dynamic')
@@ -156,7 +163,7 @@ if __name__ == '__main__':
                         help='Vanilla single-step budget; zero runs only the offline GPU checks')
     args = parser.parse_args()
     recipe = args.recipe
-    if recipe not in ('vanilla_single', 'vanilla_small_dynamic', 'vanilla_minimal') and args.steps != 305176:
+    if not recipe.startswith('vanilla_') and args.steps != 305176:
         parser.error('--steps applies only to the vanilla single-step experiment')
     key = KEYS[recipe]
     if args.steps != 305176:

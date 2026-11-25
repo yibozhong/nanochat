@@ -17,15 +17,40 @@ def _read(h, v, mu, ambient):
     return read * torch.rsqrt(1 + offset.square().mean(-1, keepdim=True))
 
 
-class MinimalChordResidual(nn.Module):
-    """Read once at RMS(h + mu*v), then retract the raw branch output."""
+class _ChordLookaheadRead:
+    def query(self, h, v):
+        # The tangent-only denominator omits the vanishing cross term.
+        ambient = self.velocity_geometry == 'ambient'
+        if h.dtype == torch.bfloat16 and h.is_cuda and h.size(-1) in (128, 512):
+            from nanochat.chord_triton import bf16_query
+            return bf16_query(h, v, self.mu, ambient)
+        if h.dtype == torch.bfloat16 and torch.is_grad_enabled():
+            return checkpoint(_read, h, v, self.mu, ambient, use_reentrant=False, preserve_rng_state=False).to(h.dtype)
+        return _read(h, v, self.mu, ambient).to(h.dtype)
+
+    def branch_input(self, h, v, dtype, fuse_norm):
+        if fuse_norm and h.is_cuda and h.dtype == dtype == torch.bfloat16 and h.size(-1) in (128, 512):
+            from nanochat.chord_triton import bf16_query
+            return bf16_query(h, v, self.mu, self.velocity_geometry == 'ambient', normalize=True)
+        q = self.query(h, v).to(dtype)
+        return torch.nn.functional.rms_norm(q, (q.size(-1),))
+
+
+class MinimalChordResidual(_ChordLookaheadRead, nn.Module):
+    """Retract either the raw or RMS-normalized branch with no learned step sizes."""
     def __init__(self, config, velocity_consumed):
         super().__init__()
+        self.normalize_force = config.normalize_minimal_force
+        self.rms_floor = config.ngpt_force_rms_floor
+        self.velocity_geometry = config.chord_velocity_geometry
         self.mu = nn.Parameter(torch.tensor([config.lookahead_mu_init], dtype=torch.float32))
         self.raw_beta = (nn.Parameter(torch.tensor([config.momentum_beta_init], dtype=torch.float32).logit())
                          if velocity_consumed else None)
 
     def branch_input(self, h, v, dtype, fuse_norm):
+        if self.normalize_force:
+            # Pair the normalized-force ablation with the default Chord read, including BF16 rounding.
+            return super().branch_input(h, v, dtype, fuse_norm)
         if fuse_norm and h.is_cuda and h.dtype == torch.bfloat16 and h.size(-1) in (128, 512):
             from nanochat.chord_triton import bf16_query
             # Use the norm of the actual sum, including BF16 tangency roundoff.
@@ -34,7 +59,8 @@ class MinimalChordResidual(nn.Module):
 
     def forward(self, h, v, force):
         position = state_dtype(h)
-        mixed = position + state_dtype(force)
+        update = normalize_residual(force, self.rms_floor) if self.normalize_force else state_dtype(force)
+        mixed = position + update
         rms2 = mixed.square().mean(-1, keepdim=True)
         # At cancellation the direction is undefined. Keep the previous position.
         new = torch.where(rms2 >= 1e-12, mixed * rms2.clamp_min(1e-12).rsqrt(), position)
@@ -48,7 +74,7 @@ class MinimalChordResidual(nn.Module):
         return self(h, v, layer(features))
 
 
-class LookaheadResidual(NormalizedResidual):
+class LookaheadResidual(_ChordLookaheadRead, NormalizedResidual):
     def __init__(self, config, *, velocity_consumed=True, fixed_unit_mu=False, split_velocity=False):
         super().__init__(config)
         if fixed_unit_mu:
@@ -76,23 +102,6 @@ class LookaheadResidual(NormalizedResidual):
 
     def beta(self):
         return self.decay if self.raw_beta is None else self.raw_beta.squeeze(0).sigmoid()
-
-    def query(self, h, v):
-        # The tangent-only denominator omits the vanishing cross term.
-        ambient = self.velocity_geometry == 'ambient'
-        if h.dtype == torch.bfloat16 and h.is_cuda and h.size(-1) in (128, 512):
-            from nanochat.chord_triton import bf16_query
-            return bf16_query(h, v, self.mu, ambient)
-        if h.dtype == torch.bfloat16 and torch.is_grad_enabled():
-            return checkpoint(_read, h, v, self.mu, ambient, use_reentrant=False, preserve_rng_state=False).to(h.dtype)
-        return _read(h, v, self.mu, ambient).to(h.dtype)
-
-    def branch_input(self, h, v, dtype, fuse_norm):
-        if fuse_norm and h.is_cuda and h.dtype == dtype == torch.bfloat16 and h.size(-1) in (128, 512):
-            from nanochat.chord_triton import bf16_query
-            return bf16_query(h, v, self.mu, self.velocity_geometry == 'ambient', normalize=True)
-        q = self.query(h, v).to(dtype)
-        return torch.nn.functional.rms_norm(q, (q.size(-1),))
 
     def projected_write(self, h, v, features, layer, recompute):
         if not recompute:

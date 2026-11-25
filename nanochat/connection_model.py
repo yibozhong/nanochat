@@ -47,6 +47,7 @@ class ConnectionConfig:
     momentum_beta_init: float = 0.5
     momentum_gamma_init: float | None = None
     momentum_eta_init: float | None = None
+    normalize_minimal_force: bool = False
     ngpt_force_rms_floor: float = 0.1
     ngpt_alpha_init: float = 0.05
     lookahead_mu_init: float = 0.0
@@ -126,6 +127,8 @@ class ConnectionConfig:
                 or self.channel_chord_coefficients or self.chord_velocity_write or self.chord_attnres
                 or self.chord_query_only_lookahead or self.fixed_first_attention_mu):
             raise ValueError('Six-coefficient Chord requires vanilla BF16 scalar project-only updates')
+        if self.normalize_minimal_force and self.ngpt_velocity_mode != 'lookahead_minimal':
+            raise ValueError('Normalized no-alpha writes require minimal Chord')
         simple_chord = self.ngpt_velocity_mode in ('lookahead_token_single', 'lookahead_minimal')
         if simple_chord and (self.architecture != 'vanilla' or self.chord_velocity_geometry != 'project_only'
                 or not self.fuse_chord_read_norm or self.recompute_chord_force or self.channel_chord_coefficients

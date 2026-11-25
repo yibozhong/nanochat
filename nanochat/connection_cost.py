@@ -18,6 +18,8 @@ def model_cost(config, batch=1, activation_bytes=2, feedback_passes=None):
         per_site={'heavy_ball':5*d, 'heavy_ball_rms':8*d-1, 'ngpt_heavy_ball':12*d-2, 'ngpt_hbformer':25*d-6, 'ngpt':9*d-2, 'ngpt_lookahead':29*d-6, 'lookahead_only':7*d}[c.residual_mode]
         if c.ngpt_velocity_mode == 'lookahead_minimal':
             per_site = 9*d - 2  # Normalize h+mu*v (5d-1) and h+F (4d-1).
+            if c.normalize_minimal_force:
+                per_site += 2*(3*d - 1)  # Default Chord branch pre-norm and the normalized force.
         initial=3*d-1
         if c.ngpt_velocity_mode == 'lookahead_geodesic_split':
             # Leading vector arithmetic per token: read 5d, sphere log ~8d,
