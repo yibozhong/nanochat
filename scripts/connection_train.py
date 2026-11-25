@@ -95,6 +95,8 @@ def main():
     p.add_argument('--momentum-velocity-rms-floor', type=float, default=.1)
     p.add_argument('--chord-update-based', action='store_true',
                    help='Split the normalized force itself along and across velocity before adding to h')
+    p.add_argument('--chord-soft-force-tau', type=float, default=0.,
+                   help='Use F/sqrt(mean(F^2)+tau^2) in token-conditioned update-based Chord')
     p.add_argument('--normalize-minimal-force', action='store_true',
                    help='Use the default Chord lookahead read and RMS-normalize F before the no-alpha addition')
     p.add_argument('--ngpt-force-rms-floor', type=float, default=.1)
@@ -115,7 +117,7 @@ def main():
     p.add_argument('--token-chord-gates', action='store_true', help='Modulate positive split steps by independent per-token cosine gates')
     p.add_argument('--chord-velocity-geometry', choices=('parallel_transport','project_only','ambient'),
                    default='parallel_transport', help='How Chord carries velocity to the next sublayer')
-    p.add_argument('--chord-six-controls', choices=('off', 'static', 'small_dynamic'), default='off',
+    p.add_argument('--chord-six-controls', choices=('off', 'static', 'small_dynamic', 'learned_dynamic'), default='off',
                    help='Use independent velocity write gains with static or token-corrected controls')
     p.add_argument('--chord-velocity-write', action='store_true', help='Add a learned scalar rho times the old velocity before Chord retraction')
     p.add_argument('--channel-chord-coefficients', action='store_true', help='Learn both Chord step sizes and velocity decay independently per channel')
@@ -188,7 +190,7 @@ def main():
                        chord_history_correction=a.chord_history_correction, chord_history_updates=a.chord_history_updates,
                        momentum_beta_init=a.momentum_beta_init, momentum_gamma_init=a.momentum_gamma_init,
                        momentum_eta_init=a.momentum_eta_init, ngpt_force_rms_floor=a.ngpt_force_rms_floor,
-                       chord_update_based=a.chord_update_based,
+                       chord_update_based=a.chord_update_based, chord_soft_force_tau=a.chord_soft_force_tau,
                        normalize_minimal_force=a.normalize_minimal_force, fixed_first_attention_mu=a.fixed_first_attention_mu,
                        lookahead_mu_init=a.lookahead_mu_init, ngpt_alpha_init=a.ngpt_alpha_init, ngpt_weight_norm=a.ngpt_weight_norm,
                        ngpt_velocity_mode=a.ngpt_velocity_mode, signed_chord_steps=a.signed_chord_steps, token_chord_gates=a.token_chord_gates,
@@ -315,6 +317,7 @@ def main():
                     ('-axis-write' if c.ngpt_velocity_mode == 'lookahead_axis_write' else '')+
                     ('-split-write' if c.split_chord_write else '')+
                     ('-update-based' if c.chord_update_based else '')+
+                    (f'-soft-tau{c.chord_soft_force_tau:g}' if c.chord_soft_force_tau else '')+
                     ('-norm-force-no-alpha' if c.normalize_minimal_force else
                      '-minimal-static-raw' if c.ngpt_velocity_mode == 'lookahead_minimal' else '')+
                     ('-token-h-single-step' if c.ngpt_velocity_mode == 'lookahead_token_single' else '')+

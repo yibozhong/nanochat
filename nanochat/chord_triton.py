@@ -3,7 +3,7 @@
 Compile-time modes: 0 isotropic, 1 token alpha gates, 2 token beta gate,
 3 split steps with shared beta, 4 single step with a parallel-axis correction, 5 channel-wise split steps and beta,
 6 scalar split steps and beta with a direct velocity write, 7 independent tangent velocity coefficients,
-8 scalar split steps applied directly to the normalized force.
+8 scalar split steps applied directly to the normalized force, 9 token controls with a soft-normalized update.
 """
 import torch
 import triton
@@ -56,9 +56,9 @@ def _history_alignment(new_h, carried, chord, D: tl.constexpr):
 def _position(h, v, force, P, FLOOR2: tl.constexpr,
                   D: tl.constexpr, MODE: tl.constexpr):
     force_sq = _mean(force * force, D)
-    force_inv = tl.rsqrt(tl.maximum(force_sq, FLOOR2))
+    force_inv = tl.rsqrt(force_sq + FLOOR2) if MODE == 9 else tl.rsqrt(tl.maximum(force_sq, FLOOR2))
     target = force * force_inv
-    delta = target if MODE == 8 else target - h
+    delta = target if MODE == 8 or MODE == 9 else target - h
     if MODE == 1:
         split = _split(delta, v, P, D)
         perp, par, along = split[0], split[1], split[2]
@@ -66,7 +66,7 @@ def _position(h, v, force, P, FLOOR2: tl.constexpr,
     elif MODE == 4:
         along = _mean(delta * v, D) / tl.maximum(_mean(v * v, D), 1e-12)
         mixed = h + tl.load(P) * (delta + (tl.load(P + 1) * along) * v)
-    elif MODE == 2 or MODE == 3 or MODE == 5 or MODE == 6 or MODE == 7 or MODE == 8:
+    elif MODE == 2 or MODE == 3 or MODE == 5 or MODE == 6 or MODE == 7 or MODE == 8 or MODE == 9:
         if MODE == 5:
             channels = tl.arange(0, D)
             perp, par = tl.load(P + channels), tl.load(P + D + channels)
@@ -109,11 +109,11 @@ def _write_values(h, v, force, P, BETA: tl.constexpr, FLOOR2: tl.constexpr,
         beta = tl.sigmoid(tl.load(P + 2) + tl.load(P + 3) * geometry[0])
     elif MODE == 5:
         beta = tl.load(P + 2 * D + tl.arange(0, D))
-    elif MODE == 1 or MODE == 3 or MODE == 6 or MODE == 7 or MODE == 8:
+    elif MODE == 1 or MODE == 3 or MODE == 6 or MODE == 7 or MODE == 8 or MODE == 9:
         beta = tl.load(P + 2)
     else:
         beta = BETA
-    if MODE == 7:
+    if MODE == 7 or MODE == 9:
         chord = new_h - h
         along = _tangent_axis(new_h, v, chord, D)[6]
         b, c = tl.load(P + 3), tl.load(P + 4)
@@ -328,7 +328,7 @@ def _backward(H, V, F, P, DNH, DNV, DH, DV, DF, DP, ROWS, BETA: tl.constexpr,
             d_chord = (1.0 - beta) * d_velocity
             d_new_h = dh_next + (d_chord - radial * upstream - dot * velocity)
         d_carried = beta * d_velocity
-        if MODE == 7:
+        if MODE == 7 or MODE == 9:
             chord = new_h - h
             u, d, vn, dn, u2, den, along = _tangent_axis(new_h, v, chord, D)
             b, c = tl.load(P + 3), tl.load(P + 4)
@@ -371,7 +371,7 @@ def _backward(H, V, F, P, DNH, DNV, DH, DV, DF, DP, ROWS, BETA: tl.constexpr,
 
     dot_h = _mean(d_new_h * new_h, D)
     d_mixed = mixed_inv * (d_new_h - tl.where(mixed_sq >= 1e-12, new_h * dot_h, 0.0))
-    delta = target if MODE == 8 else target - h
+    delta = target if MODE == 8 or MODE == 9 else target - h
     if MODE == 1:
         perp, par, along, cosine, gp, gq, inv_norms, den, v2, delta2 = _split(delta, v, P, D)
         dot_v = _mean(d_mixed * v, D)
@@ -412,7 +412,7 @@ def _backward(H, V, F, P, DNH, DNV, DH, DV, DF, DP, ROWS, BETA: tl.constexpr,
         tl.store(DP + stride + tile_offset, tl.sum(tl.where(live, d_mixed * par_dir, 0.), 0))
         tl.store(DP + 2 * stride + tile_offset,
                  tl.sum(tl.where(live, d_velocity * (carried - (new_h - h)), 0.), 0))
-    elif MODE == 2 or MODE == 3 or MODE == 4 or MODE == 6 or MODE == 7 or MODE == 8:
+    elif MODE == 2 or MODE == 3 or MODE == 4 or MODE == 6 or MODE == 7 or MODE == 8 or MODE == 9:
         perp = tl.load(P)
         if MODE == 4:
             kappa = tl.load(P + 1)
@@ -431,7 +431,7 @@ def _backward(H, V, F, P, DNH, DNV, DH, DV, DF, DP, ROWS, BETA: tl.constexpr,
             tl.store(DP + 3 * ROWS + row, D * dot_v)
         d_v += v_weight * d_mixed + d_dot * (delta - tl.where(v2 >= 1e-12, 2. * along * v, 0.))
         # Only a target displacement has a direct -h path through delta.
-        d_h += d_mixed if MODE == 8 else d_mixed - d_delta
+        d_h += d_mixed if MODE == 8 or MODE == 9 else d_mixed - d_delta
         # Contract the normalization Jacobian with the step directions first.
         # For a radial write its angular derivative vanishes; projecting the
         # upstream adjoint first would sum large cancelling terms at zero chord.
@@ -455,7 +455,11 @@ def _backward(H, V, F, P, DNH, DNV, DH, DV, DF, DP, ROWS, BETA: tl.constexpr,
         d_delta = alpha * d_mixed
         tl.store(DP + row, tl.sum(d_mixed * delta, 0))
     dot_target = _mean(d_delta * target, D)
-    d_force = force_inv * (d_delta - tl.where(force_sq >= FLOOR2, target * dot_target, 0.))
+    # The soft denominator has a norm derivative at every nonzero force magnitude.
+    if MODE == 9:
+        d_force = force_inv * (d_delta - target * dot_target)
+    else:
+        d_force = force_inv * (d_delta - tl.where(force_sq >= FLOOR2, target * dot_target, 0.))
     tl.store(DH + offsets, d_h, mask=live)
     tl.store(DV + offsets, d_v, mask=live)
     tl.store(DF + offsets, d_force, mask=live)
@@ -523,17 +527,19 @@ class _ChordWrite(torch.autograd.Function):
 class TokenWrite(torch.autograd.Function):
     """Use the same native three-scalar write with a separate control row per token."""
     @staticmethod
-    def forward(ctx, h, v, force, controls, floor, terminal):
+    def forward(ctx, h, v, force, controls, floor, terminal, soft_tau=0.):
         h, v, force = h.contiguous(), v.contiguous(), force.contiguous()
         width = h.size(-1)
         rows = h.numel() // width
         nh = torch.empty_like(h)
         nv = None if terminal else torch.empty_like(v)
-        _forward[(rows,)](h, v, force, controls, nh, nv, 0., floor**2, width, 7,
+        ctx.mode = 9 if soft_tau else 7
+        ctx.floor2 = soft_tau**2 if soft_tau else floor**2
+        _forward[(rows,)](h, v, force, controls, nh, nv, 0., ctx.floor2, width, ctx.mode,
                           controls, terminal, False, 1, TOKEN_CONTROLS=True,
                           num_warps=4, enable_fp_fusion=False)
         ctx.save_for_backward(h, v, force, controls)
-        ctx.floor2, ctx.terminal = floor**2, terminal
+        ctx.terminal = terminal
         return nh, nv
 
     @staticmethod
@@ -544,9 +550,9 @@ class TokenWrite(torch.autograd.Function):
         dh, dv, df = torch.empty_like(h), torch.empty_like(v), torch.empty_like(force)
         dc = torch.empty_like(controls)
         _backward[(rows,)](h, v, force, controls, dnh.contiguous(), None if ctx.terminal else dnv.contiguous(),
-                           dh, dv, df, dc, rows, 0., ctx.floor2, width, 7, controls, ctx.terminal,
+                           dh, dv, df, dc, rows, 0., ctx.floor2, width, ctx.mode, controls, ctx.terminal,
                            False, 1, 1, TOKEN_CONTROLS=True, num_warps=4, enable_fp_fusion=False)
-        return dh, dv, df, dc, None, None
+        return (dh, dv, df, dc, None, None, None)[:len(ctx.needs_input_grad)]
 
 
 class _SplitBoundary(torch.autograd.Function):

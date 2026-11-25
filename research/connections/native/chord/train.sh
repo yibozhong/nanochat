@@ -37,6 +37,10 @@ if vanilla:
         if sys.argv[2] == 'vanilla_norm_no_alpha':
             assert s['residual_projection_init'] == 'normal' and '--residual-projection-init=normal' in s['model_args']
             assert '--normalize-minimal-force' in s['model_args'] and '--ngpt-force-rms-floor=1e-6' in s['model_args']
+    elif sys.argv[2] == 'vanilla_next_soft':
+        assert s['next_run'] == '2574b7dc' and s['residual_projection_init'] == 'zero'
+        assert {'--chord-update-based', '--chord-soft-force-tau=0.05', '--chord-six-controls=learned_dynamic',
+                '--residual-projection-init=zero', '--velocity-init=token'} <= set(s['model_args'])
     elif sys.argv[2] == 'vanilla_split_update':
         assert '--chord-update-based' in s['model_args'] and s['control_parameters'] == 63
         assert '--ngpt-velocity-mode=lookahead_split_learned_beta' in s['model_args']
@@ -95,6 +99,10 @@ if [[ "$recipe" == vanilla_* ]]; then
         group=vanilla-chord-h-only-small-dynamic
         report=results/vanilla-small-dynamic-sm90.json
         preflight_args=(--small-dynamic)
+    elif [[ "$recipe" == vanilla_next_soft ]]; then
+        group=vanilla-chord-next-soft-update
+        report=results/vanilla-next-soft-sm90.json
+        preflight_module=research.connections.ngpt.next_soft_preflight
     elif [[ "$recipe" == vanilla_split_update ]]; then
         group=vanilla-chord-split-update
         report=results/vanilla-split-update-sm90.json

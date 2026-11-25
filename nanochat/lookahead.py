@@ -333,10 +333,13 @@ class LookaheadModel(MomentumModel):
             betas = torch.cat([site.raw_beta for site in sites if site.raw_beta is not None]).sigmoid().tolist()
             return {**{f'residual/sublayer_{i}/mu': value for i, value in enumerate(mus)},
                     **{f'residual/sublayer_{i}/beta': value for i, value in enumerate(betas)}}
-        if self.config.chord_six_controls == 'small_dynamic':
+        if self.config.dynamic_chord_controls:
             from nanochat.chord_token_controls import CONTROL_NAMES
             metrics = {}
             for i, site in enumerate(sites):
+                if site.mix_scales is not None:
+                    for name, value in zip(('lookahead', 'position', 'velocity'), site.mix_scales.tolist()):
+                        metrics[f'residual/sublayer_{i}/{name}_modulation_scale'] = value
                 if site.eval_control_moments is not None:
                     std, mean = (x.tolist() for x in site.eval_control_moments)
                     for j, name in enumerate(CONTROL_NAMES[:site.token_weight.size(0)]):

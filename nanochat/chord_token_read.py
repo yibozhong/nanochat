@@ -321,14 +321,14 @@ def _token_read_backward(
 class TokenRead(torch.autograd.Function):
     @staticmethod
     @torch.amp.custom_fwd(device_type="cuda")
-    def forward(ctx, h, v, weight, mu, steps, beta, gains, bounded=False, small_dynamic=False):
+    def forward(ctx, h, v, weight, mu, steps, beta, gains, bounded=False, small_dynamic=False, modulation=SMALL_DYNAMIC_SCALE):
         h, v = h.contiguous(), v.contiguous()
         dim = h.shape[-1]
         count = weight.shape[0]
         rows = h.numel() // dim
         query = torch.empty_like(h)
         controls = weight.new_empty((*h.shape[:-1], 6))
-        ctx.modulation = SMALL_DYNAMIC_SCALE if small_dynamic else 0.0
+        ctx.modulation = modulation if small_dynamic else 0.0
         _token_read_forward[(triton.cdiv(rows, 4),)](
             h,
             v,
@@ -415,4 +415,4 @@ class TokenRead(torch.autograd.Function):
             cols,
             inputs,
         )
-        return (dh, dv, dw, dm, ds, db, dg, None, None)[:len(ctx.needs_input_grad)]
+        return (dh, dv, dw, dm, ds, db, dg, None, None, None)[:len(ctx.needs_input_grad)]

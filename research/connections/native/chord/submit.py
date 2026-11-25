@@ -11,7 +11,8 @@ HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[3]
 HOME = Path.home()
 ASSETS = HOME / 'nanochat-runtime-assets'
-KEYS = {'vanilla_split_update': 'vanilla-chord-split-update-10b-20261125',
+KEYS = {'vanilla_next_soft': 'vanilla-chord-next-soft-update-10b-20261125',
+        'vanilla_split_update': 'vanilla-chord-split-update-10b-20261125',
         'vanilla_norm_no_alpha': 'vanilla-chord-norm-force-no-alpha-10b-20261124',
         'vanilla_minimal': 'vanilla-chord-minimal-static-10b-20261124',
         'vanilla_small_dynamic': 'vanilla-chord-h-only-small-dynamic-10b-20261124',
@@ -76,6 +77,15 @@ def submit(recipe, root, steps=305176):
                 source['residual_update'] = 'normalize(h + raw_branch)'
             source.update(control_parameters=31,
                           paired_preflight='default static Chord', control_peak_lr=.008*.25*(768/512)**.5)
+        elif recipe == 'vanilla_next_soft':
+            variant = 'learned_dynamic'
+            projection_init = 'zero'
+            flags[flags.index('--residual-projection-init=normal')] = '--residual-projection-init=zero'
+            flags.extend(('--chord-update-based', '--chord-soft-force-tau=0.05', '--chord-six-controls=learned_dynamic'))
+            source.update(next_run='2574b7dc', next_source='lululu39/NextTransformer@b8bbfa41d8ab4b31eb5447cbde6271fe84074b78',
+                          residual_update='split(force / sqrt(mean(force^2) + 0.05^2))',
+                          modulation_scale_init=.01, paired_preflight='vanilla scalar update-based Chord',
+                          comparison_run='a8c1dc29', control_peak_lr=.008*.25*(768/512)**.5)
         elif recipe == 'vanilla_split_update':
             variant = 'lookahead_split_learned_beta'
             flags.append('--chord-update-based')

@@ -22,6 +22,8 @@ def model_cost(config, batch=1, activation_bytes=2, feedback_passes=None):
                 per_site += 2*(3*d - 1)  # Default Chord branch pre-norm and the normalized force.
         if c.chord_update_based:
             per_site -= d  # The normalized force enters the split without subtracting h.
+        if c.chord_soft_force_tau:
+            per_site += 1  # Add tau squared to the row mean square.
         initial=3*d-1
         if c.ngpt_velocity_mode == 'lookahead_geodesic_split':
             # Leading vector arithmetic per token: read 5d, sphere log ~8d,
@@ -78,8 +80,11 @@ def model_cost(config, batch=1, activation_bytes=2, feedback_passes=None):
             # Independent along/across writes require the old velocity and
             # displacement projected onto the new tangent space and one dot ratio.
             residual += batch*t*(sites - 1)*(18*d - 4)
-            if c.chord_six_controls == 'small_dynamic':
+            if c.dynamic_chord_controls:
                 outputs = 6*sites - 3
+                if c.chord_six_controls == 'learned_dynamic':
+                    gain_parameters += 3*sites - 1  # terminal layer has no velocity modulation
+                    residual += outputs*d  # row scaling of the projection, shared across tokens
                 gain_parameters += outputs*d
                 residual += batch*t*(sites*(2*d - 1) + outputs*(2*d + 2))
         if c.chord_query_only_lookahead:

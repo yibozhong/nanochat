@@ -12,13 +12,13 @@ SMALL_DYNAMIC_SCALE = 0.01
 CONTROL_NAMES = ('mu', 'alpha_perp', 'alpha_parallel', 'history', 'parallel_write', 'perpendicular_write')
 
 
-def reference_read(h, v, weight, mu, steps, beta, gains, bounded=False, small_dynamic=False):
+def reference_read(h, v, weight, mu, steps, beta, gains, bounded=False, small_dynamic=False, modulation=SMALL_DYNAMIC_SCALE):
     position = h.to(weight.dtype)
     velocity = v.to(weight.dtype)
     if weight.shape[1] == 1:
         if small_dynamic:
             position_gate = F.rms_norm(position, (h.shape[-1],), eps=GATE_EPS)
-            z = SMALL_DYNAMIC_SCALE * F.linear(position_gate, weight[:, 0])
+            z = modulation * F.linear(position_gate, weight[:, 0])
         else:
             z = F.linear(position, weight[:, 0])
     elif bounded:
@@ -29,7 +29,7 @@ def reference_read(h, v, weight, mu, steps, beta, gains, bounded=False, small_dy
         gate_v = velocity * (velocity.square().mean(-1, keepdim=True) + GATE_EPS).rsqrt()
         if small_dynamic:
             position_gate = F.rms_norm(position, (h.shape[-1],), eps=GATE_EPS)
-            z = SMALL_DYNAMIC_SCALE * F.linear(position_gate, weight[:, 0])
+            z = modulation * F.linear(position_gate, weight[:, 0])
         else:
             z = F.linear(position, weight[:, 0]) + F.linear(gate_v, weight[:, 1])
     m = z[..., :1] + mu
@@ -49,11 +49,14 @@ def reference_read(h, v, weight, mu, steps, beta, gains, bounded=False, small_dy
     return q, torch.cat((m, alpha, b, g), dim=-1)
 
 
-def reference_write(h, v, force, controls, floor, terminal):
+def reference_write(h, v, force, controls, floor, terminal, soft_tau=0.):
     dtype = h.dtype
     h, v, f = h.to(controls.dtype), v.to(controls.dtype), force.to(controls.dtype)
     _, perp, par, a, b, c = controls.unsqueeze(-1).unbind(-2)
-    delta = normalize_residual(f, floor) - h
+    if soft_tau:
+        delta = f * (f.square().mean(-1, keepdim=True) + soft_tau**2).rsqrt()
+    else:
+        delta = normalize_residual(f, floor) - h
     along = (delta*v).mean(-1, keepdim=True) / v.square().mean(-1, keepdim=True).clamp_min(1e-12)
     n = normalize_residual((h + perp*delta) + ((par-perp)*along)*v)
     if terminal:
@@ -78,7 +81,10 @@ class TokenControlledSite(LookaheadResidual):
                 self.mu.fill_(3 * math.atanh(config.lookahead_mu_init / 3))
                 if self.writes is not None:
                     self.writes.fill_(math.log(gain / (2 - gain)))
-        self.small_dynamic = config.chord_six_controls == 'small_dynamic'
+        self.small_dynamic = config.dynamic_chord_controls
+        self.soft_tau = config.chord_soft_force_tau
+        self.mix_scales = (torch.nn.Parameter(torch.full((2 if self.terminal else 3,), SMALL_DYNAMIC_SCALE))
+                           if config.chord_six_controls == 'learned_dynamic' else None)
         inputs = 1 if self.small_dynamic or config.native_chord_write == 'token_h' else 2
         self.token_weight = torch.nn.Parameter(torch.zeros(3 if self.terminal else 6, inputs, config.width))
         self.eval_control_moments = None
@@ -90,7 +96,18 @@ class TokenControlledSite(LookaheadResidual):
             read = TokenRead.apply
         else:
             read = reference_read
-        q, controls = read(h, v, self.token_weight, self.mu, steps, self.raw_beta, self.writes, self.bounded, self.small_dynamic)
+        weights = self.token_weight
+        modulation = SMALL_DYNAMIC_SCALE
+        if self.mix_scales is not None:
+            # Scaling projection rows shares the same token kernel and differentiates both W and the gains.
+            scales = self.mix_scales
+            row_scales = [scales[0], scales[1], scales[1]]
+            if not self.terminal:
+                row_scales.extend([scales[2]] * 3)
+            weights = weights * torch.stack(row_scales)[:, None, None]
+            modulation = 1.
+        q, controls = read(h, v, weights, self.mu, steps, self.raw_beta, self.writes,
+                           self.bounded, self.small_dynamic, modulation)
         if not self.training and not torch.is_grad_enabled():
             # Keep just the token dispersion and mean of controls from the validation minibatch.
             self.eval_control_moments = torch.std_mean(controls.flatten(0, -2), dim=0, correction=0)
@@ -99,5 +116,5 @@ class TokenControlledSite(LookaheadResidual):
     def write(self, h, v, force, controls):
         if h.is_cuda and h.dtype == torch.bfloat16 and h.size(-1) in (128, 512):
             from nanochat.chord_triton import TokenWrite
-            return TokenWrite.apply(h, v, force, controls, self.rms_floor, self.terminal)
-        return reference_write(h, v, force, controls, self.rms_floor, self.terminal)
+            return TokenWrite.apply(h, v, force, controls, self.rms_floor, self.terminal, self.soft_tau)
+        return reference_write(h, v, force, controls, self.rms_floor, self.terminal, self.soft_tau)

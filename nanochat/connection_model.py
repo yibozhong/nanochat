@@ -76,6 +76,7 @@ class ConnectionConfig:
     native_chord_write: str | None = None
     native_chord_control_lr: float | None = None
     chord_update_based: bool = False
+    chord_soft_force_tau: float = 0.0
 
     def __post_init__(self):
         if self.native_chord_control_lr is not None and (
@@ -120,7 +121,7 @@ class ConnectionConfig:
             raise ValueError('Transported velocity LayerNorm requires the unit-step HBFormer')
         if self.residual_mode == 'lookahead_only' and self.ngpt_velocity_mode != 'ambient':
             raise ValueError('Additive lookahead uses Euclidean velocity')
-        if self.chord_six_controls not in ('off', 'static', 'small_dynamic'):
+        if self.chord_six_controls not in ('off', 'static', 'small_dynamic', 'learned_dynamic'):
             raise ValueError('Unknown six-coefficient Chord setting')
         if self.chord_six_controls != 'off' and (self.architecture != 'vanilla'
                 or self.ngpt_velocity_mode != 'lookahead_split_learned_beta' or not self.fuse_chord_read_norm
@@ -128,11 +129,15 @@ class ConnectionConfig:
                 or self.channel_chord_coefficients or self.chord_velocity_write or self.chord_attnres
                 or self.chord_query_only_lookahead or self.fixed_first_attention_mu):
             raise ValueError('Six-coefficient Chord requires vanilla BF16 scalar project-only updates')
+        if not math.isfinite(self.chord_soft_force_tau) or self.chord_soft_force_tau < 0:
+            raise ValueError('Soft force tau must be finite and nonnegative')
+        if bool(self.chord_soft_force_tau) != (self.chord_update_based and self.dynamic_chord_controls):
+            raise ValueError('Token-conditioned update-based Chord requires a positive soft force tau')
         if self.chord_update_based and (
                 self.architecture != 'vanilla' or self.ngpt_velocity_mode != 'lookahead_split_learned_beta'
-                or self.chord_six_controls != 'off' or self.channel_chord_coefficients
+                or self.chord_six_controls == 'static' or self.channel_chord_coefficients
                 or self.token_chord_gates or self.token_beta_gate or self.chord_velocity_write):
-            raise ValueError('Update-based Chord requires vanilla split steps and scalar velocity retention')
+            raise ValueError('Update-based Chord requires vanilla split steps with scalar retention or h-only controls')
         if self.normalize_minimal_force and self.ngpt_velocity_mode != 'lookahead_minimal':
             raise ValueError('Normalized no-alpha writes require minimal Chord')
         simple_chord = self.ngpt_velocity_mode in ('lookahead_token_single', 'lookahead_minimal')
@@ -292,6 +297,10 @@ class ConnectionConfig:
         return 4 * self.width + extra
 
     @property
+    def dynamic_chord_controls(self):
+        return self.chord_six_controls in ('small_dynamic', 'learned_dynamic')
+
+    @property
     def split_chord_write(self):
         return self.ngpt_velocity_mode in ('lookahead_split_write', 'lookahead_split_learned_beta')
 
@@ -387,7 +396,7 @@ class ConnectionBlock(Block):
         self.fuse_chord_read_norm = config.fuse_chord_read_norm
         self.recompute_chord_force = config.recompute_chord_force
         self.chord_query_only_lookahead = config.chord_query_only_lookahead
-        self.token_controls = config.ngpt_velocity_mode == 'lookahead_token_single' or config.chord_six_controls == 'small_dynamic'
+        self.token_controls = config.ngpt_velocity_mode == 'lookahead_token_single' or config.dynamic_chord_controls
         self.compiled_attention = self.compiled_mlp = None
         if config.residual_mode != 'vanilla':
             from nanochat.momentum import residual_update
