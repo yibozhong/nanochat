@@ -320,10 +320,6 @@ def main():
                          arc_direction=a.arc_direction, arc_step_scale=a.arc_step_scale,
                          velocity_embedding_lr=a.velocity_embedding_lr)
     opt,wd=new_optimizer()
-    if a.check_zero_init_gradients:
-        if a.formal_training or a.resume:
-            p.error('--check-zero-init-gradients requires a fresh local diagnostic')
-        record_zero_init_gradients(model, opt, out/'first-gradients.json')
     language_groups = opt.param_groups
     initial_groups=[{k:v for k,v in group.items() if k!='params'} for group in language_groups]
     protocol=dict(steps=a.steps,schedule_steps=a.schedule_steps,batch_tokens=32768,
@@ -369,6 +365,10 @@ def main():
             training_generator='released per-index NumPy seed and fixed shuffle of 2501 batches')
         if not a.resume or state['step'] < warm_steps:
             opt = ReferenceAdamW(model)
+    if a.check_zero_init_gradients:
+        if a.formal_training or a.resume:
+            p.error('--check-zero-init-gradients requires a fresh local diagnostic')
+        record_zero_init_gradients(model, opt, out/'first-gradients.json')
     warm_supervised = 0
     procedural_val_ce = None
     step=0;best=float('inf');training_seconds=0.;prior_elapsed=0.;initial_dev=None
