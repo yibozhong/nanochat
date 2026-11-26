@@ -120,10 +120,12 @@ class ProceduralData:
             if 2 * self.length + overhead > self.context:
                 raise ValueError('A complete procedural example must fit in the model context')
 
-    def batch(self, first_row, rows):
+    def batch(self, first_row, rows, split="train"):
         """Each row is a deterministic function of its index, independent of microbatch/resume."""
         import numpy as np
 
+        if split not in ('train', 'dev'):
+            raise ValueError(f'Unknown procedural split {split}')
         separator, pad = self.vocab_size - 2, self.vocab_size - 1
         pool = range(1, separator)
         inputs = np.full((rows, self.context), pad, dtype=np.int64)
@@ -133,8 +135,9 @@ class ProceduralData:
         brackets = random.Random(self.seed).sample(pool, 128) if self.task in DYCK else None
         for b in range(rows):
             row = first_row + b
-            mapping_rng = random.Random((self.seed << 64) + row)
-            rng = np.random.RandomState([self.seed, row])
+            namespace = 1 << 128 if split == 'dev' else 0
+            mapping_rng = random.Random(namespace + (self.seed << 64) + row)
+            rng = np.random.RandomState([self.seed, row, 1] if split == 'dev' else [self.seed, row])
             pos = 0
             while pos < self.context:
                 if brackets is None:

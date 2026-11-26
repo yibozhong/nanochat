@@ -2,6 +2,7 @@
 from contextlib import nullcontext
 import copy
 import json
+import math
 from pathlib import Path
 import random
 import time
@@ -65,6 +66,28 @@ def evaluate(model,data,split='dev',microbatch=16,max_rows=None,**forward_option
         total += loss.item()*y.numel(); count+=y.numel()
     model.train(was_training)
     return total/count,count
+
+
+@torch.no_grad()
+def evaluate_procedural(model, batch, microbatch):
+    """Mean CE over exactly the held-out outputs, independent of batch partition."""
+    was_training = model.training
+    model.eval()
+    inputs, targets, masks = batch
+    count = int(masks.sum())
+    total = torch.zeros((), device='cuda', dtype=torch.float64)
+    try:
+        for start in range(0, len(inputs), microbatch):
+            sl = slice(start, start + microbatch)
+            x, y, mask = (torch.from_numpy(a[sl]).cuda() for a in (inputs, targets, masks))
+            losses = model(x, y, loss_reduction='none')
+            total += losses.masked_fill(~mask, 0.).sum(dtype=torch.float64)
+        ce = total.item() / count
+        if not math.isfinite(ce):
+            raise FloatingPointError('Nonfinite held-out procedural CE')
+        return ce, count
+    finally:
+        model.train(was_training)
 
 
 def train_step(model,opt,data,step,microbatch=16,batch_tokens=32768,seed=42,masked_batch=None):

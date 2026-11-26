@@ -11,6 +11,10 @@ def test_packed_examples_and_resume(task):
     xs, ys, masks = data.batch(17, 3)
     for chunk, row in zip(data.batch(19, 1), (xs, ys, masks)):
         np.testing.assert_array_equal(chunk[0], row[2])
+    dev = data.batch(17, 3, split='dev')
+    assert not np.array_equal(dev[0], xs)
+    for first, again in zip(dev, data.batch(17, 3, split='dev')):
+        np.testing.assert_array_equal(first, again)
     pad, sep = 32767, 32766
     for x, y, mask in zip(xs, ys, masks):
         assert np.all((x >= 0) & (x < 32768))
@@ -59,7 +63,7 @@ def test_masked_cce_gradients_and_microbatch():
     import torch
     from nanochat.connection_experiment import configure_attention
     from nanochat.connection_model import ConnectionConfig, build_connection_model
-    from nanochat.packed_training import seed_all, train_step
+    from nanochat.packed_training import seed_all, train_step, evaluate_procedural
 
     configure_attention('fa2')
     seed_all(42)
@@ -71,6 +75,8 @@ def test_masked_cce_gradients_and_microbatch():
     inputs, targets, mask = (torch.from_numpy(v).cuda() for v in batch)
     dense_losses = model(inputs, targets, dense=True, loss_reduction='none')
     reference = dense_losses[mask].mean()
+    val_ce, val_count = evaluate_procedural(model, batch, microbatch=2)
+    assert val_count == int(mask.sum()) and abs(reference.item() - val_ce) < .005
     reference.backward()
     gradients = {k: p.grad.float().clone() for k, p in model.named_parameters()}
     result = train_step(model, opt, None, 0, microbatch=2, batch_tokens=512, masked_batch=batch)

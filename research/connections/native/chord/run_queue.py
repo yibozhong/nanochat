@@ -104,13 +104,15 @@ def preflight(s, directory):
             assert [r['phase'] for r in rows] == ['procedural', 'procedural', 'fineweb', 'fineweb']
             assert [r['phase_step'] for r in rows] == [1, 2, 1, 2]
             assert rows[2]['lr_multiplier'] == rows[0]['lr_multiplier'] == 1/40
+            assert math.isfinite(summary['procedural_val_ce'])
             assert summary['fineweb_tokens'] == summary['procedural_tokens'] == 2*BATCH_TOKENS
         assert summary['complete'] and summary['source'] == s and math.isfinite(summary['final_dev_ce'])
         assert config['logging_backend'] == 'local' and config['actual_attention_backend'] == s['attention_backend']
         report = dict(source=s, first_gradients=read(out/'first-gradients.json'), gpu=config['gpu'],
                       step_losses=[r['loss'] for r in rows], resumed_at=2, final_dev_ce=summary['final_dev_ce'])
         if s.get('procedural'):
-            report.update(transfer=boundary, resumed_steps=[1, 2], fineweb_tokens=summary['fineweb_tokens'],
+            report.update(transfer=boundary, resumed_steps=[1, 2], procedural_val_ce=summary['procedural_val_ce'],
+                          fineweb_tokens=summary['fineweb_tokens'],
                           procedural_supervised_tokens=summary['procedural_supervised_tokens'])
     save(marker, report)
     return report

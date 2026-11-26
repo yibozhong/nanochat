@@ -22,13 +22,15 @@
 
 两阶段都使用既有 NanoChat 优化器和 LR 配方。阶段切换时在同一模型上新建优化器，不复制或重置任何模型参数，语言日程从第 0 步按剩余步数运行，FineWeb 从训练缓存第 0 行开始。中断恢复保留所在阶段的模型、优化器、随机状态和数据位置。[整模型迁移协议，附录 A.2](https://arxiv.org/html/2609.38764v1#A1.SS2)
 
-现有训练入口为 `python -m scripts.connection_train`，调度入口为 `research/connections/native/chord/submit.py`。在同一 baseline recipe 上添加以下参数即可启用实验组，省略这些参数即为纯 FineWeb 对照。该示例占用 100 个原有训练步。
+现有训练入口为 `python -m scripts.connection_train`，调度入口为 `research/connections/native/chord/submit.py`。在同一 baseline recipe 上添加以下参数即可启用实验组，省略这些参数即为纯 FineWeb 对照。本次 Union 实验与 vanilla 基线 `a2793a7e` 配对，seed 42，FA2，16 × 2048，保留基线的置零输出投影。
 
 ```text
---procedural-task union --procedural-tokens 3276800 --procedural-input-length 64
+--procedural-task union --procedural-tokens 10000000 --procedural-input-length 64
 ```
 
-总步数和上下文与基线一致。warm-up 预算按实际模型位置计费，向上取整到每步 32,768 个，计入提示和填充。配置记录请求与实际预算。训练记录分别保存 `tokens`、`procedural_tokens`、`procedural_supervised_tokens`、`fineweb_tokens`；总 tokens 对应基线的训练 FLOPs 估计，实测耗时另计。以相同总 tokens 对齐 dev CE 曲线；数据效率以两条曲线首次达到同一基线 CE 所用的 FineWeb tokens 衡量。训练前、切换点和共同的验证步均评估同一份 FineWeb dev。
+总步数和上下文与基线一致。warm-up 预算按实际模型位置计费，就近取整到每步 32,768 个（正预算至少一步），计入提示和填充。配置记录请求与实际预算。训练记录分别保存 `tokens`、`procedural_tokens`、`procedural_supervised_tokens`、`fineweb_tokens`；总 tokens 对应基线的训练 FLOPs 估计，实测耗时另计。以相同总 tokens 对齐 dev CE 曲线；数据效率以两条曲线首次达到同一基线 CE 所用的 FineWeb tokens 衡量。训练前、切换点和共同的验证步均评估同一份 FineWeb dev。程序阶段在独立随机流生成的固定验证集上记录 `procedural/val_ce` 和有效 target 数，FineWeb 使用 `dev/ce`。
+
+本次整步切分为 305 步 Union（9,994,240 个模型位置）和 30,213 步 FineWeb-Edu（990,019,584 tokens）。总计 1,000,013,824 个模型位置，恰好与基线的 30,518 步相同。
 
 ## 验证
 

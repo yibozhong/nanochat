@@ -20,7 +20,7 @@ from nanochat.experiment_logging import BATCH_TOKENS, PROJECT, STEPS, training_r
 from nanochat.procedural import DYCK, TASKS, ProceduralData
 
 from nanochat.connection_model import ConnectionConfig, build_connection_model, optimizer_for, schedule, CONNECTION_VARIANTS
-from nanochat.packed_training import PackedData, seed_all, evaluate, train_step, snapshot, atomic_save, restore_rng, json_write
+from nanochat.packed_training import PackedData, seed_all, evaluate, evaluate_procedural, train_step, snapshot, atomic_save, restore_rng, json_write
 from nanochat.connection_experiment import configure_attention, match_vanilla_initialization
 
 
@@ -169,7 +169,7 @@ def main():
     p.add_argument('--steps', type=int)
     p.add_argument('--procedural-task', choices=TASKS)
     p.add_argument('--procedural-tokens', type=int, default=0,
-                   help='Warm-up model positions within the total budget, rounded up to one optimizer batch')
+                   help='Warm-up model positions within the total budget, rounded to the nearest full batch (positive budgets use at least one)')
     p.add_argument('--procedural-input-length', type=int, help='Defaults to 64 symbols or one full context for Dyck')
     p.add_argument('--schedule-steps', type=int, default=STEPS)
     p.add_argument('--microbatch', type=int, default=16)
@@ -199,7 +199,7 @@ def main():
         p.error('A positive --procedural-tokens budget requires --procedural-task')
     if not a.procedural_task and a.procedural_input_length is not None:
         p.error('--procedural-input-length requires --procedural-task')
-    warm_steps = (a.procedural_tokens + BATCH_TOKENS - 1) // BATCH_TOKENS
+    warm_steps = max(1, (a.procedural_tokens + BATCH_TOKENS//2) // BATCH_TOKENS) if a.procedural_tokens else 0
     if warm_steps >= a.schedule_steps or (a.formal_training and warm_steps >= a.steps):
         p.error('Reserve at least one FineWeb update after the procedural warm-up')
     if a.streams is None:
@@ -325,6 +325,9 @@ def main():
         protocol['procedural'] = dict(generator='jiang-packed-v1', task=procedural.task, input_length=length,
             requested_tokens=a.procedural_tokens, steps=warm_steps, model_tokens=warm_steps*BATCH_TOKENS,
             fineweb_schedule_steps=a.schedule_steps-warm_steps, vocabulary='native tokenizer IDs',
+            objective='within-example next token' if procedural.task in DYCK else 'output-only next token',
+            validation='fixed separate RNG stream, same generator and symbol rules',
+            validation_rows=len(data.arrays['dev']),
             transfer='all parameters in place; fresh optimizer and phase-local schedule')
     if a.velocity_embedding_lr is not None:
         protocol['velocity_embedding_peak_lr'] = a.velocity_embedding_lr
@@ -343,6 +346,7 @@ def main():
         protocol['feedback']=dict(pass_mix=[.15,.85],sampler='numpy.default_rng([seed,zero_based_step])',
             earlier_passes='no_grad_detached',eval_passes=c.feedback_eval_passes)
     warm_supervised = 0
+    procedural_val_ce = None
     step=0;best=float('inf');training_seconds=0.;prior_elapsed=0.;initial_dev=None
     prior_peak = 0
     training_flops = 0
@@ -362,6 +366,7 @@ def main():
         training_flops = state.get('estimated_training_flops', 0)
         if procedural:
             warm_supervised = state['procedural_supervised_tokens']
+            procedural_val_ce = state.get('procedural_val_ce')
         model.load_state_dict(state['model']);opt.load_state_dict(state['optimizer'])
         restore_rng(state['rng']);del state
         assert (ckpt/'best.pt').exists(),'Resume requires the paired dev-best checkpoint'
@@ -490,6 +495,10 @@ def main():
         nonlocal stop
         stop=True
     signal.signal(signal.SIGTERM,interrupted);signal.signal(signal.SIGUSR1,interrupted)
+    procedural_dev = None
+    if procedural and step <= warm_steps:
+        procedural_dev = procedural.batch(0, len(data.arrays['dev']), split='dev')
+
     def token_counts():
         if not procedural:
             return {}
@@ -501,6 +510,7 @@ def main():
         atomic_save(snapshot(model,opt,step,config=asdict(c),protocol=protocol,source=source,
             run_id=run_id,data_manifest=data.manifest,best_dev_ce=best,
             initial_dev_ce=initial_dev,training_seconds=training_seconds,**token_counts(),
+            **(dict(procedural_val_ce=procedural_val_ce) if procedural else {}),
             peak_allocated_bytes=max(prior_peak,torch.cuda.max_memory_allocated()),estimated_training_flops=training_flops,
             elapsed_seconds=prior_elapsed+time.perf_counter()-begin),
             ckpt/'latest.pt')
@@ -510,7 +520,12 @@ def main():
         atomic_save(dict(model=model.state_dict(),config=asdict(c),protocol=protocol,source=source,
             run_id=run_id,step=step,dev_ce=dev,data_manifest=data.manifest),ckpt/'best.pt')
     def dev_metrics(dev):
+        nonlocal procedural_val_ce
         metrics={'dev/ce':dev, **token_counts()}
+        if procedural and step <= warm_steps:
+            procedural_val_ce, supervised = evaluate_procedural(model, procedural_dev, a.microbatch)
+            metrics.update({'procedural/val_ce': procedural_val_ce, 'procedural/val_supervised_tokens': supervised})
+            print(f'PROCEDURAL_DEV step={step} val_ce={procedural_val_ce:.6f} targets={supervised}', flush=True)
         if a.matrix_optimizer == 'arc':
             metrics.update(opt.metrics())
         if c.residual_mode != 'vanilla':
@@ -633,6 +648,8 @@ def main():
             estimated_training_flops=training_flops if nominal_flops is not None else None,
             peak_reserved_bytes=torch.cuda.max_memory_reserved(),source=source,
             test_evaluated=a.evaluate_test,checkpoint_files=checkpoint_files,**token_counts(),**test_result)
+        if procedural:
+            result['procedural_val_ce'] = procedural_val_ce
         json_write(out/'summary.json',result);run.summary.update(result);run.finish()
         print(json.dumps(result),flush=True);return 0
     except BaseException:
