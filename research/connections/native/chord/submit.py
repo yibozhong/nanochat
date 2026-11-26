@@ -226,12 +226,13 @@ def main(argv=None):
     parser.add_argument('--procedural-task', choices=TASKS)
     parser.add_argument('--procedural-tokens', type=int, default=0)
     parser.add_argument('--procedural-input-length', type=int)
+    parser.add_argument('--procedural-reset-vocab', action='store_true', help='Fresh vocabulary layers at transfer to FineWeb')
     parser.add_argument('--procedural-reference-updates', type=int, help='Use the published 64-example Union AdamW recipe')
     args = parser.parse_args(argv)
     if args.velocity_init and args.recipe not in CHORD_ARGS:
         parser.error('--velocity-init requires an individual six-coefficient Chord recipe')
     procedural = None
-    if args.procedural_task or args.procedural_tokens or args.procedural_input_length is not None or args.procedural_reference_updates is not None:
+    if args.procedural_task or args.procedural_tokens or args.procedural_input_length is not None or args.procedural_reference_updates is not None or args.procedural_reset_vocab:
         if not args.procedural_task or not 0 < args.procedural_tokens <= (STEPS-1)*BATCH_TOKENS:
             parser.error('Select a procedural task and a positive token budget with room for FineWeb')
         length = args.procedural_input_length
@@ -242,6 +243,10 @@ def main(argv=None):
         except ValueError as error:
             parser.error(str(error))
         procedural = dict(task=args.procedural_task, tokens=args.procedural_tokens, length=length)
+        if args.procedural_reset_vocab:
+            if args.recipe != 'vanilla_baseline':
+                parser.error('--procedural-reset-vocab requires --recipe vanilla_baseline')
+            procedural['reset_vocab'] = True
         if args.procedural_reference_updates is not None:
             warm_steps = max(1, (args.procedural_tokens + BATCH_TOKENS//2)//BATCH_TOKENS)
             if args.procedural_task != 'union' or not warm_steps <= args.procedural_reference_updates <= min(2501,16*warm_steps):
@@ -249,6 +254,8 @@ def main(argv=None):
             procedural['reference_updates'] = args.procedural_reference_updates
     steps = 0 if args.debug_only else STEPS
     suffix = f"-{procedural['task']}-len{length}-{procedural['tokens']}t" if procedural else ''
+    if args.procedural_reset_vocab:
+        suffix += '-reset-vocab'
     if args.recipe in CHORD_ARGS:
         flags = chord_args(args.recipe, args.velocity_init)
         velocity, = (f.split('=', 1)[1] for f in flags if f.startswith('--velocity-init='))

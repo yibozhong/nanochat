@@ -219,3 +219,23 @@ def test_reference_adamw_resume_keeps_fp32_master_and_clip():
     for left, right in zip(model.parameters(), model2.parameters()):
         assert torch.equal(left, right)
     assert torch.equal(master, opt2.low_precision[0][1])
+
+
+def test_fresh_vocabulary_draws_preserve_rng_and_native_initialization():
+    import torch
+    from nanochat.connection_model import ConnectionConfig, build_connection_model
+
+    config = ConnectionConfig(variant='baseline', depth=2, width=128, heads=1, sequence_length=128, vocab_size=256)
+    model = build_connection_model(config).prepare()
+    prior = {name: tensor.clone() for name, tensor in model.state_dict().items()}
+    rng_before = torch.cuda.get_rng_state()
+    generator = torch.Generator(device='cuda').manual_seed(3407)
+    model.reset_vocabulary_parameters(generator=generator)
+    assert torch.equal(rng_before, torch.cuda.get_rng_state())
+    changed = {name for name, tensor in model.state_dict().items() if not torch.equal(tensor, prior[name])}
+    assert changed == {'wte.weight', 'lm_head.weight'}
+    # Compare both draws to the fresh vanilla FP32 initialization, including the embedding cast.
+    generator.manual_seed(3407)
+    for weight, std in ((model.wte.weight, .8), (model.lm_head.weight, .001)):
+        expected = torch.empty_like(weight, dtype=torch.float32).normal_(0, std, generator=generator)
+        assert torch.equal(weight, expected.to(weight.dtype))

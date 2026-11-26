@@ -174,6 +174,8 @@ def main():
     p.add_argument('--procedural-tokens', type=int, default=0,
                    help='Warm-up model positions within the total budget, rounded to the nearest full batch (positive budgets use at least one)')
     p.add_argument('--procedural-reference-updates', type=int, help='Use the published Union batch of 64 and constant AdamW for this many optimizer updates')
+    p.add_argument('--procedural-reset-vocab', action='store_true',
+                   help='Transfer the vanilla backbone and freshly initialize the native input embedding and LM head')
     p.add_argument('--procedural-input-length', type=int, help='Defaults to 64 symbols or one full context for Dyck')
     p.add_argument('--schedule-steps', type=int, default=STEPS)
     p.add_argument('--microbatch', type=int, default=16)
@@ -206,6 +208,9 @@ def main():
     warm_steps = max(1, (a.procedural_tokens + BATCH_TOKENS//2) // BATCH_TOKENS) if a.procedural_tokens else 0
     if a.procedural_reference_updates is not None and (a.procedural_task != 'union' or not warm_steps or a.procedural_reference_updates <= 0):
         p.error('--procedural-reference-updates requires Union and a positive warm-up budget')
+    if a.procedural_reset_vocab and (not warm_steps or a.architecture != 'vanilla' or a.variant != 'baseline'
+                                     or a.residual_dynamics != 'vanilla' or a.latent_feedback or a.chord_attnres):
+        p.error('--procedural-reset-vocab requires a procedural warm-up and the vanilla baseline architecture')
     if warm_steps >= a.schedule_steps or (a.formal_training and warm_steps >= a.steps):
         p.error('Reserve at least one FineWeb update after the procedural warm-up')
     if a.streams is None:
@@ -337,6 +342,9 @@ def main():
             validation='fixed separate RNG stream, same generator and symbol rules',
             validation_rows=len(data.arrays['dev']),
             transfer='all parameters in place; fresh optimizer and phase-local schedule')
+        if a.procedural_reset_vocab:
+            protocol['procedural'].update(transfer='retain backbone; fresh token embedding and LM head; fresh optimizer and phase-local schedule',
+                                          vocabulary_init_seed=3407)
         if class_ids is not None:
             protocol['procedural'].update(output_classes=len(class_ids), normalization='released task vocabulary',
                 examples='independent, causal attention and RoPE reset per sample',
@@ -523,7 +531,7 @@ def main():
         stop=True
     signal.signal(signal.SIGTERM,interrupted);signal.signal(signal.SIGUSR1,interrupted)
     procedural_dev = None
-    if procedural and step <= warm_steps:
+    if procedural and (step < warm_steps or (step == warm_steps and not a.procedural_reset_vocab)):
         procedural_dev = procedural.batch(0, len(data.arrays['dev']), split='dev')
 
     def token_counts():
@@ -547,13 +555,16 @@ def main():
     def save_best(dev):
         atomic_save(dict(model=model.state_dict(),config=asdict(c),protocol=protocol,source=source,
             run_id=run_id,step=step,dev_ce=dev,data_manifest=data.manifest),ckpt/'best.pt')
-    def dev_metrics(dev):
+    def score_procedural():
+        return evaluate_procedural(model, procedural_dev, a.microbatch, with_accuracy=True, class_ids=class_ids)
+
+    def dev_metrics(dev, final_procedural_score=None):
         nonlocal procedural_val_ce
         metrics={'dev/ce':dev, **token_counts()}
         if procedural:
             print(f"FINEWEB_DEV step={step} fineweb_tokens={metrics['fineweb_tokens']} val_ce={dev:.8f}", flush=True)
-        if procedural and step <= warm_steps:
-            procedural_val_ce, supervised, accuracy = evaluate_procedural(model, procedural_dev, a.microbatch, with_accuracy=True, class_ids=class_ids)
+        if procedural_dev is not None and step <= warm_steps:
+            procedural_val_ce, supervised, accuracy = final_procedural_score or score_procedural()
             metrics.update({'procedural/val_ce': procedural_val_ce, 'procedural/val_supervised_tokens': supervised,
                             'procedural/val_accuracy': accuracy})
             print(f'PROCEDURAL_DEV step={step} val_ce={procedural_val_ce:.6f} targets={supervised} val_accuracy={accuracy:.8f}', flush=True)
@@ -641,28 +652,40 @@ def main():
                         perf['perf/profile_additional_peak_reserved_bytes']=profile_reference['additional_peak_reserved_bytes']
                     run.log(dict(step=step,tokens=row['tokens'],**perf))
                 transfer = procedural is not None and step == warm_steps
+                final_procedural_score = None
                 if transfer:
-                    # The diagnostic verifies every tensor at this boundary on the real model.
-                    before = None if a.formal_training else {
-                        name: value.detach().clone() for name, value in model.state_dict().items()}
+                    # Score Union with the trained vocabulary, then score FineWeb with its own.
+                    if a.procedural_reset_vocab:
+                        final_procedural_score = score_procedural()
+                    verify_transfer = a.procedural_reset_vocab or not a.formal_training
+                    before = {name: value.detach().clone() for name, value in model.state_dict().items()} if verify_transfer else None
                     opt.zero_grad(set_to_none=True)
                     del opt
+                    if a.procedural_reset_vocab:
+                        # The released C4 config uses seed 3407. Isolate its two fresh
+                        # draws from the seed-42 warm-up, data stream and training RNG.
+                        rng = torch.Generator(device=model.wte.weight.device).manual_seed(protocol['procedural']['vocabulary_init_seed'])
+                        model.reset_vocabulary_parameters(generator=rng)
                     opt, wd = new_optimizer()
                     if before is not None:
                         after = model.state_dict()
                         assert before.keys() == after.keys() and not opt.state
-                        for name, value in before.items():
-                            assert torch.equal(value, after[name]), f'Weight changed at transfer: {name}'
-                        json_write(out/'transfer-check.json', dict(step=step, identical_tensors=len(after),
-                            optimizer_state_entries=len(opt.state), fineweb_next_row=0))
-                        del before, after, value
+                        changed = sorted(name for name in before if not torch.equal(before[name], after[name]))
+                        expected = ['lm_head.weight', 'wte.weight'] if a.procedural_reset_vocab else []
+                        assert changed == expected, (changed, expected)
+                        report = dict(step=step, identical_tensors=len(after)-len(changed),
+                                      optimizer_state_entries=len(opt.state), fineweb_next_row=0)
+                        if a.procedural_reset_vocab:
+                            report.update(reinitialized_tensors=changed, pre_reset_union_val_ce=final_procedural_score[0])
+                        json_write(out/'transfer-check.json', report)
+                        del before, after
                     print(f'PROCEDURAL_TRANSFER step={step} fineweb_next_row=0', flush=True)
                 if transfer or step==50 or step%250==0 or step==a.steps:
                     dev,dev_tokens=evaluate(model,data,microbatch=a.microbatch)
                     assert math.isfinite(dev)
                     if dev<best or transfer:
                         best=dev;save_best(dev)
-                    run.log(dict(step=step,tokens=step*32768,**dev_metrics(dev),**{'dev/tokens':dev_tokens}))
+                    run.log(dict(step=step,tokens=step*32768,**dev_metrics(dev, final_procedural_score),**{'dev/tokens':dev_tokens}))
                 if transfer or step==50 or step%500==0 or step==a.steps or stop:save()
                 if step<a.steps and (stop or time.perf_counter()-begin>=a.segment_seconds
                                       or a.segment_steps and step-start_step>=a.segment_steps):

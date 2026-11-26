@@ -541,8 +541,7 @@ class ConnectionModel(nn.Module):
         self.wte = nn.Embedding(config.vocab_size, config.width)
         self.blocks = nn.ModuleList([ConnectionBlock(native, i, config) for i in range(config.depth)])
         self.lm_head = Linear(config.width, config.vocab_size, bias=False)
-        nn.init.normal_(self.wte.weight, std=.8)
-        nn.init.normal_(self.lm_head.weight, std=.001)
+        self.reset_vocabulary_parameters()
         s = math.sqrt(3 / config.width)
         for b in self.blocks:
             for p in (b.attn.c_q.weight, b.attn.c_k.weight, b.attn.c_v.weight):
@@ -577,6 +576,16 @@ class ConnectionModel(nn.Module):
             from nanochat.fla_attention import FlaAttention
             for block in self.blocks:
                 block.attn = FlaAttention(block.attn)
+
+    @torch.no_grad()
+    def reset_vocabulary_parameters(self, *, generator=None):
+        """Draw fresh native input and readout weights, in FP32 before the BF16 cast."""
+        for weight, std in ((self.wte.weight, .8), (self.lm_head.weight, .001)):
+            if weight.dtype == torch.float32:
+                nn.init.normal_(weight, std=std, generator=generator)
+            else:
+                fresh = torch.empty_like(weight, dtype=torch.float32)
+                weight.copy_(nn.init.normal_(fresh, std=std, generator=generator))
 
     def prepare(self, device='cuda', dtype=torch.bfloat16, compile_blocks=False):
         if self.config.variant not in ('baseline', 'skip_scale'):

@@ -63,6 +63,8 @@ def train_args(s, *, smoke=False):
     flags = [] if not warm else [
         '--procedural-task', warm['task'], '--procedural-input-length', str(warm['length']),
         '--procedural-tokens', str(2*BATCH_TOKENS if smoke else warm['tokens'])]
+    if warm and warm.get('reset_vocab'):
+        flags.append('--procedural-reset-vocab')
     if warm and 'reference_updates' in warm:
         flags.extend(['--procedural-reference-updates', str(8 if smoke else warm['reference_updates'])])
     return [sys.executable, '-m', 'scripts.connection_train', *flags, *s['model_args'], '--matched-backbone-init',
@@ -126,6 +128,9 @@ def preflight(s, directory):
                 assert [r['procedural_optimizer_updates'] for r in rows] == [4, 8, 8, 8]
             else:
                 assert rows[0]['lr_multiplier'] == 1/40
+            if s['procedural'].get('reset_vocab'):
+                assert boundary['reinitialized_tensors'] == ['lm_head.weight', 'wte.weight']
+                assert summary['procedural_val_ce'] == boundary['pre_reset_union_val_ce']
             assert math.isfinite(summary['procedural_val_ce'])
             assert summary['fineweb_tokens'] == summary['procedural_tokens'] == 2*BATCH_TOKENS
         assert summary['complete'] and summary['source'] == s and math.isfinite(summary['final_dev_ce'])
