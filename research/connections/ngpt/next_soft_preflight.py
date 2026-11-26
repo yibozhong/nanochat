@@ -12,6 +12,7 @@ from nanochat.connection_experiment import configure_attention
 from nanochat.connection_model import ConnectionConfig
 from nanochat.engine import KVCache
 from nanochat.packed_training import PackedData, json_write, seed_all
+from research.connections.native.chord.submit import chord_args
 from research.connections.ngpt.chord_checks import benchmark, check_read_vjp, make
 
 
@@ -114,7 +115,8 @@ def check_model(c, data):
     loss = model(ids, targets)
     loss.backward()
     assert torch.isfinite(loss)
-    check_projected_h0(model, ids)
+    if c.velocity_init == 'projected_h0':
+        check_projected_h0(model, ids)
     grad_norm = torch.stack([p.grad.float().norm() for p in model.parameters() if p.grad is not None]).norm()
     assert torch.isfinite(grad_norm)
     for block in model.blocks:
@@ -128,8 +130,10 @@ def check_model(c, data):
                 site.token_weight.normal_(std=.02)
     model.zero_grad(set_to_none=True)
     model(ids, targets).backward()
-    grad = model.velocity_projection.weight.grad
-    assert grad is not None and torch.isfinite(grad).all() and grad.norm() > 0
+    velocity_module = model.velocity_projection if c.velocity_init == 'projected_h0' else model.velocity_embedding
+    if velocity_module is not None:
+        grad = velocity_module.weight.grad
+        assert grad is not None and torch.isfinite(grad).all() and grad.norm() > 0
     model.eval()
     with torch.no_grad():
         hidden = model.hidden(ids)
@@ -149,12 +153,12 @@ def main():
     torch.backends.cuda.matmul.allow_tf32 = False
     source = json.loads(Path('source.json').read_text())
     assert source['recipe'] == 'chord_next_bf16'
-    assert source['model_args'] == Path('research/connections/ngpt/chord_next.args').read_text().splitlines()
-    control = ConnectionConfig(streams=1, residual_dynamics='ngpt_lookahead', velocity_init='token', chord_soft_force_tau=.05,
+    assert source['model_args'] == chord_args(source['recipe'], source['velocity_init'])
+    control = ConnectionConfig(streams=1, residual_dynamics='ngpt_lookahead', velocity_init=source['velocity_init'],
+                               chord_soft_force_tau=.05, chord_six_controls='static', chord_update_based=True,
                                ngpt_velocity_mode='lookahead_split_learned_beta', residual_projection_init='zero',
                                chord_velocity_geometry='project_only', fuse_chord_read_norm=True, ngpt_force_rms_floor=1e-6)
-    c = replace(control, velocity_init='projected_h0', residual_projection_init='zero',
-                chord_update_based=True, chord_six_controls='learned_dynamic', chord_soft_force_tau=.05)
+    c = replace(control, chord_six_controls='learned_dynamic')
     run, reference = source['recipe'], 'chord_scalar_bf16'
     data = PackedData('../data')
     geometry(c)
@@ -165,7 +169,7 @@ def main():
         torch.cuda.empty_cache()
         result[name] = benchmark(cfg, data, verify_resume=name==run, schedule_steps=source['schedule_steps'])
     result['step_time_ratio'] = result[run]['median_step_s']/result[reference]['median_step_s']
-    json_write(Path('results/vanilla-next-soft-projected-h0-sm90.json'), result)
+    json_write(Path(f"results/vanilla-next-soft-{c.velocity_init}-sm90.json"), result)
     print('NEXT_SOFT_PREFLIGHT_PASS', result, flush=True)
 
 

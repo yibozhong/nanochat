@@ -42,7 +42,8 @@ def manifest_runs(manifest, run_id, recipe):
         if s['recipe'] in ABLATION_ARGS:
             assert s['model_args'] == chord_args(s['recipe'])
         if s['recipe'] in CHORD_ARGS:
-            assert s['model_args'] == CHORD_ARGS[s['recipe']].read_text().splitlines()
+            assert s['model_args'] == chord_args(s['recipe'], s['velocity_init'])
+            assert args['chord-six-controls'] == s['chord_controls'] and '--chord-update-based' in s['model_args']
             assert args['chord-soft-force-tau'] == '0.05' and args['chord-state-dtype'] == 'bfloat16'
     return runs
 
@@ -86,7 +87,8 @@ def preflight(s, directory):
         subprocess.run([sys.executable, '-m', 'pytest', '-q', 'tests/test_scalar_components.py::test_' + test],
                        env=env, check=True, timeout=600)
     if s['recipe'] == 'chord_scalar_bf16':
-        subprocess.run([sys.executable, '-m', 'pytest', '-q', '-s', 'tests/test_chord_soft_scalar.py'],
+        subprocess.run([sys.executable, '-m', 'pytest', '-q', '-s', 'tests/test_chord_soft_scalar.py',
+                        'tests/test_chord_six_controls.py'],
                        env=env, check=True, timeout=600)
     if s['recipe'] == 'chord_next_bf16':
         subprocess.run([sys.executable, '-m', 'research.connections.ngpt.next_soft_preflight'],

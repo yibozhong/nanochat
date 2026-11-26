@@ -1,13 +1,13 @@
 # Chord residual
 
-日常实验、迁移和配置检索只使用以下两个 BF16 入口。两者均使用 vanilla 主干和 τ=0.05 的 soft-force 归一化。Scalar 将归一化输出当作目标，Next 将其直接作为建议位移。优化器和学习率沿用 nanochat 的配对基线。
+新 Chord 实验默认使用每个子层六个系数的 BF16 版本。两个入口共用 vanilla 主干、τ=0.05 的 soft force 和同一个 update-based 球面更新。只说 Chord 时选 static。
 
 | 用户称呼 | 1B 提交参数 | 初速度 |
 | --- | --- | --- |
-| 原版、scalar 或默认 Chord | `--recipe chord_scalar_bf16` | 独立 token 速度表，投影到 h0 的切平面。[模型参数](research/connections/ngpt/chord.args) |
-| Next Chord | `--recipe chord_next_bf16` | 从归一化的 h0 生成，v0 = P_h0(W_v h0)。[模型参数](research/connections/ngpt/chord_next.args) |
+| static、scalar 或默认 Chord | `--recipe chord_scalar_bf16` | 默认独立 token 速度表。[模型参数](research/connections/ngpt/chord.args) |
+| token-dependent 或 Next Chord | `--recipe chord_next_bf16` | 默认从归一化的 h0 生成。[模型参数](research/connections/ngpt/chord_next.args) |
 
-Next 的速度表版本仍有效，归入 legacy。其余历史 Chord 配置也归入 legacy，仅在用户点名时检索或用于复现。两种日常配方的读写规则、初始化和训练入口见 [Chord 说明](research/connections/ngpt/CHORD.md)。
+两个入口均接受 `--velocity-init zero|token|projected_h0`。比较控制方式时显式指定相同初速度。速度表沿用输入 embedding 的 AdamW 组，W_v 沿用主干矩阵 Muon 组，六系数及 token 调制使用 nanochat routing AdamW 组。历史四标量实验使用各自的 manifest 和归档配方。[Chord 说明](research/connections/ngpt/CHORD.md)
 
 ## 1B 实验工作流
 

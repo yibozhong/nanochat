@@ -3,7 +3,7 @@
 Compile-time modes: 0 isotropic, 1 token alpha gates, 2 token beta gate,
 3 split steps with shared beta, 4 single step with a parallel-axis correction, 5 channel-wise split steps and beta,
 6 scalar split steps and beta with a direct velocity write, 7 independent tangent velocity coefficients,
-8 scalar split steps applied directly to the normalized force, 9 token controls with a soft-normalized update.
+8 and 9 split the normalized force directly, with tied and independent velocity gains respectively.
 """
 import torch
 import triton
@@ -483,7 +483,7 @@ class _ChordWrite(torch.autograd.Function):
         width = h.size(-1)
         assert h.is_cuda and h.dtype == v.dtype and h.dtype in (torch.bfloat16, torch.float32)
         assert params.dtype == torch.float32
-        assert h.shape == v.shape == force.shape and params.numel() == (1, 5, 4, 3, 2, 3 * width, 4, 5, 3)[mode]
+        assert h.shape == v.shape == force.shape and params.numel() == (1, 5, 4, 3, 2, 3 * width, 4, 5, 3, 5)[mode]
         assert width == triton.next_power_of_2(width) and force.dtype in (torch.bfloat16, torch.float32)
         new_h, new_v = torch.empty_like(h), torch.empty_like(v)
         rows = h.numel() // width
@@ -617,14 +617,14 @@ def fused_write(h, v, force, alpha, beta, floor):
 def fused_split_write(h, v, force, params, floor, geometry='parallel_transport', projection=(), *, update_based=False, soft_tau=0.):
     """Pack the position steps and velocity coefficients for this write policy."""
     mode = 5 if params.ndim == 2 else 3
-    if update_based:
+    if params.shape == (5,):
+        assert geometry == 'project_only'
+        mode = 9 if update_based else 7
+    elif update_based:
         assert params.shape == (3,)
         mode = 8
     elif params.shape == (4,):
         mode = 6
-    elif params.shape == (5,):
-        assert geometry == 'project_only'
-        mode = 7
     return _ChordWrite.apply(h.contiguous(), v.contiguous(), force.contiguous(), params, 0., floor, mode, _GEOMETRY[geometry], soft_tau, *projection)
 
 

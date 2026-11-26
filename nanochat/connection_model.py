@@ -139,12 +139,12 @@ class ConnectionConfig:
             raise ValueError('Token-conditioned update-based Chord requires a positive soft force tau')
         if self.chord_soft_force_tau and self.residual_mode != 'ngpt' and not token_update and (
                 self.architecture != 'vanilla' or self.residual_mode != 'ngpt_lookahead'
-                or self.ngpt_velocity_mode != 'lookahead_split_learned_beta' or self.chord_six_controls != 'off'
+                or self.ngpt_velocity_mode != 'lookahead_split_learned_beta' or self.dynamic_chord_controls
                 or self.token_chord_gates or self.token_beta_gate or self.channel_chord_coefficients or self.chord_velocity_write):
             raise ValueError('Soft force requires scalar split Chord or a token-conditioned update-based write')
         if self.chord_update_based and (
                 self.architecture != 'vanilla' or self.ngpt_velocity_mode != 'lookahead_split_learned_beta'
-                or self.chord_six_controls == 'static' or self.channel_chord_coefficients
+                or self.channel_chord_coefficients
                 or self.token_chord_gates or self.token_beta_gate or self.chord_velocity_write):
             raise ValueError('Update-based Chord requires vanilla split steps with scalar retention or h-only controls')
         if self.normalize_minimal_force and self.ngpt_velocity_mode != 'lookahead_minimal':

@@ -1,29 +1,38 @@
 # Chord residual 配方
 
-Chord 在每个 token 上沿模型深度传递位置 h 和速度 v。h 的 RMS 为 1，球面半径为 sqrt(d_model)。v 位于 h 的切平面。每个 Attention 或 FFN 从前瞻点读取，在球面上更新 h，再用实际位移更新 v。跨子层的 h、v 以 BF16 保存，几何运算使用 FP32。[标量版交互演示](chord-demo.html)
+新实验默认使用六系数 Chord。每个 token 跨层携带位置 h 和切向速度 v。位置的 RMS 为 1，球面半径为 sqrt(d_model)。Attention 和 FFN 都读取前瞻点，在球面上更新位置，再把这一步的位移写入速度。h、v 以 BF16 保存，几何归约使用 FP32。
 
-| 1B 配方 | 初速度 | 分支输出如何参与位置更新 | Attention 输出与 FFN down 投影初始化 |
-| --- | --- | --- | --- |
-| `chord_scalar_bf16`，原默认 | 独立 token 速度表，查表后投影到切平面 | 把 soft-normalized 输出当作目标，取从 h 到目标的差 | 零 |
-| `chord_next_bf16`，Next 主配置 | 对归一化后的 h0 作无偏置线性变换，再投影到切平面 | 把 soft-normalized 输出直接用作建议位移 | 零 |
+## 两个入口，三种初速度
 
-两版都用 vanilla 全注意力、FA2、融合前瞻读取、原分支 pre-norm 和 NTP loss，默认关闭 force 重算。训练入口是 `scripts.connection_train`。跨仓库迁移使用对应参数文件。[Scalar BF16](chord.args) · [Next BF16](chord_next.args)
+| 控制方式 | 1B 提交参数 | 省略初速度参数时 |
+| --- | --- | --- |
+| Static，每个子层一组跨 token 共享的系数 | `--recipe chord_scalar_bf16` | 独立速度表 |
+| Token-dependent，每个子层按当前 token 的 h 调制系数 | `--recipe chord_next_bf16` | 从 h0 线性生成速度 |
 
-## 初始化与子层更新
+两个入口均可指定 `--velocity-init`。比较控制方式时，两侧显式传入同一值。模型参数见 [static 配方](chord.args) 和 [token-dependent 配方](chord_next.args)。
 
-以下均按单个 token 计算。N 表示将向量归一化到单位 RMS，P(h,x) = x − mean(h*x) h 是球面点 h 处的切向投影。h0 取 N(token_embedding[id])。标量版初速度为 P(h0, velocity_embedding[id])，速度表按标准差 0.02 初始化。Next 主配置为 P(h0, W_v h0)，W_v 形状为 d_model × d_model，按标准差 0.02 / sqrt(d_model) 初始化，归入主干矩阵 Muon 组。
+- `zero` 从静止开始，初速度没有参数。
+- `token` 查独立 token 速度表，v0 = P(h0, E_v[id])。速度表按标准差 0.02 初始化。
+- `projected_h0` 使用 v0 = P(h0, W_v h0)。W_v 是共享的无偏置 d_model × d_model 矩阵，初始化标准差为 0.02 / sqrt(d_model)。
 
-令 q 为前瞻点。实现利用切向性计算 q = (h + μv) / sqrt(1 + mean((μv)²))。F(q) 表示当前 Attention 或 FFN 在分支 pre-norm 后的输出。两版共用 s = F(q) / sqrt(mean(F(q)²) + 0.05²)。Scalar 将 s 当作目标，取 delta = s − h。Next 将 s 当作建议位移，取 delta = s。
+三种都取 h0 = N(token_embedding[id])。N 将向量归一化到单位 RMS，P(h,x) = x − mean(h*x) h 表示切向投影。
 
-新 1B 配方统一将 Attention 输出及 FFN down 投影置零。Scalar 初始两个步长同为 0.05 时，从分支输出到下一位置的切向导数为 0.05 / (0.95 × 0.05) ≈ 1.053。旧 Scalar checkpoint 使用原配置；复现历史硬归一化配方时在参数文件后指定 `--chord-soft-force-tau=0`。
+## 每个子层如何更新
 
-把 delta 拆为沿 v 的平行分量和其余分量。两版均以 h_next = N(h + α∥ delta∥ + α⊥ delta⊥) 更新位置。当 v 为零时，平行分量为零。
+1. 用 μ 决定沿旧速度前瞻多远。融合读取计算 q = (h + μv) / sqrt(1 + mean((μv)²))，然后做分支 pre-norm，运行一次 Attention 或 FFN，得到输出 f。
+2. 取建议位移 s = f / sqrt(mean(f²) + 0.05²)，按旧速度 v 拆为平行分量 s∥ 和垂直分量 s⊥。新位置为 h′ = N(h + α∥ s∥ + α⊥ s⊥)。
+3. 在 h′ 的切平面上取 u = P(h′, v) 与 d = P(h′, h′ − h)。把 d 按 u 拆分，写入 v′ = βu + γ∥ d∥ + γ⊥ d⊥。当参考速度为零时，平行分量取零。最后一个 FFN 的速度没有下游消费者，只学习三个位置系数。
 
-- **Scalar** 每个子层的 μ、两个正步长 α 和 β 跨 token 与通道共享。有效初值依次为 0、0.05、0.05 和 0.5。速度更新为 v_next = P(h_next, βv + (1 − β)(h_next − h))。
-- **Next** 由该位置当前的 RMSNorm(h) 调制 μ、两个 α、β 和两个速度写入系数 γ。先将旧速度和本次弦位移投影到终点切平面，得到 u 和 d，再将 d 按 u 的方向拆分。v_next = βu + γ∥ d∥ + γ⊥ d⊥。两个 γ 初值均为 0.5，token 调制投影从零初始化，三组可学习调制尺度从 0.01 开始。末端 FFN 只写位置。[速度读写实现](../../../nanochat/chord_token_controls.py)
+μ 初始为 0，两个 α 用 softplus，初始为 0.05。β 用 sigmoid，初始为 0.5。两个 γ 独立、无界，初始均为 0.5。八层 static 共学习 15 × 6 + 3 = 93 个控制标量。Token-dependent 版在各系数的原始参数上加上 RMSNorm(h) 的线性投影，再施加相同的参数化。投影从零初始化，前瞻、位置和速度的调制尺度从 0.01 开始，因此在相同输入和初速度下，两版的初始系数及更新公式一致。[速度写入的来源](https://github.com/lululu39/NextTransformer/tree/chordres-zero/nexttransformer/methods/chordres_velocity_gains)
 
-## 1B 协议与复现
+## 优化器与训练
 
-从仓库根目录调用 `python research/connections/native/chord/submit.py`，传入表中的 `--recipe`、研究问题 `--group` 和同协议基线 `--baseline-run`。配对时也要匹配表中的输出初始化。新授权实验从零、seed 42，30,518 步 × 32,768 tokens。两种配方的选择属于研究约定，1B 实测见研究总表。[提交入口](../native/chord/submit.py) · [研究总表](../../RESULTS.csv)
+| 参数 | 对应的 nanochat 组 | 峰值 LR（宽 512、每步 32,768 tokens） |
+| --- | --- | ---: |
+| μ、α、β、γ，token 调制权重与尺度 | routing AdamW，无 weight decay，与 mHC routing 一致 | 0.00244949 |
+| 独立速度表 E_v | 与输入 embedding 同一 AdamW 组 | 0.09185587 |
+| 初速度变换 W_v | 与同形状主干矩阵同一 Muon 组 | 0.005 |
 
-历史变体仅在明确指定时查阅。[Legacy 索引](legacy/README.md)
+所有组沿用 nanochat 学习率日程。训练使用 vanilla 全注意力、FA2、融合前瞻读取和 NTP loss，关闭 force 重算。Attention 输出投影和 FFN down 投影置零。1B 协议从零、seed 42、30,518 步。通过提交器传入 recipe、初速度、研究问题 group 和配对 baseline run。正式训练调用 scripts.connection_train。[提交入口](../native/chord/submit.py) · [实验结果](../../RESULTS.csv)
+
+此前的四标量 Scalar 用 soft-normalized 分支输出作为目标，两个速度写入增益固定为 1 − β。复现实验时用原 run 的 manifest 和归档配方。[历史参数](legacy/chord_scalar_four.args) · [其他历史实验](legacy/README.md)

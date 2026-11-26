@@ -168,14 +168,22 @@ class ReportsTest(unittest.TestCase):
         self.assertIn('--residual-projection-init=zero', scalar)
         self.assertIn('--chord-state-dtype=bfloat16', scalar)
         self.assertIn('--chord-soft-force-tau=0.05', scalar)
-        self.assertNotIn('--chord-update-based', scalar)
-        self.assertEqual(set(scalar) - set(next_args), {'--velocity-init=token'})
+        self.assertIn('--chord-update-based', scalar)
+        self.assertEqual(set(scalar) - set(next_args), {'--velocity-init=token', '--chord-six-controls=static'})
         self.assertEqual(set(next_args) - set(scalar), {'--velocity-init=projected_h0',
-            '--chord-update-based', '--chord-six-controls=learned_dynamic'})
+            '--chord-six-controls=learned_dynamic'})
         self.assertEqual(len(next_args), len(set(next_args)))
         legacy = launcher.CHORD_ARGS['chord_next_bf16'].parent / 'legacy/chord_next_token.args'
         self.assertEqual(legacy.read_text().splitlines(), [
             '--velocity-init=token' if f=='--velocity-init=projected_h0' else f for f in next_args])
+        data = dict(data_uri='test', manifest=dict(dataset_revision='v', tokenizer={}))
+        for recipe in launcher.CHORD_ARGS:
+            for init in launcher.VELOCITY_INITS:
+                s = launcher.make_source(recipe, 'key', 0, 'test', 'test', 'self', 'commit', data, init)
+                self.assertEqual(run_queue.manifest_runs(s, s['run_id'], recipe), [s])
+                self.assertEqual([f for f in s['model_args'] if f.startswith('--velocity-init=')], ['--velocity-init='+init])
+                self.assertEqual('velocity_projection_peak_lr' in s, init == 'projected_h0')
+                self.assertEqual('velocity_embedding_peak_lr' in s, init == 'token')
         with tempfile.TemporaryDirectory() as tmp:
             for retired in ('chord', 'vanilla_next_soft', 'vanilla_next_soft_h0'):
                 with self.assertRaisesRegex(ValueError, 'Unknown active recipe'):
@@ -258,7 +266,8 @@ class ReportsTest(unittest.TestCase):
                         self.assertEqual([m['recipe'] for m in runs], list(launcher.ABLATION_ARGS))
                         self.assertEqual([m['baseline_run'] for m in runs], ['a2793a7e', s['run_id'], s['run_id']])
                         self.assertTrue(all(m['velocity_init'] == 'zero' for m in runs))
-                        scalar = launcher.chord_args('chord_scalar_bf16')
+                        scalar = launcher.ABLATION_ARGS['chord_scalar_from_rest'].read_text().splitlines()
+                        self.assertFalse(any(f.startswith('--chord-six-controls') or f=='--chord-update-based' for f in scalar))
                         self.assertEqual(runs[0]['model_args'], [f.replace('--velocity-init=token', '--velocity-init=zero') for f in scalar])
                     if recipe in launcher.CHORD_ARGS:
                         self.assertEqual(s['model_args'], launcher.CHORD_ARGS[recipe].read_text().splitlines())

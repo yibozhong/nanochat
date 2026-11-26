@@ -26,8 +26,9 @@ RESIDUAL_STUDY = ('vanilla_baseline', 'native_baseline', 'vanilla_attnres', 'van
 RECIPES = (*RESIDUAL_STUDY, 'vanilla_baseline_zero', 'mhc')
 SUITE = 'residual_suite'
 ABLATION_SUITE = 'scalar_ablation_suite'
+VELOCITY_INITS = ('zero', 'token', 'projected_h0')
 ABLATION_ARGS = {
-    'chord_scalar_from_rest': CHORD_ARGS['chord_scalar_bf16'],
+    'chord_scalar_from_rest': HERE.parents[1] / 'ngpt/legacy/chord_scalar_four.args',
     'chord_scalar_sphere_only': HERE.parents[1] / 'ngpt/scalar_sphere_only.args',
     'chord_scalar_lookahead_only': HERE.parents[1] / 'ngpt/scalar_lookahead_only.args',
 }
@@ -42,14 +43,19 @@ def save(path, value):
     path.write_text(json.dumps(value, indent=2) + '\n')
 
 
-def chord_args(recipe):
+def chord_args(recipe, velocity_init=None):
     flags = (CHORD_ARGS | ABLATION_ARGS)[recipe].read_text().splitlines()
+    if velocity_init is not None and (recipe not in CHORD_ARGS or velocity_init not in VELOCITY_INITS):
+        raise ValueError('Select a six-coefficient Chord recipe and a supported initial velocity')
     if recipe == 'chord_scalar_from_rest':
-        flags[flags.index('--velocity-init=token')] = '--velocity-init=zero'
+        velocity_init = 'zero'
+    if velocity_init is not None:
+        old_flag, = (flag for flag in flags if flag.startswith('--velocity-init='))
+        flags[flags.index(old_flag)] = f'--velocity-init={velocity_init}'
     return flags
 
 
-def make_source(recipe, key, steps, group, name, baseline, commit, data):
+def make_source(recipe, key, steps, group, name, baseline, commit, data, velocity_init=None):
     run_id = uuid.uuid4().hex[:8]
     source = dict(commit=commit, run_id=run_id, plan=key, formal_training=bool(steps), seed=42,
         wandb_project=PROJECT, group=group, run_name=name, baseline_run=baseline, recipe=recipe,
@@ -67,18 +73,23 @@ def make_source(recipe, key, steps, group, name, baseline, commit, data):
                   connection_variant=variant, streams=streams, matched_backbone_init=True,
                   residual_projection_init='zero', output_projection_actual_std=0.)
     if recipe in CHORD_ARGS or recipe in ABLATION_ARGS:
-        flags = chord_args(recipe)
+        flags = chord_args(recipe, velocity_init)
         options = dict(flag[2:].split('=', 1) for flag in flags if '=' in flag)
         source.update(model_args=flags, velocity_init=options['velocity-init'],
                       model_variant=options.get('chord-six-controls', options.get('ngpt-velocity-mode', options['residual-dynamics'])),
                       residual_projection_init=options['residual-projection-init'],
                       control_peak_lr=.008*.25*(768/512)**.5)
+        if recipe in CHORD_ARGS:
+            source.update(residual_update='split(force / sqrt(mean(force^2) + 0.05^2))',
+                          chord_controls=options['chord-six-controls'])
+            if source['velocity_init'] == 'projected_h0':
+                source.update(velocity_projection_weight_std=.02/512**.5, velocity_projection_optimizer='muon',
+                              velocity_projection_peak_lr=.02*.25)
+            elif source['velocity_init'] == 'token':
+                source.update(velocity_embedding_optimizer='adamw', velocity_embedding_peak_lr=.3*.25*(768/512)**.5)
         if recipe == 'chord_next_bf16':
             source.update(next_run='2574b7dc', next_source='lululu39/NextTransformer@b8bbfa41d8ab4b31eb5447cbde6271fe84074b78',
-                          residual_update='split(force / sqrt(mean(force^2) + 0.05^2))',
-                          modulation_scale_init=.01, paired_preflight='chord_scalar_bf16',
-                          velocity_projection_weight_std=.02/512**.5, velocity_projection_optimizer='muon',
-                          velocity_projection_peak_lr=.02*.25)
+                          modulation_scale_init=.01, paired_preflight='chord_scalar_bf16')
     else:
         flags = [f'--variant={variant}', f'--architecture={arch}', f'--streams={streams}',
                  f'--attention-backend={backend}', f'--window-pattern={window}', '--residual-projection-init=zero']
@@ -92,9 +103,11 @@ def make_source(recipe, key, steps, group, name, baseline, commit, data):
     return source
 
 
-def submit(recipe, root, steps, group, name, baseline, procedural=None):
+def submit(recipe, root, steps, group, name, baseline, procedural=None, velocity_init=None):
     if recipe not in (*RECIPES, *SUITES):
         raise ValueError(f'Unknown active recipe: {recipe}')
+    if velocity_init is not None and (recipe not in CHORD_ARGS or velocity_init not in VELOCITY_INITS):
+        raise ValueError('--velocity-init applies only to individual six-coefficient Chord recipes')
     if recipe == SUITE and baseline != 'self':
         raise ValueError('The residual suite pairs its own baseline runs')
     if recipe == ABLATION_SUITE and baseline == 'self':
@@ -106,6 +119,8 @@ def submit(recipe, root, steps, group, name, baseline, procedural=None):
     if (root/'state.json').exists():
         state = json.loads((root/'state.json').read_text())
         pinned = state['source']
+        if recipe in CHORD_ARGS and pinned.get('model_args') != chord_args(recipe, velocity_init):
+            raise ValueError('This job directory has different Chord controls or initial velocity; choose a distinct --name')
         if pinned.get('procedural') != procedural:
             raise ValueError('This job directory has a different procedural configuration')
         if (pinned['recipe'], pinned['group'], pinned['run_name'], pinned['baseline_run']) != (recipe, group, name, baseline):
@@ -132,7 +147,7 @@ def submit(recipe, root, steps, group, name, baseline, procedural=None):
         sources = []
         for member in SUITES[recipe]:
             suffix = '-zero-s42-1b' if recipe == SUITE else '-v0zero-s42-1b'
-            member_name = member.replace('_', '-') + suffix
+            member_name = member.replace('_', '-') + ('-six' if member in CHORD_ARGS else '') + suffix
             reference = baseline
             if (recipe == SUITE and member not in RESIDUAL_STUDY[:2]) or (recipe == ABLATION_SUITE and sources):
                 reference = sources[0]['run_id']
@@ -140,7 +155,7 @@ def submit(recipe, root, steps, group, name, baseline, procedural=None):
         run_id = sources[0]['run_id']
         source = dict(recipe=recipe, run_id=run_id, group=group, run_name=name, baseline_run=baseline, runs=sources)
     else:
-        source = make_source(recipe, key, steps, group, name, baseline, commit, data)
+        source = make_source(recipe, key, steps, group, name, baseline, commit, data, velocity_init)
         if procedural:
             source['procedural'] = procedural
         run_id = source['run_id']
@@ -196,6 +211,8 @@ def submit(recipe, root, steps, group, name, baseline, procedural=None):
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--recipe', choices=(*RECIPES, *SUITES), required=True)
+    parser.add_argument('--velocity-init', choices=VELOCITY_INITS,
+                        help='Chord initial velocity: at rest, a token table, or a transform of normalized h0')
     parser.add_argument('--group', required=True, help='Research question slug, shared by its configurations')
     parser.add_argument('--name', help='Configuration name (defaults to recipe, seed and budget)')
     parser.add_argument('--baseline-run', required=True, help='nanochat-1b baseline ID or self')
@@ -205,6 +222,8 @@ if __name__ == '__main__':
     parser.add_argument('--procedural-input-length', type=int)
     parser.add_argument('--procedural-reference-updates', type=int, help='Use the published 64-example Union AdamW recipe')
     args = parser.parse_args()
+    if args.velocity_init and args.recipe not in CHORD_ARGS:
+        parser.error('--velocity-init requires an individual six-coefficient Chord recipe')
     procedural = None
     if args.procedural_task or args.procedural_tokens or args.procedural_input_length is not None or args.procedural_reference_updates is not None:
         if not args.procedural_task or not 0 < args.procedural_tokens <= (STEPS-1)*BATCH_TOKENS:
@@ -224,6 +243,10 @@ if __name__ == '__main__':
             procedural['reference_updates'] = args.procedural_reference_updates
     steps = 0 if args.debug_only else STEPS
     suffix = f"-{procedural['task']}-len{length}-{procedural['tokens']}t" if procedural else ''
+    if args.recipe in CHORD_ARGS:
+        flags = chord_args(args.recipe, args.velocity_init)
+        velocity, = (f.split('=', 1)[1] for f in flags if f.startswith('--velocity-init='))
+        suffix += '-six-' + velocity.replace('_', '-')
     name = args.name or args.recipe.replace('_', '-') + suffix + '-s42-1b'
     group, name, baseline = validate_identity(args.group, name, args.baseline_run)
     slug = re.sub(r'[^a-z0-9]+', '-', name.lower()).strip('-')
@@ -234,4 +257,4 @@ if __name__ == '__main__':
     root.mkdir(parents=True, exist_ok=True)
     with (root/'submit.lock').open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        submit(args.recipe, root, steps, group, name, baseline, procedural)
+        submit(args.recipe, root, steps, group, name, baseline, procedural, args.velocity_init)

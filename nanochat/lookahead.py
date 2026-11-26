@@ -380,6 +380,10 @@ class LookaheadModel(MomentumModel):
                 betas = torch.stack([s.beta().mean() for s in sites if s.raw_beta is not None]).tolist()
                 key = 'beta_at_zero_alignment' if sites[0].beta_gate_slope is not None else 'beta'
                 metrics.update({f'residual/sublayer_{i}/{key}': value for i,value in enumerate(betas)})
+            if self.config.chord_six_controls == 'static':
+                gains = torch.stack([s.writes for s in sites if s.writes is not None]).tolist()
+                metrics.update({f'residual/sublayer_{i}/{key}': value for i, row in enumerate(gains)
+                                for key, value in zip(('parallel_write', 'perpendicular_write'), row)})
             if self.config.chord_velocity_write:
                 rhos = torch.stack([s.raw_rho[0] for s in sites]).tanh().tolist()
                 metrics.update({f'residual/sublayer_{i}/rho': x for i, x in enumerate(rhos)})
