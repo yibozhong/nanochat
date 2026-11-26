@@ -108,6 +108,8 @@ class LatentFeedbackModel(ConnectionModel):
         for index in range(passes):
             with torch.set_grad_enabled(grad_enabled and index == passes - 1):
                 state = embedding if index == 0 else (self.compiled_mix or self.mix)(embedding, feedback.detach())
+                if index and getattr(self, 'procedural_starts', None) is not None:
+                    state = torch.where(self.procedural_starts[..., None], embedding, state)
                 if self.config.feedback_source == 'layers' and index < passes-1:
                     top, feedback = self.backbone(state, return_layers=True)
                 else:

@@ -112,3 +112,50 @@ def test_masked_cce_gradients_and_microbatch():
     for k, p in model.named_parameters():
         diff = (gradients[k] - p.grad.float()).norm()
         assert diff <= .035 * gradients[k].norm() + 1e-6, k
+
+
+def test_reference_union_matches_individual_examples_and_102_class_backward():
+    import torch
+    from torch.nn import functional as F
+    from nanochat.connection_experiment import configure_attention
+    from nanochat.connection_model import ConnectionConfig, build_connection_model
+    from nanochat.packed_training import evaluate_procedural, seed_all, train_step
+
+    configure_attention('fa2')
+    seed_all(42)
+    config = ConnectionConfig(variant='baseline', depth=2, width=128, heads=1, sequence_length=128, vocab_size=256)
+    model = build_connection_model(config).prepare()
+    task = ProceduralData('union', 42, 256, 128, 16)
+    ids = torch.tensor(task.output_ids(), device='cuda')
+    assert task.output_ids() == [*range(100), 254, 255]
+    batch = task.batch(0, 4)
+    x, y, mask = (torch.from_numpy(a).cuda() for a in batch)
+    count = int(mask.sum())
+    correct = 0
+    expected_loss = 0.
+    # Evaluate each original example alone, from position zero, using full native
+    # logits and then selecting the same 102 classes as the upstream GPT head.
+    for b, row in enumerate(batch[0]):
+        starts = np.flatnonzero((row != 255) & np.r_[True, row[:-1] == 255])
+        ends = np.flatnonzero((row != 255) & np.r_[row[1:] == 255, True]) + 1
+        for lo, hi in zip(starts, ends):
+            select = mask[b, lo:hi]
+            logits = model(x[b:b+1, lo:hi])[0, select].index_select(-1, ids)
+            target = y[b, lo:hi][select]
+            correct += (ids[logits.argmax(-1)] == target).sum().item()
+            loss = F.cross_entropy(logits, target, reduction='sum') / count
+            expected_loss += loss.detach().item()
+            loss.backward()
+    expected = {n: p.grad.float().clone() for n, p in model.named_parameters()}
+    ce, n, accuracy = evaluate_procedural(model, batch, 2, with_accuracy=True, class_ids=ids)
+    assert n == count and abs(ce - expected_loss) < .003 and abs(accuracy-correct/n) < .015
+    report = {}
+    got = train_step(model, torch.optim.SGD(model.parameters(), lr=0), None, 0,
+                     microbatch=2, batch_tokens=512, masked_batch=batch, class_ids=ids, gradient_stats=report)
+    assert abs(got - expected_loss) < .003
+    assert 0 < report['gradient_norm'] < float('inf')
+    for name, p in model.named_parameters():
+        diff = (p.grad.float() - expected[name]).norm()
+        assert diff <= .04 * expected[name].norm() + 1e-5, name
+    assert model.lm_head.weight.grad[100:254].count_nonzero().item() == 0
+    assert all(getattr(b.attn, 'procedural_bias', None) is None for b in model.blocks)

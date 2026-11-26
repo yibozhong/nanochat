@@ -62,8 +62,11 @@ class NativeConnectionModel(nn.Module):
     def forward(self, idx, targets=None, dense=False, kv_cache=None, loss_reduction="mean"):
         return self.readout(self.hidden(idx, kv_cache), targets, dense, loss_reduction)
 
-    def readout(self, h, targets=None, dense=False, loss_reduction="mean"):
+    def readout(self, h, targets=None, dense=False, loss_reduction="mean", *, class_ids=None):
         w = self.native.lm_head.weight[:self.config.vocab_size].to(h.dtype)
+        if class_ids is not None:
+            from nanochat.procedural_objective import task_logits
+            return task_logits(h, w, class_ids)
         if targets is None or dense:
             logits = 15 * torch.tanh(F.linear(h, w).float() / 15)
             if targets is None:

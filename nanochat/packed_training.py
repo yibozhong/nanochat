@@ -9,6 +9,9 @@ import time
 
 import numpy as np
 import torch
+from torch.nn import functional as F
+
+from nanochat.procedural_objective import independent_examples
 
 
 def seed_all(seed=42):
@@ -69,7 +72,7 @@ def evaluate(model,data,split='dev',microbatch=16,max_rows=None,**forward_option
 
 
 @torch.no_grad()
-def evaluate_procedural(model, batch, microbatch, *, with_accuracy=False):
+def evaluate_procedural(model, batch, microbatch, *, with_accuracy=False, class_ids=None):
     """Score masked next-token predictions with gold prefixes. Optionally return top-1 accuracy."""
     was_training = model.training
     model.eval()
@@ -81,11 +84,14 @@ def evaluate_procedural(model, batch, microbatch, *, with_accuracy=False):
         for start in range(0, len(inputs), microbatch):
             sl = slice(start, start + microbatch)
             x, y, mask = (torch.from_numpy(a[sl]).cuda() for a in (inputs, targets, masks))
-            hidden = model.hidden(x)[mask]
+            with independent_examples(model, x) if class_ids is not None else nullcontext():
+                hidden = model.hidden(x)[mask]
             labels = y[mask]
+            if class_ids is not None:
+                labels = torch.searchsorted(class_ids, labels)
             # Bound the full-vocabulary logits allocation even for packed 2K batches.
             for h, labels_chunk in zip(hidden.split(256), labels.split(256)):
-                logits = model.readout(h)
+                logits = model.readout(h, class_ids=class_ids)
                 losses = torch.nn.functional.cross_entropy(logits, labels_chunk, reduction='none')
                 total += losses.sum(dtype=torch.float64)
                 if with_accuracy:
@@ -98,7 +104,8 @@ def evaluate_procedural(model, batch, microbatch, *, with_accuracy=False):
         model.train(was_training)
 
 
-def train_step(model,opt,data,step,microbatch=16,batch_tokens=32768,seed=42,masked_batch=None):
+def train_step(model,opt,data,step,microbatch=16,batch_tokens=32768,seed=42,masked_batch=None,
+               class_ids=None, gradient_stats=None):
     T=model.config.sequence_length
     rows=batch_tokens//T
     assert rows % microbatch == 0
@@ -115,19 +122,28 @@ def train_step(model,opt,data,step,microbatch=16,batch_tokens=32768,seed=42,mask
             if masked_batch is None:
                 x,y=data.batch('train',step*rows+start,microbatch)
                 loss=model(x,y,**options)/(rows//microbatch)
+                loss.backward()
             else:
                 sl = slice(start, start + microbatch)
-                # Use valid in-vocabulary targets everywhere. This keeps the full
-                # baseline LM-head matmuls, including at masked prompt/pad positions.
-                losses = model(inputs[sl], targets[sl], loss_reduction='none', **options)
-                loss = losses.masked_fill(~mask[sl], 0.).sum() / valid
-            loss.backward()
+                if class_ids is None:  # Original whole-head objective for old checkpoints.
+                    losses = model(inputs[sl], targets[sl], loss_reduction='none', **options)
+                    loss = losses.masked_fill(~mask[sl], 0.).sum() / valid
+                    loss.backward()
+                else:
+                    with independent_examples(model, inputs[sl]):
+                        hidden = model.hidden(inputs[sl], **options)
+                        logits = model.readout(hidden, class_ids=class_ids)
+                        labels = torch.searchsorted(class_ids, targets[sl][mask[sl]])
+                        loss = F.cross_entropy(logits[mask[sl]], labels, reduction='sum') / valid
+                        loss.backward()
             total += loss.detach()
     # Preserve nanochat's lack of clipping, but stop before a nonfinite update.
     grads=[p.grad for p in model.parameters() if p.grad is not None]
     finite=torch.stack([torch.isfinite(g).all() for g in grads]).all()
     if not bool(finite) or not torch.isfinite(total):
         raise FloatingPointError('Nonfinite loss/gradient before optimizer update')
+    if gradient_stats is not None:
+        gradient_stats['gradient_norm'] = torch.stack([g.detach().float().norm() for g in grads]).norm().item()
     opt.step()
     return total.item()
 

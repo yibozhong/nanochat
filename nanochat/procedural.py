@@ -124,6 +124,13 @@ class ProceduralData:
             if 2 * self.length + overhead > self.context:
                 raise ValueError('A complete procedural example must fit in the model context')
 
+    def output_ids(self):
+        """Native IDs of all classes in the released head, including special tokens."""
+        if self.task in DYCK:
+            pairs = random.Random(self.seed).sample(range(1, self.vocab_size - 2), 128)
+            return sorted([*pairs, self.vocab_size - 1])
+        return [*range(100), self.vocab_size - 2, self.vocab_size - 1]
+
     def batch(self, first_row, rows, split="train"):
         """Each row is a deterministic function of its index, independent of microbatch/resume."""
         import numpy as np

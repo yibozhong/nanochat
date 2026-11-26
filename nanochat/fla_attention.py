@@ -8,6 +8,7 @@ import triton
 from torch import nn
 from nanochat import fla_attention_kernels as base
 from nanochat.gpt import apply_rotary_emb, norm
+from nanochat.procedural_objective import document_attention
 
 
 def launch_options(q):
@@ -69,5 +70,8 @@ class FlaAttention(nn.Module):
         cos,sin=cos_sin
         q=norm(apply_rotary_emb(q,cos,sin))*1.2
         k=norm(apply_rotary_emb(k,cos,sin))*1.2
-        mean=fused_attention(q,k,v)
+        if getattr(self, 'procedural_bias', None) is None:
+            mean = fused_attention(q,k,v)
+        else:
+            mean = document_attention(q,k,v,self.procedural_bias,window_size)
         return self.c_proj(mean.reshape(b,t,self.n_embd))

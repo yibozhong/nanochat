@@ -259,6 +259,7 @@ def main():
     assert data.manifest['sequence_length']==c.sequence_length
     assert max(a.steps-warm_steps, 0)*rows_per_step<=len(data.arrays['train'])
     procedural = None
+    class_ids = None
     if warm_steps:
         if data.manifest['tokenizer']['vocab_size'] != c.vocab_size:
             p.error('Model vocabulary must match the packed FineWeb tokenizer')
@@ -268,6 +269,8 @@ def main():
         try:
             generator = state['protocol'].get('procedural', {}).get('generator', GENERATOR) if a.resume else GENERATOR
             procedural = ProceduralData(a.procedural_task, a.seed, c.vocab_size, c.sequence_length, length, generator)
+            if not a.resume or 'output_classes' in state['protocol'].get('procedural', {}):
+                class_ids = torch.tensor(procedural.output_ids(), device='cuda')
         except ValueError as error:
             p.error(str(error))
     # User preference: check geometry/file sizes without scanning file contents.
@@ -330,6 +333,11 @@ def main():
             validation='fixed separate RNG stream, same generator and symbol rules',
             validation_rows=len(data.arrays['dev']),
             transfer='all parameters in place; fresh optimizer and phase-local schedule')
+        if class_ids is not None:
+            protocol['procedural'].update(output_classes=len(class_ids), normalization='released task vocabulary',
+                examples='independent, causal attention and RoPE reset per sample',
+                attention_backend='torch efficient SDPA with document bias and causal triangle')
+
     if a.velocity_embedding_lr is not None:
         protocol['velocity_embedding_peak_lr'] = a.velocity_embedding_lr
     if a.eval_zero_v0:
@@ -526,7 +534,7 @@ def main():
         if procedural:
             print(f"FINEWEB_DEV step={step} fineweb_tokens={metrics['fineweb_tokens']} val_ce={dev:.8f}", flush=True)
         if procedural and step <= warm_steps:
-            procedural_val_ce, supervised, accuracy = evaluate_procedural(model, procedural_dev, a.microbatch, with_accuracy=True)
+            procedural_val_ce, supervised, accuracy = evaluate_procedural(model, procedural_dev, a.microbatch, with_accuracy=True, class_ids=class_ids)
             metrics.update({'procedural/val_ce': procedural_val_ce, 'procedural/val_supervised_tokens': supervised,
                             'procedural/val_accuracy': accuracy})
             print(f'PROCEDURAL_DEV step={step} val_ce={procedural_val_ce:.6f} targets={supervised} val_accuracy={accuracy:.8f}', flush=True)
@@ -564,12 +572,17 @@ def main():
                 lr=schedule(opt,phase_step,horizon,wd)
                 torch.cuda.synchronize();start=time.perf_counter()
                 batch = procedural.batch(step*rows_per_step, rows_per_step) if warming else None
-                loss=train_step(model,opt,data,phase_step,microbatch=a.microbatch,seed=a.seed,masked_batch=batch)
+                log_procedural_run = procedural is not None and (phase_step < 5 or (step+1)%10 == 0 or step+1 == warm_steps)
+                gradient_stats = {} if log_procedural_run else None
+                loss=train_step(model,opt,data,phase_step,microbatch=a.microbatch,seed=a.seed,masked_batch=batch,
+                                class_ids=class_ids if warming else None, gradient_stats=gradient_stats)
                 if warming:
                     warm_supervised += int(batch[2].sum())
                 torch.cuda.synchronize();duration=time.perf_counter()-start
                 durations.append(duration);training_seconds+=duration;step+=1
                 row=dict(step=step,tokens=step*32768,loss=loss,seconds=duration,lr_multiplier=lr)
+                if gradient_stats:
+                    row.update(gradient_stats)
                 if procedural:
                     row.update(phase='procedural' if warming else 'fineweb', phase_step=phase_step+1, **token_counts())
                 if c.latent_feedback:
@@ -582,7 +595,7 @@ def main():
                 if step_flops is not None:
                     training_flops += step_flops
                 log.write(json.dumps(row)+'\n')
-                if step<=5 or step%10==0:
+                if step<=5 or step%10==0 or log_procedural_run:
                     print(json.dumps(row),flush=True)
                     loss_key = 'procedural/ce' if warming else 'train/ce'
                     perf={loss_key:loss, **token_counts(),'perf/step_seconds':duration,'perf/tokens_per_second':32768/duration,
@@ -590,6 +603,9 @@ def main():
                           'perf/training_seconds':training_seconds,
                           'perf/mean_tokens_per_second':row['tokens']/training_seconds,
                           'perf/peak_reserved_bytes':torch.cuda.max_memory_reserved()}
+                    if gradient_stats:
+                        prefix = 'procedural' if warming else 'train'
+                        perf[prefix+'/gradient_norm'] = gradient_stats['gradient_norm']
                     if cost:
                         perf['perf/estimated_forward_flops_per_step'] = step_cost['estimated_forward_flops']
                     if step_flops is not None:

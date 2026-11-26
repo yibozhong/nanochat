@@ -24,6 +24,7 @@ from nanochat.optim import MuonAdamW
 
 # Our custom Flash Attention module that automatically uses FA3 when compatible and SDPA fallback otherwise
 from nanochat.flash_attention import flash_attn
+from nanochat.procedural_objective import document_attention
 
 @dataclass
 class GPTConfig:
@@ -122,7 +123,9 @@ class CausalSelfAttention(nn.Module):
 
         # Flash Attention (FA3 or SDPA fallback)
         # window_size is (left, right) tuple: (N, 0) for causal, (-1, 0) for full context
-        if kv_cache is None:
+        if getattr(self, 'procedural_bias', None) is not None:
+            y = document_attention(q, k, v, self.procedural_bias, window_size)
+        elif kv_cache is None:
             # Training: causal attention with optional sliding window
             y = flash_attn.flash_attn_func(q, k, v, causal=True, window_size=window_size)
         else:
@@ -586,6 +589,8 @@ class GPT(nn.Module):
             # Training / naive generate: full sequence available, use fast slice
             assert T > 1, "Training forward pass should have T > 1"
             gate = self.smear_lambda.to(x.dtype) * torch.sigmoid(self.smear_gate(x[:, 1:, :24]))
+            if getattr(self, 'procedural_starts', None) is not None:
+                gate = gate.masked_fill(self.procedural_starts[:, 1:, None], 0)
             x = torch.cat([x[:, :1], x[:, 1:] + gate * x[:, :-1]], dim=1)
         else:
             # KV cache inference: read prev embedding from cache, store current for next step
