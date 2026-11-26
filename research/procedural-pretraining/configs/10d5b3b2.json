@@ -1,0 +1,80 @@
+{
+  "source": {
+    "architecture": "vanilla",
+    "attention_backend": "fa2",
+    "baseline_run": "a2793a7e",
+    "batch_tokens": 32768,
+    "checkpoint_seconds": 1800,
+    "commit": "70b3b6187f62022f3c5a1224a6824574bae0d331",
+    "connection_variant": "baseline",
+    "data_uri": "osdf:///chtc/staging/y/yzhong239/nanochat-2k-10b-data-7685535.tar",
+    "dataset_revision": "87f09149ef4734204d70ed1d046ddc9ca3f2b8f9",
+    "formal_training": true,
+    "group": "procedural-pretraining",
+    "hopper_only": true,
+    "initialization": "fresh",
+    "matched_backbone_init": true,
+    "microbatch": 16,
+    "model_args": [
+      "--variant=baseline",
+      "--architecture=vanilla",
+      "--streams=1",
+      "--attention-backend=fa2",
+      "--window-pattern=L",
+      "--residual-projection-init=zero"
+    ],
+    "model_variant": "baseline",
+    "output_projection_actual_std": 0.0,
+    "plan": "nanochat-1b-procedural-pretraining--vanilla-union-10m-s42-1b",
+    "procedural": {
+      "length": 64,
+      "task": "union",
+      "tokens": 10000000
+    },
+    "recipe": "vanilla_baseline",
+    "residual_projection_init": "zero",
+    "run_id": "10d5b3b2",
+    "run_name": "vanilla-union-10m-s42-1b",
+    "runtime": "mhc-official-runtime-7546767.tar.gz + frozen uv.lock",
+    "schedule_steps": 30518,
+    "seed": 42,
+    "steps": 30518,
+    "streams": 1,
+    "tokenizer": {
+      "benchmark": "native base_train d8/D512/2K/SSSL, 300 steps x 32768 model tokens; original source unmodified",
+      "config": "sample-10BT",
+      "dataset": "HuggingFaceFW/fineweb-edu",
+      "doc_cap": 10000,
+      "elapsed_seconds": 5.633999116718769,
+      "files": {
+        "token_bytes.pt": {
+          "bytes": 132649,
+          "sha256": "8e6ed9947610b8b329f0aed7e01bf332359331790e61fc6c0c95dc3cff29bdb4"
+        },
+        "tokenizer.pkl": {
+          "bytes": 412696,
+          "sha256": "8d1a5a03421ca24e7acafd1ef68fe8dbc6326dad903bc65cc726ec0601c577de"
+        }
+      },
+      "full_dataset_bytes": 28518193415,
+      "full_source_gpt2_tokens": 9972918177,
+      "max_chars": 100000000,
+      "nanochat_commit": "145da40cdd37b9522aa53d26c0c356e9126458bb",
+      "nanochat_source_sha256": "9a39516fc52effabe6bf9b87fc5fc67f7026a95060861be560d3525257bfb3e6",
+      "purpose": "Throughput pilot tokenizer; native RustBPE; train shard only",
+      "revision": "87f09149ef4734204d70ed1d046ddc9ca3f2b8f9",
+      "run_id": "eqnd6jdz",
+      "tokenizer": "native RustBPE 32768 vocab, first 100M capped characters from training shard",
+      "train_shards": [
+        "000_00000.parquet"
+      ],
+      "validation_shards": [
+        "013_00000.parquet"
+      ],
+      "vocab_size": 32768
+    },
+    "training_tokens": 1000013824,
+    "wandb_project": "nanochat-1b",
+    "window_pattern": "L"
+  }
+}

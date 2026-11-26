@@ -105,8 +105,10 @@ def scheduler_states(jobs):
     read('condor_q', list(by_job))
     missing = [j for j, v in by_job.items() if 'ad' not in v[0]]
     if missing:
-        clusters = [str(int(j.split('.')[0])) for j in missing]
-        read('condor_history', ['-constraint', ' || '.join('ClusterId == '+n for n in clusters)])
+        # Stop traversing the schedd's history once all requested job records are found.
+        ids = [tuple(map(int, job.split('.'))) for job in missing]
+        constraint = ' || '.join(f'(ClusterId == {cluster} && ProcId == {proc})' for cluster, proc in ids)
+        read('condor_history', ['-constraint', constraint, '-limit', str(len(ids))])
     return local
 
 

@@ -1,0 +1,286 @@
+{
+  "gpu": "NVIDIA A100-SXM4-40GB",
+  "paired_steps": 50,
+  "warm_schedule": 305,
+  "conditions": {
+    "jiang-packed-v1": {
+      "distinct_dev_targets": 26072,
+      "points": {
+        "0": {
+          "ce": 10.397490638286827,
+          "supervised": 52267,
+          "top1": 1.9132531042531616e-05,
+          "first_top1": 0.0,
+          "exact": 0.0,
+          "examples": 1104,
+          "reversed_prompt_ce": 10.397490625550978
+        },
+        "10": {
+          "ce": 10.398078021291207,
+          "supervised": 52267
+        },
+        "25": {
+          "ce": 10.402416776707135,
+          "supervised": 52267
+        },
+        "50": {
+          "ce": 10.43244756059298,
+          "supervised": 52267,
+          "top1": 3.826506208506323e-05,
+          "first_top1": 0.0,
+          "exact": 0.0,
+          "examples": 1104,
+          "reversed_prompt_ce": 10.432427641796536
+        }
+      }
+    },
+    "jiang-packed-v2": {
+      "distinct_dev_targets": 99,
+      "points": {
+        "0": {
+          "ce": 10.397608429736891,
+          "supervised": 52267,
+          "top1": 0.0,
+          "first_top1": 0.0,
+          "exact": 0.0,
+          "examples": 1104,
+          "reversed_prompt_ce": 10.397608436214293
+        },
+        "10": {
+          "ce": 9.508896192091257,
+          "supervised": 52267
+        },
+        "25": {
+          "ce": 4.59629000786682,
+          "supervised": 52267
+        },
+        "50": {
+          "ce": 4.600211396167078,
+          "supervised": 52267,
+          "top1": 0.01006371132837163,
+          "first_top1": 0.009057971014492754,
+          "exact": 0.0,
+          "examples": 1104,
+          "reversed_prompt_ce": 4.600202658251825
+        },
+        "100": {
+          "ce": 4.443479454679071,
+          "supervised": 52267
+        },
+        "150": {
+          "ce": 1.9812086582557884,
+          "supervised": 52267,
+          "top1": 0.40547573038437257,
+          "first_top1": 1.0,
+          "exact": 0.0,
+          "examples": 1104,
+          "reversed_prompt_ce": 6.365866658499063
+        },
+        "250": {
+          "ce": 1.203323768575435,
+          "supervised": 52267
+        },
+        "305": {
+          "ce": 0.7673650042391755,
+          "supervised": 52267,
+          "top1": 0.7515832169437695,
+          "first_top1": 1.0,
+          "exact": 0.0,
+          "examples": 1104,
+          "reversed_prompt_ce": 7.082314659178098
+        }
+      }
+    }
+  },
+  "job": "9091083.0",
+  "formal_training": false,
+  "seed": 42,
+  "task": "union",
+  "input_length": 64,
+  "baseline_run": "a2793a7e",
+  "batch_tokens": 32768,
+  "config": {
+    "variant": "baseline",
+    "depth": 8,
+    "width": 512,
+    "heads": 4,
+    "sequence_length": 2048,
+    "vocab_size": 32768,
+    "streams": 1,
+    "sinkhorn_iterations": 20,
+    "activation_checkpoint": false,
+    "connection_backend": "nvidia",
+    "fused_connection_grad": false,
+    "architecture": "vanilla",
+    "window_pattern": "L",
+    "attention_kernel": "original",
+    "compact_routing": false,
+    "attnres_block_size": 2,
+    "attnres_block_size_unit": "sublayers",
+    "latent_feedback": false,
+    "feedback_eval_passes": 4,
+    "feedback_source": "top",
+    "feedback_attention_backend": "triton",
+    "residual_dynamics": "vanilla",
+    "velocity_init": "zero",
+    "velocity_embedding_std": 0.02,
+    "momentum_beta_init": 0.5,
+    "momentum_gamma_init": 0.5,
+    "momentum_eta_init": 1,
+    "normalize_minimal_force": false,
+    "ngpt_force_rms_floor": 0.1,
+    "ngpt_alpha_init": 0.05,
+    "lookahead_mu_init": 0,
+    "fixed_first_attention_mu": false,
+    "ngpt_weight_norm": false,
+    "ngpt_velocity_mode": "ambient",
+    "momentum_velocity_rms_floor": 0.1,
+    "residual_projection_init": "zero",
+    "residual_projection_init_std": 0.02,
+    "signed_chord_steps": false,
+    "token_chord_gates": false,
+    "token_beta_gate": false,
+    "channel_chord_coefficients": false,
+    "chord_velocity_write": false,
+    "chord_six_controls": "off",
+    "chord_velocity_geometry": "parallel_transport",
+    "chord_state_dtype": "float32",
+    "fuse_chord_read_norm": false,
+    "recompute_chord_force": false,
+    "match_velocity_table_with_ffn": false,
+    "chord_attnres": false,
+    "chord_attnres_backend": "direct",
+    "chord_history_correction": false,
+    "chord_history_updates": false,
+    "chord_query_only_lookahead": false,
+    "native_chord_write": null,
+    "native_chord_control_lr": null,
+    "chord_update_based": false,
+    "chord_soft_force_tau": 0
+  },
+  "repeat_at_step_305": {
+    "purpose": "teacher-forced errors by answer position and skipped duplicates",
+    "validation_by_first_packed_row": {
+      "0": {
+        "ce": 0.705799449684585,
+        "counts": {
+          "all": {
+            "numerator": 40644,
+            "denominator": 52267
+          },
+          "no_skip": {
+            "numerator": 34509,
+            "denominator": 40258
+          },
+          "source_A": {
+            "numerator": 28074,
+            "denominator": 30289
+          },
+          "output_0": {
+            "numerator": 8758,
+            "denominator": 8832
+          },
+          "output_1": {
+            "numerator": 8367,
+            "denominator": 8832
+          },
+          "skip": {
+            "numerator": 6135,
+            "denominator": 12009
+          },
+          "output_2": {
+            "numerator": 7724,
+            "denominator": 8832
+          },
+          "output_3": {
+            "numerator": 6459,
+            "denominator": 8832
+          },
+          "prediction_was_a_skipped_duplicate_among_skip_errors": {
+            "numerator": 2456,
+            "denominator": 5874
+          },
+          "source_B": {
+            "numerator": 12570,
+            "denominator": 21978
+          },
+          "output_4": {
+            "numerator": 5062,
+            "denominator": 8831
+          },
+          "output_5": {
+            "numerator": 4274,
+            "denominator": 8108
+          }
+        },
+        "examples": 1104,
+        "exact": 0,
+        "first_error_one_based_quartiles_for_incorrect_examples": [
+          15.0,
+          20.0,
+          26.0
+        ]
+      },
+      "64": {
+        "ce": 0.7097602276314038,
+        "counts": {
+          "all": {
+            "numerator": 40588,
+            "denominator": 52381
+          },
+          "no_skip": {
+            "numerator": 34496,
+            "denominator": 40320
+          },
+          "source_A": {
+            "numerator": 28007,
+            "denominator": 30389
+          },
+          "output_0": {
+            "numerator": 8768,
+            "denominator": 8848
+          },
+          "output_1": {
+            "numerator": 8301,
+            "denominator": 8848
+          },
+          "output_2": {
+            "numerator": 7703,
+            "denominator": 8848
+          },
+          "skip": {
+            "numerator": 6092,
+            "denominator": 12061
+          },
+          "output_3": {
+            "numerator": 6483,
+            "denominator": 8848
+          },
+          "source_B": {
+            "numerator": 12581,
+            "denominator": 21992
+          },
+          "prediction_was_a_skipped_duplicate_among_skip_errors": {
+            "numerator": 2409,
+            "denominator": 5969
+          },
+          "output_4": {
+            "numerator": 5081,
+            "denominator": 8843
+          },
+          "output_5": {
+            "numerator": 4252,
+            "denominator": 8146
+          }
+        },
+        "examples": 1106,
+        "exact": 0,
+        "first_error_one_based_quartiles_for_incorrect_examples": [
+          14.0,
+          20.0,
+          25.0
+        ]
+      }
+    }
+  }
+}

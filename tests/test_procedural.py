@@ -2,7 +2,7 @@
 import numpy as np
 import pytest
 
-from nanochat.procedural import DYCK, TASKS, ProceduralData
+from nanochat.procedural import DYCK, TASKS, TRANSFORMS, ProceduralData
 
 
 @pytest.mark.parametrize('task', TASKS)
@@ -15,6 +15,9 @@ def test_packed_examples_and_resume(task):
     assert not np.array_equal(dev[0], xs)
     for first, again in zip(dev, data.batch(17, 3, split='dev')):
         np.testing.assert_array_equal(first, again)
+    if task in TRANSFORMS:
+        for _, labels, supervised in ((xs, ys, masks), dev):
+            assert set(np.unique(labels[supervised])) <= set(range(1, 100))
     pad, sep = 32767, 32766
     for x, y, mask in zip(xs, ys, masks):
         assert np.all((x >= 0) & (x < 32768))
@@ -59,6 +62,27 @@ def test_packed_examples_and_resume(task):
         assert len(ends) > 1 and mask.sum() > 0
 
 
+def test_union_packed_stream_uses_reference_ids_and_keeps_legacy_resume():
+    fixed = ProceduralData('union', 42, 32768, 2048, 64)
+    legacy = ProceduralData('union', 42, 32768, 2048, 64, 'jiang-packed-v1')
+    for split in ('train', 'dev'):
+        x, y, mask = fixed.batch(23, 1, split)
+        old_x, old_y, old_mask = legacy.batch(23, 1, split)
+        np.testing.assert_array_equal(mask, old_mask)
+        assert np.any(old_y[old_mask] > 99)
+        rng = np.random.RandomState([42, 23, 1] if split == 'dev' else [42, 23])
+        start = 0
+        for _ in range(3):
+            a, b = rng.randint(1, 100, (2, 32)).tolist()
+            answer = list(dict.fromkeys(a + b))
+            example = a + [32766] + b + [32766] + answer
+            end = start + len(example)
+            np.testing.assert_array_equal(x[0, start:end], example)
+            np.testing.assert_array_equal(y[0, start:end][mask[0, start:end]], answer)
+            start = end + 1
+        assert not np.array_equal(old_x, x)
+
+
 def test_masked_cce_gradients_and_microbatch():
     import torch
     from nanochat.connection_experiment import configure_attention
@@ -75,7 +99,11 @@ def test_masked_cce_gradients_and_microbatch():
     inputs, targets, mask = (torch.from_numpy(v).cuda() for v in batch)
     dense_losses = model(inputs, targets, dense=True, loss_reduction='none')
     reference = dense_losses[mask].mean()
-    val_ce, val_count = evaluate_procedural(model, batch, microbatch=2)
+    val_ce, val_count, accuracy = evaluate_procedural(model, batch, microbatch=2, with_accuracy=True)
+    with torch.no_grad():
+        correct = (model(inputs).argmax(-1)[mask] == targets[mask]).sum().item()
+    assert accuracy == correct / int(mask.sum())
+    assert evaluate_procedural(model, batch, microbatch=2) == (val_ce, val_count)
     assert val_count == int(mask.sum()) and abs(reference.item() - val_ce) < .005
     reference.backward()
     gradients = {k: p.grad.float().clone() for k, p in model.named_parameters()}

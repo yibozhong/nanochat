@@ -7,10 +7,11 @@ from dataclasses import dataclass
 import random
 
 
-
 TRANSFORMS = ('identity', 'reverse', 'sort', 'set', 'delete', 'union', 'stack')
 DYCK = ('dyck', 'dyck_shuffle')
 TASKS = (*TRANSFORMS, *DYCK)
+REFERENCE_SYMBOLS = range(1, 100)  # randint(1, vocab_size=100) in the released configs
+GENERATOR = "jiang-packed-v2"
 
 
 def _stack(rng, length, alphabet):
@@ -102,8 +103,11 @@ class ProceduralData:
     vocab_size: int
     context: int
     length: int
+    generator: str = GENERATOR
 
     def __post_init__(self):
+        if self.generator not in ('jiang-packed-v1', GENERATOR):
+            raise ValueError(f'Unknown procedural generator {self.generator}')
         if self.task not in TASKS:
             raise ValueError(f'Unknown procedural task {self.task}')
         if self.vocab_size < 131 or not 0 <= self.seed < 2**32:
@@ -141,8 +145,10 @@ class ProceduralData:
             pos = 0
             while pos < self.context:
                 if brackets is None:
-                    # Preserve the reference collision rate while exposing all native symbol IDs.
-                    alphabet = sorted(mapping_rng.sample(pool, 99))
+                    # All released transformation datasets share one alphabet across examples and splits.
+                    # v1 independently renamed it on every example; retain that stream for old checkpoints.
+                    alphabet = (sorted(mapping_rng.sample(pool, len(REFERENCE_SYMBOLS)))
+                                if self.generator == 'jiang-packed-v1' else REFERENCE_SYMBOLS)
                     tokens, first = transform_example(self.task, self.length, alphabet, separator, rng)
                 else:
                     tokens, first = bracket_example(self.task, self.length, brackets, mapping_rng)

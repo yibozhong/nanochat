@@ -60,7 +60,9 @@ class NativeConnectionModel(nn.Module):
         return self.chord.metrics()
 
     def forward(self, idx, targets=None, dense=False, kv_cache=None, loss_reduction="mean"):
-        h = self.hidden(idx, kv_cache)
+        return self.readout(self.hidden(idx, kv_cache), targets, dense, loss_reduction)
+
+    def readout(self, h, targets=None, dense=False, loss_reduction="mean"):
         w = self.native.lm_head.weight[:self.config.vocab_size].to(h.dtype)
         if targets is None or dense:
             logits = 15 * torch.tanh(F.linear(h, w).float() / 15)

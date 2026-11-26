@@ -17,7 +17,7 @@ import uuid
 
 import torch
 from nanochat.experiment_logging import BATCH_TOKENS, PROJECT, STEPS, training_run
-from nanochat.procedural import DYCK, TASKS, ProceduralData
+from nanochat.procedural import DYCK, GENERATOR, TASKS, ProceduralData
 
 from nanochat.connection_model import ConnectionConfig, build_connection_model, optimizer_for, schedule, CONNECTION_VARIANTS
 from nanochat.packed_training import PackedData, seed_all, evaluate, evaluate_procedural, train_step, snapshot, atomic_save, restore_rng, json_write
@@ -266,7 +266,8 @@ def main():
         if length is None:
             length = c.sequence_length if a.procedural_task in DYCK else 64
         try:
-            procedural = ProceduralData(a.procedural_task, a.seed, c.vocab_size, c.sequence_length, length)
+            generator = state['protocol'].get('procedural', {}).get('generator', GENERATOR) if a.resume else GENERATOR
+            procedural = ProceduralData(a.procedural_task, a.seed, c.vocab_size, c.sequence_length, length, generator)
         except ValueError as error:
             p.error(str(error))
     # User preference: check geometry/file sizes without scanning file contents.
@@ -322,7 +323,7 @@ def main():
                   attention_backend=a.attention_backend,matched_backbone_init=a.matched_backbone_init,
                   evaluate_test=a.evaluate_test)
     if procedural:
-        protocol['procedural'] = dict(generator='jiang-packed-v1', task=procedural.task, input_length=length,
+        protocol['procedural'] = dict(generator=procedural.generator, task=procedural.task, input_length=length,
             requested_tokens=a.procedural_tokens, steps=warm_steps, model_tokens=warm_steps*BATCH_TOKENS,
             fineweb_schedule_steps=a.schedule_steps-warm_steps, vocabulary='native tokenizer IDs',
             objective='within-example next token' if procedural.task in DYCK else 'output-only next token',
@@ -522,10 +523,13 @@ def main():
     def dev_metrics(dev):
         nonlocal procedural_val_ce
         metrics={'dev/ce':dev, **token_counts()}
+        if procedural:
+            print(f"FINEWEB_DEV step={step} fineweb_tokens={metrics['fineweb_tokens']} val_ce={dev:.8f}", flush=True)
         if procedural and step <= warm_steps:
-            procedural_val_ce, supervised = evaluate_procedural(model, procedural_dev, a.microbatch)
-            metrics.update({'procedural/val_ce': procedural_val_ce, 'procedural/val_supervised_tokens': supervised})
-            print(f'PROCEDURAL_DEV step={step} val_ce={procedural_val_ce:.6f} targets={supervised}', flush=True)
+            procedural_val_ce, supervised, accuracy = evaluate_procedural(model, procedural_dev, a.microbatch, with_accuracy=True)
+            metrics.update({'procedural/val_ce': procedural_val_ce, 'procedural/val_supervised_tokens': supervised,
+                            'procedural/val_accuracy': accuracy})
+            print(f'PROCEDURAL_DEV step={step} val_ce={procedural_val_ce:.6f} targets={supervised} val_accuracy={accuracy:.8f}', flush=True)
         if a.matrix_optimizer == 'arc':
             metrics.update(opt.metrics())
         if c.residual_mode != 'vanilla':

@@ -69,23 +69,31 @@ def evaluate(model,data,split='dev',microbatch=16,max_rows=None,**forward_option
 
 
 @torch.no_grad()
-def evaluate_procedural(model, batch, microbatch):
-    """Mean CE over exactly the held-out outputs, independent of batch partition."""
+def evaluate_procedural(model, batch, microbatch, *, with_accuracy=False):
+    """Score masked next-token predictions with gold prefixes. Optionally return top-1 accuracy."""
     was_training = model.training
     model.eval()
     inputs, targets, masks = batch
     count = int(masks.sum())
     total = torch.zeros((), device='cuda', dtype=torch.float64)
+    correct = torch.zeros((), device='cuda', dtype=torch.long)
     try:
         for start in range(0, len(inputs), microbatch):
             sl = slice(start, start + microbatch)
             x, y, mask = (torch.from_numpy(a[sl]).cuda() for a in (inputs, targets, masks))
-            losses = model(x, y, loss_reduction='none')
-            total += losses.masked_fill(~mask, 0.).sum(dtype=torch.float64)
+            hidden = model.hidden(x)[mask]
+            labels = y[mask]
+            # Bound the full-vocabulary logits allocation even for packed 2K batches.
+            for h, labels_chunk in zip(hidden.split(256), labels.split(256)):
+                logits = model.readout(h)
+                losses = torch.nn.functional.cross_entropy(logits, labels_chunk, reduction='none')
+                total += losses.sum(dtype=torch.float64)
+                if with_accuracy:
+                    correct += (logits.argmax(-1) == labels_chunk).sum()
         ce = total.item() / count
         if not math.isfinite(ce):
             raise FloatingPointError('Nonfinite held-out procedural CE')
-        return ce, count
+        return (ce, count, correct.item() / count) if with_accuracy else (ce, count)
     finally:
         model.train(was_training)
 
