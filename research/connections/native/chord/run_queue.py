@@ -62,6 +62,8 @@ def train_args(s, *, smoke=False):
     flags = [] if not warm else [
         '--procedural-task', warm['task'], '--procedural-input-length', str(warm['length']),
         '--procedural-tokens', str(2*BATCH_TOKENS if smoke else warm['tokens'])]
+    if warm and 'reference_updates' in warm:
+        flags.extend(['--procedural-reference-updates', str(8 if smoke else warm['reference_updates'])])
     return [sys.executable, '-m', 'scripts.connection_train', *flags, *s['model_args'], '--matched-backbone-init',
             '--schedule-steps', str(s['schedule_steps']), '--seed', str(s['seed']),
             '--microbatch', str(s['microbatch']), '--data-dir', '../data']
@@ -113,7 +115,12 @@ def preflight(s, directory):
         if s.get('procedural'):
             assert [r['phase'] for r in rows] == ['procedural', 'procedural', 'fineweb', 'fineweb']
             assert [r['phase_step'] for r in rows] == [1, 2, 1, 2]
-            assert rows[2]['lr_multiplier'] == rows[0]['lr_multiplier'] == 1/40
+            assert rows[2]['lr_multiplier'] == 1/40
+            if 'reference_updates' in s['procedural']:
+                assert rows[0]['lr_multiplier'] == rows[1]['lr_multiplier'] == 1.0
+                assert [r['procedural_optimizer_updates'] for r in rows] == [4, 8, 8, 8]
+            else:
+                assert rows[0]['lr_multiplier'] == 1/40
             assert math.isfinite(summary['procedural_val_ce'])
             assert summary['fineweb_tokens'] == summary['procedural_tokens'] == 2*BATCH_TOKENS
         assert summary['complete'] and summary['source'] == s and math.isfinite(summary['final_dev_ce'])

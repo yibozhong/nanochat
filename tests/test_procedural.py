@@ -159,3 +159,63 @@ def test_reference_union_matches_individual_examples_and_102_class_backward():
         assert diff <= .04 * expected[name].norm() + 1e-5, name
     assert model.lm_head.weight.grad[100:254].count_nonzero().item() == 0
     assert all(getattr(b.attn, 'procedural_bias', None) is None for b in model.blocks)
+
+
+def test_published_union_batch_sizes_masks_and_budget():
+    from nanochat.union_reference import ReferenceUnion
+
+    task = ProceduralData('union', 42, 32768, 2048, 64)
+    sampler = ReferenceUnion(task, updates=250, budget_steps=64, rows_per_step=16)
+    assert sampler.completed(64) == 250
+    assert len(set(sampler.order[:16000].tolist())) == 16000
+    for step in range(64):
+        first, last = sampler.completed(step), sampler.completed(step + 1)
+        n = last - first
+        counts = [(i + 1) * 16 // n - i * 16 // n for i in range(n)]
+        assert sum(counts) == 16 and min(counts) >= 4
+        if step not in (0, 63):
+            continue
+        for update, rows in zip(range(first, last), counts):
+            x, y, mask = sampler.batch(update, rows)
+            answers = []
+            for row, labels, supervised in zip(x, y, mask):
+                starts = np.flatnonzero((row != 32767) & np.r_[True, row[:-1] == 32767])
+                ends = np.flatnonzero((row != 32767) & np.r_[row[1:] == 32767, True]) + 1
+                for start, end in zip(starts, ends):
+                    prompt = row[start:start + 66]
+                    assert np.flatnonzero(prompt == 32766).tolist() == [32, 65]
+                    answer = list(dict.fromkeys(t for t in prompt if t != 32766))
+                    np.testing.assert_array_equal(labels[start:end][supervised[start:end]], answer)
+                    answers.append(tuple(prompt[prompt != 32766]))
+            expected = [tuple(np.random.RandomState(42 + j).randint(1, 100, 64))
+                        for j in sampler.order[update*64:(update+1)*64].tolist()]
+            assert sorted(expected) == sorted(answers)
+
+
+def test_reference_adamw_resume_keeps_fp32_master_and_clip():
+    import copy
+    import torch
+    from nanochat.union_reference import ReferenceAdamW
+
+    model = torch.nn.Linear(4, 2).cuda()
+    model.weight.data = model.weight.data.bfloat16()
+    initial = model.weight.detach().float().clone()
+    opt = ReferenceAdamW(model)
+    for p in model.parameters():
+        p.grad = torch.full_like(p, 50.)
+    opt.step()
+    master = opt.low_precision[0][1]
+    assert master.dtype == torch.float32 and not torch.equal(initial, master)
+    assert torch.equal(model.weight, master.bfloat16())
+    assert torch.stack([p.grad.float().norm() for p in opt.param_groups[0]['params']]).norm() <= 1.00001
+    model2 = copy.deepcopy(model)
+    opt2 = ReferenceAdamW(model2)
+    opt2.load_state_dict(copy.deepcopy(opt.state_dict()))
+    for m, o in ((model, opt), (model2, opt2)):
+        o.zero_grad()
+        for p in m.parameters():
+            p.grad = torch.ones_like(p)
+        o.step()
+    for left, right in zip(model.parameters(), model2.parameters()):
+        assert torch.equal(left, right)
+    assert torch.equal(master, opt2.low_precision[0][1])

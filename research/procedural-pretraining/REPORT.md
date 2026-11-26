@@ -165,3 +165,9 @@
 **待验证** 将 Union 预热缩短到中等任务 CE（2.49M 位置时约为 2.42），是否改善完整 1B 预算的 FineWeb 终点？
 
 <!-- agent:end -->
+
+## Union 的公开最优点
+
+第一篇图 5 的 C4 曲线在约 2M procedural tokens 处取得最佳结果。按附录使用每例 2 × 64 的计数和公开 batch size 64 换算，取 250 次更新、16,000 个独立样本，即 2,048,000 个论文口径 tokens。250 是从图中估算的设置。公开 YAML 中的 2,501 次更新覆盖整条扫描曲线。[图 5](https://arxiv.org/html/2601.21725v2#S5.F5) · [Union 配置](https://github.com/zlshinnick/procedural-pretraining/blob/e97ffe3/procedural_pretraining/configs/union.yaml)
+
+在上述 vanilla 配方上添加 `--procedural-task union --procedural-input-length 64 --procedural-reference-updates 250 --procedural-tokens 2097152`。这个选项为 Union 使用官方 AdamW、常数 LR 0.0005、weight decay 0.1 和梯度范数上限 1。每次优化恰好使用 64 个样本。分隔符和填充计入 NanoChat 的计算预算，64 个基线步合计 2,097,152 个 2K 模型位置。剩余 30,454 步共 997,916,672 个 FineWeb 位置。两条训练都合计 30,518 步的矩阵计算预算；优化器更新次数、掩码开销和运行时间另计。FineWeb 沿用配对基线的优化器、数据和阶段内 LR 日程。

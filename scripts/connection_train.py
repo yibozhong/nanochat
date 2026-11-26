@@ -22,6 +22,7 @@ from nanochat.procedural import DYCK, GENERATOR, TASKS, ProceduralData
 from nanochat.connection_model import ConnectionConfig, build_connection_model, optimizer_for, schedule, CONNECTION_VARIANTS
 from nanochat.packed_training import PackedData, seed_all, evaluate, evaluate_procedural, train_step, snapshot, atomic_save, restore_rng, json_write
 from nanochat.connection_experiment import configure_attention, match_vanilla_initialization
+from nanochat.union_reference import ReferenceAdamW, ReferenceUnion
 
 
 def check_resume_protocol(state, source, protocol, *, latest):
@@ -170,6 +171,7 @@ def main():
     p.add_argument('--procedural-task', choices=TASKS)
     p.add_argument('--procedural-tokens', type=int, default=0,
                    help='Warm-up model positions within the total budget, rounded to the nearest full batch (positive budgets use at least one)')
+    p.add_argument('--procedural-reference-updates', type=int, help='Use the published Union batch of 64 and constant AdamW for this many optimizer updates')
     p.add_argument('--procedural-input-length', type=int, help='Defaults to 64 symbols or one full context for Dyck')
     p.add_argument('--schedule-steps', type=int, default=STEPS)
     p.add_argument('--microbatch', type=int, default=16)
@@ -200,6 +202,8 @@ def main():
     if not a.procedural_task and a.procedural_input_length is not None:
         p.error('--procedural-input-length requires --procedural-task')
     warm_steps = max(1, (a.procedural_tokens + BATCH_TOKENS//2) // BATCH_TOKENS) if a.procedural_tokens else 0
+    if a.procedural_reference_updates is not None and (a.procedural_task != 'union' or not warm_steps or a.procedural_reference_updates <= 0):
+        p.error('--procedural-reference-updates requires Union and a positive warm-up budget')
     if warm_steps >= a.schedule_steps or (a.formal_training and warm_steps >= a.steps):
         p.error('Reserve at least one FineWeb update after the procedural warm-up')
     if a.streams is None:
@@ -320,7 +324,8 @@ def main():
         if a.formal_training or a.resume:
             p.error('--check-zero-init-gradients requires a fresh local diagnostic')
         record_zero_init_gradients(model, opt, out/'first-gradients.json')
-    initial_groups=[{k:v for k,v in group.items() if k!='params'} for group in opt.param_groups]
+    language_groups = opt.param_groups
+    initial_groups=[{k:v for k,v in group.items() if k!='params'} for group in language_groups]
     protocol=dict(steps=a.steps,schedule_steps=a.schedule_steps,batch_tokens=32768,
                   microbatch=a.microbatch,grad_accum=rows_per_step//a.microbatch,seed=a.seed,
                   attention_backend=a.attention_backend,matched_backbone_init=a.matched_backbone_init,
@@ -354,6 +359,16 @@ def main():
     if c.latent_feedback:
         protocol['feedback']=dict(pass_mix=[.15,.85],sampler='numpy.default_rng([seed,zero_based_step])',
             earlier_passes='no_grad_detached',eval_passes=c.feedback_eval_passes)
+    reference_union = None
+    if a.procedural_reference_updates is not None:
+        reference_union = ReferenceUnion(procedural, a.procedural_reference_updates, warm_steps, rows_per_step)
+        protocol['procedural'].update(optimizer='AdamW with FP32 masters', lr=5e-4, weight_decay=0.1,
+            betas=[0.9, 0.999], eps=1e-8, clip_grad_norm=1.0, lr_schedule='constant',
+            optimizer_updates=reference_union.updates, examples_per_update=reference_union.batch_size,
+            nominal_paper_tokens=reference_union.updates*reference_union.batch_size*2*length,
+            training_generator='released per-index NumPy seed and fixed shuffle of 2501 batches')
+        if not a.resume or state['step'] < warm_steps:
+            opt = ReferenceAdamW(model)
     warm_supervised = 0
     procedural_val_ce = None
     step=0;best=float('inf');training_seconds=0.;prior_elapsed=0.;initial_dev=None
@@ -430,7 +445,7 @@ def main():
         config['training_dtype'] = str(token_embedding.weight.dtype)
         anchors = {'input':token_embedding.weight, 'output':backbone.lm_head.weight, 'matrix':first_block.attn.c_q.weight}
         config['backbone_optimizer_groups'] = {
-            name: initial_groups[next(i for i, group in enumerate(opt.param_groups) if any(p is weight for p in group['params']))]
+            name: initial_groups[next(i for i, group in enumerate(language_groups) if any(p is weight for p in group['params']))]
             for name, weight in anchors.items()}
         config['comparison_protocol'] = comparison_protocol(config)
         config['arguments'] = vars(a).copy()
@@ -511,7 +526,8 @@ def main():
     def token_counts():
         if not procedural:
             return {}
-        return dict(procedural_tokens=min(step, warm_steps)*BATCH_TOKENS,
+        published = {'procedural_optimizer_updates': reference_union.completed(min(step, warm_steps))} if reference_union else {}
+        return dict(**published, procedural_tokens=min(step, warm_steps)*BATCH_TOKENS,
                     procedural_supervised_tokens=warm_supervised,
                     fineweb_tokens=max(0, step-warm_steps)*BATCH_TOKENS)
 
@@ -569,15 +585,19 @@ def main():
                 warming = step < warm_steps
                 phase_step = step if warming else step-warm_steps
                 horizon = warm_steps if warming else a.schedule_steps-warm_steps
-                lr=schedule(opt,phase_step,horizon,wd)
+                lr=1.0 if warming and reference_union else schedule(opt,phase_step,horizon,wd)
                 torch.cuda.synchronize();start=time.perf_counter()
-                batch = procedural.batch(step*rows_per_step, rows_per_step) if warming else None
+                batch = procedural.batch(step*rows_per_step, rows_per_step) if warming and not reference_union else None
                 log_procedural_run = procedural is not None and (phase_step < 5 or (step+1)%10 == 0 or step+1 == warm_steps)
                 gradient_stats = {} if log_procedural_run else None
-                loss=train_step(model,opt,data,phase_step,microbatch=a.microbatch,seed=a.seed,masked_batch=batch,
-                                class_ids=class_ids if warming else None, gradient_stats=gradient_stats)
-                if warming:
-                    warm_supervised += int(batch[2].sum())
+                if warming and reference_union:
+                    loss, targets = reference_union.train(model, opt, step, class_ids, a.microbatch, gradient_stats)
+                    warm_supervised += targets
+                else:
+                    loss=train_step(model,opt,data,phase_step,microbatch=a.microbatch,seed=a.seed,masked_batch=batch,
+                                    class_ids=class_ids if warming else None, gradient_stats=gradient_stats)
+                    if warming:
+                        warm_supervised += int(batch[2].sum())
                 torch.cuda.synchronize();duration=time.perf_counter()-start
                 durations.append(duration);training_seconds+=duration;step+=1
                 row=dict(step=step,tokens=step*32768,loss=loss,seconds=duration,lr_multiplier=lr)
