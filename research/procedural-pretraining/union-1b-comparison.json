@@ -1,0 +1,65 @@
+{
+  "run_id": "0155b548",
+  "baseline": "a2793a7e",
+  "step": 30518,
+  "total_positions": 1000013824,
+  "block_rows": 4,
+  "bootstrap_resamples": 10000,
+  "interval_scope": "sampling of held-out contiguous row blocks, conditional on this seed",
+  "splits": {
+    "dev": {
+      "rows": 64,
+      "tokens": 131072,
+      "baseline_ce": 3.2926613794206787,
+      "candidate_ce": 3.310455280181486,
+      "delta_ce": 0.017793900760807446,
+      "relative_perplexity_change": 0.017953155397701925,
+      "paired_block_bootstrap_95pct": [
+        0.01423678794890293,
+        0.021034292189142434
+      ]
+    },
+    "test": {
+      "rows": 1024,
+      "tokens": 2097152,
+      "baseline_ce": 3.2793808547163508,
+      "candidate_ce": 3.2957705358298313,
+      "delta_ce": 0.016389681113480492,
+      "relative_perplexity_change": 0.016524728723952276,
+      "paired_block_bootstrap_95pct": [
+        0.015228054098031407,
+        0.017528825245733515
+      ]
+    }
+  },
+  "first_crossings": {
+    "7500": {
+      "target_ce": 3.740081310272217,
+      "baseline_step": 6750,
+      "union_run_step": 7750,
+      "baseline_fineweb_tokens": 221184000,
+      "union_run_fineweb_tokens": 243957760
+    },
+    "15000": {
+      "target_ce": 3.5793718099594116,
+      "baseline_step": 14750,
+      "union_run_step": 15500,
+      "baseline_fineweb_tokens": 483328000,
+      "union_run_fineweb_tokens": 497909760
+    },
+    "22500": {
+      "target_ce": 3.41983962059021,
+      "baseline_step": 22500,
+      "union_run_step": 23500,
+      "baseline_fineweb_tokens": 737280000,
+      "union_run_fineweb_tokens": 760053760
+    },
+    "30518": {
+      "target_ce": 3.2926530241966248,
+      "baseline_step": 30518,
+      "union_run_step": null,
+      "baseline_fineweb_tokens": 1000013824,
+      "union_run_fineweb_tokens": null
+    }
+  }
+}

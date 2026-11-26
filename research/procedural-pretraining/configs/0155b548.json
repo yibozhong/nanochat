@@ -1,0 +1,539 @@
+{
+  "actual_attention_backend": "fa2",
+  "applied_sinkhorn_iterations": 0,
+  "arguments": {
+    "activation_checkpoint": false,
+    "arc_beta": 0.5,
+    "arc_direction": "raw",
+    "arc_mu": 1,
+    "arc_step_scale": "fan_out",
+    "architecture": "vanilla",
+    "attention_backend": "fa2",
+    "attention_kernel": "original",
+    "attnres_block_size": 2,
+    "baseline_run": null,
+    "channel_chord_coefficients": false,
+    "check_zero_init_gradients": false,
+    "checkpoint_dir": "../checkpoints",
+    "chord_attnres": false,
+    "chord_attnres_backend": "direct",
+    "chord_history_correction": false,
+    "chord_history_updates": false,
+    "chord_kernel": "current",
+    "chord_query_only_lookahead": false,
+    "chord_six_controls": "off",
+    "chord_soft_force_tau": 0,
+    "chord_state_dtype": "float32",
+    "chord_update_based": false,
+    "chord_velocity_geometry": "parallel_transport",
+    "chord_velocity_write": false,
+    "compact_routing": false,
+    "compile_lookahead_branches": false,
+    "connection_backend": "nvidia",
+    "data_dir": "../data",
+    "eval_zero_v0": false,
+    "evaluate_test": true,
+    "feedback_attention_backend": "triton",
+    "feedback_eval_passes": 4,
+    "feedback_source": "top",
+    "fixed_first_attention_mu": false,
+    "formal_training": true,
+    "fuse_chord_read_norm": false,
+    "fused_connection_grad": false,
+    "latent_feedback": false,
+    "lookahead_mu_init": 0,
+    "match_velocity_table_with_ffn": false,
+    "matched_backbone_init": true,
+    "matrix_optimizer": "muon",
+    "microbatch": 16,
+    "momentum_beta_init": 0.5,
+    "momentum_eta_init": null,
+    "momentum_gamma_init": null,
+    "momentum_velocity_rms_floor": 0.1,
+    "native_chord_control_lr": null,
+    "native_chord_write": null,
+    "ngpt_alpha_init": 0.05,
+    "ngpt_force_rms_floor": 0.1,
+    "ngpt_velocity_mode": null,
+    "ngpt_weight_norm": null,
+    "normalize_minimal_force": false,
+    "output_dir": "results/train",
+    "procedural_input_length": 64,
+    "procedural_task": "union",
+    "procedural_tokens": 10000000,
+    "recompute_chord_force": false,
+    "residual_dynamics": "vanilla",
+    "residual_projection_init": "zero",
+    "residual_projection_init_std": 0.02,
+    "resume": "../checkpoints/latest.pt",
+    "run_id": "0155b548",
+    "run_name": null,
+    "schedule_steps": 30518,
+    "seed": 42,
+    "segment_seconds": 1800,
+    "segment_steps": 0,
+    "sequence_length": 2048,
+    "signed_chord_steps": false,
+    "sinkhorn_iterations": 20,
+    "steps": 30518,
+    "streams": 1,
+    "token_beta_gate": false,
+    "token_chord_gates": false,
+    "variant": "baseline",
+    "velocity_embedding_lr": null,
+    "velocity_embedding_std": 0.02,
+    "velocity_init": null,
+    "wandb_group": "procedural-pretraining",
+    "window_pattern": "L"
+  },
+  "backbone_optimizer_groups": {
+    "input": {
+      "betas": [
+        0.8,
+        0.995
+      ],
+      "eps": 1e-10,
+      "initial_lr": 0.09185586535436918,
+      "kind": "adamw",
+      "lr": 0.09185586535436918,
+      "weight_decay": 0.001
+    },
+    "matrix": {
+      "beta2": 0.9,
+      "initial_lr": 0.005,
+      "kind": "muon",
+      "lr": 0.005,
+      "momentum": 0.95,
+      "ns_steps": 5,
+      "weight_decay": 0.18375000000000002
+    },
+    "output": {
+      "betas": [
+        0.8,
+        0.96
+      ],
+      "eps": 1e-10,
+      "initial_lr": 0.0024494897427831783,
+      "kind": "adamw",
+      "lr": 0.0024494897427831783,
+      "weight_decay": 0.01
+    }
+  },
+  "checkpoint_transport": {
+    "local_save_every_steps": 500,
+    "method": "exit85 plus scheduler transfer; local save alone is not durable",
+    "upload_interval_seconds": 1800
+  },
+  "comparison_protocol": {
+    "architecture": "vanilla",
+    "attention": "fa2",
+    "backbone_optimizer_groups": {
+      "input": {
+        "betas": [
+          0.8,
+          0.995
+        ],
+        "eps": 1e-10,
+        "initial_lr": 0.09185586535436918,
+        "kind": "adamw",
+        "lr": 0.09185586535436918,
+        "weight_decay": 0.001
+      },
+      "matrix": {
+        "beta2": 0.9,
+        "initial_lr": 0.005,
+        "kind": "muon",
+        "lr": 0.005,
+        "momentum": 0.95,
+        "ns_steps": 5,
+        "weight_decay": 0.18375000000000002
+      },
+      "output": {
+        "betas": [
+          0.8,
+          0.96
+        ],
+        "eps": 1e-10,
+        "initial_lr": 0.0024494897427831783,
+        "kind": "adamw",
+        "lr": 0.0024494897427831783,
+        "weight_decay": 0.01
+      }
+    },
+    "batch_tokens": 32768,
+    "context": 2048,
+    "dataset": "87f09149ef4734204d70ed1d046ddc9ca3f2b8f9",
+    "depth": 8,
+    "dev": "bd67b90b4386ba6428992864712f56eb10527678ed8b3664ed5f63c1643458a4",
+    "evaluation": "full-dev-token-mean-ce-v1",
+    "grad_accum": 1,
+    "heads": 4,
+    "loss": "full-token full-vocabulary CCE; no gradient filtering",
+    "matched_backbone_init": true,
+    "matrix_optimizer": "muon",
+    "microbatch": 16,
+    "output_init": "zero",
+    "output_init_std": 0.02,
+    "precision": "torch.bfloat16",
+    "schedule": "warmup40-cooldown65pct-final5pct-v1",
+    "schedule_steps": 30518,
+    "seed": 42,
+    "steps": 30518,
+    "tokenizer": "8d1a5a03421ca24e7acafd1ef68fe8dbc6326dad903bc65cc726ec0601c577de",
+    "train": "85ed8668da74daba482f76eee8773748c8e56d38c2cd1ce90120d27d391b2721",
+    "version": "packed-ntp-v1",
+    "vocab": 32768,
+    "width": 512,
+    "windows": "full"
+  },
+  "compute_estimate": {
+    "accounting": "FMA=2 FLOPs; allowed attention pairs, not masked dense-kernel execution. Backward approximated as2x consumed forward matrix FLOPs. Excludes softmax/norm/activation/optimizer/recomputation and is not measured hardware FLOPs.",
+    "components_forward": {
+      "attention": 550024249344,
+      "backbone_projections": 1649267441664,
+      "vocab_head": 1099511627776
+    },
+    "estimated_forward_flops": 3298803318784,
+    "estimated_training_flops": 9896409956352,
+    "memory_note": "Actual training peak VRAM must be measured separately."
+  },
+  "cuda": "13.0",
+  "data_manifest": {
+    "batch_tokens": 32768,
+    "complete": true,
+    "dataset_revision": "87f09149ef4734204d70ed1d046ddc9ca3f2b8f9",
+    "dtype": "uint16",
+    "epoch_note": "Native loader cycles the entire 13-shard training split. Epoch tracks source reads into the document buffer, not exact consumed unique tokens.",
+    "files": {
+      "dev": {
+        "bytes": 262272,
+        "last_source_state": {
+          "epoch": 1,
+          "pq_idx": 0,
+          "rg_idx": 1
+        },
+        "rows": 64,
+        "sha256": "bd67b90b4386ba6428992864712f56eb10527678ed8b3664ed5f63c1643458a4",
+        "tokens": 131072
+      },
+      "test": {
+        "bytes": 4196352,
+        "last_source_state": {
+          "epoch": 1,
+          "pq_idx": 0,
+          "rg_idx": 4
+        },
+        "rows": 1024,
+        "sha256": "e7d24b6a89155ebc7123afe68bd2c58aeaf159b5087dbdf28e090ce09f293d09",
+        "tokens": 2097152
+      },
+      "train": {
+        "bytes": 20009779968,
+        "last_source_state": {
+          "epoch": 2,
+          "pq_idx": 5,
+          "rg_idx": 440
+        },
+        "rows": 4882816,
+        "sha256": "85ed8668da74daba482f76eee8773748c8e56d38c2cd1ce90120d27d391b2721",
+        "tokens": 10000007168
+      }
+    },
+    "first_1b_prefix_sha256": "614ef0ecce77ca839cb7650bfe7da9a8fbb92bbfc8efe461ded57a1f2af315c7",
+    "heldout_shard": "013",
+    "layout": "rows of 2049 token ids; x=row[:-1], y=row[1:]",
+    "logging_backend": "local",
+    "native_commit": "145da40cdd37b9522aa53d26c0c356e9126458bb",
+    "requested_tokens": 10000000000,
+    "seconds": 9800.379161169752,
+    "sequence_length": 2048,
+    "source_read_epochs": [
+      {
+        "batch": 1,
+        "source_state": {
+          "epoch": 1,
+          "pq_idx": 0,
+          "rg_idx": 1
+        }
+      },
+      {
+        "batch": 213224,
+        "source_state": {
+          "epoch": 2,
+          "pq_idx": 0,
+          "rg_idx": 0
+        }
+      }
+    ],
+    "tokenizer": {
+      "benchmark": "native base_train d8/D512/2K/SSSL, 300 steps x 32768 model tokens; original source unmodified",
+      "config": "sample-10BT",
+      "dataset": "HuggingFaceFW/fineweb-edu",
+      "doc_cap": 10000,
+      "elapsed_seconds": 5.633999116718769,
+      "files": {
+        "token_bytes.pt": {
+          "bytes": 132649,
+          "sha256": "8e6ed9947610b8b329f0aed7e01bf332359331790e61fc6c0c95dc3cff29bdb4"
+        },
+        "tokenizer.pkl": {
+          "bytes": 412696,
+          "sha256": "8d1a5a03421ca24e7acafd1ef68fe8dbc6326dad903bc65cc726ec0601c577de"
+        }
+      },
+      "full_dataset_bytes": 28518193415,
+      "full_source_gpt2_tokens": 9972918177,
+      "max_chars": 100000000,
+      "nanochat_commit": "145da40cdd37b9522aa53d26c0c356e9126458bb",
+      "nanochat_source_sha256": "9a39516fc52effabe6bf9b87fc5fc67f7026a95060861be560d3525257bfb3e6",
+      "purpose": "Throughput pilot tokenizer; native RustBPE; train shard only",
+      "revision": "87f09149ef4734204d70ed1d046ddc9ca3f2b8f9",
+      "run_id": "eqnd6jdz",
+      "tokenizer": "native RustBPE 32768 vocab, first 100M capped characters from training shard",
+      "train_shards": [
+        "000_00000.parquet"
+      ],
+      "validation_shards": [
+        "013_00000.parquet"
+      ],
+      "vocab_size": 32768
+    },
+    "train_shards": "000..012",
+    "training_steps": 305176,
+    "training_tokens": 10000007168,
+    "validation": "dev first 64 rows, test next 1024 rows; no shared packed rows"
+  },
+  "estimated_training_flops_per_step": 9896409956352,
+  "explicit_portability_gate": false,
+  "flops_scope": "FMA=2 FLOPs; allowed attention pairs, not masked dense-kernel execution. Backward approximated as2x consumed forward matrix FLOPs. Excludes softmax/norm/activation/optimizer/recomputation and is not measured hardware FLOPs.",
+  "gpu": "NVIDIA A100-SXM4-40GB",
+  "gpu_capability": [
+    8,
+    0
+  ],
+  "logging_backend": "wandb",
+  "loss": "full-token full-vocabulary CCE; no gradient filtering",
+  "model": {
+    "activation_checkpoint": false,
+    "architecture": "vanilla",
+    "attention_kernel": "original",
+    "attnres_block_size": 2,
+    "attnres_block_size_unit": "sublayers",
+    "channel_chord_coefficients": false,
+    "chord_attnres": false,
+    "chord_attnres_backend": "direct",
+    "chord_history_correction": false,
+    "chord_history_updates": false,
+    "chord_query_only_lookahead": false,
+    "chord_six_controls": "off",
+    "chord_soft_force_tau": 0,
+    "chord_state_dtype": "float32",
+    "chord_update_based": false,
+    "chord_velocity_geometry": "parallel_transport",
+    "chord_velocity_write": false,
+    "compact_routing": false,
+    "connection_backend": "nvidia",
+    "depth": 8,
+    "feedback_attention_backend": "triton",
+    "feedback_eval_passes": 4,
+    "feedback_source": "top",
+    "fixed_first_attention_mu": false,
+    "fuse_chord_read_norm": false,
+    "fused_connection_grad": false,
+    "heads": 4,
+    "latent_feedback": false,
+    "lookahead_mu_init": 0,
+    "match_velocity_table_with_ffn": false,
+    "momentum_beta_init": 0.5,
+    "momentum_eta_init": 1,
+    "momentum_gamma_init": 0.5,
+    "momentum_velocity_rms_floor": 0.1,
+    "native_chord_control_lr": null,
+    "native_chord_write": null,
+    "ngpt_alpha_init": 0.05,
+    "ngpt_force_rms_floor": 0.1,
+    "ngpt_velocity_mode": "ambient",
+    "ngpt_weight_norm": false,
+    "normalize_minimal_force": false,
+    "recompute_chord_force": false,
+    "residual_dynamics": "vanilla",
+    "residual_projection_init": "zero",
+    "residual_projection_init_std": 0.02,
+    "sequence_length": 2048,
+    "signed_chord_steps": false,
+    "sinkhorn_iterations": 20,
+    "streams": 1,
+    "token_beta_gate": false,
+    "token_chord_gates": false,
+    "variant": "baseline",
+    "velocity_embedding_std": 0.02,
+    "velocity_init": "zero",
+    "vocab_size": 32768,
+    "width": 512,
+    "window_pattern": "L"
+  },
+  "optimizer": "native MuonAdamW; connector AdamW at native unembedding LR, no decay",
+  "optimizer_groups": [
+    {
+      "betas": [
+        0.8,
+        0.96
+      ],
+      "eps": 1e-10,
+      "initial_lr": 0.0024494897427831783,
+      "kind": "adamw",
+      "lr": 0.0024494897427831783,
+      "weight_decay": 0.01
+    },
+    {
+      "betas": [
+        0.8,
+        0.995
+      ],
+      "eps": 1e-10,
+      "initial_lr": 0.09185586535436918,
+      "kind": "adamw",
+      "lr": 0.09185586535436918,
+      "weight_decay": 0.001
+    },
+    {
+      "beta2": 0.9,
+      "initial_lr": 0.005,
+      "kind": "muon",
+      "lr": 0.005,
+      "momentum": 0.95,
+      "ns_steps": 5,
+      "weight_decay": 0.18375000000000002
+    },
+    {
+      "beta2": 0.9,
+      "initial_lr": 0.005,
+      "kind": "muon",
+      "lr": 0.005,
+      "momentum": 0.95,
+      "ns_steps": 5,
+      "weight_decay": 0.18375000000000002
+    },
+    {
+      "beta2": 0.9,
+      "initial_lr": 0.005,
+      "kind": "muon",
+      "lr": 0.005,
+      "momentum": 0.95,
+      "ns_steps": 5,
+      "weight_decay": 0.18375000000000002
+    }
+  ],
+  "parameters": 58720256,
+  "protocol": {
+    "attention_backend": "fa2",
+    "batch_tokens": 32768,
+    "evaluate_test": true,
+    "grad_accum": 1,
+    "matched_backbone_init": true,
+    "microbatch": 16,
+    "procedural": {
+      "attention_backend": "torch efficient SDPA with document bias and causal triangle",
+      "examples": "independent, causal attention and RoPE reset per sample",
+      "fineweb_schedule_steps": 30213,
+      "generator": "jiang-packed-v2",
+      "input_length": 64,
+      "model_tokens": 9994240,
+      "normalization": "released task vocabulary",
+      "objective": "output-only next token",
+      "output_classes": 102,
+      "requested_tokens": 10000000,
+      "steps": 305,
+      "task": "union",
+      "transfer": "all parameters in place; fresh optimizer and phase-local schedule",
+      "validation": "fixed separate RNG stream, same generator and symbol rules",
+      "validation_rows": 64,
+      "vocabulary": "native tokenizer IDs"
+    },
+    "schedule_steps": 30518,
+    "seed": 42,
+    "steps": 30518
+  },
+  "references": "research/connections/references.json",
+  "residual_mixing": "additive",
+  "source": {
+    "architecture": "vanilla",
+    "attention_backend": "fa2",
+    "baseline_run": "a2793a7e",
+    "batch_tokens": 32768,
+    "checkpoint_seconds": 1800,
+    "commit": "66cb9d9ad9f0a54ac85e280df98ef5400184b5ed",
+    "connection_variant": "baseline",
+    "data_uri": "osdf:///chtc/staging/y/yzhong239/nanochat-2k-10b-data-7685535.tar",
+    "dataset_revision": "87f09149ef4734204d70ed1d046ddc9ca3f2b8f9",
+    "formal_training": true,
+    "group": "procedural-pretraining",
+    "hopper_only": false,
+    "initialization": "fresh",
+    "matched_backbone_init": true,
+    "microbatch": 16,
+    "model_args": [
+      "--variant=baseline",
+      "--architecture=vanilla",
+      "--streams=1",
+      "--attention-backend=fa2",
+      "--window-pattern=L",
+      "--residual-projection-init=zero"
+    ],
+    "model_variant": "baseline",
+    "output_projection_actual_std": 0,
+    "plan": "nanochat-1b-procedural-pretraining--vanilla-union-reference-10m-s42-1b",
+    "procedural": {
+      "length": 64,
+      "task": "union",
+      "tokens": 10000000
+    },
+    "recipe": "vanilla_baseline",
+    "residual_projection_init": "zero",
+    "run_id": "0155b548",
+    "run_name": "vanilla-union-reference-10m-s42-1b",
+    "runtime": "mhc-official-runtime-7546767.tar.gz + frozen uv.lock",
+    "schedule_steps": 30518,
+    "seed": 42,
+    "steps": 30518,
+    "streams": 1,
+    "tokenizer": {
+      "benchmark": "native base_train d8/D512/2K/SSSL, 300 steps x 32768 model tokens; original source unmodified",
+      "config": "sample-10BT",
+      "dataset": "HuggingFaceFW/fineweb-edu",
+      "doc_cap": 10000,
+      "elapsed_seconds": 5.633999116718769,
+      "files": {
+        "token_bytes.pt": {
+          "bytes": 132649,
+          "sha256": "8e6ed9947610b8b329f0aed7e01bf332359331790e61fc6c0c95dc3cff29bdb4"
+        },
+        "tokenizer.pkl": {
+          "bytes": 412696,
+          "sha256": "8d1a5a03421ca24e7acafd1ef68fe8dbc6326dad903bc65cc726ec0601c577de"
+        }
+      },
+      "full_dataset_bytes": 28518193415,
+      "full_source_gpt2_tokens": 9972918177,
+      "max_chars": 100000000,
+      "nanochat_commit": "145da40cdd37b9522aa53d26c0c356e9126458bb",
+      "nanochat_source_sha256": "9a39516fc52effabe6bf9b87fc5fc67f7026a95060861be560d3525257bfb3e6",
+      "purpose": "Throughput pilot tokenizer; native RustBPE; train shard only",
+      "revision": "87f09149ef4734204d70ed1d046ddc9ca3f2b8f9",
+      "run_id": "eqnd6jdz",
+      "tokenizer": "native RustBPE 32768 vocab, first 100M capped characters from training shard",
+      "train_shards": [
+        "000_00000.parquet"
+      ],
+      "validation_shards": [
+        "013_00000.parquet"
+      ],
+      "vocab_size": 32768
+    },
+    "training_tokens": 1000013824,
+    "wandb_project": "nanochat-1b",
+    "window_pattern": "L"
+  },
+  "torch": "2.10.0+cu130",
+  "training_dtype": "torch.bfloat16"
+}
