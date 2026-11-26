@@ -236,11 +236,12 @@ class ReportsTest(unittest.TestCase):
                 if args[0]=='condor_submit': self.fail('Real submission attempted')
                 return 'commit' if args[:2]==('git','rev-parse') else ''
             with patch.object(launcher,'run',fake), patch.object(launcher,'HOME',d), patch.object(launcher,'ASSETS',assets):
-                for recipe in (*launcher.RECIPES, launcher.SUITE):
+                for recipe in (*launcher.RECIPES, *launcher.SUITES):
                     root=d/recipe
                     root.mkdir()
                     with self.assertRaises(StopBeforeSubmit):
-                        launcher.submit(recipe,root,STEPS,'velocity',recipe,'self')
+                        launcher.submit(recipe,root,STEPS,'velocity',recipe,
+                                            'a2793a7e' if recipe == launcher.ABLATION_SUITE else 'self')
                     manifest=(root/'bundles/source.json').read_text()
                     s=json.loads(manifest)
                     runs = run_queue.manifest_runs(s, s['run_id'], recipe)
@@ -253,6 +254,12 @@ class ReportsTest(unittest.TestCase):
                         self.assertEqual([m['baseline_run'] for m in runs], ['self', 'self'] + [s['run_id']]*4)
                         self.assertEqual([m['connection_variant'] for m in runs],
                                          ['baseline', 'baseline', 'attnres', 'mhc', 'baseline', 'baseline'])
+                    if recipe == launcher.ABLATION_SUITE:
+                        self.assertEqual([m['recipe'] for m in runs], list(launcher.ABLATION_ARGS))
+                        self.assertEqual([m['baseline_run'] for m in runs], ['a2793a7e', s['run_id'], s['run_id']])
+                        self.assertTrue(all(m['velocity_init'] == 'zero' for m in runs))
+                        scalar = launcher.chord_args('chord_scalar_bf16')
+                        self.assertEqual(runs[0]['model_args'], [f.replace('--velocity-init=token', '--velocity-init=zero') for f in scalar])
                     if recipe in launcher.CHORD_ARGS:
                         self.assertEqual(s['model_args'], launcher.CHORD_ARGS[recipe].read_text().splitlines())
                         self.assertEqual(s['velocity_init'], 'token' if recipe=='chord_scalar_bf16' else 'projected_h0')

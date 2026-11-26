@@ -119,7 +119,10 @@ class ConnectionConfig:
                 self.momentum_eta_init = 0.05 if self.residual_mode == 'heavy_ball_rms' else 1.0
         if self.ngpt_velocity_mode == 'transport_layernorm' and not hbformer:
             raise ValueError('Transported velocity LayerNorm requires the unit-step HBFormer')
-        if self.residual_mode == 'lookahead_only' and self.ngpt_velocity_mode != 'ambient':
+        additive = self.residual_mode == 'lookahead_only'
+        if self.ngpt_velocity_mode == 'ambient_learned_beta' and not additive:
+            raise ValueError('Ambient learned retention requires additive lookahead')
+        if additive and self.ngpt_velocity_mode not in ('ambient', 'ambient_learned_beta'):
             raise ValueError('Additive lookahead uses Euclidean velocity')
         if self.chord_six_controls not in ('off', 'static', 'small_dynamic', 'learned_dynamic'):
             raise ValueError('Unknown six-coefficient Chord setting')
@@ -134,7 +137,7 @@ class ConnectionConfig:
         token_update = self.chord_update_based and self.dynamic_chord_controls
         if token_update and not self.chord_soft_force_tau:
             raise ValueError('Token-conditioned update-based Chord requires a positive soft force tau')
-        if self.chord_soft_force_tau and not token_update and (
+        if self.chord_soft_force_tau and self.residual_mode != 'ngpt' and not token_update and (
                 self.architecture != 'vanilla' or self.residual_mode != 'ngpt_lookahead'
                 or self.ngpt_velocity_mode != 'lookahead_split_learned_beta' or self.chord_six_controls != 'off'
                 or self.token_chord_gates or self.token_beta_gate or self.channel_chord_coefficients or self.chord_velocity_write):
@@ -164,12 +167,13 @@ class ConnectionConfig:
             raise ValueError('Fused read/norm and force recomputation require BF16 project-only Chord')
         if self.chord_state_dtype not in ('bfloat16', 'float32'):
             raise ValueError('Unknown Chord state dtype')
-        if self.chord_state_dtype == 'bfloat16' and (self.residual_mode != 'ngpt_lookahead'
+        if self.chord_state_dtype == 'bfloat16' and (self.residual_mode not in ('ngpt_lookahead', 'lookahead_only', 'ngpt')
                 or self.ngpt_velocity_mode == 'lookahead_geodesic_split'):
-            raise ValueError('BF16 Chord state storage requires spherical lookahead with a chord write')
+            raise ValueError('BF16 residual storage requires Chord or one of its component ablations')
         if self.chord_velocity_geometry not in ('parallel_transport', 'project_only', 'ambient'):
             raise ValueError('Unknown Chord velocity geometry')
-        if not simple_chord and self.chord_velocity_geometry != 'parallel_transport' and (
+        euclidean_velocity = additive and self.chord_velocity_geometry == 'ambient'
+        if not (simple_chord or euclidean_velocity) and self.chord_velocity_geometry != 'parallel_transport' and (
                 self.ngpt_velocity_mode != 'lookahead_split_learned_beta' or self.signed_chord_steps
                 or self.token_chord_gates or self.token_beta_gate):
             raise ValueError('Velocity geometry ablations require positive split steps and layerwise beta')
@@ -183,22 +187,26 @@ class ConnectionConfig:
             raise ValueError('Token beta gate requires shared positive split steps and learned velocity decay')
         if (self.residual_mode == 'ngpt_lookahead') != spherical_lookahead:
             raise ValueError('Spherical lookahead requires a compatible Chord or geodesic velocity mode')
-        if not spherical_lookahead and self.ngpt_velocity_mode not in ('ambient', 'transport_rms', 'transport_layernorm'):
+        if not spherical_lookahead and self.ngpt_velocity_mode not in ('ambient', 'ambient_learned_beta', 'transport_rms', 'transport_layernorm'):
             raise ValueError('Unknown nGPT velocity mode')
         if not math.isfinite(self.momentum_velocity_rms_floor) or self.momentum_velocity_rms_floor <= 0:
             raise ValueError('Velocity RMS floor must be positive and finite')
         if not math.isfinite(self.ngpt_force_rms_floor) or self.ngpt_force_rms_floor <= 0:
             raise ValueError('Normalized-target force RMS floor must be positive and finite')
         if self.velocity_init is None:
-            if hbformer or lookahead:
+            if self.ngpt_velocity_mode == 'ambient_learned_beta':
+                self.velocity_init = 'zero'
+            elif hbformer or lookahead:
                 self.velocity_init = 'token_position'
             else:
                 self.velocity_init = 'token' if self.residual_mode in ('heavy_ball', 'heavy_ball_rms', 'ngpt_heavy_ball') else 'zero'
         if hbformer and (self.velocity_init != 'token_position' or self.ngpt_velocity_mode == 'ambient'
                          or self.momentum_eta_init != 1 or self.residual_projection_init != 'normal'):
             raise ValueError('ngpt_hbformer requires token_position velocity, parallel transport, fixed unit step and nonzero projections')
-        if self.residual_mode == 'lookahead_only' and self.velocity_init != 'token_position':
-            raise ValueError('Additive lookahead requires token and position velocity embeddings')
+        if additive:
+            expected = 'zero' if self.ngpt_velocity_mode == 'ambient_learned_beta' else 'token_position'
+            if self.velocity_init != expected:
+                raise ValueError(f'{self.ngpt_velocity_mode} additive lookahead expects velocity_init={expected}')
         if self.velocity_init == 'token_position' and not (hbformer or lookahead):
             raise ValueError('Token plus position velocity requires HBFormer or lookahead')
         if self.velocity_init not in ('zero', 'token', 'token_position', 'projected_h0'):

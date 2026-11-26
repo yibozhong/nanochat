@@ -7,7 +7,7 @@ import subprocess
 import sys
 import tempfile
 
-from .submit import BATCH_TOKENS, CHORD_ARGS, RECIPES, RESIDUAL_STUDY, STEPS, SUITE, save
+from .submit import ABLATION_ARGS, BATCH_TOKENS, CHORD_ARGS, RECIPES, STEPS, SUITE, SUITES, chord_args, save
 
 ROOT = Path('..')
 RESULTS = Path('results')
@@ -20,21 +20,27 @@ def read(path):
 
 def manifest_runs(manifest, run_id, recipe):
     assert (manifest['run_id'], manifest['recipe']) == (run_id, recipe)
-    runs = manifest['runs'] if recipe == SUITE else [manifest]
-    if recipe == SUITE:
-        assert tuple(s['recipe'] for s in runs) == RESIDUAL_STUDY
+    runs = manifest['runs'] if recipe in SUITES else [manifest]
+    if recipe in SUITES:
+        assert tuple(s['recipe'] for s in runs) == SUITES[recipe]
         assert len({s['run_id'] for s in runs}) == len(runs) and runs[0]['run_id'] == run_id
         for index, s in enumerate(runs):
-            assert s['baseline_run'] == ('self' if index < 2 else run_id)
+            if recipe == SUITE:
+                assert s['baseline_run'] == ('self' if index < 2 else run_id)
+            else:
+                assert s['baseline_run'] == (manifest['baseline_run'] if index == 0 else run_id)
+                assert s['velocity_init'] == 'zero'
             assert s['group'] == manifest['group']
     for s in runs:
-        assert s['recipe'] in RECIPES
+        assert s['recipe'] in (*RECIPES, *ABLATION_ARGS)
         assert s['schedule_steps'] == STEPS and s['steps'] in (0, STEPS)
         assert s['seed'] == 42 and s['formal_training'] == bool(s['steps']) and s['initialization'] == 'fresh'
         assert s['wandb_project'] == 'nanochat-1b' and s['matched_backbone_init'] and s['residual_projection_init'] == 'zero'
         args = dict(option[2:].split('=', 1) for option in s['model_args'] if '=' in option)
         assert args['residual-projection-init'] == 'zero' and args['variant'] == s['connection_variant']
         assert (args['architecture'], args['attention-backend']) == (s['architecture'], s['attention_backend'])
+        if s['recipe'] in ABLATION_ARGS:
+            assert s['model_args'] == chord_args(s['recipe'])
         if s['recipe'] in CHORD_ARGS:
             assert s['model_args'] == CHORD_ARGS[s['recipe']].read_text().splitlines()
             assert args['chord-soft-force-tau'] == '0.05' and args['chord-state-dtype'] == 'bfloat16'
@@ -73,6 +79,10 @@ def preflight(s, directory):
     env = dict(environment(s), WANDB_MODE='disabled')
     if s.get('procedural'):
         subprocess.run([sys.executable, '-m', 'pytest', '-q', 'tests/test_procedural.py'], env=env, check=True, timeout=900)
+    if s['recipe'] in ABLATION_ARGS:
+        test = s['recipe'].removeprefix('chord_scalar_')
+        subprocess.run([sys.executable, '-m', 'pytest', '-q', 'tests/test_scalar_components.py::test_' + test],
+                       env=env, check=True, timeout=600)
     if s['recipe'] == 'chord_scalar_bf16':
         subprocess.run([sys.executable, '-m', 'pytest', '-q', '-s', 'tests/test_chord_soft_scalar.py'],
                        env=env, check=True, timeout=600)
@@ -135,10 +145,10 @@ def finished(s, out, ckpt):
 
 def main(run_id, recipe):
     runs = manifest_runs(read(ROOT/'source.json'), run_id, recipe)
-    suite = recipe == SUITE
+    suite = recipe in SUITES
     folders = [RESULTS/s['run_id'] if suite else RESULTS for s in runs]
     reports = [preflight(s, folder) for s, folder in zip(runs, folders)]
-    if suite:
+    if recipe == SUITE:
         ref = reports[0]['first_gradients']['output_projection_norms']
         for s, report in zip(runs, reports):
             if s['recipe'] in CHORD_ARGS:

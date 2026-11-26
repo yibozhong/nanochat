@@ -118,7 +118,7 @@ def main():
     p.add_argument('--momentum-gamma-init', type=float, default=None)
     p.add_argument('--momentum-eta-init', type=float, default=None,
                    help='HBFormer fixes eta=1. Other modes learn eta from their configured initial value.')
-    p.add_argument('--ngpt-velocity-mode', choices=('ambient','transport_rms','transport_layernorm','lookahead_transport','lookahead_axis_write','lookahead_split_write','lookahead_split_learned_beta','lookahead_geodesic_split','lookahead_token_single','lookahead_minimal'), default=None,
+    p.add_argument('--ngpt-velocity-mode', choices=('ambient','ambient_learned_beta','transport_rms','transport_layernorm','lookahead_transport','lookahead_axis_write','lookahead_split_write','lookahead_split_learned_beta','lookahead_geodesic_split','lookahead_token_single','lookahead_minimal'), default=None,
                    help='New nGPT momentum defaults to transport_rms; old checkpoints require ambient')
     p.add_argument('--momentum-velocity-rms-floor', type=float, default=.1)
     p.add_argument('--chord-update-based', action='store_true',

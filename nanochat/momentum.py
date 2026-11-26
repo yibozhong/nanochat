@@ -132,7 +132,7 @@ def residual_update(config, *, velocity_consumed=True, fixed_unit_mu=False):
         return SingleStepSite(config, velocity_consumed)
     if config.residual_mode == 'lookahead_only':
         from nanochat.lookahead import AdditiveLookaheadResidual
-        return AdditiveLookaheadResidual(config)
+        return AdditiveLookaheadResidual(config, velocity_consumed)
     if config.residual_mode == 'ngpt_lookahead':
         from nanochat.lookahead import LookaheadResidual
         return LookaheadResidual(config, velocity_consumed=velocity_consumed, fixed_unit_mu=fixed_unit_mu,
@@ -152,6 +152,8 @@ class NormalizedResidual(nn.Module):
         self.signed_chord_steps = config.signed_chord_steps
         self.initial_slope = -math.expm1(-self.initial_alpha)
         self.rms_floor = config.ngpt_force_rms_floor
+        self.soft_tau = config.chord_soft_force_tau
+        self.bf16_position = config.chord_state_dtype == 'bfloat16'
 
     def step_size(self, raw):
         value = raw.squeeze(0)
@@ -167,9 +169,10 @@ class NormalizedResidual(nn.Module):
         return self.step_size(self.raw)
 
     def forward(self, h, force):
-        h = state_dtype(h)
-        target = normalize_residual(force, self.rms_floor)
-        return normalize_residual(h + self.alpha()*(target-h))
+        position = state_dtype(h)
+        target = normalize_residual(force, self.rms_floor, soft_tau=self.soft_tau)
+        new = normalize_residual(position + self.alpha()*(target-position))
+        return new.bfloat16() if self.bf16_position and h.dtype == torch.bfloat16 else new
 
 
 class NormalizedResidualModel(ConnectionModel):
@@ -182,7 +185,10 @@ class NormalizedResidualModel(ConnectionModel):
         return self
 
     def hidden(self, idx, kv_cache=None):
-        h = self.backbone(normalize_residual(self.wte(idx)), kv_cache)
+        h = normalize_residual(self.wte(idx))
+        if self.config.chord_state_dtype == 'bfloat16':
+            h = h.bfloat16()
+        h = self.backbone(h, kv_cache)
         return norm(h.to(self.wte.weight.dtype))
 
     @torch.no_grad()

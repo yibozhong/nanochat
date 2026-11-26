@@ -212,7 +212,7 @@ class LookaheadResidual(_ChordLookaheadRead, NormalizedResidual):
 
 def additive_branch_input(h, v, mu):
     # Keep the BF16 query boundary visible to the branch backward.
-    return (state_dtype(h) + mu[0] * v).to(h.dtype)
+    return (state_dtype(h) + mu[0] * state_dtype(v)).to(h.dtype)
 
 
 def compile_additive_step(block, options):
@@ -232,19 +232,27 @@ def compile_additive_step(block, options):
 
 class AdditiveLookaheadResidual(nn.Module):
     """Read ahead in Euclidean space and write through the vanilla residual."""
-    def __init__(self, config):
+    def __init__(self, config, velocity_consumed=True):
         super().__init__()
         self.mu = nn.Parameter(torch.tensor([config.lookahead_mu_init], dtype=torch.float32))
         self.decay = config.momentum_beta_init
+        learn_beta = config.ngpt_velocity_mode == 'ambient_learned_beta'
+        self.terminal = learn_beta and not velocity_consumed
+        self.raw_beta = (nn.Parameter(torch.tensor([self.decay], dtype=torch.float32).logit())
+                         if learn_beta and velocity_consumed else None)
 
     def query(self, h, v):
-        return state_dtype(h) + self.mu[0] * v
+        return state_dtype(h) + self.mu[0] * state_dtype(v)
 
     def forward(self, h, v, force):
         new_h = h + force
+        if self.terminal:
+            return new_h, None
         # Track the realized displacement of the vanilla (normally BF16) sum.
         displacement = state_dtype(new_h) - state_dtype(h)
-        return new_h, self.decay * v + (1 - self.decay) * displacement
+        beta = self.raw_beta.sigmoid() if self.raw_beta is not None else self.decay
+        velocity = beta * state_dtype(v) + (1 - beta) * displacement
+        return new_h, velocity.to(v.dtype)
 
 
 def compile_split_block(block, next_mu, *, first, preview, terminal):
@@ -319,7 +327,7 @@ class LookaheadModel(MomentumModel):
     def _initial_state(self, x, token_ids, start):
         h, v = super().initial_state(x, token_ids, start)
         if self.config.residual_mode == 'lookahead_only':
-            return h.to(x.dtype), v
+            return h.to(x.dtype), v.bfloat16() if self.config.chord_state_dtype == 'bfloat16' else v
         if (self.velocity_embedding is not None or self.velocity_projection is not None) and self.config.chord_velocity_geometry != 'ambient':
             v = tangent_project(h, v)
         if self.config.chord_state_dtype == 'bfloat16':
@@ -329,7 +337,7 @@ class LookaheadModel(MomentumModel):
     @torch.no_grad()
     def residual_metrics(self):
         sites = [site for b in self.blocks for site in (b.attn_residual, b.mlp_residual)]
-        if self.config.ngpt_velocity_mode == 'lookahead_minimal':
+        if self.config.ngpt_velocity_mode in ('lookahead_minimal', 'ambient_learned_beta'):
             mus = torch.cat([site.mu for site in sites]).tolist()
             betas = torch.cat([site.raw_beta for site in sites if site.raw_beta is not None]).sigmoid().tolist()
             return {**{f'residual/sublayer_{i}/mu': value for i, value in enumerate(mus)},
