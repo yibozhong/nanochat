@@ -28,7 +28,7 @@ TOKEN_COMPONENTS = {'chord_token_sphere_only': HERE.parents[1] / 'ngpt/token_sph
 RECIPES = (*RESIDUAL_STUDY, 'vanilla_baseline_zero', 'mhc', *TOKEN_COMPONENTS)
 SUITE = 'residual_suite'
 ABLATION_SUITE = 'scalar_ablation_suite'
-VELOCITY_INITS = ('zero', 'token', 'projected_h0')
+VELOCITY_INITS = ('token', 'projected_h0', 'zero')
 ABLATION_ARGS = {
     'chord_scalar_from_rest': HERE.parents[1] / 'ngpt/legacy/chord_scalar_four.args',
     'chord_scalar_sphere_only': HERE.parents[1] / 'ngpt/legacy/scalar_sphere_only.args',
@@ -218,7 +218,7 @@ def main(argv=None):
     parser.add_argument('--recipe', choices=(*RECIPES, *SUITES), default='chord_next_bf16',
                         help='Default: token-dependent Chord. Select chord_scalar_bf16 for the static ablation.')
     parser.add_argument('--velocity-init', choices=VELOCITY_INITS,
-                        help='Chord initial velocity: at rest, a token table, or a transform of normalized h0')
+                        help='Chord initial velocity: token table (default), transform of normalized h0, or zero')
     parser.add_argument('--group', required=True, help='Research question slug, shared by its configurations')
     parser.add_argument('--name', help='Configuration name (defaults to recipe, seed and budget)')
     parser.add_argument('--baseline-run', required=True, help='nanochat-1b baseline ID or self')

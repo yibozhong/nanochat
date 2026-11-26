@@ -4,10 +4,10 @@
 
 | 用户称呼 | 1B 提交参数 | 现有参数文件的初速度 |
 | --- | --- | --- |
-| Chord、ChordRes、token-dependent 或 Next Chord | 默认，可显式指定 `--recipe chord_next_bf16` | 从归一化的 h0 生成。[模型参数](research/connections/ngpt/chord.args) |
+| Chord、ChordRes、token-dependent 或 Next Chord | 默认，可显式指定 `--recipe chord_next_bf16` | 独立 token 速度表。[模型参数](research/connections/ngpt/chord.args) |
 | static 或 scalar 消融 | `--recipe chord_scalar_bf16` | 独立 token 速度表。[模型参数](research/connections/ngpt/chord_scalar.args) |
 
-初速度的研究默认值待定，等用户给出结果后再更新。两个入口均接受 `--velocity-init zero|token|projected_h0`，新实验按研究设计选取，比较控制方式时显式指定相同初速度。速度表沿用输入 embedding 的 AdamW 组，W_v 沿用主干矩阵 Muon 组，六系数及 token 调制使用 nanochat routing AdamW 组。历史四标量实验使用各自的 manifest 和归档配方。[Chord 说明](research/connections/ngpt/CHORD.md)
+完整 Chord 默认用独立速度表（`--velocity-init token`），第二种选择是从归一化的 h0 生成（`projected_h0`），从静止开始用 `zero`。比较控制方式时匹配初速度。速度表沿用输入 embedding 的 AdamW 组，W_v 沿用主干矩阵 Muon 组，六系数及 token 调制使用 nanochat routing AdamW 组。历史实验使用各自的 manifest 和归档配方。[Chord 说明](research/connections/ngpt/CHORD.md)
 
 ## 1B 实验工作流
 

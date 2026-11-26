@@ -203,6 +203,8 @@ class ConnectionConfig:
         if self.velocity_init is None:
             if self.ngpt_velocity_mode == 'ambient_learned_beta':
                 self.velocity_init = 'zero'
+            elif self.chord_six_controls in ('learned_dynamic', 'static'):
+                self.velocity_init = 'token'
             elif hbformer or lookahead:
                 self.velocity_init = 'token_position'
             else:

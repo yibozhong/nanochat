@@ -179,8 +179,8 @@ class ReportsTest(unittest.TestCase):
             flags = launcher.chord_args(default)
             self.assertEqual((launcher.CHORD_ARGS[default].parent/'chord.args').read_text().splitlines(), flags)
             self.assertIn('--chord-six-controls=learned_dynamic', flags)
-            self.assertIn('--velocity-init=projected_h0', flags)
-            launcher.main([*args, '--recipe', 'chord_scalar_bf16', '--velocity-init', 'projected_h0'])
+            self.assertIn('--velocity-init=token', flags)
+            launcher.main([*args, '--recipe', 'chord_scalar_bf16'])
             call = submit.call_args.args
             self.assertEqual(call[0], 'chord_scalar_bf16')
             static = launcher.chord_args(call[0], call[-1])
@@ -198,13 +198,11 @@ class ReportsTest(unittest.TestCase):
         self.assertIn('--chord-state-dtype=bfloat16', scalar)
         self.assertIn('--chord-soft-force-tau=0.05', scalar)
         self.assertIn('--chord-update-based', scalar)
-        self.assertEqual(set(scalar) - set(next_args), {'--velocity-init=token', '--chord-six-controls=static'})
-        self.assertEqual(set(next_args) - set(scalar), {'--velocity-init=projected_h0',
-            '--chord-six-controls=learned_dynamic'})
+        self.assertEqual(set(scalar) - set(next_args), {'--chord-six-controls=static'})
+        self.assertEqual(set(next_args) - set(scalar), {'--chord-six-controls=learned_dynamic'})
         self.assertEqual(len(next_args), len(set(next_args)))
         legacy = launcher.CHORD_ARGS['chord_next_bf16'].parent / 'legacy/chord_next_token.args'
-        self.assertEqual(legacy.read_text().splitlines(), [
-            '--velocity-init=token' if f=='--velocity-init=projected_h0' else f for f in next_args])
+        self.assertEqual(legacy.read_text().splitlines(), next_args)
         data = dict(data_uri='test', manifest=dict(dataset_revision='v', tokenizer={}))
         for recipe in launcher.CHORD_ARGS:
             for init in launcher.VELOCITY_INITS:
@@ -300,7 +298,7 @@ class ReportsTest(unittest.TestCase):
                         self.assertEqual(runs[0]['model_args'], [f.replace('--velocity-init=token', '--velocity-init=zero') for f in scalar])
                     if recipe in launcher.CHORD_ARGS:
                         self.assertEqual(s['model_args'], launcher.CHORD_ARGS[recipe].read_text().splitlines())
-                        self.assertEqual(s['velocity_init'], 'token' if recipe=='chord_scalar_bf16' else 'projected_h0')
+                        self.assertEqual(s['velocity_init'], 'token')
 
 
 if __name__ == '__main__':

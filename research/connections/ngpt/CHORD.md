@@ -6,14 +6,14 @@
 
 | 控制方式 | 1B 提交参数 | 现有参数文件的初速度 |
 | --- | --- | --- |
-| Token-dependent（默认），每个子层按当前 token 的 h 调制系数 | 省略 `--recipe` 或指定 `--recipe chord_next_bf16` | 从 h0 线性生成速度 |
+| Token-dependent（默认），每个子层按当前 token 的 h 调制系数 | 省略 `--recipe` 或指定 `--recipe chord_next_bf16` | 独立 token 速度表 |
 | Static（可选消融），每个子层一组跨 token 共享的系数 | `--recipe chord_scalar_bf16` | 独立速度表 |
 
-初速度仍在研究中，默认选择待定。两个入口都可用 `--velocity-init` 指定以下三种方式。比较两种控制方式时，两侧显式使用相同的初速度。[Token-dependent 配方](chord.args) · [Static 配方](chord_scalar.args)
+两个入口都可用 `--velocity-init` 指定初速度。比较两种控制方式时，两侧使用相同的初速度。[Token-dependent 配方](chord.args) · [Static 配方](chord_scalar.args)
 
+- `token` 是默认方式。查独立 token 速度表，v0 = P(h0, E_v[id])，表按标准差 0.02 初始化。
+- `projected_h0` 是第二种方式。取 v0 = P(h0, W_v h0)，W_v 是共享的无偏置 d_model × d_model 矩阵，初始化标准差为 0.02 / sqrt(d_model)。
 - `zero` 从静止开始，初速度没有参数。
-- `token` 查独立 token 速度表，v0 = P(h0, E_v[id])。速度表按标准差 0.02 初始化。
-- `projected_h0` 使用 v0 = P(h0, W_v h0)。W_v 是共享的无偏置 d_model × d_model 矩阵，初始化标准差为 0.02 / sqrt(d_model)。
 
 三种都取 h0 = N(token_embedding[id])。N 将向量归一化到单位 RMS，P(h,x) = x − mean(h*x) h 表示切向投影。
 
