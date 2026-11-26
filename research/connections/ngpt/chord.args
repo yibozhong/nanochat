@@ -18,5 +18,5 @@
 --ngpt-force-rms-floor=1e-6
 --chord-soft-force-tau=0.05
 --no-ngpt-weight-norm
---residual-projection-init=normal
+--residual-projection-init=zero
 --residual-projection-init-std=0.02

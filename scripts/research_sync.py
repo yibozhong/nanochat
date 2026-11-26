@@ -68,25 +68,42 @@ def scheduler_states(jobs):
     for path in sorted(jobs.glob(f'{PROJECT}-*/state.json')):
         state = json.loads(path.read_text())
         source = state.get('source', {})
-        if source.get('wandb_project') != PROJECT or not source.get('formal_training'):
-            continue
+        runs = source.get('runs', [source])
         stopped = path.with_name('STOPPED.json')
         stop = json.loads(stopped.read_text()) if stopped.is_file() else {}
-        explicit_stop = stop.get('run_id') == state['run_id']
-        local[state['run_id']] = dict(source=source, job=state['job'], stopped=explicit_stop,
-                                      stop_reason=stop.get('reason') if explicit_stop else None)
+        active = None
+        if 'runs' in source:
+            log = path.parent/'logs'/f"train.{state['job']}.out"
+            if log.is_file():
+                with log.open(errors='replace') as f:
+                    for line in f:
+                        if line.startswith('RESIDUAL_PHASE '):
+                            parts = line.split()
+                            if len(parts) == 4:
+                                active = parts[2]
+        for s in runs:
+            if s.get('wandb_project') != PROJECT or not s.get('formal_training'):
+                continue
+            rid = s['run_id']
+            explicit_stop = stop.get('run_id') == rid or rid in stop.get('run_ids', [])
+            local[rid] = dict(source=s, job=state['job'], stopped=explicit_stop,
+                              suite_wait='runs' in source and rid != active,
+                              stop_reason=stop.get('reason') if explicit_stop else None)
     if not local or not shutil.which('condor_q'):
         return local
-    by_job = {v['job']: v for v in local.values()}
+    by_job = defaultdict(list)
+    for value in local.values():
+        by_job[value['job']].append(value)
     fields = 'ClusterId,ProcId,JobStatus,ExitCode,ExitBySignal'
     def read(command, args):
         output = subprocess.check_output([command, *args, '-attributes', fields, '-json'], text=True, timeout=30)
         for ad in json.loads(output or '[]'):
             job = f"{ad['ClusterId']}.{ad['ProcId']}"
             if job in by_job:
-                by_job[job]['ad'] = ad
+                for entry in by_job[job]:
+                    entry['ad'] = ad
     read('condor_q', list(by_job))
-    missing = [j for j, v in by_job.items() if 'ad' not in v]
+    missing = [j for j, v in by_job.items() if 'ad' not in v[0]]
     if missing:
         clusters = [str(int(j.split('.')[0])) for j in missing]
         read('condor_history', ['-constraint', ' || '.join('ClusterId == '+n for n in clusters)])
@@ -151,6 +168,8 @@ def make_record(rid, name, group, wb, cfg, summary, curve, job):
         status = '已完成'
     elif job.get('stopped') or wb == 'killed' or state == 3:
         status = '主动终止' if job.get('stopped') else '已中断'
+    elif job.get('suite_wait') and not wb and state in (1, 2, 5):
+        status = '挂起待排查' if state == 5 else '排队'
     elif state == 5:
         status = '失败' if ad.get('ExitBySignal') or ad.get('ExitCode') not in (None,0,85) else '挂起待排查'
     elif state == 1:

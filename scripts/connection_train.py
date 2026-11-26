@@ -54,6 +54,31 @@ def velocity_usage_metrics(model, data, microbatch, normal_ce):
             'residual/velocity_embedding_rms': table_rms}
 
 
+def record_zero_init_gradients(model, optimizer, path):
+    """Capture the first real NTP backward before Muon changes the gradients."""
+    blocks = model.native.transformer.h if model.config.architecture == 'native' else model.blocks
+    projections = [branch.c_proj.weight for block in blocks for branch in (block.attn, block.mlp)]
+    if any(weight.count_nonzero().item() for weight in projections):
+        raise ValueError('Expected zero attention and FFN output projections in every block')
+
+    captured = False
+
+    def capture(opt, args, kwargs):
+        nonlocal captured
+        if captured:
+            return
+        norms = torch.stack([weight.grad.float().norm() for weight in projections])
+        total = torch.stack([p.grad.float().norm() for p in model.parameters() if p.grad is not None]).norm()
+        if not torch.isfinite(total) or not (norms > 0).all():
+            raise FloatingPointError('Invalid first NTP gradient at zero initialization')
+        report = dict(total_norm=total.item(), output_projection_norms=norms.tolist())
+        json_write(path, report)
+        print('FIRST_NTP_GRADIENT', report, flush=True)
+        captured = True
+
+    optimizer.register_step_pre_hook(capture)
+
+
 def main():
     p = argparse.ArgumentParser(fromfile_prefix_chars='@')
     p.add_argument('--variant', choices=CONNECTION_VARIANTS, required=True)
@@ -146,6 +171,7 @@ def main():
     p.add_argument('--sinkhorn-iterations', type=int, default=20)
     p.add_argument('--activation-checkpoint', action=argparse.BooleanOptionalAction, default=False)
     p.add_argument('--data-dir', default='data')
+    p.add_argument('--check-zero-init-gradients', action='store_true', help='Measure the first diagnostic NTP backward')
     p.add_argument('--output-dir', required=True)
     p.add_argument('--checkpoint-dir', default=None)
     p.add_argument('--attention-backend', choices=('auto','sdpa_cudnn','fa3','fa2','hardware_auto'), default='auto')
@@ -184,6 +210,11 @@ def main():
             a.chord_state_dtype = state['config'].get('chord_state_dtype', 'float32')
     if a.chord_soft_force_tau is None:
         a.chord_soft_force_tau = state['config'].get('chord_soft_force_tau', 0.) if a.resume else 0.
+    if a.residual_projection_init is None:
+        if a.resume:
+            a.residual_projection_init = state['config'].get('residual_projection_init')
+        elif a.formal_training and a.schedule_steps == STEPS:
+            a.residual_projection_init = 'zero'
     c=ConnectionConfig(variant=a.variant,streams=a.streams,sinkhorn_iterations=a.sinkhorn_iterations,
                        sequence_length=a.sequence_length, compact_routing=a.compact_routing,
                        attnres_block_size=a.attnres_block_size,
@@ -256,6 +287,10 @@ def main():
     opt,wd=optimizer_for(model, matrix_optimizer=a.matrix_optimizer, arc_mu=a.arc_mu, arc_beta=a.arc_beta,
                          arc_direction=a.arc_direction, arc_step_scale=a.arc_step_scale,
                          velocity_embedding_lr=a.velocity_embedding_lr)
+    if a.check_zero_init_gradients:
+        if a.formal_training or a.resume:
+            p.error('--check-zero-init-gradients requires a fresh local diagnostic')
+        record_zero_init_gradients(model, opt, out/'first-gradients.json')
     initial_groups=[{k:v for k,v in group.items() if k!='params'} for group in opt.param_groups]
     protocol=dict(steps=a.steps,schedule_steps=a.schedule_steps,batch_tokens=32768,
                   microbatch=a.microbatch,grad_accum=rows_per_step//a.microbatch,seed=a.seed,

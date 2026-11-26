@@ -11,6 +11,7 @@ from unittest.mock import patch
 
 from nanochat.experiment_logging import STEPS, BATCH_TOKENS, PROJECT
 from research.connections.native.chord import submit as launcher
+from research.connections.native.chord import run_queue
 from scripts import research_sync as sync
 
 
@@ -160,16 +161,16 @@ class ReportsTest(unittest.TestCase):
 
     def test_active_chord_recipes_and_legacy_next(self):
         self.assertEqual(set(launcher.RECIPES), {
-            'chord_scalar_bf16', 'chord_next_bf16', 'vanilla_baseline', 'vanilla_baseline_zero', 'mhc'})
+            'chord_scalar_bf16', 'chord_next_bf16', 'vanilla_baseline', 'vanilla_baseline_zero', 'native_baseline', 'vanilla_mhc', 'vanilla_attnres', 'mhc'})
         scalar = launcher.CHORD_ARGS['chord_scalar_bf16'].read_text().splitlines()
         next_args = launcher.CHORD_ARGS['chord_next_bf16'].read_text().splitlines()
         self.assertIn('--velocity-init=token', scalar)
-        self.assertIn('--residual-projection-init=normal', scalar)
+        self.assertIn('--residual-projection-init=zero', scalar)
         self.assertIn('--chord-state-dtype=bfloat16', scalar)
         self.assertIn('--chord-soft-force-tau=0.05', scalar)
         self.assertNotIn('--chord-update-based', scalar)
-        self.assertEqual(set(scalar) - set(next_args), {'--velocity-init=token', '--residual-projection-init=normal'})
-        self.assertEqual(set(next_args) - set(scalar), {'--velocity-init=projected_h0', '--residual-projection-init=zero',
+        self.assertEqual(set(scalar) - set(next_args), {'--velocity-init=token'})
+        self.assertEqual(set(next_args) - set(scalar), {'--velocity-init=projected_h0',
             '--chord-update-based', '--chord-six-controls=learned_dynamic'})
         self.assertEqual(len(next_args), len(set(next_args)))
         legacy = launcher.CHORD_ARGS['chord_next_bf16'].parent / 'legacy/chord_next_token.args'
@@ -181,8 +182,45 @@ class ReportsTest(unittest.TestCase):
                     launcher.submit(retired, Path(tmp), STEPS, 'velocity', retired, 'self')
             self.assertEqual(list(Path(tmp).iterdir()), [])
 
-    def test_manifest_and_worker_agree_without_submission(self):
+    def test_suite_scheduler_uses_current_member(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            folder = root / (PROJECT + '-residual-suite')
+            (folder/'logs').mkdir(parents=True)
+            runs = [dict(run_id=rid, formal_training=True, wandb_project=PROJECT) for rid in ('a','b','c')]
+            (folder/'state.json').write_text(json.dumps(dict(source=dict(runs=runs), job='1.0')))
+            (folder/'logs/train.1.0.out').write_text('RESIDUAL_PHASE preflight b native_baseline\n')
+            ad = json.dumps([dict(ClusterId=1, ProcId=0, JobStatus=2)])
+            with patch.object(sync.shutil, 'which', return_value='condor_q'), patch.object(sync.subprocess, 'check_output', return_value=ad):
+                states = sync.scheduler_states(root)
+            statuses = [record(rid,'self',{},wb='',job=states[rid])['status'] for rid in ('a','b','c')]
+            self.assertEqual(statuses, ['排队','准备中','排队'])
+
+    def test_suite_validates_all_before_training_and_resumes_in_order(self):
         import subprocess
+        runs = [dict(run_id=key, recipe=key, group='residual-mechanisms', formal_training=True,
+                     steps=STEPS, checkpoint_seconds=1800) for key in launcher.RESIDUAL_STUDY]
+        report = dict(first_gradients=dict(output_projection_norms=[1.]))
+        with patch.object(run_queue, 'read'), patch.object(run_queue, 'manifest_runs', return_value=runs), \
+                patch.object(run_queue, 'preflight', return_value=report) as gate, patch.object(run_queue,'save'), \
+                patch.object(run_queue, 'train_args', return_value=['train']), patch.object(run_queue, 'environment'), \
+                patch.object(run_queue, 'finished') as finished, patch.object(run_queue.subprocess, 'run') as train:
+            gate.side_effect = [report]*5 + [ValueError('last config failed')]
+            with self.assertRaisesRegex(ValueError, 'last config failed'):
+                run_queue.main('id', launcher.SUITE)
+            train.assert_not_called()
+            gate.side_effect = None
+            # A completed baseline is skipped. The next entry returns a durable
+            # checkpoint, so the other four may only start on a later invocation.
+            finished.side_effect = [True, False]
+            train.return_value = subprocess.CompletedProcess([], 85)
+            self.assertEqual(run_queue.main('id', launcher.SUITE), 85)
+            args = train.call_args.args[0]
+            self.assertEqual(args[args.index('--run-id')+1], 'native_baseline')
+            self.assertEqual(args[args.index('--resume')+1], 'auto')
+            train.assert_called_once()
+
+    def test_manifest_and_worker_agree_without_submission(self):
         class StopBeforeSubmit(Exception): pass
         with tempfile.TemporaryDirectory() as tmp:
             d=Path(tmp)
@@ -198,20 +236,26 @@ class ReportsTest(unittest.TestCase):
                 if args[0]=='condor_submit': self.fail('Real submission attempted')
                 return 'commit' if args[:2]==('git','rev-parse') else ''
             with patch.object(launcher,'run',fake), patch.object(launcher,'HOME',d), patch.object(launcher,'ASSETS',assets):
-                for recipe in launcher.RECIPES:
+                for recipe in (*launcher.RECIPES, launcher.SUITE):
                     root=d/recipe
                     root.mkdir()
                     with self.assertRaises(StopBeforeSubmit):
                         launcher.submit(recipe,root,STEPS,'velocity',recipe,'self')
                     manifest=(root/'bundles/source.json').read_text()
                     s=json.loads(manifest)
-                    self.assertEqual((s['schedule_steps'],s['steps'],s['wandb_project']),(STEPS,STEPS,PROJECT))
+                    runs = run_queue.manifest_runs(s, s['run_id'], recipe)
+                    for member in runs:
+                        self.assertEqual((member['schedule_steps'], member['steps'], member['wandb_project']),
+                                         (STEPS, STEPS, PROJECT))
+                    if recipe == launcher.SUITE:
+                        self.assertEqual([m['architecture'] for m in runs],
+                                         ['vanilla', 'native', 'vanilla', 'vanilla', 'vanilla', 'vanilla'])
+                        self.assertEqual([m['baseline_run'] for m in runs], ['self', 'self'] + [s['run_id']]*4)
+                        self.assertEqual([m['connection_variant'] for m in runs],
+                                         ['baseline', 'baseline', 'attnres', 'mhc', 'baseline', 'baseline'])
                     if recipe in launcher.CHORD_ARGS:
                         self.assertEqual(s['model_args'], launcher.CHORD_ARGS[recipe].read_text().splitlines())
                         self.assertEqual(s['velocity_init'], 'token' if recipe=='chord_scalar_bf16' else 'projected_h0')
-                    (root/'source.json').write_text(manifest)
-                    worker=(root/'train.sh').read_text().split("<<'PY'\n",1)[1].split('\nPY\n',1)[0]
-                    subprocess.run([sync.sys.executable,'-c',worker,s['run_id'],recipe],cwd=root,check=True)
 
 
 if __name__ == '__main__':

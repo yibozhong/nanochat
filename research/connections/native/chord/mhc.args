@@ -6,7 +6,7 @@
 --attention-kernel=original
 --attention-backend=fa3
 --window-pattern=SSSL
---residual-projection-init=normal
+--residual-projection-init=zero
 --residual-projection-init-std=0.02
 --matched-backbone-init
 --no-activation-checkpoint

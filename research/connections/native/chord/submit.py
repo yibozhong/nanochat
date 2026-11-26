@@ -1,4 +1,4 @@
-"""Submit a nanochat-1b baseline, Chord, or native mHC experiment on Hopper."""
+"""Submit nanochat-1b experiments in one sequential job on Hopper."""
 import argparse
 import fcntl
 import json
@@ -21,7 +21,9 @@ CHORD_ARGS = {
     'chord_scalar_bf16': HERE.parents[1] / 'ngpt/chord.args',
     'chord_next_bf16': HERE.parents[1] / 'ngpt/chord_next.args',
 }
-RECIPES = ('vanilla_baseline', 'vanilla_baseline_zero', *CHORD_ARGS, 'mhc')
+RESIDUAL_STUDY = ('vanilla_baseline', 'native_baseline', 'vanilla_attnres', 'vanilla_mhc', *CHORD_ARGS)
+RECIPES = (*RESIDUAL_STUDY, 'vanilla_baseline_zero', 'mhc')
+SUITE = 'residual_suite'
 
 
 def run(*args, cwd=REPO):
@@ -32,9 +34,54 @@ def save(path, value):
     path.write_text(json.dumps(value, indent=2) + '\n')
 
 
+def make_source(recipe, key, steps, group, name, baseline, commit, data):
+    run_id = uuid.uuid4().hex[:8]
+    source = dict(commit=commit, run_id=run_id, plan=key, formal_training=bool(steps), seed=42,
+        wandb_project=PROJECT, group=group, run_name=name, baseline_run=baseline, recipe=recipe,
+        initialization='fresh', hopper_only=True,
+        steps=steps, schedule_steps=STEPS, batch_tokens=32768, training_tokens=steps*32768,
+        microbatch=16,
+        data_uri=data['data_uri'],
+        dataset_revision=data['manifest']['dataset_revision'], tokenizer=data['manifest']['tokenizer'],
+        runtime='mhc-official-runtime-7546767.tar.gz + frozen uv.lock', checkpoint_seconds=1800)
+    native = recipe in ('native_baseline', 'mhc')
+    variant = {'vanilla_attnres': 'attnres', 'vanilla_mhc': 'mhc', 'mhc': 'mhc'}.get(recipe, 'baseline')
+    streams = 4 if variant == 'mhc' else 1
+    arch, backend, window = ('native', 'fa3', 'SSSL') if native else ('vanilla', 'fa2', 'L')
+    source.update(architecture=arch, attention_backend=backend, window_pattern=window,
+                  connection_variant=variant, streams=streams, matched_backbone_init=True,
+                  residual_projection_init='zero', output_projection_actual_std=0.)
+    if recipe in CHORD_ARGS:
+        flags = CHORD_ARGS[recipe].read_text().splitlines()
+        options = dict(flag[2:].split('=', 1) for flag in flags if '=' in flag)
+        source.update(model_args=flags, velocity_init=options['velocity-init'],
+                      model_variant=options.get('chord-six-controls', options['ngpt-velocity-mode']),
+                      residual_projection_init=options['residual-projection-init'],
+                      control_peak_lr=.008*.25*(768/512)**.5)
+        if recipe == 'chord_next_bf16':
+            source.update(next_run='2574b7dc', next_source='lululu39/NextTransformer@b8bbfa41d8ab4b31eb5447cbde6271fe84074b78',
+                          residual_update='split(force / sqrt(mean(force^2) + 0.05^2))',
+                          modulation_scale_init=.01, paired_preflight='chord_scalar_bf16',
+                          velocity_projection_weight_std=.02/512**.5, velocity_projection_optimizer='muon',
+                          velocity_projection_peak_lr=.02*.25)
+    else:
+        flags = [f'--variant={variant}', f'--architecture={arch}', f'--streams={streams}',
+                 f'--attention-backend={backend}', f'--window-pattern={window}', '--residual-projection-init=zero']
+        if variant == 'attnres':
+            flags += ['--attnres-block-size=2']
+        if variant == 'mhc':
+            flags += ['--connection-backend=nvidia', '--sinkhorn-iterations=20']
+        if recipe == 'mhc':
+            flags = (HERE/'mhc.args').read_text().splitlines()
+        source.update(model_args=flags, model_variant=variant)
+    return source
+
+
 def submit(recipe, root, steps, group, name, baseline):
-    if recipe not in RECIPES:
+    if recipe not in (*RECIPES, SUITE):
         raise ValueError(f'Unknown active recipe: {recipe}')
+    if recipe == SUITE and baseline != 'self':
+        raise ValueError('The residual suite pairs its own baseline runs')
     key = root.name
     ad_key = 'NativeMhcKey' if recipe == 'mhc' else 'VanillaChordKey'
     if (root/'state.json').exists():
@@ -60,41 +107,17 @@ def submit(recipe, root, steps, group, name, baseline):
     (bundles/wheel.name).symlink_to(wheel)
     data = json.loads((HOME/'datasets/fineweb-edu-10bt/current-packed-cache.json').read_text())
     assert data['ready'] and data['manifest']['training_steps'] >= STEPS
-    run_id = uuid.uuid4().hex[:8]
-    source = dict(commit=commit, run_id=run_id, plan=key, formal_training=bool(steps), seed=42,
-        wandb_project=PROJECT, group=group, run_name=name, baseline_run=baseline, recipe=recipe,
-        initialization='fresh', hopper_only=True,
-        steps=steps, schedule_steps=STEPS, batch_tokens=32768, training_tokens=steps*32768,
-        microbatch=16,
-        data_uri=data['data_uri'],
-        dataset_revision=data['manifest']['dataset_revision'], tokenizer=data['manifest']['tokenizer'],
-        runtime='mhc-official-runtime-7546767.tar.gz + frozen uv.lock', checkpoint_seconds=1800)
-    if recipe == 'mhc':
-        source.update(architecture='native', attention_backend='fa3', window_pattern='SSSL',
-                      model_args=(HERE/'mhc.args').read_text().splitlines(),
-                      connection_variant='mhc', streams=4, sinkhorn_iterations=20,
-                      residual_projection_init='normal', output_projection_actual_std=.005)
+    if recipe == SUITE:
+        sources = []
+        for member in RESIDUAL_STUDY:
+            member_name = member.replace('_', '-') + '-zero-s42-1b'
+            reference = 'self' if member in RESIDUAL_STUDY[:2] else sources[0]['run_id']
+            sources.append(make_source(member, key, steps, group, member_name, reference, commit, data))
+        run_id = sources[0]['run_id']
+        source = dict(recipe=SUITE, run_id=run_id, group=group, run_name=name, baseline_run=baseline, runs=sources)
     else:
-        source.update(architecture='vanilla', attention_backend='fa2', window_pattern='L',
-                      control_optimizer_reference='vanilla_chord')
-        if recipe in CHORD_ARGS:
-            flags = CHORD_ARGS[recipe].read_text().splitlines()
-            options = dict(flag[2:].split('=', 1) for flag in flags if '=' in flag)
-            source.update(model_args=flags, velocity_init=options['velocity-init'],
-                          model_variant=options.get('chord-six-controls', options['ngpt-velocity-mode']),
-                          residual_projection_init=options['residual-projection-init'],
-                          control_peak_lr=.008*.25*(768/512)**.5)
-            if recipe == 'chord_next_bf16':
-                source.update(next_run='2574b7dc', next_source='lululu39/NextTransformer@b8bbfa41d8ab4b31eb5447cbde6271fe84074b78',
-                              residual_update='split(force / sqrt(mean(force^2) + 0.05^2))',
-                              modulation_scale_init=.01, paired_preflight='chord_scalar_bf16',
-                              velocity_projection_weight_std=.02/512**.5, velocity_projection_optimizer='muon',
-                              velocity_projection_peak_lr=.02*.25)
-        else:
-            init = 'zero' if recipe == 'vanilla_baseline_zero' else 'normal'
-            source.update(model_variant='vanilla', velocity_init='zero', residual_projection_init=init,
-                          model_args=['--variant=baseline', '--architecture=vanilla', '--streams=1',
-                                      '--attention-backend=fa2', '--residual-projection-init='+init])
+        source = make_source(recipe, key, steps, group, name, baseline, commit, data)
+        run_id = source['run_id']
     job_args = f'{run_id} {recipe}'
     save(bundles/'source.json', source)
     # Use the current site's container, transfer plugins, encrypted auth and pool settings.
@@ -108,7 +131,7 @@ def submit(recipe, root, steps, group, name, baseline):
         if line.startswith('transfer_input_files'):
             line = line.replace('bundles/gate-data.tar,bundles/inputs.sha256', data['data_uri']+','+str(HOME/'.netrc'))
         elif line.startswith('request_disk'):
-            line = 'request_disk = 80GB'
+            line = 'request_disk = 100GB' if recipe == SUITE else 'request_disk = 80GB'
         elif line.startswith('require_gpus'):
             line = line.replace('(Capability == 9.0)', '(Capability == 9.0 && regexp("H100|H200",DeviceName))')
         elif line.startswith('transfer_output_files'):
@@ -130,7 +153,7 @@ def submit(recipe, root, steps, group, name, baseline):
     save(root/'state.json',state)
     ad, = json.loads(run('condor_q',job,'-json'))
     assert ad['JobStatus']==5 and not ad.get('NumJobStarts',0) and ad['Args']==job_args
-    assert ad[ad_key]==key and ad['RequestGPUs']==1 and ad['RequestDisk']==80*1024**2
+    assert ad[ad_key]==key and ad['RequestGPUs']==1 and ad['RequestDisk']==(100 if recipe == SUITE else 80)*1024**2
     assert ad['RequestMemory']==16384 and ad['RequestCpus']==2 and ad['InteractiveJob']
     assert 'H100|H200' in ad['RequireGPUs'] and ad['GPUsMinCapability']==9
     assert data['data_uri'] in ad['TransferInput'] and 'nanochat-uv-v4.sif' in ad['TransferInput']
@@ -146,7 +169,7 @@ def submit(recipe, root, steps, group, name, baseline):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--recipe', choices=RECIPES, required=True)
+    parser.add_argument('--recipe', choices=(*RECIPES, SUITE), required=True)
     parser.add_argument('--group', required=True, help='Research question slug, shared by its configurations')
     parser.add_argument('--name', help='Configuration name (defaults to recipe, seed and budget)')
     parser.add_argument('--baseline-run', required=True, help='nanochat-1b baseline ID or self')
