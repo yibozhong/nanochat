@@ -23,14 +23,16 @@ CHORD_ARGS = {
     'chord_next_bf16': HERE.parents[1] / 'ngpt/chord_next.args',
 }
 RESIDUAL_STUDY = ('vanilla_baseline', 'native_baseline', 'vanilla_attnres', 'vanilla_mhc', *CHORD_ARGS)
-RECIPES = (*RESIDUAL_STUDY, 'vanilla_baseline_zero', 'mhc')
+TOKEN_COMPONENTS = {'chord_token_sphere_only': HERE.parents[1] / 'ngpt/token_sphere_only.args',
+                    'chord_token_lookahead_only': HERE.parents[1] / 'ngpt/token_lookahead_only.args'}
+RECIPES = (*RESIDUAL_STUDY, 'vanilla_baseline_zero', 'mhc', *TOKEN_COMPONENTS)
 SUITE = 'residual_suite'
 ABLATION_SUITE = 'scalar_ablation_suite'
 VELOCITY_INITS = ('zero', 'token', 'projected_h0')
 ABLATION_ARGS = {
     'chord_scalar_from_rest': HERE.parents[1] / 'ngpt/legacy/chord_scalar_four.args',
-    'chord_scalar_sphere_only': HERE.parents[1] / 'ngpt/scalar_sphere_only.args',
-    'chord_scalar_lookahead_only': HERE.parents[1] / 'ngpt/scalar_lookahead_only.args',
+    'chord_scalar_sphere_only': HERE.parents[1] / 'ngpt/legacy/scalar_sphere_only.args',
+    'chord_scalar_lookahead_only': HERE.parents[1] / 'ngpt/legacy/scalar_lookahead_only.args',
 }
 SUITES = {SUITE: RESIDUAL_STUDY, ABLATION_SUITE: tuple(ABLATION_ARGS)}
 
@@ -44,7 +46,7 @@ def save(path, value):
 
 
 def chord_args(recipe, velocity_init=None):
-    flags = (CHORD_ARGS | ABLATION_ARGS)[recipe].read_text().splitlines()
+    flags = (CHORD_ARGS | ABLATION_ARGS | TOKEN_COMPONENTS)[recipe].read_text().splitlines()
     if velocity_init is not None and (recipe not in CHORD_ARGS or velocity_init not in VELOCITY_INITS):
         raise ValueError('Select a six-coefficient Chord recipe and a supported initial velocity')
     if recipe == 'chord_scalar_from_rest':
@@ -72,7 +74,7 @@ def make_source(recipe, key, steps, group, name, baseline, commit, data, velocit
     source.update(architecture=arch, attention_backend=backend, window_pattern=window,
                   connection_variant=variant, streams=streams, matched_backbone_init=True,
                   residual_projection_init='zero', output_projection_actual_std=0.)
-    if recipe in CHORD_ARGS or recipe in ABLATION_ARGS:
+    if recipe in CHORD_ARGS or recipe in ABLATION_ARGS or recipe in TOKEN_COMPONENTS:
         flags = chord_args(recipe, velocity_init)
         options = dict(flag[2:].split('=', 1) for flag in flags if '=' in flag)
         source.update(model_args=flags, velocity_init=options['velocity-init'],
@@ -90,6 +92,9 @@ def make_source(recipe, key, steps, group, name, baseline, commit, data, velocit
         if recipe == 'chord_next_bf16':
             source.update(next_run='2574b7dc', next_source='lululu39/NextTransformer@b8bbfa41d8ab4b31eb5447cbde6271fe84074b78',
                           modulation_scale_init=.01, paired_preflight='chord_scalar_bf16')
+        if recipe in TOKEN_COMPONENTS:
+            source.update(model_variant=recipe, chord_controls='token_dependent',
+                          modulation_scale_init=.01)
     else:
         flags = [f'--variant={variant}', f'--architecture={arch}', f'--streams={streams}',
                  f'--attention-backend={backend}', f'--window-pattern={window}', '--residual-projection-init=zero']

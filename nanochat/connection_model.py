@@ -63,6 +63,7 @@ class ConnectionConfig:
     channel_chord_coefficients: bool = False
     chord_velocity_write: bool = False
     chord_six_controls: str = 'off'
+    chord_component_gates: bool = False
     chord_velocity_geometry: str = 'parallel_transport'
     chord_state_dtype: str | None = None
     fuse_chord_read_norm: bool = False
@@ -167,6 +168,12 @@ class ConnectionConfig:
             raise ValueError('Fused read/norm and force recomputation require BF16 project-only Chord')
         if self.chord_state_dtype not in ('bfloat16', 'float32'):
             raise ValueError('Unknown Chord state dtype')
+        if self.chord_component_gates:
+            sphere = self.residual_mode == 'ngpt' and self.chord_soft_force_tau > 0
+            preview = additive and self.ngpt_velocity_mode == 'ambient_learned_beta' and self.chord_velocity_geometry == 'ambient'
+            if not ((sphere or preview) and self.velocity_init == 'zero' and self.chord_state_dtype == 'bfloat16'
+                    and self.chord_six_controls == 'off' and self.streams == 1 and self.architecture == 'vanilla'):
+                raise ValueError('Token-dependent component ablations use zero initial velocity and BF16 sphere or additive lookahead')
         if self.chord_state_dtype == 'bfloat16' and (self.residual_mode not in ('ngpt_lookahead', 'lookahead_only', 'ngpt')
                 or self.ngpt_velocity_mode == 'lookahead_geodesic_split'):
             raise ValueError('BF16 residual storage requires Chord or one of its component ablations')
@@ -413,7 +420,8 @@ class ConnectionBlock(Block):
         self.fuse_chord_read_norm = config.fuse_chord_read_norm
         self.recompute_chord_force = config.recompute_chord_force
         self.chord_query_only_lookahead = config.chord_query_only_lookahead
-        self.token_controls = config.ngpt_velocity_mode == 'lookahead_token_single' or config.dynamic_chord_controls
+        self.token_controls = (config.ngpt_velocity_mode == 'lookahead_token_single' or config.dynamic_chord_controls
+                               or (config.chord_component_gates and self.residual_mode == 'lookahead_only'))
         self.compiled_attention = self.compiled_mlp = None
         if config.residual_mode != 'vanilla':
             from nanochat.momentum import residual_update

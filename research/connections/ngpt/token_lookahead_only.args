@@ -1,0 +1,13 @@
+--variant=baseline
+--architecture=vanilla
+--streams=1
+--attention-backend=fa2
+--residual-dynamics=lookahead_only
+--ngpt-velocity-mode=ambient_learned_beta
+--chord-velocity-geometry=ambient
+--chord-state-dtype=bfloat16
+--velocity-init=zero
+--lookahead-mu-init=0
+--momentum-beta-init=0.5
+--residual-projection-init=zero
+--chord-component-gates

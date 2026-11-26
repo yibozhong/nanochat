@@ -7,7 +7,7 @@ import subprocess
 import sys
 import tempfile
 
-from .submit import ABLATION_ARGS, BATCH_TOKENS, CHORD_ARGS, RECIPES, STEPS, SUITE, SUITES, chord_args, save
+from .submit import ABLATION_ARGS, BATCH_TOKENS, CHORD_ARGS, RECIPES, STEPS, SUITE, SUITES, TOKEN_COMPONENTS, chord_args, save
 
 ROOT = Path('..')
 RESULTS = Path('results')
@@ -39,7 +39,7 @@ def manifest_runs(manifest, run_id, recipe):
         args = dict(option[2:].split('=', 1) for option in s['model_args'] if '=' in option)
         assert args['residual-projection-init'] == 'zero' and args['variant'] == s['connection_variant']
         assert (args['architecture'], args['attention-backend']) == (s['architecture'], s['attention_backend'])
-        if s['recipe'] in ABLATION_ARGS:
+        if s['recipe'] in ABLATION_ARGS or s['recipe'] in TOKEN_COMPONENTS:
             assert s['model_args'] == chord_args(s['recipe'])
         if s['recipe'] in CHORD_ARGS:
             assert s['model_args'] == chord_args(s['recipe'], s['velocity_init'])
@@ -86,6 +86,9 @@ def preflight(s, directory):
         test = s['recipe'].removeprefix('chord_scalar_')
         subprocess.run([sys.executable, '-m', 'pytest', '-q', 'tests/test_scalar_components.py::test_' + test],
                        env=env, check=True, timeout=600)
+    if s['recipe'] in TOKEN_COMPONENTS:
+        subprocess.run([sys.executable, '-m', 'pytest', '-q', 'tests/test_token_components.py',
+                        '-k', s['recipe'].removeprefix('chord_token_')], env=env, check=True, timeout=600)
     if s['recipe'] == 'chord_scalar_bf16':
         subprocess.run([sys.executable, '-m', 'pytest', '-q', '-s', 'tests/test_chord_soft_scalar.py',
                         'tests/test_chord_six_controls.py'],

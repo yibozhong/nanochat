@@ -59,6 +59,13 @@ def model_cost(config, batch=1, activation_bytes=2, feedback_passes=None):
         if c.ngpt_velocity_mode == 'ambient_learned_beta':
             gain_parameters += sites - 1
             residual += sites - 1 - batch*t*4*d  # Skip the terminal displacement and EMA.
+        if c.chord_component_gates:
+            sphere = c.residual_mode == 'ngpt'
+            rows = sites if sphere else 4*sites - 3  # mu only at the terminal Euclidean site
+            scales = sites if sphere else 2*sites - 1
+            gain_parameters += rows*d + scales + (0 if sphere else 2*(sites-1))
+            residual += rows*d + batch*t*(sites*(3*d-1) + rows*(2*d+1))
+            residual += batch*t*(-sites*d if sphere else (sites-1)*(5*d-2))
         if c.ngpt_velocity_mode == 'lookahead_minimal':
             scalars_per_site = 1  # mu everywhere; beta only where velocity is consumed.
             gain_parameters += sites - 1

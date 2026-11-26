@@ -179,7 +179,8 @@ class ReportsTest(unittest.TestCase):
 
     def test_active_chord_recipes_and_legacy_next(self):
         self.assertEqual(set(launcher.RECIPES), {
-            'chord_scalar_bf16', 'chord_next_bf16', 'vanilla_baseline', 'vanilla_baseline_zero', 'native_baseline', 'vanilla_mhc', 'vanilla_attnres', 'mhc'})
+            'chord_scalar_bf16', 'chord_next_bf16', 'chord_token_sphere_only', 'chord_token_lookahead_only',
+            'vanilla_baseline', 'vanilla_baseline_zero', 'native_baseline', 'vanilla_mhc', 'vanilla_attnres', 'mhc'})
         scalar = launcher.CHORD_ARGS['chord_scalar_bf16'].read_text().splitlines()
         next_args = launcher.CHORD_ARGS['chord_next_bf16'].read_text().splitlines()
         self.assertIn('--velocity-init=token', scalar)

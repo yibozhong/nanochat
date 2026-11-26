@@ -121,6 +121,9 @@ class NormalizedHeavyBall(HeavyBall):
 
 
 def residual_update(config, *, velocity_consumed=True, fixed_unit_mu=False):
+    if config.chord_component_gates:
+        from nanochat.chord_components import SphereOnlySite, LookaheadOnlySite
+        return SphereOnlySite(config) if config.residual_mode == 'ngpt' else LookaheadOnlySite(config, velocity_consumed)
     if config.dynamic_chord_controls:
         from nanochat.chord_token_controls import TokenControlledSite
         return TokenControlledSite(config, velocity_consumed=velocity_consumed)
@@ -244,7 +247,9 @@ class MomentumModel(ConnectionModel):
         self.compiled_steps = None
         if compile_blocks:
             options = dict(dynamic=False, fullgraph=True, options={'emulate_precision_casts': True})
-            if self.blocks[0].token_controls:
+            if self.config.chord_component_gates:
+                self.compiled_steps = [torch.compile(b.momentum_forward, **options) for b in self.blocks]
+            elif self.blocks[0].token_controls:
                 for block in self.blocks:
                     block.compiled_attention = torch.compile(block.attn.forward, **options)
                     block.compiled_mlp = torch.compile(block.mlp.forward, **options)
