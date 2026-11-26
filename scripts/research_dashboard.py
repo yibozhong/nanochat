@@ -132,8 +132,9 @@ def render(root, groups, ranked, reviewed, synced_at=None, overview_notes=''):
                 else:
                     progress = f'等待训练记录 · 目标 {total:,} tokens' if total else '暂无进度记录'
                 active.append([name,state_pill(status),progress,ce(r['validation_ce']),esc(r['gpu'] or '—')])
-            elif status in interrupted or r['run_id'] in worse:
-                outcome = '最终 CE 高于基线' if status == '已完成' else status
+            elif group == 'legacy-chord-1b' or status in interrupted or r['run_id'] in worse:
+                outcome = ('Legacy · ' + status if group == 'legacy-chord-1b' else
+                           '最终 CE 高于基线' if status == '已完成' else status)
                 notes = []
                 if r.get('stop_reason'):
                     notes.append('停止记录 · '+esc(r['stop_reason']))

@@ -11,6 +11,8 @@
 
 ## 1B 实验工作流
 
+当前六系数 Chord 的初速度比较见[初速度报告](research/chord-initial-velocity/REPORT.md)，零初速分量消融见[球面与前瞻报告](research/chord-components/REPORT.md)。旧 1B 四标量及其分量实验归入 [Legacy](research/legacy-chord-1b/REPORT.md)，保留原 run ID、状态和可核实的曲线，活动 leaderboard 使用现行结果。
+
 本仓库新授权的正式训练默认从零、seed 42、1B tokens。所有新 1B 配方默认将每层 Attention 输出投影和 FFN down 投影置零。历史作业按其保存的配置恢复。packed FineWeb-Edu 下每步 32,768 tokens，共 30,518 步、1,000,013,824 tokens，warmup 和衰减使用 30,518 步日程。作业恢复沿用自身正式 checkpoint 和 run ID。GPU 诊断仍在同一分配内独立执行，只写本地文件。
 
 - 正式研究只使用 W&B 的 [nanochat-1b 项目](https://wandb.ai/yibozhong657-none/nanochat-1b)。旧 nanochat 项目归档在原处。新协议的同步、分析和排名仅读取新项目。

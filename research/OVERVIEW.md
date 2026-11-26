@@ -8,8 +8,11 @@
 
 <!-- sync:begin -->
 
-- [chord-initial-velocity](chord-initial-velocity/REPORT.md) · 待实验
-- [residual-mechanisms](residual-mechanisms/REPORT.md) · 排队 6
+- [chord-components](chord-components/REPORT.md) · 排队 2
+- [chord-initial-velocity](chord-initial-velocity/REPORT.md) · 排队 2
+- [legacy-chord-1b](legacy-chord-1b/REPORT.md) · 主动终止 2，已完成 2 · 待 Agent 复核结论
+- [procedural-pretraining](procedural-pretraining/REPORT.md) · 主动终止 4，等待同步 1
+- [residual-mechanisms](residual-mechanisms/REPORT.md) · 已完成 5 · 待 Agent 复核结论
 
 <!-- sync:end -->
 

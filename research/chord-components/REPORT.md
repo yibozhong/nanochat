@@ -16,7 +16,12 @@
 
 <!-- sync:begin -->
 
-待同步。
+| 配置 | 状态 | 验证 tokens | 最近 CE | ΔCE | 基线 |
+|---|---|---:|---:|---:|---|
+| [chord-token-dependent-lookahead-only-s42-1b](configs/961d9458.json) | 排队 | — | — | — | aa44a2d7 |
+| [chord-token-dependent-sphere-only-s42-1b](configs/33c7f10a.json) | 排队 | — | — | — | aa44a2d7 |
+
+[完整验证曲线数据](curves.csv)
 
 <!-- sync:end -->
 

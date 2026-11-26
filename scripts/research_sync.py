@@ -320,7 +320,26 @@ def review_ended(folder, stamp, rows):
     atomic(report, a + start + '\n\n' + body + '\n\n' + end + b)
 
 
+def include_archived_runs(records, root):
+    """Restore frozen 1B results even when the original W&B runs are unavailable."""
+    archive = root/'legacy-chord-1b'
+    index = archive/'runs.json'
+    if not index.exists():
+        return records
+    facts = json.loads(index.read_text())
+    rows = [r for r in records if r['run_id'] not in facts]
+    for rid, fact in facts.items():
+        cfg = json.loads((archive/'configs'/f'{rid}.json').read_text())
+        source = cfg['source']
+        assert source['run_id'] == rid and source['wandb_project'] == PROJECT
+        job = dict(stopped='stop_reason' in fact, stop_reason=fact.get('stop_reason'))
+        rows.append(make_record(rid, source['run_name'], archive.name, '', cfg, fact['summary'],
+                                dict(fact['points']), job))
+    return sorted(rows, key=lambda r: (r['group'], r['name'], r['run_id']))
+
+
 def publish(records, root, reviewer=None, *, synced_at=None):
+    records = include_archived_runs(records, root)
     compare(records)
     by_id = {r['run_id']:r for r in records}
     groups = defaultdict(list)
@@ -328,7 +347,8 @@ def publish(records, root, reviewer=None, *, synced_at=None):
     for r in records:
         groups[r['group']].append(r)
         baseline = r if r['baseline_run']=='self' else by_id.get(r['baseline_run'])
-        if r['status']=='已完成' and r['delta_ce'] is not None and baseline and baseline['status']=='已完成':
+        if (r['group'] != 'legacy-chord-1b' and r['status']=='已完成' and r['delta_ce'] is not None
+                and baseline and baseline['status']=='已完成'):
             ranked[r['protocol_id']].append(r)
     board = ['# 全局 leaderboard', '', '按协议分榜。配置和配对基线都完成全部训练后，按最终 validation CE 升序排列。']
     for cohort, rows in sorted(ranked.items()):

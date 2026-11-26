@@ -27,6 +27,16 @@ def record(rid, baseline, points, *, complete=False, seed=42, wb='finished', job
 
 
 class ReportsTest(unittest.TestCase):
+    def test_frozen_chord_records_take_precedence_over_missing_wandb_data(self):
+        root = launcher.REPO/'research'
+        rows = sync.include_archived_runs([{'run_id': '9c3d50ec'}], root)
+        self.assertEqual(len(rows), 4)
+        self.assertTrue(all(r['group'] == 'legacy-chord-1b' for r in rows))
+        archived = {r['run_id']: r for r in rows}
+        self.assertEqual(archived['9c3d50ec']['status'], '已完成')
+        self.assertAlmostEqual(archived['9c3d50ec']['final_ce'], 3.2080763)
+        self.assertEqual(archived['62357991']['trained_tokens'], 0)
+
     def test_matching_and_closed_group_review(self):
         end = STEPS*BATCH_TOKENS
         self.assertEqual(end,1_000_013_824)

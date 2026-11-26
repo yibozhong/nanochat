@@ -12,7 +12,12 @@
 
 <!-- sync:begin -->
 
-暂无正式实验。
+| 配置 | 状态 | 验证 tokens | 最近 CE | ΔCE | 基线 |
+|---|---|---:|---:|---:|---|
+| [chord-token-dependent-v0-table-s42-1b](configs/7337b20d.json) | 排队 | — | — | — | 2e37a95d |
+| [chord-token-dependent-v0-zero-s42-1b](configs/aa44a2d7.json) | 排队 | — | — | — | 2e37a95d |
+
+[完整验证曲线数据](curves.csv)
 
 <!-- sync:end -->
 
