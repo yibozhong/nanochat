@@ -54,9 +54,9 @@ def _history_alignment(new_h, carried, chord, D: tl.constexpr):
 
 @triton.jit
 def _position(h, v, force, P, FLOOR2: tl.constexpr,
-                  D: tl.constexpr, MODE: tl.constexpr):
+                  D: tl.constexpr, MODE: tl.constexpr, SOFT_FORCE: tl.constexpr):
     force_sq = _mean(force * force, D)
-    force_inv = tl.rsqrt(force_sq + FLOOR2) if MODE == 9 else tl.rsqrt(tl.maximum(force_sq, FLOOR2))
+    force_inv = tl.rsqrt(force_sq + FLOOR2) if SOFT_FORCE else tl.rsqrt(tl.maximum(force_sq, FLOOR2))
     target = force * force_inv
     delta = target if MODE == 8 or MODE == 9 else target - h
     if MODE == 1:
@@ -97,8 +97,8 @@ def _tangent_axis(n, v, chord, D: tl.constexpr):
 
 @triton.jit
 def _write_values(h, v, force, P, BETA: tl.constexpr, FLOOR2: tl.constexpr,
-                  D: tl.constexpr, MODE: tl.constexpr, GEOMETRY: tl.constexpr):
-    new_h, mixed_inv, mixed_sq, target, force_inv, force_sq = _position(h, v, force, P, FLOOR2, D, MODE)
+                  D: tl.constexpr, MODE: tl.constexpr, GEOMETRY: tl.constexpr, SOFT_FORCE: tl.constexpr):
+    new_h, mixed_inv, mixed_sq, target, force_inv, force_sq = _position(h, v, force, P, FLOOR2, D, MODE, SOFT_FORCE)
     bisector = h + new_h
     bisector_sq = _mean(bisector * bisector, D)
     denom = tl.maximum(bisector_sq, 1e-12)
@@ -239,7 +239,7 @@ def corrected_query(h, v, mu, memory, gain):
 @triton.jit
 def _forward(H, V, F, P, NH, NV, BETA: tl.constexpr, FLOOR2: tl.constexpr,
              D: tl.constexpr, MODE: tl.constexpr, Q, TERMINAL: tl.constexpr,
-             PREVIEW: tl.constexpr, GEOMETRY: tl.constexpr, TOKEN_CONTROLS: tl.constexpr):
+             PREVIEW: tl.constexpr, GEOMETRY: tl.constexpr, TOKEN_CONTROLS: tl.constexpr, SOFT_FORCE: tl.constexpr):
     offsets = tl.program_id(0).to(tl.int64) * D + tl.arange(0, D)
     if TOKEN_CONTROLS:
         P += tl.program_id(0).to(tl.int64) * 6 + 1
@@ -247,10 +247,10 @@ def _forward(H, V, F, P, NH, NV, BETA: tl.constexpr, FLOOR2: tl.constexpr,
     v = tl.load(V + offsets).to(tl.float32)
     force = tl.load(F + offsets).to(tl.float32)
     if TERMINAL:
-        position = _position(h, v, force, P, FLOOR2, D, MODE)
+        position = _position(h, v, force, P, FLOOR2, D, MODE, SOFT_FORCE)
         tl.store(NH + offsets, position[0])
     else:
-        values = _write_values(h, v, force, P, BETA, FLOOR2, D, MODE, GEOMETRY)
+        values = _write_values(h, v, force, P, BETA, FLOOR2, D, MODE, GEOMETRY, SOFT_FORCE)
         new_h, velocity, radial = values[0], values[1], values[2]
         new_v = velocity - radial * new_h if GEOMETRY != 2 else velocity
         tl.store(NH + offsets, new_h)
@@ -266,7 +266,7 @@ def _forward(H, V, F, P, NH, NV, BETA: tl.constexpr, FLOOR2: tl.constexpr,
 def _backward(H, V, F, P, DNH, DNV, DH, DV, DF, DP, ROWS, BETA: tl.constexpr,
               FLOOR2: tl.constexpr, D: tl.constexpr, MODE: tl.constexpr, DQ, TERMINAL: tl.constexpr,
               PREVIEW: tl.constexpr, GEOMETRY: tl.constexpr, ROW_TILE: tl.constexpr,
-              TOKEN_CONTROLS: tl.constexpr):
+              TOKEN_CONTROLS: tl.constexpr, SOFT_FORCE: tl.constexpr):
     row = tl.program_id(0)
     # Shared controls accumulate one gradient per token for a later reduction.
     # Token controls instead write their own [mu, perp, par, a, b, c] row.
@@ -297,13 +297,13 @@ def _backward(H, V, F, P, DNH, DNV, DH, DV, DF, DP, ROWS, BETA: tl.constexpr,
     force = tl.load(F + offsets, mask=live, other=0.).to(tl.float32)
     dh_next = tl.load(DNH + offsets, mask=live, other=0.).to(tl.float32)
     if TERMINAL:
-        new_h, mixed_inv, mixed_sq, target, force_inv, force_sq = _position(h, v, force, P, FLOOR2, D, MODE)
+        new_h, mixed_inv, mixed_sq, target, force_inv, force_sq = _position(h, v, force, P, FLOOR2, D, MODE, SOFT_FORCE)
         d_new_h = dh_next
         d_h = tl.full((D,), 0., tl.float32)
         d_v = tl.full((D,), 0., tl.float32)
     else:
         (new_h, velocity, radial, bisector, scale, denom, bisector_sq, mixed_inv,
-         mixed_sq, target, force_inv, force_sq, carried, beta) = _write_values(h, v, force, P, BETA, FLOOR2, D, MODE, GEOMETRY)
+         mixed_sq, target, force_inv, force_sq, carried, beta) = _write_values(h, v, force, P, BETA, FLOOR2, D, MODE, GEOMETRY, SOFT_FORCE)
         # Reverse the tangent projection, then the short-arc parallel transport.
         upstream = tl.load(DNV + offsets, mask=live, other=0.).to(tl.float32)
         if PREVIEW:
@@ -456,7 +456,7 @@ def _backward(H, V, F, P, DNH, DNV, DH, DV, DF, DP, ROWS, BETA: tl.constexpr,
         tl.store(DP + row, tl.sum(d_mixed * delta, 0))
     dot_target = _mean(d_delta * target, D)
     # The soft denominator has a norm derivative at every nonzero force magnitude.
-    if MODE == 9:
+    if SOFT_FORCE:
         d_force = force_inv * (d_delta - target * dot_target)
     else:
         d_force = force_inv * (d_delta - tl.where(force_sq >= FLOOR2, target * dot_target, 0.))
@@ -479,7 +479,7 @@ def _fake_rebuild_force(features, weight):
 
 class _ChordWrite(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, h, v, force, params, fixed_beta, floor, mode, geometry, *projection):
+    def forward(ctx, h, v, force, params, fixed_beta, floor, mode, geometry, soft_tau=0., *projection):
         width = h.size(-1)
         assert h.is_cuda and h.dtype == v.dtype and h.dtype in (torch.bfloat16, torch.float32)
         assert params.dtype == torch.float32
@@ -487,8 +487,10 @@ class _ChordWrite(torch.autograd.Function):
         assert width == triton.next_power_of_2(width) and force.dtype in (torch.bfloat16, torch.float32)
         new_h, new_v = torch.empty_like(h), torch.empty_like(v)
         rows = h.numel() // width
-        _forward[(rows,)](h, v, force, params, new_h, new_v, fixed_beta, floor**2,
-                          width, mode, params, False, False, geometry, False, num_warps=4, enable_fp_fusion=False)
+        denom2 = (soft_tau or floor)**2
+        ctx.soft_force = bool(soft_tau)
+        _forward[(rows,)](h, v, force, params, new_h, new_v, fixed_beta, denom2,
+                          width, mode, params, False, False, geometry, False, ctx.soft_force, num_warps=4, enable_fp_fusion=False)
         ctx.remat = len(projection) == 2
         if ctx.remat:
             features, weight = projection
@@ -496,7 +498,7 @@ class _ChordWrite(torch.autograd.Function):
         else:
             assert len(projection) == 0
             ctx.save_for_backward(h, v, params, force)
-        ctx.options = fixed_beta, floor**2, width, mode
+        ctx.options = fixed_beta, denom2, width, mode
         ctx.geometry = geometry
         return new_h, new_v
 
@@ -518,10 +520,9 @@ class _ChordWrite(torch.autograd.Function):
         shape = (3, tiles, h.size(-1)) if channel_mode else (params.numel(), rows)
         partials = params.new_empty(shape)
         _backward[(tiles,)](h, v, force, params, d_new_h.contiguous(), d_new_v.contiguous(),
-                           dh, dv, df, partials, rows, *ctx.options, params, False, False, ctx.geometry, row_tile, False,
+                           dh, dv, df, partials, rows, *ctx.options, params, False, False, ctx.geometry, row_tile, False, ctx.soft_force,
                            num_warps=8 if channel_mode else 4, enable_fp_fusion=False)
-        grads = (dh, dv, df, partials.sum(1).reshape_as(params), None, None, None, None)
-        return grads + ((None, None) if ctx.remat else ())
+        return (dh, dv, df, partials.sum(1).reshape_as(params)) + (None,) * (len(ctx.needs_input_grad) - 4)
 
 
 class TokenWrite(torch.autograd.Function):
@@ -533,10 +534,11 @@ class TokenWrite(torch.autograd.Function):
         rows = h.numel() // width
         nh = torch.empty_like(h)
         nv = None if terminal else torch.empty_like(v)
+        ctx.soft_force = bool(soft_tau)
         ctx.mode = 9 if soft_tau else 7
         ctx.floor2 = soft_tau**2 if soft_tau else floor**2
         _forward[(rows,)](h, v, force, controls, nh, nv, 0., ctx.floor2, width, ctx.mode,
-                          controls, terminal, False, 1, TOKEN_CONTROLS=True,
+                          controls, terminal, False, 1, TOKEN_CONTROLS=True, SOFT_FORCE=ctx.soft_force,
                           num_warps=4, enable_fp_fusion=False)
         ctx.save_for_backward(h, v, force, controls)
         ctx.terminal = terminal
@@ -551,22 +553,23 @@ class TokenWrite(torch.autograd.Function):
         dc = torch.empty_like(controls)
         _backward[(rows,)](h, v, force, controls, dnh.contiguous(), None if ctx.terminal else dnv.contiguous(),
                            dh, dv, df, dc, rows, 0., ctx.floor2, width, ctx.mode, controls, ctx.terminal,
-                           False, 1, 1, TOKEN_CONTROLS=True, num_warps=4, enable_fp_fusion=False)
+                           False, 1, 1, TOKEN_CONTROLS=True, SOFT_FORCE=ctx.soft_force, num_warps=4, enable_fp_fusion=False)
         return (dh, dv, df, dc, None, None, None)[:len(ctx.needs_input_grad)]
 
 
 class _SplitBoundary(torch.autograd.Function):
     """Two parameters for a terminal write, or [perp, parallel, beta, next_mu] for a preview."""
     @staticmethod
-    def forward(ctx, h, v, force, params, floor, terminal, geometry):
+    def forward(ctx, h, v, force, params, floor, terminal, geometry, soft_tau):
         width = h.size(-1)
         nh = torch.empty_like(h)
         nv = params if terminal else torch.empty_like(v)
         q = params if terminal else torch.empty_like(h, dtype=torch.bfloat16)
-        _forward[(h.numel() // width,)](h, v, force, params, nh, nv, 0., floor**2, width, 3,
-                                        q, terminal, not terminal, geometry, False, num_warps=4, enable_fp_fusion=False)
+        ctx.floor2 = (soft_tau or floor)**2
+        ctx.soft_force = bool(soft_tau)
+        _forward[(h.numel() // width,)](h, v, force, params, nh, nv, 0., ctx.floor2, width, 3,
+                                        q, terminal, not terminal, geometry, False, ctx.soft_force, num_warps=4, enable_fp_fusion=False)
         ctx.save_for_backward(h, v, force, params)
-        ctx.floor2 = floor**2
         ctx.geometry = geometry
         return nh if terminal else (nh, nv, q)
 
@@ -582,9 +585,9 @@ class _SplitBoundary(torch.autograd.Function):
         dnv = params if terminal else grads[1].contiguous()
         dq = params if terminal else grads[2].contiguous()
         _backward[(rows,)](h, v, force, params, dnh, dnv, dh, dv, df, partials, rows,
-                           0., ctx.floor2, width, 3, dq, terminal, not terminal, ctx.geometry, 1, False,
+                           0., ctx.floor2, width, 3, dq, terminal, not terminal, ctx.geometry, 1, False, ctx.soft_force,
                            num_warps=4, enable_fp_fusion=False)
-        return dh, dv, df, partials.sum(1), None, None, None
+        return dh, dv, df, partials.sum(1), None, None, None, None
 
 
 def split_boundary(site, h, v, force, next_mu):
@@ -594,7 +597,7 @@ def split_boundary(site, h, v, force, next_mu):
     if next_mu is not None:
         params.extend((site.beta(), next_mu[0]))
     return _SplitBoundary.apply(h.contiguous(), v.contiguous(), force.contiguous(), torch.stack(params),
-                                site.rms_floor, next_mu is None, _GEOMETRY[site.velocity_geometry])
+                                site.rms_floor, next_mu is None, _GEOMETRY[site.velocity_geometry], site.soft_tau)
 
 
 def fused_gated_write(h, v, force, params, floor):
@@ -611,7 +614,7 @@ def fused_write(h, v, force, alpha, beta, floor):
     return _ChordWrite.apply(h.contiguous(), v.contiguous(), force.contiguous(), alpha, beta, floor, 0, 0)
 
 
-def fused_split_write(h, v, force, params, floor, geometry='parallel_transport', projection=(), *, update_based=False):
+def fused_split_write(h, v, force, params, floor, geometry='parallel_transport', projection=(), *, update_based=False, soft_tau=0.):
     """Pack the position steps and velocity coefficients for this write policy."""
     mode = 5 if params.ndim == 2 else 3
     if update_based:
@@ -622,7 +625,7 @@ def fused_split_write(h, v, force, params, floor, geometry='parallel_transport',
     elif params.shape == (5,):
         assert geometry == 'project_only'
         mode = 7
-    return _ChordWrite.apply(h.contiguous(), v.contiguous(), force.contiguous(), params, 0., floor, mode, _GEOMETRY[geometry], *projection)
+    return _ChordWrite.apply(h.contiguous(), v.contiguous(), force.contiguous(), params, 0., floor, mode, _GEOMETRY[geometry], soft_tau, *projection)
 
 
 def fused_axis_write(h, v, force, params, beta, floor):

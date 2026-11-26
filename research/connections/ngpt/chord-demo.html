@@ -627,7 +627,7 @@
         <ol>
           <li>
             <b>读取。</b>沿 v 从 h 走 μ 倍速度，把结果归一化到球面得到 q。μ = 0
-            时，两个点重合。将分支输出归一化，得到淡紫色目标点 t。
+            时，两个点重合。对分支输出做 soft 归一化，得到球内的淡紫色目标点 t。
           </li>
           <li>
             <b>写回。</b>把 Δ = t − h 分成沿 v 的 p 和与 v 垂直的 s。分量 s 可以有径向部分。两个步长分别缩放 p
@@ -677,7 +677,8 @@
           const steps = [];
           for (let i = 0; i < count; i++) {
             const q = sphere(add(h, scale(v, params.mu)));
-            const target = sphere(branch(q, i));
+            const force = branch(q, i);
+            const target = scale(force, 1 / Math.sqrt(dot(force, force) / 3 + 0.05 ** 2));
             const delta = sub(target, h);
             const p = scale(v, dot(delta, v) / Math.max(dot(v, v), 3e-12));
             const along = scale(p, params.parallel),
@@ -727,7 +728,7 @@
           "将旧速度与实际走过的弦混合。在新位置去掉混合速度的径向分量，让下一次前瞻沿新切平面出发。",
         ];
         const equations = [
-          "q = N(h + μv)     t = N(F(q))",
+          "q = N(h + μv)     t = F(q) / √(RMS(F(q))² + 0.05²)",
           "Δ = t − h = p + s　　 h′ = N(h + α∥p + α⊥s)",
           "c = h′ − h　　 w = βv + (1 − β)c　　 v′ = P(h′, w)",
         ];

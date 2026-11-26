@@ -82,6 +82,7 @@ class LookaheadResidual(_ChordLookaheadRead, NormalizedResidual):
         else:
             self.mu = nn.Parameter(torch.tensor([config.lookahead_mu_init], dtype=torch.float32))
         self.update_based = config.chord_update_based
+        self.soft_tau = config.chord_soft_force_tau
         self.kappa = (nn.Parameter(torch.zeros(1, dtype=torch.float32))
                       if config.ngpt_velocity_mode == 'lookahead_axis_write' else None)
         self.raw_rho = nn.Parameter(torch.zeros(1, dtype=torch.float32)) if config.chord_velocity_write else None
@@ -141,7 +142,7 @@ class LookaheadResidual(_ChordLookaheadRead, NormalizedResidual):
         if self.raw_rho is not None:
             coefficients += (self.raw_rho[0].tanh(),)
         return fused_split_write(h, v, force, torch.stack(coefficients), self.rms_floor, self.velocity_geometry, projection,
-                                 update_based=self.update_based)
+                                 update_based=self.update_based, soft_tau=self.soft_tau)
 
     def reference_write(self, h, v, force):
         if self.geodesic:
@@ -152,7 +153,7 @@ class LookaheadResidual(_ChordLookaheadRead, NormalizedResidual):
         if self.kappa is None and self.raw_parallel is None:
             new_h = super().forward(h, force)
         else:
-            direction = normalize_residual(force, self.rms_floor)
+            direction = normalize_residual(force, self.rms_floor, soft_tau=self.soft_tau)
             delta = direction if self.update_based else direction - h
             # Use an RMS-squared floor to keep the write
             # and its derivatives finite even for an exactly zero velocity.

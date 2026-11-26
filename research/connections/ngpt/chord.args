@@ -16,6 +16,7 @@
 --ngpt-alpha-init=0.05
 --momentum-beta-init=0.5
 --ngpt-force-rms-floor=1e-6
+--chord-soft-force-tau=0.05
 --no-ngpt-weight-norm
 --residual-projection-init=normal
 --residual-projection-init-std=0.02

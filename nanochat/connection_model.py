@@ -131,8 +131,14 @@ class ConnectionConfig:
             raise ValueError('Six-coefficient Chord requires vanilla BF16 scalar project-only updates')
         if not math.isfinite(self.chord_soft_force_tau) or self.chord_soft_force_tau < 0:
             raise ValueError('Soft force tau must be finite and nonnegative')
-        if bool(self.chord_soft_force_tau) != (self.chord_update_based and self.dynamic_chord_controls):
+        token_update = self.chord_update_based and self.dynamic_chord_controls
+        if token_update and not self.chord_soft_force_tau:
             raise ValueError('Token-conditioned update-based Chord requires a positive soft force tau')
+        if self.chord_soft_force_tau and not token_update and (
+                self.architecture != 'vanilla' or self.residual_mode != 'ngpt_lookahead'
+                or self.ngpt_velocity_mode != 'lookahead_split_learned_beta' or self.chord_six_controls != 'off'
+                or self.token_chord_gates or self.token_beta_gate or self.channel_chord_coefficients or self.chord_velocity_write):
+            raise ValueError('Soft force requires scalar split Chord or a token-conditioned update-based write')
         if self.chord_update_based and (
                 self.architecture != 'vanilla' or self.ngpt_velocity_mode != 'lookahead_split_learned_beta'
                 or self.chord_six_controls == 'static' or self.channel_chord_coefficients

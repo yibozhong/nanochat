@@ -24,14 +24,16 @@ def inverse_softplus(value):
     return value + math.log(-math.expm1(-value))
 
 
-def normalize_residual(x, rms_floor=1e-6):
-    """Normalize to RMS=1 outside a small-norm floor, smooth at zero.
+def normalize_residual(x, rms_floor=1e-6, *, soft_tau=0.):
+    """Use a floored RMS denominator, or a smooth denominator for Chord force.
 
     Clamp the squared norm BEFORE rsqrt so zero vectors have finite first and
     second derivatives. A larger force floor preserves zero output init.
     """
     x = state_dtype(x)
-    return x * torch.rsqrt(x.square().mean(-1, keepdim=True).clamp_min(rms_floor**2))
+    mean_square = x.square().mean(-1, keepdim=True)
+    denom2 = mean_square + soft_tau**2 if soft_tau else mean_square.clamp_min(rms_floor**2)
+    return x * torch.rsqrt(denom2)
 
 
 def ngpt_momentum_step(h, v, force, beta, gamma, eta, rms_floor):

@@ -96,8 +96,8 @@ def main():
     p.add_argument('--momentum-velocity-rms-floor', type=float, default=.1)
     p.add_argument('--chord-update-based', action='store_true',
                    help='Split the normalized force itself along and across velocity before adding to h')
-    p.add_argument('--chord-soft-force-tau', type=float, default=0.,
-                   help='Use F/sqrt(mean(F^2)+tau^2) in token-conditioned update-based Chord')
+    p.add_argument('--chord-soft-force-tau', type=float,
+                   help='Normalize Chord force by sqrt(mean(F^2)+tau^2); zero uses the historical hard RMS floor')
     p.add_argument('--normalize-minimal-force', action='store_true',
                    help='Use the default Chord lookahead read and RMS-normalize F before the no-alpha addition')
     p.add_argument('--ngpt-force-rms-floor', type=float, default=.1)
@@ -182,6 +182,8 @@ def main():
         state=torch.load(a.resume,map_location='cpu',weights_only=False)
         if a.chord_state_dtype is None:
             a.chord_state_dtype = state['config'].get('chord_state_dtype', 'float32')
+    if a.chord_soft_force_tau is None:
+        a.chord_soft_force_tau = state['config'].get('chord_soft_force_tau', 0.) if a.resume else 0.
     c=ConnectionConfig(variant=a.variant,streams=a.streams,sinkhorn_iterations=a.sinkhorn_iterations,
                        sequence_length=a.sequence_length, compact_routing=a.compact_routing,
                        attnres_block_size=a.attnres_block_size,

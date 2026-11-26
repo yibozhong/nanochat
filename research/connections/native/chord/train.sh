@@ -41,10 +41,10 @@ else:
         assert s['model_variant'] == 'vanilla' and '--variant=baseline' in flags
     else:
         assert {'--chord-state-dtype=bfloat16', '--chord-velocity-geometry=project_only',
-                '--ngpt-velocity-mode=lookahead_split_learned_beta', '--velocity-init=' + s['velocity_init']} <= flags
+                '--ngpt-velocity-mode=lookahead_split_learned_beta', '--chord-soft-force-tau=0.05', '--velocity-init=' + s['velocity_init']} <= flags
         if recipe == 'chord_next_bf16':
             assert (s['velocity_init'], s['residual_projection_init']) == ('projected_h0', 'zero')
-            assert {'--chord-update-based', '--chord-soft-force-tau=0.05', '--chord-six-controls=learned_dynamic'} <= flags
+            assert {'--chord-update-based', '--chord-six-controls=learned_dynamic'} <= flags
         else:
             assert (s['velocity_init'], s['residual_projection_init']) == ('token', 'normal')
             assert '--chord-update-based' not in flags and not any(o.startswith('--chord-six-controls=') for o in flags)
@@ -85,6 +85,9 @@ elif [[ "$recipe" == mhc ]]; then
     WANDB_MODE=disabled timeout --kill-after=30s 2400 python -m research.connections.ngpt.connection_init_preflight "${model_args[@]}" "${training_args[@]}"
 else
     if [[ ! -f results/baseline-check/summary.json ]]; then
+        if [[ "$recipe" == chord_scalar_bf16 ]]; then
+            WANDB_MODE=disabled timeout --kill-after=30s 600 python -m pytest -q -s tests/test_chord_soft_scalar.py
+        fi
         WANDB_MODE=disabled python -m scripts.connection_train "${model_args[@]}" "${training_args[@]}" --steps 2 \
             --output-dir results/baseline-check --checkpoint-dir ../preflight-checkpoints
     fi

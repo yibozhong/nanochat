@@ -150,7 +150,7 @@ def main():
     source = json.loads(Path('source.json').read_text())
     assert source['recipe'] == 'chord_next_bf16'
     assert source['model_args'] == Path('research/connections/ngpt/chord_next.args').read_text().splitlines()
-    control = ConnectionConfig(streams=1, residual_dynamics='ngpt_lookahead', velocity_init='token',
+    control = ConnectionConfig(streams=1, residual_dynamics='ngpt_lookahead', velocity_init='token', chord_soft_force_tau=.05,
                                ngpt_velocity_mode='lookahead_split_learned_beta', residual_projection_init='normal',
                                chord_velocity_geometry='project_only', fuse_chord_read_norm=True, ngpt_force_rms_floor=1e-6)
     c = replace(control, velocity_init='projected_h0', residual_projection_init='zero',

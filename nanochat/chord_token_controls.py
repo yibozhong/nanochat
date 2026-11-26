@@ -53,10 +53,8 @@ def reference_write(h, v, force, controls, floor, terminal, soft_tau=0.):
     dtype = h.dtype
     h, v, f = h.to(controls.dtype), v.to(controls.dtype), force.to(controls.dtype)
     _, perp, par, a, b, c = controls.unsqueeze(-1).unbind(-2)
-    if soft_tau:
-        delta = f * (f.square().mean(-1, keepdim=True) + soft_tau**2).rsqrt()
-    else:
-        delta = normalize_residual(f, floor) - h
+    direction = normalize_residual(f, floor, soft_tau=soft_tau)
+    delta = direction if soft_tau else direction - h
     along = (delta*v).mean(-1, keepdim=True) / v.square().mean(-1, keepdim=True).clamp_min(1e-12)
     n = normalize_residual((h + perp*delta) + ((par-perp)*along)*v)
     if terminal:
@@ -82,7 +80,6 @@ class TokenControlledSite(LookaheadResidual):
                 if self.writes is not None:
                     self.writes.fill_(math.log(gain / (2 - gain)))
         self.small_dynamic = config.dynamic_chord_controls
-        self.soft_tau = config.chord_soft_force_tau
         self.mix_scales = (torch.nn.Parameter(torch.full((2 if self.terminal else 3,), SMALL_DYNAMIC_SCALE))
                            if config.chord_six_controls == 'learned_dynamic' else None)
         inputs = 1 if self.small_dynamic or config.native_chord_write == 'token_h' else 2

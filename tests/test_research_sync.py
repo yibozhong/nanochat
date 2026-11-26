@@ -166,10 +166,11 @@ class ReportsTest(unittest.TestCase):
         self.assertIn('--velocity-init=token', scalar)
         self.assertIn('--residual-projection-init=normal', scalar)
         self.assertIn('--chord-state-dtype=bfloat16', scalar)
+        self.assertIn('--chord-soft-force-tau=0.05', scalar)
         self.assertNotIn('--chord-update-based', scalar)
         self.assertEqual(set(scalar) - set(next_args), {'--velocity-init=token', '--residual-projection-init=normal'})
         self.assertEqual(set(next_args) - set(scalar), {'--velocity-init=projected_h0', '--residual-projection-init=zero',
-            '--chord-update-based', '--chord-soft-force-tau=0.05', '--chord-six-controls=learned_dynamic'})
+            '--chord-update-based', '--chord-six-controls=learned_dynamic'})
         self.assertEqual(len(next_args), len(set(next_args)))
         legacy = launcher.CHORD_ARGS['chord_next_bf16'].parent / 'legacy/chord_next_token.args'
         self.assertEqual(legacy.read_text().splitlines(), [
