@@ -1,7 +1,7 @@
 """Single-GPU FineWeb-Edu training: vanilla, mHC, or no-manifold ablation.
 
 Example: python -m scripts.connection_train --variant mhc --steps 50 --data-dir data
-Steps are required deliberately; implementation checks do not launch a 1B run.
+Diagnostics require an explicit step count. Formal runs default to the 1B protocol.
 """
 import argparse
 from dataclasses import asdict
@@ -15,7 +15,7 @@ import time
 import uuid
 
 import torch
-from nanochat.experiment_logging import training_run
+from nanochat.experiment_logging import PROJECT, STEPS, training_run
 
 from nanochat.connection_model import ConnectionConfig, build_connection_model, optimizer_for, schedule, CONNECTION_VARIANTS
 from nanochat.packed_training import PackedData, seed_all, evaluate, train_step, snapshot, atomic_save, restore_rng, json_write
@@ -131,14 +131,16 @@ def main():
     p.add_argument('--feedback-attention-backend', choices=('torch','triton'), default='triton')
     p.add_argument('--window-pattern', default='SSSL', help='Native backbone only; vanilla always uses full attention')
     p.add_argument('--formal-training', action='store_true', help='Explicitly enable W&B for a formal training run')
-    p.add_argument('--wandb-group', default='mhc-official-kernels-20261030')
+    p.add_argument('--wandb-group', help='Research question (lowercase directory slug)')
+    p.add_argument('--run-name', help='Short descriptive configuration name')
+    p.add_argument('--baseline-run', help='Baseline ID in nanochat-1b, or self for the reference configuration')
     p.add_argument('--connection-backend', choices=('nvidia','nvidia_precise'), default='nvidia')
     p.add_argument('--fused-connection-grad', action=argparse.BooleanOptionalAction, default=False)
     p.add_argument('--compact-routing', action=argparse.BooleanOptionalAction, default=False)
     p.add_argument('--attnres-block-size', type=int, default=2,
                    help='Moonshot paper S: Attention/MLP sublayers per residual block; even >=2, default2 = one Transformer layer')
-    p.add_argument('--steps', type=int, required=True)
-    p.add_argument('--schedule-steps', type=int, default=30518)
+    p.add_argument('--steps', type=int)
+    p.add_argument('--schedule-steps', type=int, default=STEPS)
     p.add_argument('--microbatch', type=int, default=16)
     p.add_argument('--streams', type=int, default=None)
     p.add_argument('--sinkhorn-iterations', type=int, default=20)
@@ -157,6 +159,10 @@ def main():
                    help='Bounded restart validation; 0 uses only the time/signal limit')
     p.add_argument('--seed', type=int, default=42)
     a = p.parse_args()
+    if a.steps is None:
+        if not a.formal_training:
+            p.error('Diagnostics require an explicit --steps budget')
+        a.steps = STEPS
     if a.streams is None:
         a.streams = 1 if a.variant in ('skip_scale','attnres_scale') else 4
     assert torch.cuda.is_available() and torch.cuda.device_count()==1
@@ -212,8 +218,25 @@ def main():
         assert Path(a.data_dir,split+'.bin').stat().st_size==expected,split
     if Path('source.json').exists():
         source=json.loads(Path('source.json').read_text())
+    elif a.resume:
+        source = state['source'].copy()
     else:
         source=dict(commit=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip())
+    legacy_resume = bool(a.formal_training and a.resume and 'wandb_project' not in state['source'])
+    if a.formal_training and not legacy_resume:
+        from nanochat.research_protocol import validate_identity
+        try:
+            group, name, baseline = validate_identity(a.wandb_group or source.get('group'),
+                a.run_name or source.get('run_name'), a.baseline_run or source.get('baseline_run'))
+        except ValueError as error:
+            p.error(str(error))
+        if source.get('wandb_project', PROJECT) != PROJECT:
+            p.error('New formal runs use ' + PROJECT)
+        identity = dict(wandb_project=PROJECT, group=group, run_name=name, baseline_run=baseline)
+        for key, value in dict(identity, steps=a.steps, schedule_steps=a.schedule_steps, seed=a.seed).items():
+            if key in source and source[key] != value:
+                p.error(f'Formal argument {key} differs from the submission manifest')
+        source.update(identity)
     prepare_options = dict(compile_blocks=True)
     if a.compile_lookahead_branches:
         if c.residual_mode != 'lookahead_only':
@@ -253,6 +276,8 @@ def main():
         protocol['feedback']=dict(pass_mix=[.15,.85],sampler='numpy.default_rng([seed,zero_based_step])',
             earlier_passes='no_grad_detached',eval_passes=c.feedback_eval_passes)
     step=0;best=float('inf');training_seconds=0.;prior_elapsed=0.;initial_dev=None
+    prior_peak = 0
+    training_flops = 0
     run_id=a.run_id or uuid.uuid4().hex[:8]
     resuming_parent=False
     if a.formal_training and 'continuation' in source:
@@ -265,6 +290,8 @@ def main():
         run_id=state['run_id'];step=state['step'];best=state['best_dev_ce']
         training_seconds=state['training_seconds'];prior_elapsed=state['elapsed_seconds']
         initial_dev=state.get('initial_dev_ce')
+        prior_peak = state.get('peak_allocated_bytes', 0)
+        training_flops = state.get('estimated_training_flops', 0)
         model.load_state_dict(state['model']);opt.load_state_dict(state['optimizer'])
         restore_rng(state['rng']);del state
         assert (ckpt/'best.pt').exists(),'Resume requires the paired dev-best checkpoint'
@@ -299,6 +326,30 @@ def main():
     from nanochat.connection_cost import model_cost
     cost=model_cost(c,batch=rows_per_step)
     config['compute_estimate']=cost
+    nominal_flops = cost['estimated_training_flops'] if cost else None
+    if nominal_flops is None and c.architecture == 'native':
+        nominal_flops = model.native.estimate_flops() * protocol['batch_tokens']
+        config['flops_scope'] = 'native GPT matrix and attention estimate; excludes connector arithmetic'
+    elif cost:
+        config['flops_scope'] = cost['accounting']
+    else:
+        d = c.width
+        matmuls = c.depth*(4*d*d + 2*d*c.ffn_width) + d*c.vocab_size
+        nominal_flops = 6*protocol['batch_tokens']*(matmuls + c.depth*d*(c.sequence_length+1))
+        config['flops_scope'] = 'vanilla backbone matrix and causal attention estimate; excludes connector arithmetic'
+    config['estimated_training_flops_per_step'] = nominal_flops
+    if a.formal_training and not legacy_resume:
+        from nanochat.research_protocol import comparison_protocol
+        backbone = model.native if c.architecture == 'native' else model
+        token_embedding = backbone.transformer.wte if c.architecture == 'native' else backbone.wte
+        first_block = backbone.transformer.h[0] if c.architecture == 'native' else backbone.blocks[0]
+        config['training_dtype'] = str(token_embedding.weight.dtype)
+        anchors = {'input':token_embedding.weight, 'output':backbone.lm_head.weight, 'matrix':first_block.attn.c_q.weight}
+        config['backbone_optimizer_groups'] = {
+            name: initial_groups[next(i for i, group in enumerate(opt.param_groups) if any(p is weight for p in group['params']))]
+            for name, weight in anchors.items()}
+        config['comparison_protocol'] = comparison_protocol(config)
+        config['arguments'] = vars(a).copy()
     if c.match_velocity_table_with_ffn and 'parameter_match' in source:
         match = source['parameter_match']
         assert config['parameters'] == match['total_parameters']
@@ -308,7 +359,7 @@ def main():
     if profile_reference:
         config['profile_reference']=profile_reference
         config['profile_matches_current_gpu']=str(torch.cuda.get_device_properties(0).uuid)==profile_reference.get('gpu_uuid')
-    kwargs=dict(project='nanochat',entity='yibozhong657-none',group=a.wandb_group,
+    kwargs=dict(group=a.wandb_group,
                 job_type='pretrain' if a.formal_training else 'diagnostic',
                 name=f'{a.architecture}-{a.variant}'+('-ngpt' if c.residual_mode == 'ngpt' else
                     f'-{c.residual_mode}-v0-{c.velocity_init}' if c.residual_mode != 'vanilla' else
@@ -348,7 +399,9 @@ def main():
                     ('-mu0' if a.matrix_optimizer == 'arc' and a.arc_mu == 0 else '')+
                     (f'-init-{c.residual_projection_init}' if c.residual_projection_init != 'zero' or c.ngpt_velocity_mode == 'lookahead_minimal' else '')+
                     f'-{c.sequence_length}ctx-{a.steps}steps',id=run_id,resume='allow',config=config)
-    run=training_run(formal_training=a.formal_training, local_dir=out/"diagnostics", **kwargs)
+    if a.formal_training and not legacy_resume:
+        kwargs.update(name=source['run_name'], group=source['group'])
+    run=training_run(legacy_resume=legacy_resume, formal_training=a.formal_training, local_dir=out/"diagnostics", **kwargs)
     if a.formal_training and resuming_parent:
         run.config.update({'source':source, 'protocol':protocol}, allow_val_change=True)
         run.name=kwargs['name']
@@ -369,6 +422,7 @@ def main():
         atomic_save(snapshot(model,opt,step,config=asdict(c),protocol=protocol,source=source,
             run_id=run_id,data_manifest=data.manifest,best_dev_ce=best,
             initial_dev_ce=initial_dev,training_seconds=training_seconds,
+            peak_allocated_bytes=max(prior_peak,torch.cuda.max_memory_allocated()),estimated_training_flops=training_flops,
             elapsed_seconds=prior_elapsed+time.perf_counter()-begin),
             ckpt/'latest.pt')
         json_write(out/'progress.json',dict(run_id=run_id,step=step,tokens=step*32768,
@@ -414,16 +468,26 @@ def main():
                 row=dict(step=step,tokens=step*32768,loss=loss,seconds=duration,lr_multiplier=lr)
                 if c.latent_feedback:
                     row['passes']=model.training_passes(a.seed,step-1)
+                step_cost = cost
+                step_flops = nominal_flops
+                if c.latent_feedback and cost:
+                    step_cost = model_cost(c,batch=rows_per_step,feedback_passes=row['passes'])
+                    step_flops = step_cost['estimated_training_flops']
+                if step_flops is not None:
+                    training_flops += step_flops
                 log.write(json.dumps(row)+'\n')
                 if step<=5 or step%10==0:
                     print(json.dumps(row),flush=True)
                     perf={'train/ce':loss,'perf/step_seconds':duration,'perf/tokens_per_second':32768/duration,
-                          'perf/peak_allocated_bytes':torch.cuda.max_memory_allocated(),
+                          'perf/peak_allocated_bytes':max(prior_peak,torch.cuda.max_memory_allocated()),
+                          'perf/training_seconds':training_seconds,
+                          'perf/mean_tokens_per_second':row['tokens']/training_seconds,
                           'perf/peak_reserved_bytes':torch.cuda.max_memory_reserved()}
                     if cost:
-                        step_cost=model_cost(c,batch=rows_per_step,feedback_passes=row['passes']) if c.latent_feedback else cost
-                        perf.update({'perf/estimated_training_flops_per_step':step_cost['estimated_training_flops'],
-                            'perf/estimated_forward_flops_per_step':step_cost['estimated_forward_flops']})
+                        perf['perf/estimated_forward_flops_per_step'] = step_cost['estimated_forward_flops']
+                    if step_flops is not None:
+                        perf.update({'perf/estimated_training_flops_per_step':step_flops,
+                                     'perf/estimated_training_flops':training_flops})
                     if c.latent_feedback:
                         perf['train/passes']=row['passes']
                     if profile_reference and 'additional_peak_allocated_bytes' in profile_reference:
@@ -460,7 +524,8 @@ def main():
             initial_dev_ce=initial_dev,final_dev_ce=dev,best_dev_ce=best,dev_tokens=dev_tokens,
             training_seconds=training_seconds,elapsed_seconds=prior_elapsed+time.perf_counter()-begin,
             steady_step_seconds=sum(durations[10:])/len(durations[10:]) if len(durations)>10 else None,
-            gpu=torch.cuda.get_device_name(),peak_allocated_bytes=torch.cuda.max_memory_allocated(),
+            gpu=torch.cuda.get_device_name(),peak_allocated_bytes=max(prior_peak,torch.cuda.max_memory_allocated()),
+            estimated_training_flops=training_flops if nominal_flops is not None else None,
             peak_reserved_bytes=torch.cuda.max_memory_reserved(),source=source,
             test_evaluated=a.evaluate_test,checkpoint_files=checkpoint_files,**test_result)
         json_write(out/'summary.json',result);run.summary.update(result);run.finish()

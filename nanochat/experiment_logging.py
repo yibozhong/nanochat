@@ -5,6 +5,12 @@ import time
 import uuid
 
 
+PROJECT = 'nanochat-1b'
+ENTITY = 'yibozhong657-none'
+BATCH_TOKENS = 32768
+STEPS = (10**9 + BATCH_TOKENS - 1) // BATCH_TOKENS
+
+
 class LocalRun:
     """Plain JSON diagnostics with the small recorder interface used by scripts."""
     def __init__(self, **kwargs):
@@ -49,7 +55,9 @@ def training_run(*, formal_training=False, **kwargs):
         return diagnostic_run(**kwargs)
     import wandb
     kwargs.pop('local_dir', None)
-    kwargs.update(project='nanochat', entity='yibozhong657-none')
+    # Only a resumed, archived training checkpoint may use the historical project.
+    legacy = kwargs.pop('legacy_resume', False)
+    kwargs.update(project='nanochat' if legacy else PROJECT, entity=ENTITY)
     try:
         return wandb.init(**kwargs, settings=wandb.Settings(init_timeout=60))
     except wandb.errors.CommError:

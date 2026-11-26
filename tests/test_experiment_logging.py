@@ -35,7 +35,7 @@ class LoggingPolicyTest(unittest.TestCase):
             self.assertEqual(training_run(formal_training=True,id='mock-only',project='wrong'), 'mock-run')
         self.assertEqual(len(calls), 2)
         self.assertEqual(calls[1]['mode'], 'offline')
-        self.assertTrue(all(c['project']=='nanochat' and c['entity']=='yibozhong657-none' and c['id']=='mock-only' for c in calls))
+        self.assertTrue(all(c['project']=='nanochat-1b' and c['entity']=='yibozhong657-none' and c['id']=='mock-only' for c in calls))
 
 
 if __name__=='__main__':unittest.main()

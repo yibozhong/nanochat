@@ -25,7 +25,7 @@ if [ "$TASK_DRIVER" -lt 13010 ]; then
 fi
 export NANOCHAT_DTYPE=bfloat16 HF_HUB_OFFLINE=1 PYTHONUNBUFFERED=1
 export NETRC="$TASK_ROOT/.netrc" WANDB_DIR="$TASK_ROOT/results" WANDB_MODE=online
-export WANDB_PROJECT=nanochat WANDB_ENTITY=yibozhong657-none
+export WANDB_PROJECT=nanochat-1b WANDB_ENTITY=yibozhong657-none
 export NANOCHAT_BASE_DIR="$PWD/cache" OMP_NUM_THREADS=2 TORCHINDUCTOR_COMPILE_THREADS=2
 export CC=/usr/bin/gcc CXX=/usr/bin/g++ CUBLAS_WORKSPACE_CONFIG=:4096:8
 export TRITON_CACHE_DIR="$PWD/triton-cache" TORCHINDUCTOR_CACHE_DIR="$PWD/inductor-cache"

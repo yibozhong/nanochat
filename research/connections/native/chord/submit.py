@@ -3,7 +3,9 @@ import argparse
 import fcntl
 import json
 from pathlib import Path
+import re
 import shutil
+import sys
 import subprocess
 import uuid
 
@@ -11,18 +13,13 @@ HERE = Path(__file__).resolve().parent
 REPO = HERE.parents[3]
 HOME = Path.home()
 ASSETS = HOME / 'nanochat-runtime-assets'
-KEYS = {'vanilla_next_soft': 'vanilla-chord-next-soft-update-10b-20261125',
-        'vanilla_next_soft_h0': 'vanilla-chord-next-soft-projected-h0-10b-20261125',
-        'vanilla_split_update': 'vanilla-chord-split-update-10b-20261125',
-        'vanilla_norm_no_alpha': 'vanilla-chord-norm-force-no-alpha-10b-20261124',
-        'vanilla_minimal': 'vanilla-chord-minimal-static-10b-20261124',
-        'vanilla_small_dynamic': 'vanilla-chord-h-only-small-dynamic-10b-20261124',
-        'vanilla_single': 'vanilla-chord-h-only-single-step-10b-20261124',
-        'chord': 'native-chord-three-scalar-token-bf16-10b-20261123',
-        'mhc': 'native-mhc-normal-init-10b-20261123',
-        'token_vnorm': 'native-chord-token-controls-vnorm-10b-20261124',
-        'token_bounded': 'native-chord-token-controls-bounded-10b-20261124',
-        'token_h': 'native-chord-token-h-only-native-lr-10b-20261124'}
+sys.path.insert(0, str(REPO))
+from nanochat.experiment_logging import ENTITY, PROJECT, STEPS
+from nanochat.research_protocol import validate_identity
+
+RECIPES = ('vanilla_baseline', 'vanilla_baseline_zero', 'vanilla_next_soft', 'vanilla_next_soft_h0',
+           'vanilla_split_update', 'vanilla_norm_no_alpha', 'vanilla_minimal', 'vanilla_small_dynamic',
+           'vanilla_single', 'chord', 'mhc', 'token_vnorm', 'token_bounded', 'token_h')
 
 
 def run(*args, cwd=REPO):
@@ -33,15 +30,22 @@ def save(path, value):
     path.write_text(json.dumps(value, indent=2) + '\n')
 
 
-def submit(recipe, root, steps=305176):
+def submit(recipe, root, steps, group, name, baseline):
     key = root.name
     ad_key = 'VanillaChordKey' if recipe.startswith('vanilla_') else ('NativeMhcKey' if recipe == 'mhc' else 'NativeChordKey')
     if (root/'state.json').exists():
-        print((root/'state.json').read_text())
+        state = json.loads((root/'state.json').read_text())
+        pinned = state['source']
+        if (pinned['recipe'], pinned['group'], pinned['run_name'], pinned['baseline_run']) != (recipe, group, name, baseline):
+            raise ValueError('This job directory belongs to a different configuration; choose a distinct --name')
+        print(state['job'], state['wandb_url'])
         return
-    assert not any((root/name).exists() for name in ('submission-intent.json','STOPPED','STOPPED.json'))
+    assert not any((root/marker).exists() for marker in ('submission-intent.json','STOPPED','STOPPED.json'))
     assert not json.loads(run('condor_q', '-constraint', f'{ad_key} == "{key}"', '-json') or '[]')
-    assert not run('git', 'status', '--porcelain'), 'Commit the source before creating the archive'
+    assert not run('git', 'status', '--porcelain', '--', '.', ':(exclude)research/RESULTS.csv',
+                   ':(exclude)research/OVERVIEW.md', ':(exclude)research/*/REPORT.md',
+                   ':(exclude)research/*/curves*.png', ':(exclude)research/*/curves.csv', ':(exclude)research/*/configs/*.json',
+                   ':(exclude)research/LEADERBOARD.md'), 'Commit training code before creating the archive'
     for d in ('bundles','logs','results'):
         (root/d).mkdir(exist_ok=True)
     bundles = root/'bundles'
@@ -51,11 +55,12 @@ def submit(recipe, root, steps=305176):
     wheel, = (ASSETS/'bundles').glob('transformer_engine_torch-*.whl')
     (bundles/wheel.name).symlink_to(wheel)
     data = json.loads((HOME/'datasets/fineweb-edu-10bt/current-packed-cache.json').read_text())
-    assert data['ready'] and data['manifest']['training_steps'] == 305176
+    assert data['ready'] and data['manifest']['training_steps'] >= STEPS
     run_id = uuid.uuid4().hex[:8]
-    source = dict(commit=commit, run_id=run_id, plan=key, formal_training=True, seed=42,
+    source = dict(commit=commit, run_id=run_id, plan=key, formal_training=bool(steps), seed=42,
+        wandb_project=PROJECT, group=group, run_name=name, baseline_run=baseline, recipe=recipe,
         initialization='fresh', architecture='native', hopper_only=True,
-        steps=305176, schedule_steps=305176, batch_tokens=32768, training_tokens=305176*32768,
+        steps=steps, schedule_steps=STEPS, batch_tokens=32768, training_tokens=steps*32768,
         microbatch=16, attention_backend='fa3', window_pattern='SSSL',
         model_args=(HERE/('mhc.args' if recipe == 'mhc' else 'train.args')).read_text().splitlines(),
         data_uri=data['data_uri'],
@@ -65,7 +70,13 @@ def submit(recipe, root, steps=305176):
         flags = (HERE.parents[1]/'ngpt/chord.args').read_text().splitlines()
         projection_init = 'normal'
         velocity_init = 'token'
-        if recipe in ('vanilla_minimal', 'vanilla_norm_no_alpha'):
+        if recipe in ('vanilla_baseline', 'vanilla_baseline_zero'):
+            variant = 'vanilla'
+            velocity_init = 'zero'
+            projection_init = 'zero' if recipe.endswith('_zero') else 'normal'
+            flags = ['--variant=baseline','--architecture=vanilla','--streams=1','--attention-backend=fa2',
+                     '--residual-projection-init='+projection_init]
+        elif recipe in ('vanilla_minimal', 'vanilla_norm_no_alpha'):
             variant = 'lookahead_minimal'
             flags[flags.index('--ngpt-velocity-mode=lookahead_split_learned_beta')] = '--ngpt-velocity-mode='+variant
             flags = [flag for flag in flags if not flag.startswith('--ngpt-alpha-init=')]
@@ -87,11 +98,11 @@ def submit(recipe, root, steps=305176):
             source.update(next_run='2574b7dc', next_source='lululu39/NextTransformer@b8bbfa41d8ab4b31eb5447cbde6271fe84074b78',
                           residual_update='split(force / sqrt(mean(force^2) + 0.05^2))',
                           modulation_scale_init=.01, paired_preflight='vanilla scalar update-based Chord',
-                          comparison_run='a8c1dc29', control_peak_lr=.008*.25*(768/512)**.5)
+                          control_peak_lr=.008*.25*(768/512)**.5)
             if recipe == 'vanilla_next_soft_h0':
                 velocity_init = 'projected_h0'
                 flags[flags.index('--velocity-init=token')] = '--velocity-init=projected_h0'
-                source.update(comparison_run='176c43d5', paired_preflight='Next soft-force with token velocity table',
+                source.update(paired_preflight='Next soft-force with token velocity table',
                               velocity_projection_weight_std=.02/512**.5, velocity_projection_optimizer='muon',
                               velocity_projection_peak_lr=.02*.25)
         elif recipe == 'vanilla_split_update':
@@ -112,7 +123,7 @@ def submit(recipe, root, steps=305176):
         source.update(architecture='vanilla', model_args=flags, attention_backend='fa2', window_pattern='L',
                       model_variant=variant, velocity_init=velocity_init, residual_projection_init=projection_init,
                       steps=steps, training_tokens=steps*32768, formal_training=bool(steps),
-                      control_optimizer_reference='vanilla_chord', reference_run='a7163d23')
+                      control_optimizer_reference='vanilla_chord')
     elif recipe == 'mhc':
         source.update(connection_variant='mhc', streams=4, sinkhorn_iterations=20,
                       residual_projection_init='normal', output_projection_actual_std=.005)
@@ -159,7 +170,7 @@ def submit(recipe, root, steps=305176):
     (root/'train.sub').write_text('\n'.join(lines)+'\n')
     run('condor_submit','-dry-run','dry-run.ad','train.sub',cwd=root)
     state = dict(run_id=run_id, source=source, status='intent',
-                 wandb_url=f'https://wandb.ai/yibozhong657-none/nanochat/runs/{run_id}' if steps else None)
+                 wandb_url=f'https://wandb.ai/{ENTITY}/{PROJECT}/runs/{run_id}' if steps else None)
     save(root/'submission-intent.json', state)
     job = run('condor_submit','-terse','train.sub',cwd=root).split()[0]
     state.update(job=job,status='held_for_audit')
@@ -182,18 +193,21 @@ def submit(recipe, root, steps=305176):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--recipe', choices=KEYS, default='chord')
-    parser.add_argument('--steps', type=int, choices=(0, 5000, 305176), default=305176,
-                        help='Vanilla single-step budget; zero runs only the offline GPU checks')
+    parser.add_argument('--recipe', choices=RECIPES, required=True)
+    parser.add_argument('--group', required=True, help='Research question slug, shared by its configurations')
+    parser.add_argument('--name', help='Configuration name (defaults to recipe, seed and budget)')
+    parser.add_argument('--baseline-run', required=True, help='nanochat-1b baseline ID or self')
+    parser.add_argument('--debug-only', action='store_true', help='Local checks only, without a W&B run')
     args = parser.parse_args()
-    recipe = args.recipe
-    if not recipe.startswith('vanilla_') and args.steps != 305176:
-        parser.error('--steps applies only to the vanilla single-step experiment')
-    key = KEYS[recipe]
-    if args.steps != 305176:
-        key = key.replace('10b', '5k' if args.steps else 'debug')
+    steps = 0 if args.debug_only else STEPS
+    name = args.name or args.recipe.replace('_', '-') + '-s42-1b'
+    group, name, baseline = validate_identity(args.group, name, args.baseline_run)
+    slug = re.sub(r'[^a-z0-9]+', '-', name.lower()).strip('-')
+    if not slug:
+        parser.error('The configuration name needs an ASCII letter or digit for its job directory')
+    key = f'{PROJECT}-{group}--{slug}' + ('-debug' if args.debug_only else '')
     root = HOME / 'nanochat-experiments' / key
     root.mkdir(parents=True, exist_ok=True)
     with (root/'submit.lock').open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        submit(recipe, root, args.steps)
+        submit(args.recipe, root, steps, group, name, baseline)
