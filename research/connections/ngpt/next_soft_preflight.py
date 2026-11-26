@@ -12,8 +12,7 @@ from nanochat.connection_experiment import configure_attention
 from nanochat.connection_model import ConnectionConfig
 from nanochat.engine import KVCache
 from nanochat.packed_training import PackedData, json_write, seed_all
-from research.connections.native.chord.token_control_checks import check_vjp
-from research.connections.ngpt.single_step_preflight import benchmark, make
+from research.connections.ngpt.chord_checks import benchmark, check_read_vjp, make
 
 
 def check_read(site, h, v):
@@ -35,7 +34,7 @@ def check_read(site, h, v):
     preview = ((h.float()+offset) * (1 + offset.square().mean(-1, keepdim=True)).rsqrt()).to(h.dtype)
     oracle = (F.rms_norm(preview, (h.size(-1),), eps=torch.finfo(torch.float32).eps),
               torch.cat((m, alpha, beta, gamma), dim=-1))
-    check_vjp(oracle, (q, controls), (h, v, *site.parameters()), bounded_read=True)
+    check_read_vjp(oracle, (q, controls), (h, v, *site.parameters()))
 
 
 def check_write(site, h, v, f, controls):
