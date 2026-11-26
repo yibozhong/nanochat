@@ -1,0 +1,114 @@
+{
+  "baseline": "a2793a7e",
+  "job": "9091239.0",
+  "union_steps": 76,
+  "learning_rate_horizon": 30518,
+  "max_language_steps": 2500,
+  "total_model_positions": 84410368,
+  "terminal_union": {
+    "fineweb_updates": 0,
+    "train_ce": 2.403188705444336,
+    "fineweb_dev_ce": 10.365164041519165,
+    "union_dev_ce": 2.4220509362748666,
+    "union_accuracy": 0.39803317580882774,
+    "gradient_norm": 1.5317648649215698
+  },
+  "first_fineweb": {
+    "fineweb_updates": 1,
+    "train_ce": 10.358416557312012,
+    "fineweb_dev_ce": 10.35777735710144,
+    "gradient_norm": 0.6619797945022583
+  },
+  "validation": [
+    {
+      "step": 250,
+      "baseline_dev_ce": 5.232967972755432,
+      "same_total_steps_dev_ce": 5.547582149505615,
+      "same_total_steps_delta": 0.3146141767501831,
+      "same_language_steps_dev_ce": 5.242524027824402,
+      "same_language_steps_delta": 0.009556055068969727,
+      "mean_delta_training_ce_last_250_matched_batches": -0.03818281745910645
+    },
+    {
+      "step": 500,
+      "baseline_dev_ce": 4.705530405044556,
+      "same_total_steps_dev_ce": 4.8423155546188354,
+      "same_total_steps_delta": 0.13678514957427979,
+      "same_language_steps_dev_ce": 4.718238949775696,
+      "same_language_steps_delta": 0.012708544731140137,
+      "mean_delta_training_ce_last_250_matched_batches": 0.011673418045043946
+    },
+    {
+      "step": 750,
+      "baseline_dev_ce": 4.35506796836853,
+      "same_total_steps_dev_ce": 4.450356841087341,
+      "same_total_steps_delta": 0.09528887271881104,
+      "same_language_steps_dev_ce": 4.3663917779922485,
+      "same_language_steps_delta": 0.011323809623718262,
+      "mean_delta_training_ce_last_250_matched_batches": 0.01576382255554199
+    },
+    {
+      "step": 1000,
+      "baseline_dev_ce": 4.17973005771637,
+      "same_total_steps_dev_ce": 4.231031775474548,
+      "same_total_steps_delta": 0.05130171775817871,
+      "same_language_steps_dev_ce": 4.18700098991394,
+      "same_language_steps_delta": 0.007270932197570801,
+      "mean_delta_training_ce_last_250_matched_batches": 0.008919389724731445
+    },
+    {
+      "step": 1250,
+      "baseline_dev_ce": 4.116983413696289,
+      "same_total_steps_dev_ce": 4.147998332977295,
+      "same_total_steps_delta": 0.03101491928100586,
+      "same_language_steps_dev_ce": 4.121881723403931,
+      "same_language_steps_delta": 0.0048983097076416016,
+      "mean_delta_training_ce_last_250_matched_batches": 0.007851174354553223
+    },
+    {
+      "step": 1500,
+      "baseline_dev_ce": 4.034967243671417,
+      "same_total_steps_dev_ce": 4.062881112098694,
+      "same_total_steps_delta": 0.02791386842727661,
+      "same_language_steps_dev_ce": 4.040305852890015,
+      "same_language_steps_delta": 0.005338609218597412,
+      "mean_delta_training_ce_last_250_matched_batches": 0.010213640213012696
+    },
+    {
+      "step": 1750,
+      "baseline_dev_ce": 4.00342321395874,
+      "same_total_steps_dev_ce": 4.032188653945923,
+      "same_total_steps_delta": 0.028765439987182617,
+      "same_language_steps_dev_ce": 4.012318253517151,
+      "same_language_steps_delta": 0.008895039558410645,
+      "mean_delta_training_ce_last_250_matched_batches": 0.009506247520446777
+    },
+    {
+      "step": 2000,
+      "baseline_dev_ce": 3.9486331939697266,
+      "same_total_steps_dev_ce": 3.9724629521369934,
+      "same_total_steps_delta": 0.023829758167266846,
+      "same_language_steps_dev_ce": 3.9543882608413696,
+      "same_language_steps_delta": 0.005755066871643066,
+      "mean_delta_training_ce_last_250_matched_batches": 0.009880545616149903
+    },
+    {
+      "step": 2250,
+      "baseline_dev_ce": 3.9370117783546448,
+      "same_total_steps_dev_ce": 3.95355361700058,
+      "same_total_steps_delta": 0.01654183864593506,
+      "same_language_steps_dev_ce": 3.9480435252189636,
+      "same_language_steps_delta": 0.011031746864318848,
+      "mean_delta_training_ce_last_250_matched_batches": 0.01069498062133789
+    },
+    {
+      "step": 2500,
+      "baseline_dev_ce": 3.9034880995750427,
+      "same_total_steps_dev_ce": 3.916115462779999,
+      "same_total_steps_delta": 0.012627363204956055,
+      "same_language_steps_dev_ce": 3.9114367365837097,
+      "same_language_steps_delta": 0.007948637008666992,
+      "mean_delta_training_ce_last_250_matched_batches": 0.010732995986938476
+    }
+  ]
+}
