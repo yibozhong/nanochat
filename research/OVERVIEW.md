@@ -2,7 +2,7 @@
 
 正式研究使用 [nanochat-1b](https://wandb.ai/yibozhong657-none/nanochat-1b)。默认从零、seed 42，使用同一 packed 数据，30,518 步 × 32,768 tokens。
 
-[实验总表](RESULTS.csv) · [同协议排名](LEADERBOARD.md) · [实验规范](../AGENTS.md)
+[每日看板](index.html) · [实验总表](RESULTS.csv) · [同协议排名](LEADERBOARD.md) · [实验规范](../AGENTS.md)
 
 ## 研究方向与状态
 

@@ -1,6 +1,6 @@
 # /// script
 # requires-python = ">=3.11"
-# dependencies = ["wandb==0.26.1", "matplotlib==3.10.8"]
+# dependencies = ["wandb==0.26.1", "matplotlib==3.10.8", "mistune==3.2.0"]
 # ///
 """Synchronize the 1B project's full validation curves and Chinese research reports."""
 import argparse
@@ -13,6 +13,7 @@ import math
 import os
 import re
 from collections import Counter, defaultdict
+from datetime import datetime
 from pathlib import Path
 import shutil
 import subprocess
@@ -23,6 +24,7 @@ import time
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO))
 from nanochat.experiment_logging import ENTITY, PROJECT
+from scripts.research_dashboard import render as render_dashboard
 
 COLUMNS = ('group name run_id status wandb_state baseline_run protocol_id target_tokens trained_tokens '
            'validation_tokens validation_ce final_ce best_ce delta_ce comparison parameters '
@@ -69,8 +71,10 @@ def scheduler_states(jobs):
         if source.get('wandb_project') != PROJECT or not source.get('formal_training'):
             continue
         stopped = path.with_name('STOPPED.json')
-        explicit_stop = stopped.is_file() and json.loads(stopped.read_text()).get('run_id') == state['run_id']
-        local[state['run_id']] = dict(source=source, job=state['job'], stopped=explicit_stop)
+        stop = json.loads(stopped.read_text()) if stopped.is_file() else {}
+        explicit_stop = stop.get('run_id') == state['run_id']
+        local[state['run_id']] = dict(source=source, job=state['job'], stopped=explicit_stop,
+                                      stop_reason=stop.get('reason') if explicit_stop else None)
     if not local or not shutil.which('condor_q'):
         return local
     by_job = {v['job']: v for v in local.values()}
@@ -166,6 +170,7 @@ def make_record(rid, name, group, wb, cfg, summary, curve, job):
     if not complete:
         speed = summary.get('perf/mean_tokens_per_second')
     return dict(group=group,name=name,run_id=rid,status=status,wandb_state=wb,baseline_run=baseline,
+                stop_reason=job.get('stop_reason'),
                 protocol_id=cohort,target_tokens=target,trained_tokens=trained,validation_tokens=end,
                 validation_ce=curve.get(end),final_ce=final if complete else None,best_ce=min(curve.values(),default=None),
                 comparison='',delta_ce=None,parameters=cfg.get('parameters'),gpu=cfg.get('gpu'),
@@ -248,7 +253,7 @@ OVERVIEW = '''# Nanochat 1B 研究总览
 
 正式研究使用 [nanochat-1b](https://wandb.ai/yibozhong657-none/nanochat-1b)。默认从零、seed 42，使用同一 packed 数据，30,518 步 × 32,768 tokens。
 
-[实验总表](RESULTS.csv) · [同协议排名](LEADERBOARD.md) · [实验规范](../AGENTS.md)
+[每日看板](index.html) · [实验总表](RESULTS.csv) · [同协议排名](LEADERBOARD.md) · [实验规范](../AGENTS.md)
 
 ## 研究方向与状态
 
@@ -294,7 +299,7 @@ def review_ended(folder, stamp, rows):
     atomic(report, a + start + '\n\n' + body + '\n\n' + end + b)
 
 
-def publish(records, root, reviewer=None):
+def publish(records, root, reviewer=None, *, synced_at=None):
     compare(records)
     by_id = {r['run_id']:r for r in records}
     groups = defaultdict(list)
@@ -309,11 +314,13 @@ def publish(records, root, reviewer=None):
         board.extend(['', f'## {cohort} · {rows[0]["target_tokens"]:,} tokens','',
                       f"{rows[0]['spec'].get('architecture')} · {rows[0]['spec'].get('depth')} 层 × {rows[0]['spec'].get('width')} · context {rows[0]['spec'].get('context')} · seed {rows[0]['seed']}", '',
                       '| 配置 | 研究问题 | 最终 CE | ΔCE | 基线 |','|---|---|---:|---:|---|'])
-        for r in sorted(rows,key=lambda r:(r['final_ce'],r['run_id'])):
+        rows.sort(key=lambda r:(r['final_ce'],r['run_id']))
+        for r in rows:
             board.append(f"| {label(r['name'])} ({r['run_id']}) | [{r['group']}]({r['group']}/REPORT.md) | {fmt(r['final_ce'])} | {fmt(r['delta_ce'])} | {r['baseline_run']} |")
     if not ranked:
         board.extend(['', '暂无符合条件的已完成实验。'])
     overview = []
+    reviewed_groups = {}
     # Keep planned and manually authored topics visible even before their first run.
     for p in root.glob('*/REPORT.md'):
         if BEGIN in p.read_text():
@@ -361,12 +368,17 @@ def publish(records, root, reviewer=None):
             if reviewed:
                 report = (folder/'REPORT.md').read_text()
                 findings = [line for line in report.splitlines() if line.startswith(('**实测结论**', '**待验证**'))]
+                reviewed_groups[group] = True
                 overview[-1] += ' · 已复核' + ''.join('\n  - '+line for line in findings)
             else:
                 overview[-1] += ' · 待 Agent 复核结论'
     atomic(root/'RESULTS.csv', table(COLUMNS, records))
     atomic(root/'LEADERBOARD.md', '\n'.join(board)+'\n')
     update_block(root/'OVERVIEW.md', OVERVIEW, '\n'.join(overview) or '暂无登记的研究方向。')
+    notes = (root/'OVERVIEW.md').read_text().partition(END)[2].strip()
+    if notes == OVERVIEW.partition(END)[2].strip():
+        notes = ''
+    atomic(root/'index.html', render_dashboard(root, groups, ranked, reviewed_groups, synced_at, notes))
 
 
 def main():
@@ -394,7 +406,8 @@ def main():
                 print(f'{folder.name}: review pending ({error})',file=sys.stderr)
                 atomic(retry,json.dumps(dict(stamp=stamp,after=time.time()+6*3600)))
                 return False
-        publish(records, REPO/'research', reviewer if args.review_ended else None)
+        publish(records, REPO/'research', reviewer if args.review_ended else None,
+                synced_at=datetime.now().astimezone().strftime('%Y-%m-%d %H:%M %Z'))
     print(f'{ENTITY}/{PROJECT}: {len(records)} runs')
 
 

@@ -45,7 +45,7 @@ def submit(recipe, root, steps, group, name, baseline):
     assert not run('git', 'status', '--porcelain', '--', '.', ':(exclude)research/RESULTS.csv',
                    ':(exclude)research/OVERVIEW.md', ':(exclude)research/*/REPORT.md',
                    ':(exclude)research/*/curves*.png', ':(exclude)research/*/curves.csv', ':(exclude)research/*/configs/*.json',
-                   ':(exclude)research/LEADERBOARD.md'), 'Commit training code before creating the archive'
+                   ':(exclude)research/LEADERBOARD.md', ':(exclude)research/index.html'), 'Commit training code before creating the archive'
     for d in ('bundles','logs','results'):
         (root/d).mkdir(exist_ok=True)
     bundles = root/'bundles'

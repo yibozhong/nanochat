@@ -13,6 +13,7 @@
 - 正式入口为 `research/connections/native/chord/submit.py`。指定 `--recipe`、`--group` 和 `--baseline-run`，可用 `--name` 定制名称。基线填 `self`，实验组填写该项目基线的 run ID。新配方复用这一入口和 `scripts.connection_train`。仅在获得训练授权后提交。来自旧项目的 CE 不参与新协议对照。
 - W&B 和本地配置快照记录完整模型、训练和优化器超参数、实际参数量、数据及 tokenizer 版本、seed、GPU、Git commit 和预算。终止作业时在作业目录写入含对应 `run_id` 的 `STOPPED.json` 与原因，以区分主动终止、失败和分段恢复。
 - [总览](research/OVERVIEW.md)记录核心发现、状态和待验证问题；[总表](research/RESULTS.csv)保存客观指标；[leaderboard](research/LEADERBOARD.md)按协议分榜。每个方向在自己的 REPORT 内保留假设、实验设计、结果、分析和结论。报告写中文，技术术语可保留英文。区分实测事实、解释和未验证假设。
+- 每次成功同步后，原子更新[单页研究看板](research/index.html)，作为 nanochat-1b 的日常阅读入口。Overview 汇总研究方向与结论，Leaderboard 沿用同协议完整预算排名，Experiments 内嵌专题报告和曲线，Running 显示调度状态与已训练 tokens，Archive 区分运行失败、主动终止、中断和完整配对后最终 CE 高于基线的结果。结论尚未复核时注明状态。页面使用同步器的同一批数据，可离线打开；同步失败时保留上一次成功生成的页面。
 - 用 `uv run --no-project --script scripts/research_sync.py --review-ended` 刷新。脚本通过 W&B API 分页读取全部 validation CE，以训练 tokens 为横轴，生成每组的曲线图、原始曲线、配置快照及客观结果。AP 定时执行这一命令；组内已登记作业均结束后，Agent 解读完整曲线并更新 REPORT 与 OVERVIEW。数值同步失败、离线未上传、分析待复核应单独标记。已结束组的同一结果只复核一次。需要全量重读历史曲线时加 `--refresh`。
 - ΔCE = 当前配置验证 CE − 基线在同一 token 点的验证 CE，负值表示改善。协议匹配包含数据划分、tokenizer、主干、输出初始化、精度、训练预算、LR 日程、主干优化器、seed 和验证口径。缺基线或缺同 token 验证点则留空。leaderboard 只列达到完整预算、通过相同协议核验的最终验证结果。早停或失败仍保留已观测曲线。
 - 算力栏记录累计理论训练 FLOPs 及估算范围，吞吐量为训练 tokens 除以累计训练步耗时，显存为各恢复分段中最大的 allocated bytes。性能对比需要相同 GPU；不同协议分别解释。CSV 空值表示尚无有效观测。

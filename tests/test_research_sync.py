@@ -1,5 +1,7 @@
 """Offline reporting regressions. Fixtures never contact W&B or submit GPU jobs."""
+import base64
 import csv
+from html.parser import HTMLParser
 import json
 from pathlib import Path
 import tempfile
@@ -54,6 +56,77 @@ class ReportsTest(unittest.TestCase):
             self.assertIsNone(records[2]['final_ce'])
             self.assertEqual(records[2]['status'],'主动终止')
             self.assertIsNone(records[4]['delta_ce'])
+
+    def test_portable_dashboard_progress_archive_and_rankings(self):
+        target = STEPS*BATCH_TOKENS
+        baseline = record('baseline','self',{100:4,target:3.1},complete=True)
+        worse = record('worse','baseline',{100:4.1,target:3.2},complete=True)
+        stopped = record('stopped','baseline',{100:4.5},job={'stopped':True,'stop_reason':'复核后停止'})
+        failed = record('failed','baseline',{100:4.8},wb='failed')
+        unmatched = record('different','baseline',{target:2.9},complete=True,seed=19)
+        running = record('running','baseline',{100:3.95},wb='running')
+        running.update(status='运行中',trained_tokens=12345,name='preview <script>unsafe()</script>')
+        queued = record('queued','baseline',{},wb='',job={'ad':{'JobStatus':1}})
+        queued['trained_tokens']=None
+        records = [baseline,worse,stopped,failed,unmatched,running,queued]
+        with tempfile.TemporaryDirectory() as tmp:
+            root=Path(tmp)
+            folder=root/'velocity'
+            folder.mkdir()
+            (folder/'REPORT.md').write_text(sync.REPORT.format(group='velocity')+
+                '\n## 结论\n\n手工复核的结果。\n\n<script>alert(1)</script>\n')
+            legacy = root/'legacy'
+            legacy.mkdir()
+            (legacy/'REPORT.md').write_text('# 历史项目不应出现在看板')
+            sync.publish(records,root,synced_at='2026-11-25 12:00 CST')
+            html=(root/'index.html').read_text()
+            class Page(HTMLParser):
+                def __init__(self):
+                    super().__init__()
+                    self.sections={}
+                    self.current=None
+                    self.images=[]
+                    self.downloads={}
+                def handle_starttag(self,tag,attrs):
+                    a=dict(attrs)
+                    if tag=='section':
+                        self.current=a['id']
+                        self.sections[self.current]=[]
+                    if tag=='img':
+                        self.images.append(a['src'])
+                    if tag=='a' and 'download' in a:
+                        self.downloads[a['download']]=a['href']
+                    if tag=='script':
+                        raise AssertionError('Unexpected executable content in static page')
+                def handle_endtag(self,tag):
+                    if tag=='section':
+                        self.current=None
+                def handle_data(self,data):
+                    if self.current:
+                        self.sections[self.current].append(data)
+            page=Page()
+            page.feed(html)
+            regions={k:' '.join(v) for k,v in page.sections.items()}
+            self.assertEqual(set(regions),{'overview','leaderboard','experiments','running','archive'})
+            self.assertIn('手工复核的结果',regions['overview'])
+            self.assertLess(regions['leaderboard'].index('baseline'),regions['leaderboard'].index('worse'))
+            self.assertNotIn('different',regions['leaderboard'])
+            self.assertIn('12,345 / 1,000,013,824',regions['running'])
+            self.assertIn('排队',regions['running'])
+            self.assertNotIn('stopped',regions['running'])
+            for expected in ('stopped','复核后停止','失败','最终 CE 高于基线','手工复核的结果'):
+                self.assertIn(expected,regions['archive'])
+            self.assertNotIn('different',regions['archive'])
+            self.assertNotIn('历史项目不应出现在看板',html)
+            self.assertIn('2026-11-25 12:00 CST',html)
+            self.assertTrue(page.images)
+            for url in page.images:
+                self.assertTrue(url.startswith('data:image/png;base64,'))
+                self.assertTrue(base64.b64decode(url.split(',',1)[1]).startswith(b'\x89PNG'))
+            for name in ('curves.csv','baseline.json'):
+                contents=base64.b64decode(page.downloads[name].split(',',1)[1])
+                source=folder/name if name.endswith('.csv') else folder/'configs'/name
+                self.assertEqual(contents,source.read_bytes())
 
     def test_resumable_segment_and_absent_metadata(self):
         r=record('segment','self',{50:4},job={'ad':{'JobStatus':1}})

@@ -1,0 +1,89 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">
+<meta name="color-scheme" content="light">
+<title>nanochat-1b · 实验总览</title>
+<style>
+:root { --ink:#162c32; --muted:#4b6268; --line:#c9d8d7; --teal:#006e65; --paper:#fff; --wash:#f0f6f5; }
+* { box-sizing:border-box; }
+html { scroll-padding-top:5rem; }
+body { margin:0; color:var(--ink); background:var(--paper); font:1rem/1.65 "Inter","PingFang SC","Microsoft YaHei",system-ui,sans-serif; }
+main,.mast-inner,.nav-inner,footer { max-width:74rem; margin:auto; padding-inline:clamp(1rem,5vw,4rem); }
+.mast { color:#fff; background:#173b40; border-top:4px solid #68c8ab; }
+.mast-inner { min-height:4rem; display:flex; align-items:center; justify-content:space-between; flex-wrap:wrap; gap:.5rem 1rem; padding-block:.75rem; }
+.wordmark { font:bold 1.2rem/1.2 "IBM Plex Mono",ui-monospace,monospace; letter-spacing:-.035em; }
+.mast time,.mast .stamp { font-size:.875rem; color:#d5e8e5; }
+nav { position:sticky; top:0; z-index:1; background:#fff; border-block-end:1px solid var(--line); }
+.nav-inner { display:flex; gap:clamp(.8rem,3.2vw,2.6rem); overflow-x:auto; }
+nav a { display:block; padding-block:.7rem; white-space:nowrap; color:var(--ink); text-decoration:none; font-size:.94rem; font-weight:650; }
+a { color:var(--teal); text-underline-offset:.2em; }
+a:hover { text-decoration:underline; }
+a:focus-visible { outline:3px solid #168178; outline-offset:3px; }
+section { padding-block:clamp(1.55rem,4vw,3rem); border-bottom:1px solid var(--line); min-width:0; }
+h1,h2,h3,h4,p { margin:0; }
+h1,h2,h3,h4 { line-height:1.3; text-wrap:balance; }
+h1 { font-size:clamp(2.1rem,5vw,3.4rem); letter-spacing:-.045em; }
+h2 { font-size:clamp(1.45rem,3vw,2rem); letter-spacing:-.025em; }
+h3 { font-size:1.2rem; }
+.hero { display:flex; align-items:center; justify-content:space-between; gap:1.25rem; flex-wrap:wrap; padding-bottom:1.5rem; }
+.counts { display:flex; gap:clamp(1rem,3vw,2.8rem); margin:0; }
+.counts dt,.meta,small { font-size:.875rem; color:var(--muted); }
+.counts dd { margin:0; line-height:1.15; font:600 1.8rem/1.15 "IBM Plex Mono",ui-monospace,monospace; color:#17534e; }
+.topic { border-left:3px solid #309782; padding:.85rem 1.15rem; margin:.65rem 0; background:var(--wash); border-radius:0 .35rem .35rem 0; }
+.topic-head { display:flex; justify-content:space-between; gap:.4rem 1rem; flex-wrap:wrap; }
+.topic-head a { font-weight:680; text-decoration:none; }
+.topic-head a:hover { text-decoration:underline; }
+.topic p { margin-top:.32rem; }
+.section-head { display:flex; align-items:baseline; flex-wrap:wrap; gap:.2rem 1rem; margin-bottom:1rem; }
+.section-head p,.empty { color:var(--muted); }
+.empty { padding:.9rem 1rem; border:1px dashed var(--line); border-radius:.35rem; }
+.report { margin:1rem 0; border:1px solid var(--line); border-radius:.55rem; overflow:hidden; scroll-margin-top:.6rem; }
+.report header { padding:1rem clamp(1rem,2vw,1.6rem); background:var(--wash); border-bottom:1px solid var(--line); }
+.report header h3 { margin-top:.2rem; font-size:1.35rem; }
+.prose { padding:1.3rem clamp(1rem,2vw,1.6rem); overflow-wrap:anywhere; }
+.prose h2,.prose h3,.prose h4 { font-size:1.05rem; margin:1.25rem 0 .5rem; }
+.prose p+p,.prose ul,.prose ol { margin-top:.55rem; }
+.prose > :first-child { margin-top:0; }
+.prose img { max-width:100%; height:auto; display:block; }
+.prose pre { overflow:auto; padding:.8rem; background:var(--wash); }
+.prose code { font-family:"IBM Plex Mono",ui-monospace,monospace; }
+.table-wrap { width:100%; overflow-x:auto; margin:.7rem 0 1rem; }
+table { width:100%; border-collapse:collapse; font-size:.94rem; font-variant-numeric:tabular-nums; }
+td,th { padding:.65rem .75rem; text-align:left; vertical-align:top; border-bottom:1px solid var(--line); overflow-wrap:anywhere; }
+th { background:var(--wash); font-size:.875rem; color:#365251; white-space:nowrap; }
+td small { display:block; }
+.status { display:inline-block; border-radius:.3rem; padding:.1rem .45rem; white-space:nowrap; font-size:.875rem; }
+.live,.done { background:#e0f1ea; color:#185740; }
+.failed,.negative { background:#f8e8e5; color:#873c2f; }
+.stopped,.neutral { background:#eff0f3; color:#455059; }
+.num { white-space:nowrap; font-variant-numeric:tabular-nums; }
+progress { display:block; width:100%; height:.5rem; margin-top:.3rem; accent-color:var(--teal); }
+footer { display:flex; gap:1rem; justify-content:space-between; padding-block:1.25rem; font-size:.875rem; }
+@media(max-width:40rem) { .hero { display:grid; } .nav-inner { gap:1rem; } td,th { padding:.5rem; } }
+@media print { nav,footer { display:none; } .mast { color:#222; background:white; } .mast .stamp,.mast time { color:#555; } section { padding-block:1rem; } tr,img { break-inside:avoid; } .table-wrap { overflow:visible; } }
+</style>
+</head>
+<body>
+<header class="mast"><div class="mast-inner"><span class="wordmark">nanochat-1b</span><span class="stamp">最近同步 <time>2026-11-25 23:37 CST</time></span></div></header>
+<nav aria-label="页面导航"><div class="nav-inner"><a href="#overview">Overview</a><a href="#leaderboard">Leaderboard</a><a href="#experiments">Experiments</a><a href="#running">Running</a><a href="#archive">Archive</a></div></nav>
+<main>
+<section id="overview" aria-labelledby="overview-title"><div class="hero"><h1 id="overview-title">1B 实验总览</h1>
+<dl class="counts"><div><dt>研究方向</dt><dd>1</dd></div><div><dt>实验配置</dt><dd>0</dd></div><div><dt>训练中</dt><dd>0</dd></div></dl></div><article class="topic"><div class="topic-head"><a href="#topic-chord-initial-velocity">Chord 的初速度需要独立词表吗？</a><span class="meta">待实验</span></div><p>尚未开训</p></article></section>
+<section id="leaderboard" aria-labelledby="board-title"><div class="section-head"><h2 id="board-title">Leaderboard</h2><p>按协议分榜，最终 validation CE 越低越好。</p></div><p class="empty">暂无同时完成预算的配置与配对基线。</p></section>
+<section id="experiments" aria-labelledby="experiments-title"><div class="section-head"><h2 id="experiments-title">Experiments</h2><p>研究问题、配对实验与完整验证曲线</p></div><article class="report" id="topic-chord-initial-velocity"><header><span class="meta">chord-initial-velocity</span><h3>Chord 的初速度需要独立词表吗？</h3></header><div class="prose"><h2>假设与实验设计</h2>
+<p>待验证假设是，共享矩阵 W_v 可以从归一化的 h0 生成有用的切向速度，同时减少独立速度表带来的参数。配对基线使用独立 token velocity embedding。候选配置使用 v0 = P_h0(W_v h0)。两者共用 vanilla 主干、soft-force 更新、初始速度尺度、数据顺序和 1B 学习率日程。</p>
+<p>判据是完整预算下的 validation CE 差值，并检查差距在训练中的变化。并列报告参数量、训练 FLOPs、同型号 GPU 上的吞吐及峰值显存。两种初速度的参数量和优化器分组均有差异，结论适用于这一整体替换。</p>
+<h2>实验事实</h2>
+<p>暂无正式实验。</p>
+<h2>分析、结论与待验证问题</h2>
+<p>待验证问题：共享矩阵与速度表的 CE 差距在早期出现还是持续到 1B tokens？两者达到相同 CE 所需的训练时间相差多少？</p>
+</div></article></section>
+<section id="running" aria-labelledby="running-title"><div class="section-head"><h2 id="running-title">Running</h2><p>调度状态与最近一次训练进度</p></div><p class="empty">当前没有运行中或等待调度的实验。</p></section>
+<section id="archive" aria-labelledby="archive-title"><div class="section-head"><h2 id="archive-title">Archive</h2><p>失败、终止、中断与同协议负结果</p></div><p class="empty">暂无失败、终止、中断或已确认最终 CE 高于基线的实验。</p></section>
+</main>
+<footer><a href="#overview">返回总览</a><a href="https://wandb.ai/yibozhong657-none/nanochat-1b">W&amp;B 项目</a></footer>
+</body>
+</html>

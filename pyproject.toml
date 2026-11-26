@@ -23,6 +23,7 @@ research = [
 dev = [
     "ipykernel>=7.1.0",
     "matplotlib>=3.10.8",
+    "mistune==3.2.0",
     "pytest>=8.0.0",
     "python-dotenv>=1.2.1",
 ]
