@@ -4,12 +4,12 @@
 
 ## 两个入口，三种初速度
 
-| 控制方式 | 1B 提交参数 | 省略初速度参数时 |
+| 控制方式 | 1B 提交参数 | 现有参数文件的初速度 |
 | --- | --- | --- |
 | Token-dependent（默认），每个子层按当前 token 的 h 调制系数 | 省略 `--recipe` 或指定 `--recipe chord_next_bf16` | 从 h0 线性生成速度 |
 | Static（可选消融），每个子层一组跨 token 共享的系数 | `--recipe chord_scalar_bf16` | 独立速度表 |
 
-两个入口均可指定 `--velocity-init`。与默认 Chord 配对做 static 消融时，使用 `--recipe chord_scalar_bf16 --velocity-init projected_h0`，两侧就会使用相同的初速度生成方式。[默认配方](chord.args) · [Static 配方](chord_scalar.args)
+初速度仍在研究中，默认选择待定。两个入口都可用 `--velocity-init` 指定以下三种方式。比较两种控制方式时，两侧显式使用相同的初速度。[Token-dependent 配方](chord.args) · [Static 配方](chord_scalar.args)
 
 - `zero` 从静止开始，初速度没有参数。
 - `token` 查独立 token 速度表，v0 = P(h0, E_v[id])。速度表按标准差 0.02 初始化。

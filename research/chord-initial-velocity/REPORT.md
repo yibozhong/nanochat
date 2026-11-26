@@ -2,7 +2,7 @@
 
 ## 假设与实验设计
 
-Next 主配置使用生成初速度。独立速度表是有效的 legacy 对照，这组配对实验只在明确指定时启动。
+研究对象为六系数 token-dependent Chord。初速度有三个候选：零初速、独立 token 速度表和从归一化 h0 生成。默认初速度待定。
 
 待验证假设是，共享矩阵 W_v 可以从归一化的 h0 生成有用的切向速度，同时减少独立速度表带来的参数。配对基线使用独立 token velocity embedding。候选配置使用 v0 = P_h0(W_v h0)。两者共用 vanilla 主干、soft-force 更新、初始速度尺度、数据顺序和 1B 学习率日程。
 
@@ -18,4 +18,6 @@ Next 主配置使用生成初速度。独立速度表是有效的 legacy 对照�
 
 ## 分析、结论与待验证问题
 
-待验证问题：共享矩阵与速度表的 CE 差距在早期出现还是持续到 1B tokens？两者达到相同 CE 所需的训练时间相差多少？
+截至 2026-11-26，residual-mechanisms 组的 h0 生成版已完成 1B，最终 validation CE 为 3.196963。该协议下的六系数 token-dependent 查表版和零初速版尚无正式结果。[已完成实验](https://wandb.ai/yibozhong657-none/nanochat-1b/runs/2e37a95d)
+
+待验证问题：与 h0 生成相比，查表和零初速在同一 1B 日程下的 CE 曲线、最终 CE 和达到相同 CE 的时间如何变化？
