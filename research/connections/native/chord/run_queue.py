@@ -7,7 +7,7 @@ import subprocess
 import sys
 import tempfile
 
-from .submit import CHORD_ARGS, RECIPES, RESIDUAL_STUDY, STEPS, SUITE, save
+from .submit import BATCH_TOKENS, CHORD_ARGS, RECIPES, RESIDUAL_STUDY, STEPS, SUITE, save
 
 ROOT = Path('..')
 RESULTS = Path('results')
@@ -51,8 +51,12 @@ def environment(s):
     return env
 
 
-def train_args(s):
-    return [sys.executable, '-m', 'scripts.connection_train', *s['model_args'], '--matched-backbone-init',
+def train_args(s, *, smoke=False):
+    warm = s.get('procedural')
+    flags = [] if not warm else [
+        '--procedural-task', warm['task'], '--procedural-input-length', str(warm['length']),
+        '--procedural-tokens', str(2*BATCH_TOKENS if smoke else warm['tokens'])]
+    return [sys.executable, '-m', 'scripts.connection_train', *flags, *s['model_args'], '--matched-backbone-init',
             '--schedule-steps', str(s['schedule_steps']), '--seed', str(s['seed']),
             '--microbatch', str(s['microbatch']), '--data-dir', '../data']
 
@@ -67,6 +71,8 @@ def preflight(s, directory):
     save(Path('source.json'), s)
     directory.mkdir(parents=True, exist_ok=True)
     env = dict(environment(s), WANDB_MODE='disabled')
+    if s.get('procedural'):
+        subprocess.run([sys.executable, '-m', 'pytest', '-q', 'tests/test_procedural.py'], env=env, check=True, timeout=900)
     if s['recipe'] == 'chord_scalar_bf16':
         subprocess.run([sys.executable, '-m', 'pytest', '-q', '-s', 'tests/test_chord_soft_scalar.py'],
                        env=env, check=True, timeout=600)
@@ -76,18 +82,36 @@ def preflight(s, directory):
     # Diagnostic checkpoints and optimizer state live only in scratch.
     with tempfile.TemporaryDirectory(dir=ROOT, prefix='residual-smoke-') as tmp:
         out = Path(tmp)
-        args = [*train_args(s), '--output-dir', tmp, '--steps', '4', '--run-id', 'smoke-'+s['run_id']]
-        first = subprocess.run([*args, '--check-zero-init-gradients', '--segment-steps', '2'], env=env, timeout=2400)
-        if first.returncode != 85 or read(out/'progress.json')['step'] != 2:
-            raise RuntimeError(f"{s['recipe']} failed to checkpoint at diagnostic step 2 (exit {first.returncode})")
+        args = [*train_args(s, smoke=True), '--output-dir', tmp, '--steps', '4', '--run-id', 'smoke-'+s['run_id']]
+        first_stop = 1 if s.get('procedural') else 2
+        first = subprocess.run([*args, '--check-zero-init-gradients', '--segment-steps', str(first_stop)],
+                               env=env, timeout=2400)
+        if first.returncode != 85 or read(out/'progress.json')['step'] != first_stop:
+            raise RuntimeError(f"{s['recipe']} failed to checkpoint at diagnostic step {first_stop} (exit {first.returncode})")
+        if s.get('procedural'):
+            second = subprocess.run([*args, '--resume', 'auto', '--segment-steps', '1'], env=env, timeout=2400)
+            if second.returncode != 85 or read(out/'progress.json')['step'] != 2:
+                raise RuntimeError(f"Procedural diagnostic failed at transfer (exit {second.returncode})")
+            boundary = read(out/'transfer-check.json')
+            assert boundary['identical_tensors'] > 0 and boundary['optimizer_state_entries'] == 0
+            progress = read(out/'progress.json')
+            assert progress['fineweb_tokens'] == 0 and progress['procedural_supervised_tokens'] > 0
         subprocess.run([*args, '--resume', 'auto'], env=env, check=True, timeout=2400)
         summary, config = read(out/'summary.json'), read(out/'config.json')
         rows = [json.loads(line) for line in (out/'steps.jsonl').read_text().splitlines()]
         assert [r['step'] for r in rows] == [1, 2, 3, 4] and all(math.isfinite(r['loss']) for r in rows)
+        if s.get('procedural'):
+            assert [r['phase'] for r in rows] == ['procedural', 'procedural', 'fineweb', 'fineweb']
+            assert [r['phase_step'] for r in rows] == [1, 2, 1, 2]
+            assert rows[2]['lr_multiplier'] == rows[0]['lr_multiplier'] == 1/40
+            assert summary['fineweb_tokens'] == summary['procedural_tokens'] == 2*BATCH_TOKENS
         assert summary['complete'] and summary['source'] == s and math.isfinite(summary['final_dev_ce'])
         assert config['logging_backend'] == 'local' and config['actual_attention_backend'] == s['attention_backend']
         report = dict(source=s, first_gradients=read(out/'first-gradients.json'), gpu=config['gpu'],
                       step_losses=[r['loss'] for r in rows], resumed_at=2, final_dev_ce=summary['final_dev_ce'])
+        if s.get('procedural'):
+            report.update(transfer=boundary, resumed_steps=[1, 2], fineweb_tokens=summary['fineweb_tokens'],
+                          procedural_supervised_tokens=summary['procedural_supervised_tokens'])
     save(marker, report)
     return report
 

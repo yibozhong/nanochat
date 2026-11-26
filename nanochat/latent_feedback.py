@@ -115,5 +115,5 @@ class LatentFeedbackModel(ConnectionModel):
                     feedback = top
         return norm(top)
 
-    def forward(self, idx, targets=None, dense=False, kv_cache=None, passes=None):
-        return self.readout(self.hidden(idx, kv_cache, passes), targets, dense)
+    def forward(self, idx, targets=None, dense=False, kv_cache=None, passes=None, loss_reduction="mean"):
+        return self.readout(self.hidden(idx, kv_cache, passes), targets, dense, loss_reduction)

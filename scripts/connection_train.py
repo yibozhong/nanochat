@@ -5,6 +5,7 @@ Diagnostics require an explicit step count. Formal runs default to the 1B protoc
 """
 import argparse
 from dataclasses import asdict
+from functools import partial
 import json
 import math
 import os
@@ -15,7 +16,8 @@ import time
 import uuid
 
 import torch
-from nanochat.experiment_logging import PROJECT, STEPS, training_run
+from nanochat.experiment_logging import BATCH_TOKENS, PROJECT, STEPS, training_run
+from nanochat.procedural import DYCK, TASKS, ProceduralData
 
 from nanochat.connection_model import ConnectionConfig, build_connection_model, optimizer_for, schedule, CONNECTION_VARIANTS
 from nanochat.packed_training import PackedData, seed_all, evaluate, train_step, snapshot, atomic_save, restore_rng, json_write
@@ -165,6 +167,10 @@ def main():
     p.add_argument('--attnres-block-size', type=int, default=2,
                    help='Moonshot paper S: Attention/MLP sublayers per residual block; even >=2, default2 = one Transformer layer')
     p.add_argument('--steps', type=int)
+    p.add_argument('--procedural-task', choices=TASKS)
+    p.add_argument('--procedural-tokens', type=int, default=0,
+                   help='Warm-up model positions within the total budget, rounded up to one optimizer batch')
+    p.add_argument('--procedural-input-length', type=int, help='Defaults to 64 symbols or one full context for Dyck')
     p.add_argument('--schedule-steps', type=int, default=STEPS)
     p.add_argument('--microbatch', type=int, default=16)
     p.add_argument('--streams', type=int, default=None)
@@ -189,6 +195,13 @@ def main():
         if not a.formal_training:
             p.error('Diagnostics require an explicit --steps budget')
         a.steps = STEPS
+    if a.procedural_tokens < 0 or (a.procedural_tokens > 0 and a.procedural_task is None):
+        p.error('A positive --procedural-tokens budget requires --procedural-task')
+    if not a.procedural_task and a.procedural_input_length is not None:
+        p.error('--procedural-input-length requires --procedural-task')
+    warm_steps = (a.procedural_tokens + BATCH_TOKENS - 1) // BATCH_TOKENS
+    if warm_steps >= a.schedule_steps or (a.formal_training and warm_steps >= a.steps):
+        p.error('Reserve at least one FineWeb update after the procedural warm-up')
     if a.streams is None:
         a.streams = 1 if a.variant in ('skip_scale','attnres_scale') else 4
     assert torch.cuda.is_available() and torch.cuda.device_count()==1
@@ -244,7 +257,18 @@ def main():
                        connection_backend=a.connection_backend, fused_connection_grad=a.fused_connection_grad)
     data=PackedData(a.data_dir)
     assert data.manifest['sequence_length']==c.sequence_length
-    assert a.steps*rows_per_step<=len(data.arrays['train'])
+    assert max(a.steps-warm_steps, 0)*rows_per_step<=len(data.arrays['train'])
+    procedural = None
+    if warm_steps:
+        if data.manifest['tokenizer']['vocab_size'] != c.vocab_size:
+            p.error('Model vocabulary must match the packed FineWeb tokenizer')
+        length = a.procedural_input_length
+        if length is None:
+            length = c.sequence_length if a.procedural_task in DYCK else 64
+        try:
+            procedural = ProceduralData(a.procedural_task, a.seed, c.vocab_size, c.sequence_length, length)
+        except ValueError as error:
+            p.error(str(error))
     # User preference: check geometry/file sizes without scanning file contents.
     for split, info in data.manifest['files'].items():
         expected=info['rows']*(c.sequence_length+1)*2
@@ -284,9 +308,10 @@ def main():
         match_vanilla_initialization(model,a.seed)
     if a.eval_zero_v0 and (c.residual_mode != 'ngpt_lookahead' or c.velocity_init != 'token'):
         p.error('--eval-zero-v0 requires token-only spherical lookahead')
-    opt,wd=optimizer_for(model, matrix_optimizer=a.matrix_optimizer, arc_mu=a.arc_mu, arc_beta=a.arc_beta,
+    new_optimizer=partial(optimizer_for, model, matrix_optimizer=a.matrix_optimizer, arc_mu=a.arc_mu, arc_beta=a.arc_beta,
                          arc_direction=a.arc_direction, arc_step_scale=a.arc_step_scale,
                          velocity_embedding_lr=a.velocity_embedding_lr)
+    opt,wd=new_optimizer()
     if a.check_zero_init_gradients:
         if a.formal_training or a.resume:
             p.error('--check-zero-init-gradients requires a fresh local diagnostic')
@@ -296,6 +321,11 @@ def main():
                   microbatch=a.microbatch,grad_accum=rows_per_step//a.microbatch,seed=a.seed,
                   attention_backend=a.attention_backend,matched_backbone_init=a.matched_backbone_init,
                   evaluate_test=a.evaluate_test)
+    if procedural:
+        protocol['procedural'] = dict(generator='jiang-packed-v1', task=procedural.task, input_length=length,
+            requested_tokens=a.procedural_tokens, steps=warm_steps, model_tokens=warm_steps*BATCH_TOKENS,
+            fineweb_schedule_steps=a.schedule_steps-warm_steps, vocabulary='native tokenizer IDs',
+            transfer='all parameters in place; fresh optimizer and phase-local schedule')
     if a.velocity_embedding_lr is not None:
         protocol['velocity_embedding_peak_lr'] = a.velocity_embedding_lr
     if a.eval_zero_v0:
@@ -312,6 +342,7 @@ def main():
     if c.latent_feedback:
         protocol['feedback']=dict(pass_mix=[.15,.85],sampler='numpy.default_rng([seed,zero_based_step])',
             earlier_passes='no_grad_detached',eval_passes=c.feedback_eval_passes)
+    warm_supervised = 0
     step=0;best=float('inf');training_seconds=0.;prior_elapsed=0.;initial_dev=None
     prior_peak = 0
     training_flops = 0
@@ -329,6 +360,8 @@ def main():
         initial_dev=state.get('initial_dev_ce')
         prior_peak = state.get('peak_allocated_bytes', 0)
         training_flops = state.get('estimated_training_flops', 0)
+        if procedural:
+            warm_supervised = state['procedural_supervised_tokens']
         model.load_state_dict(state['model']);opt.load_state_dict(state['optimizer'])
         restore_rng(state['rng']);del state
         assert (ckpt/'best.pt').exists(),'Resume requires the paired dev-best checkpoint'
@@ -445,6 +478,8 @@ def main():
         run.summary.update(dict(complete=False, checkpoint_step=step, source=source, test_evaluated=False,
                                 final_dev_ce=None, final_test_ce=None, best_selected_test_ce=None))
     run.define_metric('tokens')
+    if procedural:
+        run.define_metric('procedural/*', step_metric='tokens')
     for metric in ('train/*','dev/*','perf/*','residual/*'):
         run.define_metric(metric,step_metric='tokens')
     if a.matrix_optimizer == 'arc':
@@ -455,20 +490,27 @@ def main():
         nonlocal stop
         stop=True
     signal.signal(signal.SIGTERM,interrupted);signal.signal(signal.SIGUSR1,interrupted)
+    def token_counts():
+        if not procedural:
+            return {}
+        return dict(procedural_tokens=min(step, warm_steps)*BATCH_TOKENS,
+                    procedural_supervised_tokens=warm_supervised,
+                    fineweb_tokens=max(0, step-warm_steps)*BATCH_TOKENS)
+
     def save():
         atomic_save(snapshot(model,opt,step,config=asdict(c),protocol=protocol,source=source,
             run_id=run_id,data_manifest=data.manifest,best_dev_ce=best,
-            initial_dev_ce=initial_dev,training_seconds=training_seconds,
+            initial_dev_ce=initial_dev,training_seconds=training_seconds,**token_counts(),
             peak_allocated_bytes=max(prior_peak,torch.cuda.max_memory_allocated()),estimated_training_flops=training_flops,
             elapsed_seconds=prior_elapsed+time.perf_counter()-begin),
             ckpt/'latest.pt')
         json_write(out/'progress.json',dict(run_id=run_id,step=step,tokens=step*32768,
-            best_dev_ce=best,training_seconds=training_seconds,source=source))
+            best_dev_ce=best,training_seconds=training_seconds,source=source,**token_counts()))
     def save_best(dev):
         atomic_save(dict(model=model.state_dict(),config=asdict(c),protocol=protocol,source=source,
             run_id=run_id,step=step,dev_ce=dev,data_manifest=data.manifest),ckpt/'best.pt')
     def dev_metrics(dev):
-        metrics={'dev/ce':dev}
+        metrics={'dev/ce':dev, **token_counts()}
         if a.matrix_optimizer == 'arc':
             metrics.update(opt.metrics())
         if c.residual_mode != 'vanilla':
@@ -497,14 +539,22 @@ def main():
         durations=[]
         with (out/'steps.jsonl').open('a',buffering=1) as log:
             while step<a.steps:
-                lr=schedule(opt,step,a.schedule_steps,wd)
+                warming = step < warm_steps
+                phase_step = step if warming else step-warm_steps
+                horizon = warm_steps if warming else a.schedule_steps-warm_steps
+                lr=schedule(opt,phase_step,horizon,wd)
                 torch.cuda.synchronize();start=time.perf_counter()
-                loss=train_step(model,opt,data,step,microbatch=a.microbatch,seed=a.seed)
+                batch = procedural.batch(step*rows_per_step, rows_per_step) if warming else None
+                loss=train_step(model,opt,data,phase_step,microbatch=a.microbatch,seed=a.seed,masked_batch=batch)
+                if warming:
+                    warm_supervised += int(batch[2].sum())
                 torch.cuda.synchronize();duration=time.perf_counter()-start
                 durations.append(duration);training_seconds+=duration;step+=1
                 row=dict(step=step,tokens=step*32768,loss=loss,seconds=duration,lr_multiplier=lr)
+                if procedural:
+                    row.update(phase='procedural' if warming else 'fineweb', phase_step=phase_step+1, **token_counts())
                 if c.latent_feedback:
-                    row['passes']=model.training_passes(a.seed,step-1)
+                    row['passes']=model.training_passes(a.seed,phase_step)
                 step_cost = cost
                 step_flops = nominal_flops
                 if c.latent_feedback and cost:
@@ -515,7 +565,8 @@ def main():
                 log.write(json.dumps(row)+'\n')
                 if step<=5 or step%10==0:
                     print(json.dumps(row),flush=True)
-                    perf={'train/ce':loss,'perf/step_seconds':duration,'perf/tokens_per_second':32768/duration,
+                    loss_key = 'procedural/ce' if warming else 'train/ce'
+                    perf={loss_key:loss, **token_counts(),'perf/step_seconds':duration,'perf/tokens_per_second':32768/duration,
                           'perf/peak_allocated_bytes':max(prior_peak,torch.cuda.max_memory_allocated()),
                           'perf/training_seconds':training_seconds,
                           'perf/mean_tokens_per_second':row['tokens']/training_seconds,
@@ -531,13 +582,30 @@ def main():
                         perf['perf/profile_additional_peak_allocated_bytes']=profile_reference['additional_peak_allocated_bytes']
                         perf['perf/profile_additional_peak_reserved_bytes']=profile_reference['additional_peak_reserved_bytes']
                     run.log(dict(step=step,tokens=row['tokens'],**perf))
-                if step==50 or step%250==0 or step==a.steps:
+                transfer = procedural is not None and step == warm_steps
+                if transfer:
+                    # The diagnostic verifies every tensor at this boundary on the real model.
+                    before = None if a.formal_training else {
+                        name: value.detach().clone() for name, value in model.state_dict().items()}
+                    opt.zero_grad(set_to_none=True)
+                    del opt
+                    opt, wd = new_optimizer()
+                    if before is not None:
+                        after = model.state_dict()
+                        assert before.keys() == after.keys() and not opt.state
+                        for name, value in before.items():
+                            assert torch.equal(value, after[name]), f'Weight changed at transfer: {name}'
+                        json_write(out/'transfer-check.json', dict(step=step, identical_tensors=len(after),
+                            optimizer_state_entries=len(opt.state), fineweb_next_row=0))
+                        del before, after, value
+                    print(f'PROCEDURAL_TRANSFER step={step} fineweb_next_row=0', flush=True)
+                if transfer or step==50 or step%250==0 or step==a.steps:
                     dev,dev_tokens=evaluate(model,data,microbatch=a.microbatch)
                     assert math.isfinite(dev)
-                    if dev<best:
+                    if dev<best or transfer:
                         best=dev;save_best(dev)
                     run.log(dict(step=step,tokens=step*32768,**dev_metrics(dev),**{'dev/tokens':dev_tokens}))
-                if step==50 or step%500==0 or step==a.steps or stop:save()
+                if transfer or step==50 or step%500==0 or step==a.steps or stop:save()
                 if step<a.steps and (stop or time.perf_counter()-begin>=a.segment_seconds
                                       or a.segment_steps and step-start_step>=a.segment_steps):
                     save();run.summary.update(dict(complete=False,checkpoint_step=step))
@@ -564,7 +632,7 @@ def main():
             gpu=torch.cuda.get_device_name(),peak_allocated_bytes=max(prior_peak,torch.cuda.max_memory_allocated()),
             estimated_training_flops=training_flops if nominal_flops is not None else None,
             peak_reserved_bytes=torch.cuda.max_memory_reserved(),source=source,
-            test_evaluated=a.evaluate_test,checkpoint_files=checkpoint_files,**test_result)
+            test_evaluated=a.evaluate_test,checkpoint_files=checkpoint_files,**token_counts(),**test_result)
         json_write(out/'summary.json',result);run.summary.update(result);run.finish()
         print(json.dumps(result),flush=True);return 0
     except BaseException:

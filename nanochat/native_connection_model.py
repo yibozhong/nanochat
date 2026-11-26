@@ -59,17 +59,18 @@ class NativeConnectionModel(nn.Module):
     def residual_metrics(self):
         return self.chord.metrics()
 
-    def forward(self, idx, targets=None, dense=False, kv_cache=None):
+    def forward(self, idx, targets=None, dense=False, kv_cache=None, loss_reduction="mean"):
         h = self.hidden(idx, kv_cache)
         w = self.native.lm_head.weight[:self.config.vocab_size].to(h.dtype)
         if targets is None or dense:
             logits = 15 * torch.tanh(F.linear(h, w).float() / 15)
             if targets is None:
                 return logits
-            return F.cross_entropy(logits.flatten(0, 1), targets.flatten(), ignore_index=-1)
+            loss = F.cross_entropy(logits.flatten(0, 1), targets.flatten(), ignore_index=-1, reduction=loss_reduction)
+            return loss.view_as(targets) if loss_reduction == "none" else loss
         from cut_cross_entropy import linear_cross_entropy
         return linear_cross_entropy(h, w, targets, softcap=15., shift=0,
-            reduction='mean', ignore_index=-1, filter_eps=None,
+            reduction=loss_reduction, ignore_index=-1, filter_eps=None,
             filter_e_grad=False, filter_c_grad=False, accum_e_fp32=True, accum_c_fp32=True)
 
     def setup_optimizer(self, batch_tokens=32768):

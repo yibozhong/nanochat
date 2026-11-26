@@ -67,19 +67,31 @@ def evaluate(model,data,split='dev',microbatch=16,max_rows=None,**forward_option
     return total/count,count
 
 
-def train_step(model,opt,data,step,microbatch=16,batch_tokens=32768,seed=42):
+def train_step(model,opt,data,step,microbatch=16,batch_tokens=32768,seed=42,masked_batch=None):
     T=model.config.sequence_length
     rows=batch_tokens//T
     assert rows % microbatch == 0
     opt.zero_grad(set_to_none=True)
     total=torch.zeros((),device='cuda')
     options = dict(passes=model.training_passes(seed, step)) if model.config.latent_feedback else {}
+    if masked_batch is not None:
+        inputs, targets, mask = (torch.from_numpy(a).to('cuda') for a in masked_batch)
+        valid = int(masked_batch[2].sum())
+        if valid == 0:
+            raise ValueError('Procedural batch contains no supervised outputs')
     with opt.gradient_point() if hasattr(opt, 'gradient_point') else nullcontext():
         for start in range(0,rows,microbatch):
-            x,y=data.batch('train',step*rows+start,microbatch)
-            loss=model(x,y,**options)
-            (loss/(rows//microbatch)).backward()
-            total += loss.detach()/(rows//microbatch)
+            if masked_batch is None:
+                x,y=data.batch('train',step*rows+start,microbatch)
+                loss=model(x,y,**options)/(rows//microbatch)
+            else:
+                sl = slice(start, start + microbatch)
+                # Use valid in-vocabulary targets everywhere. This keeps the full
+                # baseline LM-head matmuls, including at masked prompt/pad positions.
+                losses = model(inputs[sl], targets[sl], loss_reduction='none', **options)
+                loss = losses.masked_fill(~mask[sl], 0.).sum() / valid
+            loss.backward()
+            total += loss.detach()
     # Preserve nanochat's lack of clipping, but stop before a nonfinite update.
     grads=[p.grad for p in model.parameters() if p.grad is not None]
     finite=torch.stack([torch.isfinite(g).all() for g in grads]).all()

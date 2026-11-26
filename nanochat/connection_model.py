@@ -606,20 +606,21 @@ class ConnectionModel(nn.Module):
             x = self.stream_head(x)
         return (x, torch.stack(states, dim=2)) if return_layers else x
 
-    def forward(self, idx, targets=None, dense=False, kv_cache=None):
+    def forward(self, idx, targets=None, dense=False, kv_cache=None, loss_reduction="mean"):
         h = self.hidden(idx, kv_cache)
-        return self.readout(h, targets, dense)
+        return self.readout(h, targets, dense, loss_reduction)
 
-    def readout(self, h, targets=None, dense=False):
+    def readout(self, h, targets=None, dense=False, loss_reduction="mean"):
         w = self.lm_head.weight.to(h.dtype)
         if targets is None or dense:
             logits = 15 * torch.tanh(F.linear(h, w).float() / 15)
             if targets is None:
                 return logits
-            return F.cross_entropy(logits.flatten(0, 1), targets.flatten())
+            loss = F.cross_entropy(logits.flatten(0, 1), targets.flatten(), reduction=loss_reduction)
+            return loss.view_as(targets) if loss_reduction == "none" else loss
         from cut_cross_entropy import linear_cross_entropy
         return linear_cross_entropy(h, w, targets, softcap=15., shift=0,
-            reduction='mean', filter_eps=None, filter_e_grad=False, filter_c_grad=False,
+            reduction=loss_reduction, filter_eps=None, filter_e_grad=False, filter_c_grad=False,
             accum_e_fp32=True, accum_c_fp32=True)
 
 

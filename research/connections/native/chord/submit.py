@@ -14,7 +14,8 @@ REPO = HERE.parents[3]
 HOME = Path.home()
 ASSETS = HOME / 'nanochat-runtime-assets'
 sys.path.insert(0, str(REPO))
-from nanochat.experiment_logging import ENTITY, PROJECT, STEPS
+from nanochat.experiment_logging import BATCH_TOKENS, ENTITY, PROJECT, STEPS
+from nanochat.procedural import DYCK, TASKS, ProceduralData
 from nanochat.research_protocol import validate_identity
 
 CHORD_ARGS = {
@@ -77,16 +78,20 @@ def make_source(recipe, key, steps, group, name, baseline, commit, data):
     return source
 
 
-def submit(recipe, root, steps, group, name, baseline):
+def submit(recipe, root, steps, group, name, baseline, procedural=None):
     if recipe not in (*RECIPES, SUITE):
         raise ValueError(f'Unknown active recipe: {recipe}')
     if recipe == SUITE and baseline != 'self':
         raise ValueError('The residual suite pairs its own baseline runs')
+    if procedural and recipe == SUITE:
+        raise ValueError('Select the single model recipe for the procedural comparison')
     key = root.name
     ad_key = 'NativeMhcKey' if recipe == 'mhc' else 'VanillaChordKey'
     if (root/'state.json').exists():
         state = json.loads((root/'state.json').read_text())
         pinned = state['source']
+        if pinned.get('procedural') != procedural:
+            raise ValueError('This job directory has a different procedural configuration')
         if (pinned['recipe'], pinned['group'], pinned['run_name'], pinned['baseline_run']) != (recipe, group, name, baseline):
             raise ValueError('This job directory belongs to a different configuration; choose a distinct --name')
         print(state['job'], state['wandb_url'])
@@ -117,6 +122,8 @@ def submit(recipe, root, steps, group, name, baseline):
         source = dict(recipe=SUITE, run_id=run_id, group=group, run_name=name, baseline_run=baseline, runs=sources)
     else:
         source = make_source(recipe, key, steps, group, name, baseline, commit, data)
+        if procedural:
+            source['procedural'] = procedural
         run_id = source['run_id']
     job_args = f'{run_id} {recipe}'
     save(bundles/'source.json', source)
@@ -174,9 +181,25 @@ if __name__ == '__main__':
     parser.add_argument('--name', help='Configuration name (defaults to recipe, seed and budget)')
     parser.add_argument('--baseline-run', required=True, help='nanochat-1b baseline ID or self')
     parser.add_argument('--debug-only', action='store_true', help='Local checks only, without a W&B run')
+    parser.add_argument('--procedural-task', choices=TASKS)
+    parser.add_argument('--procedural-tokens', type=int, default=0)
+    parser.add_argument('--procedural-input-length', type=int)
     args = parser.parse_args()
+    procedural = None
+    if args.procedural_task or args.procedural_tokens or args.procedural_input_length is not None:
+        if not args.procedural_task or not 0 < args.procedural_tokens <= (STEPS-1)*BATCH_TOKENS:
+            parser.error('Select a procedural task and a positive token budget with room for FineWeb')
+        length = args.procedural_input_length
+        if length is None:
+            length = 2048 if args.procedural_task in DYCK else 64
+        try:
+            ProceduralData(args.procedural_task, 42, 32768, 2048, length)
+        except ValueError as error:
+            parser.error(str(error))
+        procedural = dict(task=args.procedural_task, tokens=args.procedural_tokens, length=length)
     steps = 0 if args.debug_only else STEPS
-    name = args.name or args.recipe.replace('_', '-') + '-s42-1b'
+    suffix = f"-{procedural['task']}-len{length}-{procedural['tokens']}t" if procedural else ''
+    name = args.name or args.recipe.replace('_', '-') + suffix + '-s42-1b'
     group, name, baseline = validate_identity(args.group, name, args.baseline_run)
     slug = re.sub(r'[^a-z0-9]+', '-', name.lower()).strip('-')
     if not slug:
@@ -186,4 +209,4 @@ if __name__ == '__main__':
     root.mkdir(parents=True, exist_ok=True)
     with (root/'submit.lock').open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
-        submit(args.recipe, root, steps, group, name, baseline)
+        submit(args.recipe, root, steps, group, name, baseline, procedural)
