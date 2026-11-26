@@ -21,7 +21,16 @@
 
 <!-- sync:begin -->
 
-等待 GPU 预检与正式训练。
+| 配置 | 状态 | 验证 tokens | 最近 CE | ΔCE | 基线 |
+|---|---|---:|---:|---:|---|
+| [chord-next-bf16-zero-s42-1b](configs/2e37a95d.json) | 排队 | — | — | — | a2793a7e |
+| [chord-scalar-bf16-zero-s42-1b](configs/57ba73d6.json) | 排队 | — | — | — | a2793a7e |
+| [native-baseline-zero-s42-1b](configs/7e37ab98.json) | 排队 | — | — | — | self |
+| [vanilla-attnres-zero-s42-1b](configs/d38f2bd0.json) | 排队 | — | — | — | a2793a7e |
+| [vanilla-baseline-zero-s42-1b](configs/a2793a7e.json) | 排队 | — | — | — | self |
+| [vanilla-mhc-zero-s42-1b](configs/b4e0525d.json) | 排队 | — | — | — | a2793a7e |
+
+[完整验证曲线数据](curves.csv)
 
 <!-- sync:end -->
 

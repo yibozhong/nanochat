@@ -9,6 +9,7 @@
 <!-- sync:begin -->
 
 - [chord-initial-velocity](chord-initial-velocity/REPORT.md) · 待实验
+- [residual-mechanisms](residual-mechanisms/REPORT.md) · 排队 6
 
 <!-- sync:end -->
 
