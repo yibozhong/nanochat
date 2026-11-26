@@ -67,13 +67,14 @@ footer { display:flex; gap:1rem; justify-content:space-between; padding-block:1.
 </style>
 </head>
 <body>
-<header class="mast"><div class="mast-inner"><span class="wordmark">nanochat-1b</span><span class="stamp">最近同步 <time>2026-11-25 23:37 CST</time></span></div></header>
+<header class="mast"><div class="mast-inner"><span class="wordmark">nanochat-1b</span><span class="stamp">最近同步 <time>2026-11-25 23:56 CST</time></span></div></header>
 <nav aria-label="页面导航"><div class="nav-inner"><a href="#overview">Overview</a><a href="#leaderboard">Leaderboard</a><a href="#experiments">Experiments</a><a href="#running">Running</a><a href="#archive">Archive</a></div></nav>
 <main>
 <section id="overview" aria-labelledby="overview-title"><div class="hero"><h1 id="overview-title">1B 实验总览</h1>
 <dl class="counts"><div><dt>研究方向</dt><dd>1</dd></div><div><dt>实验配置</dt><dd>0</dd></div><div><dt>训练中</dt><dd>0</dd></div></dl></div><article class="topic"><div class="topic-head"><a href="#topic-chord-initial-velocity">Chord 的初速度需要独立词表吗？</a><span class="meta">待实验</span></div><p>尚未开训</p></article></section>
 <section id="leaderboard" aria-labelledby="board-title"><div class="section-head"><h2 id="board-title">Leaderboard</h2><p>按协议分榜，最终 validation CE 越低越好。</p></div><p class="empty">暂无同时完成预算的配置与配对基线。</p></section>
 <section id="experiments" aria-labelledby="experiments-title"><div class="section-head"><h2 id="experiments-title">Experiments</h2><p>研究问题、配对实验与完整验证曲线</p></div><article class="report" id="topic-chord-initial-velocity"><header><span class="meta">chord-initial-velocity</span><h3>Chord 的初速度需要独立词表吗？</h3></header><div class="prose"><h2>假设与实验设计</h2>
+<p>Next 主配置使用生成初速度。独立速度表是有效的 legacy 对照，这组配对实验只在明确指定时启动。</p>
 <p>待验证假设是，共享矩阵 W_v 可以从归一化的 h0 生成有用的切向速度，同时减少独立速度表带来的参数。配对基线使用独立 token velocity embedding。候选配置使用 v0 = P_h0(W_v h0)。两者共用 vanilla 主干、soft-force 更新、初始速度尺度、数据顺序和 1B 学习率日程。</p>
 <p>判据是完整预算下的 validation CE 差值，并检查差距在训练中的变化。并列报告参数量、训练 FLOPs、同型号 GPU 上的吞吐及峰值显存。两种初速度的参数量和优化器分组均有差异，结论适用于这一整体替换。</p>
 <h2>实验事实</h2>

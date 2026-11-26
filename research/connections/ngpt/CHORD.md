@@ -1,62 +1,27 @@
-# Chord residual 默认配方
+# Chord residual 配方
 
-Chord 为每个 token 维护球面上的 hidden `h` 和与它垂直的速度 `v`。每个 Attention 和 FFN 子层在前瞻点读取，用两个步长写回当前 hidden，再用实际位移更新速度。Attention、FFN、分支 pre-norm 和 NTP loss 沿用 vanilla 主干。
+Chord 在每个 token 上沿模型深度传递位置 h 和速度 v。h 的 RMS 为 1，球面半径为 sqrt(d_model)。v 位于 h 的切平面。每个 Attention 或 FFN 从前瞻点读取，在球面上更新 h，再用实际位移更新 v。跨子层的 h、v 以 BF16 保存，几何运算使用 FP32。[标量版交互演示](chord-demo.html)
 
-[交互演示](chord-demo.html)可下载后用浏览器离线打开。拖动球面、切换更新阶段或调节步长，即可观察一个示例 token 的位置与切向速度。
+| 1B 配方 | 初速度 | 分支输出如何参与位置更新 | Attention 输出与 FFN down 投影初始化 |
+| --- | --- | --- | --- |
+| `chord_scalar_bf16`，原默认 | 独立 token 速度表，查表后投影到切平面 | 把归一化输出当作目标，取从 h 到目标的差 | 正态，标准差 0.02 / sqrt(2 × depth) |
+| `chord_next_bf16`，Next 主配置 | 对归一化后的 h0 作无偏置线性变换，再投影到切平面 | 把 soft-normalized 输出直接用作建议位移 | 零 |
 
-## nanochat 配置
+两版都用 vanilla 全注意力、FA2、融合前瞻读取、原分支 pre-norm 和 NTP loss，默认关闭 force 重算。训练入口是 `scripts.connection_train`。跨仓库迁移使用对应参数文件。[Scalar BF16](chord.args) · [Next BF16](chord_next.args)
 
-新训练从仓库根目录向 `python -m scripts.connection_train` 传入 `@research/connections/ngpt/chord.args`，再指定本次的训练步数、学习率日程、数据与输出路径。跨仓库迁移时使用这份文件中的显式模型参数。历史实验按其保存的配置恢复。[默认模型参数](chord.args)
+## 初始化与子层更新
 
-## 融合与反向重算
+以下均按单个 token 计算。N 表示将向量归一化到单位 RMS，P(h,x) = x − mean(h*x) h 是球面点 h 处的切向投影。h0 取 N(token_embedding[id])。标量版初速度为 P(h0, velocity_embedding[id])，速度表按标准差 0.02 初始化。Next 主配置为 P(h0, W_v h0)，W_v 形状为 d_model × d_model，按标准差 0.02 / sqrt(d_model) 初始化，归入主干矩阵 Muon 组。
 
-默认开启 `--fuse-chord-read-norm`，将 BF16 前瞻读取和分支入口的无权重 RMSNorm 融为一次读写，保留中间 BF16 舍入和原主干的 epsilon。反向从 h、v 和 mu 重建分支读取。`--recompute-chord-force` 可独立启用，默认为关闭。开启后，训练反向会用已经保存的输入与 BF16 权重各重算一次 Attention 输出投影和 FFN down 投影。KV 推理沿用正常投影。两项均使用 `--chord-kernel current`。
+令 q 为前瞻点。实现利用切向性计算 q = (h + μv) / sqrt(1 + mean((μv)²))。F(q) 表示当前 Attention 或 FFN 在分支 pre-norm 后的输出。标量版取 delta = N(F(q)) − h，Next 版取 delta = F(q) / sqrt(mean(F(q)²) + 0.05²)。
 
-## 初始化与更新顺序
+把 delta 拆为沿 v 的平行分量和其余分量。两版均以 h_next = N(h + α∥ delta∥ + α⊥ delta⊥) 更新位置。当 v 为零时，平行分量为零。
 
-`mean` 沿当前 token 的 hidden 维度取均值。记 `N(x) = x / sqrt(max(mean(x*x), 1e-12))`，`P(h,x) = x - mean(h*x)*h`。正常尺度下，`N` 给出 RMS 为 1、半径为 `sqrt(d_model)` 的向量，`P` 把向量投影到该点的切平面。
+- **Scalar** 每个子层的 μ、两个正步长 α 和 β 跨 token 与通道共享。有效初值依次为 0、0.05、0.05 和 0.5。速度更新为 v_next = P(h_next, βv + (1 − β)(h_next − h))。
+- **Next** 由该位置当前的 RMSNorm(h) 调制 μ、两个 α、β 和两个速度写入系数 γ。先将旧速度和本次弦位移投影到终点切平面，得到 u 和 d，再将 d 按 u 的方向拆分。v_next = βu + γ∥ d∥ + γ⊥ d⊥。两个 γ 初值均为 0.5，token 调制投影从零初始化，三组可学习调制尺度从 0.01 开始。末端 FFN 只写位置。[速度读写实现](../../../nanochat/chord_token_controls.py)
 
-输入时设 `h = N(token_embedding[id])`，再设 `v = P(h, velocity_token[id])`。速度表独立于主干词嵌入，形状为 `vocab_size × d_model`，按标准差 0.02 的零均值正态分布初始化。速度沿同一 token 的模型深度传递。位置由 Attention 的 RoPE 编码。复现历史 `token_position` 对照时，初速度额外加上绝对位置速度嵌入，再做切向投影。
+## 1B 协议与复现
 
-对每层先执行 Attention，再执行 FFN；后者使用前者更新后的 `h, v`。下式的 `F` 表示带原 pre-norm 的当前分支，返回该分支的输出投影结果。当前默认以 BF16 保存跨子层的 `h, v`；球面归一化、投影、速度混合和弦位移在 FP32 计算。速度使用本次写回舍入前的 `h_next - h`，下一个子层的前瞻使用已舍入的两个状态。Attention 和 FFN 接收 BF16。一个位置和通道的两条跨层状态合计占 4 字节。旧参考训练 af1c3266 使用 FP32 状态，旧 checkpoint 继续沿用其精度。
+从仓库根目录调用 `python research/connections/native/chord/submit.py`，传入表中的 `--recipe`、研究问题 `--group` 和同协议基线 `--baseline-run`。配对时也要匹配表中的输出初始化。新授权实验从零、seed 42，30,518 步 × 32,768 tokens。两种配方的选择属于研究约定，1B 实测见研究总表。[提交入口](../native/chord/submit.py) · [研究总表](../../RESULTS.csv)
 
-```text
-offset = mu * v
-q = (h + offset) / sqrt(1 + mean(offset*offset))
-delta = N(F(q)) - h
-parallel = (mean(delta*v) / max(mean(v*v), 1e-12)) * v
-h_next = N(h + alpha_perp*delta + (alpha_parallel - alpha_perp)*parallel)
-chord = h_next - h
-v_next = P(h_next, beta*v + (1 - beta)*chord)
-```
-
-- 前瞻系数 `mu` 是可取正负的子层标量，从 0 开始学习。前瞻公式利用了 `h` 的单位 RMS 和 `v` 的切向性。建议位移从当前 `h` 量到目标 `N(F(q))`。
-- `alpha_parallel` 缩放建议位移沿历史速度的分量，`alpha_perp` 缩放其余分量。每个子层独立学习这两个标量，均经 softplus 映射为正值，有效初值均为 0.05。
-- `beta = sigmoid(raw_beta)`，初始 logit 为 0，有效初值为 0.5。每个把速度传给后续子层的位置各学习一个标量 β。最后一个 FFN 之后，输出头只读取 hidden，因此 L 层共有 2L−1 个可学习 β。两个步长和 β 在各自子层内跨通道、跨 token 共享。对应的消融开关 `signed_chord_steps`、`token_chord_gates`、`token_beta_gate` 均为 `false`。
-- `project_only` 将旧速度直接与实际弦混合，随后在新位置做一次切向投影。整个跨层更新参与反向传播。参考优化器将残差系数放入零权重衰减的 AdamW 组。速度 token 表默认与主词嵌入使用相同的 AdamW 超参。训练参数 `--velocity-embedding-lr` 可单独设置速度 token 表的绝对峰值 LR，沿用相同调度与权重衰减。
-
-实验使用 `--velocity-init token --velocity-embedding-std 0` 时，独立 token 速度表所有行都从 0 开始，随训练一起更新，可用 `residual/velocity_embedding_rms` 观察它何时偏离 0。
-
-实验使用 `--velocity-init zero` 时，模型省去速度表，每个 token 以 `v₀=0` 进入首个 Attention。第一个 FFN 的速度来自首个 Attention 实际位移的切向分量。
-
-在静止起步的配方上加 `--match-velocity-table-with-ffn` 可把速度表的参数均分到各层 FFN。两张无偏置投影使每个新增通道占用 `2 × d_model` 个参数，8 层、宽 512、词表 32768 时，FFN 中间宽度由 2048 增至 4096。模型共 75,497,535 个可训练参数，与标量有表版相同。新增权重参与每个 token 的计算，训练日志中的 FLOPs 估算计入这部分矩阵乘法。
-
-实验选项 `--fixed-first-attention-mu` 把首个 Attention 的前瞻系数全程固定为 1，直接从球面上的 `h0 + v0` 方向读取。初速度表继续学习。从同一 block 的 FFN 起，各子层按原配方学习自己的 μ。
-
-逐通道消融可显式启用 `--channel-chord-coefficients`。此时两个步长和 β 各扩为宽度 d_model 的向量，μ 仍为子层标量。
-
-实验选项 `--chord-velocity-write` 在归一化前把 `rho * v` 加入 hidden 的建议位移。rho 由每个子层的一个标量经 tanh 得到，初值为 0，此时复现默认写回。mu 控制前瞻读取距离，rho 控制旧速度对本次位移的直接贡献。下一子层的速度仍由实际弦与旧速度混合后做终点切向投影。8 层模型增加 16 个参数。
-
-## 迁移校验与训练参照
-
-对同一批输入，逐子层检查 `mean(h*h) ≈ 1` 和 `mean(h*v) ≈ 0`。把两个步长设为相同值时，写回应化简为 `N(h + alpha*delta)`。对照实现还覆盖非零前瞻、互异步长、速度为零时的梯度，以及整段推理与 KV cache 分段推理的一致性。[PyTorch 更新](../../../nanochat/lookahead.py) · [Triton 前反向](../../../nanochat/chord_triton.py) · [几何与梯度测试](../../../tests/test_chord_velocity_geometry.py) · [分支接线与优化器](../../../nanochat/connection_model.py)
-
-对应的 10B 配方为 8 层、宽 512、4 头、上下文 2048、词表 32768。Attention 输出和 FFN down 投影按标准差 `0.02/sqrt(2*depth)` 初始化。参考训练使用 seed 42、FineWeb-Edu packed 2K、FA2 和 MuonAdamW，每步 16 条序列共 32768 tokens，目标 305176 步。[标量参考训练 a7163d23](https://wandb.ai/yibozhong657-none/nanochat/runs/a7163d23) · [逐通道对照 9a7fd31d](https://wandb.ai/yibozhong657-none/nanochat/runs/9a7fd31d)
-
-### ChordAttnRes
-
-在默认小模型配方上加 `--chord-attnres --attnres-block-size 2` 可启用跨深度读取。每个完整 Attention + FFN 后保存该 token 的 BF16 球面终点 h。每个子层把自己的 BF16 前瞻点 q 和所有已完成块的终点作为候选，用该子层自己的可学习向量打分，沿深度 softmax 后加权求和，再做原有分支 pre-norm。评分前对 key 做 RMS 归一化，value 使用原值。首块仅有 q，沿用默认 Chord 融合读取。初始词嵌入、块内临时状态和最终输出头均不额外加入候选。双步长写回仍以实际 h 为起点，速度来自真实弦位移。历史可反向传播，随当前 forward 结束而释放，逐 token 推理只需原有 KV cache。
-
-`--chord-attnres-backend direct` 的 Triton 算子直接读取各终点张量，`packed` 使用移植自 NeMo 的 AttnRes 算子和按块拼接的历史。两者使用同一组评分参数，8 层 D=512、S=2 时共增加 14,336 个参数。正式实验由同卡预检选择较快的后端，恢复时沿用该选择。
-
-加 `--chord-history-correction` 可将读取改为 `pre_norm(q + g * m)`。其中 m 是仅对已完成块终点做深度 softmax 得到的 BF16 历史表示，q 有系数固定为 1 的直通路径。每个可读到历史的子层独立学习一个从 0 开始的有符号标量 g，归入与 Chord 标量相同的 AdamW 组。只有一个终点时直接使用它；有两个及以上终点才学习评分向量。BF16 前瞻、历史加法和分支 pre-norm 由 Chord Triton 读取内核融合。step 0 对齐相同 seed 的原 Chord，g 可立即接收梯度；历史评分器随 g 离开零开始学习。W&B 验证日志记录各子层的 `history_gain`。
+历史变体仅在明确指定时查阅。[Legacy 索引](legacy/README.md)

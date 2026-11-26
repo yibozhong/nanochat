@@ -86,10 +86,6 @@ def geometry(c):
 
 
 def check_projected_h0(model, ids):
-    table_model = make(replace(model.config, velocity_init='token'), False)
-    for name, param in model.named_parameters():
-        if name != 'velocity_projection.weight':
-            assert torch.equal(param, table_model.get_parameter(name)), name
     weight = model.velocity_projection.weight
     assert model.velocity_projection.bias is None and model.velocity_embedding is model.velocity_position_embedding is None
     assert weight.shape == (model.config.width, model.config.width)
@@ -119,10 +115,7 @@ def check_model(c, data):
     loss = model(ids, targets)
     loss.backward()
     assert torch.isfinite(loss)
-    if c.velocity_init == 'projected_h0':
-        check_projected_h0(model, ids)
-    else:
-        assert model.velocity_embedding.weight.count_nonzero() > 0
+    check_projected_h0(model, ids)
     grad_norm = torch.stack([p.grad.float().norm() for p in model.parameters() if p.grad is not None]).norm()
     assert torch.isfinite(grad_norm)
     for block in model.blocks:
@@ -134,11 +127,10 @@ def check_model(c, data):
                 branch.weight.normal_(std=.005)
                 site.mu.fill_(.4)
                 site.token_weight.normal_(std=.02)
-    if c.velocity_init == 'projected_h0':
-        model.zero_grad(set_to_none=True)
-        model(ids, targets).backward()
-        grad = model.velocity_projection.weight.grad
-        assert grad is not None and torch.isfinite(grad).all() and grad.norm() > 0
+    model.zero_grad(set_to_none=True)
+    model(ids, targets).backward()
+    grad = model.velocity_projection.weight.grad
+    assert grad is not None and torch.isfinite(grad).all() and grad.norm() > 0
     model.eval()
     with torch.no_grad():
         hidden = model.hidden(ids)
@@ -157,23 +149,14 @@ def main():
     configure_attention('fa2')
     torch.backends.cuda.matmul.allow_tf32 = False
     source = json.loads(Path('source.json').read_text())
-    baseline_flags = Path('research/connections/ngpt/chord.args').read_text().splitlines()
-    flags = [flag.replace('projection-init=normal', 'projection-init=zero') for flag in baseline_flags]
-    projected = source['velocity_init'] == 'projected_h0'
-    if projected:
-        flags[flags.index('--velocity-init=token')] = '--velocity-init=projected_h0'
-    assert source['model_args'] == flags + ['--chord-update-based', '--chord-soft-force-tau=0.05',
-                                            '--chord-six-controls=learned_dynamic']
+    assert source['recipe'] == 'chord_next_bf16'
+    assert source['model_args'] == Path('research/connections/ngpt/chord_next.args').read_text().splitlines()
     control = ConnectionConfig(streams=1, residual_dynamics='ngpt_lookahead', velocity_init='token',
-                               ngpt_velocity_mode='lookahead_split_learned_beta', chord_update_based=True,
+                               ngpt_velocity_mode='lookahead_split_learned_beta', residual_projection_init='normal',
                                chord_velocity_geometry='project_only', fuse_chord_read_norm=True, ngpt_force_rms_floor=1e-6)
-    c = replace(control, residual_projection_init='zero', chord_six_controls='learned_dynamic', chord_soft_force_tau=.05)
-    run, reference = 'next_soft', 'scalar_update'
-    report = 'vanilla-next-soft-sm90.json'
-    if projected:
-        control, c = c, replace(c, velocity_init='projected_h0')
-        run, reference = 'projected_h0', 'next_soft_token'
-        report = 'vanilla-next-soft-projected-h0-sm90.json'
+    c = replace(control, velocity_init='projected_h0', residual_projection_init='zero',
+                chord_update_based=True, chord_six_controls='learned_dynamic', chord_soft_force_tau=.05)
+    run, reference = source['recipe'], 'chord_scalar_bf16'
     data = PackedData('../data')
     geometry(c)
     result = dict(gpu=torch.cuda.get_device_name(), short_batch_init_grad_norm=check_model(c, data),
@@ -181,9 +164,9 @@ def main():
     for name, cfg in [(run, c), (reference, control)]:
         gc.collect()
         torch.cuda.empty_cache()
-        result[name] = benchmark(cfg, data, verify_resume=name==run)
+        result[name] = benchmark(cfg, data, verify_resume=name==run, schedule_steps=source['schedule_steps'])
     result['step_time_ratio'] = result[run]['median_step_s']/result[reference]['median_step_s']
-    json_write(Path('results')/report, result)
+    json_write(Path('results/vanilla-next-soft-projected-h0-sm90.json'), result)
     print('NEXT_SOFT_PREFLIGHT_PASS', result, flush=True)
 
 

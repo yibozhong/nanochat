@@ -1,8 +1,13 @@
 # Chord residual
 
-用户提到“默认 Chord”时，新训练使用 [chord.args](research/connections/ngpt/chord.args)，跨仓库迁移沿用同一组参数。初速度只查独立的 token 速度表，再投到切平面。每个子层使用球面前瞻和终点切向投影。前瞻系数 μ、两个独立正步长 α∥、α⊥ 和可学习 β 默认都是逐子层标量，在通道与 token 之间共享。跨层 h、v 以 BF16 存储，几何运算用 FP32。开启前瞻读取与 RMSNorm 融合，关闭 force 重算。初始化、训练参照和验证入口见 [Chord 迁移说明](research/connections/ngpt/CHORD.md)。
+日常实验、迁移和配置检索只使用以下两个 BF16 入口。两者均使用 vanilla 主干，优化器和学习率沿用 nanochat 的配对基线。
 
-移植外部方法时，训练超参数默认沿用 nanochat 对应的配对基线。native Chord 的 token gate 投影与偏置沿用本仓库 native mHC 路由参数的 AdamW 配方和学习率缩放，除非实验明确指定覆盖项。
+| 用户称呼 | 1B 提交参数 | 初速度 |
+| --- | --- | --- |
+| 原版、scalar 或默认 Chord | `--recipe chord_scalar_bf16` | 独立 token 速度表，投影到 h0 的切平面。[模型参数](research/connections/ngpt/chord.args) |
+| Next Chord | `--recipe chord_next_bf16` | 从归一化的 h0 生成，v0 = P_h0(W_v h0)。[模型参数](research/connections/ngpt/chord_next.args) |
+
+Next 的速度表版本仍有效，归入 legacy。其余历史 Chord 配置也归入 legacy，仅在用户点名时检索或用于复现。两种日常配方的读写规则、初始化和训练入口见 [Chord 说明](research/connections/ngpt/CHORD.md)。
 
 ## 1B 实验工作流
 

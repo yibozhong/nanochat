@@ -2,7 +2,7 @@
 set -euo pipefail
 TASK_ROOT="$PWD"
 run_id="${1:?missing run ID}"
-recipe="${2:-chord}"
+recipe="${2:?missing recipe}"
 mkdir -p checkpoints results
 if [[ -f results.tar || -f checkpoints.tar ]]; then
     [[ -f results.tar && -f checkpoints.tar ]]
@@ -26,47 +26,28 @@ trap finish EXIT
 import json, sys
 from pathlib import Path
 s = json.loads(Path('source.json').read_text())
-vanilla = sys.argv[2].startswith('vanilla_')
+recipe = sys.argv[2]
+assert recipe == s['recipe'] and recipe in ('vanilla_baseline', 'vanilla_baseline_zero', 'mhc', 'chord_scalar_bf16', 'chord_next_bf16')
 assert s['run_id'] == sys.argv[1] and s['schedule_steps'] == 30518 and s['seed'] == 42
 assert s['steps'] in (0, s['schedule_steps']) and s['wandb_project'] == 'nanochat-1b'
-assert s['architecture'] == ('vanilla' if vanilla else 'native') and s['initialization'] == 'fresh'
-if vanilla:
-    assert s['attention_backend'] == 'fa2' and s['formal_training'] == bool(s['steps'])
-    if sys.argv[2] in ('vanilla_baseline', 'vanilla_baseline_zero'):
-        assert s['model_variant'] == 'vanilla' and '--variant=baseline' in s['model_args']
-    elif sys.argv[2] in ('vanilla_minimal', 'vanilla_norm_no_alpha'):
-        assert '--ngpt-velocity-mode=lookahead_minimal' in s['model_args'] and s['control_parameters'] == 31
-        if sys.argv[2] == 'vanilla_norm_no_alpha':
-            assert s['residual_projection_init'] == 'normal' and '--residual-projection-init=normal' in s['model_args']
-            assert '--normalize-minimal-force' in s['model_args'] and '--ngpt-force-rms-floor=1e-6' in s['model_args']
-    elif sys.argv[2] in ('vanilla_next_soft', 'vanilla_next_soft_h0'):
-        assert s['next_run'] == '2574b7dc' and s['residual_projection_init'] == 'zero'
-        velocity = 'token' if sys.argv[2] == 'vanilla_next_soft' else 'projected_h0'
-        assert s['velocity_init'] == velocity
-        assert {'--chord-update-based', '--chord-soft-force-tau=0.05', '--chord-six-controls=learned_dynamic',
-                '--residual-projection-init=zero', f'--velocity-init={velocity}'} <= set(s['model_args'])
-    elif sys.argv[2] == 'vanilla_split_update':
-        assert '--chord-update-based' in s['model_args'] and s['control_parameters'] == 63
-        assert '--ngpt-velocity-mode=lookahead_split_learned_beta' in s['model_args']
-    elif sys.argv[2] == 'vanilla_small_dynamic':
-        assert '--chord-six-controls=small_dynamic' in s['model_args'] and s['next_run'] == 'faea35e6'
-    else:
-        assert '--ngpt-velocity-mode=lookahead_token_single' in s['model_args']
-elif sys.argv[2] == 'mhc':
-    assert s['connection_variant'] == 'mhc' and s['streams'] == 4
-elif sys.argv[2] in ('token_vnorm', 'token_bounded', 'token_h'):
-    assert s['native_chord_write'] == sys.argv[2]
-    if sys.argv[2] == 'token_h':
-        assert s['gate_input'] == 'current_sublayer_h'
-        assert s['control_optimizer_reference'] == 'nanochat_native_mhc_router'
-        assert not any(arg.startswith('--native-chord-control-lr') for arg in s['model_args'])
-    elif sys.argv[2] == 'token_bounded':
-        assert s['gate_input_norm'] == 'joint_h_v' and s['gate_joint_rms_eps'] == 1e-6
-    else:
-        assert s['gate_velocity_rms_eps'] == 1e-6
-    assert '--native-chord-write=' + sys.argv[2] in s['model_args']
+assert s['initialization'] == 'fresh' and s['formal_training'] == bool(s['steps'])
+if recipe == 'mhc':
+    assert (s['architecture'], s['attention_backend'], s['connection_variant'], s['streams']) == ('native', 'fa3', 'mhc', 4)
 else:
-    assert sys.argv[2] == 'chord' and s['native_chord_write'] == 'three_scalar'
+    assert (s['architecture'], s['attention_backend']) == ('vanilla', 'fa2')
+    flags = set(s['model_args'])
+    assert '--residual-projection-init=' + s['residual_projection_init'] in flags
+    if recipe in ('vanilla_baseline', 'vanilla_baseline_zero'):
+        assert s['model_variant'] == 'vanilla' and '--variant=baseline' in flags
+    else:
+        assert {'--chord-state-dtype=bfloat16', '--chord-velocity-geometry=project_only',
+                '--ngpt-velocity-mode=lookahead_split_learned_beta', '--velocity-init=' + s['velocity_init']} <= flags
+        if recipe == 'chord_next_bf16':
+            assert (s['velocity_init'], s['residual_projection_init']) == ('projected_h0', 'zero')
+            assert {'--chord-update-based', '--chord-soft-force-tau=0.05', '--chord-six-controls=learned_dynamic'} <= flags
+        else:
+            assert (s['velocity_init'], s['residual_projection_init']) == ('token', 'normal')
+            assert '--chord-update-based' not in flags and not any(o.startswith('--chord-six-controls=') for o in flags)
 assert isinstance(s['model_args'], list) and all(a.startswith('--') for a in s['model_args'])
 Path('model.args').write_text('\n'.join(s['model_args']) + '\n')
 if Path('results/train/summary.json').exists():
@@ -80,7 +61,7 @@ PY
 [[ ! -f results/train/summary.json ]] || exit 0
 tar -xf source.tar
 source nanochat-src/research/connections/runtime/packed_worker_env.sh
-if [[ "$recipe" == vanilla_* ]]; then
+if [[ "$recipe" != mhc ]]; then
     export NANOCHAT_DISABLE_FA3=1
 else
     export HF_HOME="$TASK_ROOT/fa3-cache" NANOCHAT_FA3_REVISION=de87b9b5af06dd9984df595bef90b2eba44b181a
@@ -96,47 +77,16 @@ steps=$(python -c "import json; print(json.load(open('source.json'))['steps'])")
 schedule=$(python -c "import json; print(json.load(open('source.json'))['schedule_steps'])")
 group=$(python -c "import json; print(json.load(open('source.json'))['group'])")
 training_args=(--schedule-steps "$schedule" --seed 42 --microbatch 16 --data-dir ../data)
-if [[ "$recipe" == vanilla_baseline || "$recipe" == vanilla_baseline_zero ]]; then
-    if [[ ! -f results/baseline-check/summary.json ]]; then
-        WANDB_MODE=disabled python -m scripts.connection_train "${model_args[@]}" "${training_args[@]}" --steps 2 --output-dir results/baseline-check
-    fi
-elif [[ "$recipe" == vanilla_* ]]; then
-    report=results/vanilla-single-sm90.json
-    preflight_module=research.connections.ngpt.single_step_preflight
-    preflight_args=()
-    if [[ "$recipe" == vanilla_small_dynamic ]]; then
-        report=results/vanilla-small-dynamic-sm90.json
-        preflight_args=(--small-dynamic)
-    elif [[ "$recipe" == vanilla_next_soft || "$recipe" == vanilla_next_soft_h0 ]]; then
-        report=results/vanilla-next-soft-sm90.json
-        preflight_module=research.connections.ngpt.next_soft_preflight
-        if [[ "$recipe" == vanilla_next_soft_h0 ]]; then
-            report=results/vanilla-next-soft-projected-h0-sm90.json
-        fi
-    elif [[ "$recipe" == vanilla_split_update ]]; then
-        report=results/vanilla-split-update-sm90.json
-        preflight_module=research.connections.ngpt.split_update_preflight
-    elif [[ "$recipe" == vanilla_minimal || "$recipe" == vanilla_norm_no_alpha ]]; then
-        report=results/vanilla-minimal-sm90.json
-        preflight_module=research.connections.ngpt.minimal_chord_preflight
-        if [[ "$recipe" == vanilla_norm_no_alpha ]]; then
-            report=results/vanilla-norm-force-no-alpha-sm90.json
-            preflight_args=(--normalize-force)
-        fi
-    fi
-    if [[ ! -f "$report" ]]; then
-        WANDB_MODE=disabled timeout --kill-after=30s 2400 python -m "$preflight_module" "${preflight_args[@]}"
+if [[ "$recipe" == chord_next_bf16 ]]; then
+    if [[ ! -f results/vanilla-next-soft-projected-h0-sm90.json ]]; then
+        WANDB_MODE=disabled timeout --kill-after=30s 2400 python -m research.connections.ngpt.next_soft_preflight
     fi
 elif [[ "$recipe" == mhc ]]; then
     WANDB_MODE=disabled timeout --kill-after=30s 2400 python -m research.connections.ngpt.connection_init_preflight "${model_args[@]}" "${training_args[@]}"
-elif [[ "$recipe" == token_vnorm || "$recipe" == token_bounded || "$recipe" == token_h ]]; then
-    mode="${recipe//_/-}"
-    if [[ ! -f "results/native-chord-$mode-sm90.json" ]]; then
-        WANDB_MODE=disabled timeout --kill-after=30s 2400 python -m research.connections.native.chord.preflight "--$mode"
-    fi
 else
-    if [[ ! -f results/native-chord-sm90.json ]]; then
-        WANDB_MODE=disabled timeout --kill-after=30s 2400 python -m research.connections.native.chord.preflight
+    if [[ ! -f results/baseline-check/summary.json ]]; then
+        WANDB_MODE=disabled python -m scripts.connection_train "${model_args[@]}" "${training_args[@]}" --steps 2 \
+            --output-dir results/baseline-check --checkpoint-dir ../preflight-checkpoints
     fi
 fi
 [[ "$steps" != 0 ]] || exit 0

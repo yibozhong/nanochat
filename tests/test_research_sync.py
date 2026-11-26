@@ -158,6 +158,28 @@ class ReportsTest(unittest.TestCase):
             run.scan_history=lambda **kwargs:self.fail('Finished history should be cached')
             self.assertEqual(sync.fetch(root,root/'cache')[0]['validation_tokens'],target)
 
+    def test_active_chord_recipes_and_legacy_next(self):
+        self.assertEqual(set(launcher.RECIPES), {
+            'chord_scalar_bf16', 'chord_next_bf16', 'vanilla_baseline', 'vanilla_baseline_zero', 'mhc'})
+        scalar = launcher.CHORD_ARGS['chord_scalar_bf16'].read_text().splitlines()
+        next_args = launcher.CHORD_ARGS['chord_next_bf16'].read_text().splitlines()
+        self.assertIn('--velocity-init=token', scalar)
+        self.assertIn('--residual-projection-init=normal', scalar)
+        self.assertIn('--chord-state-dtype=bfloat16', scalar)
+        self.assertNotIn('--chord-update-based', scalar)
+        self.assertEqual(set(scalar) - set(next_args), {'--velocity-init=token', '--residual-projection-init=normal'})
+        self.assertEqual(set(next_args) - set(scalar), {'--velocity-init=projected_h0', '--residual-projection-init=zero',
+            '--chord-update-based', '--chord-soft-force-tau=0.05', '--chord-six-controls=learned_dynamic'})
+        self.assertEqual(len(next_args), len(set(next_args)))
+        legacy = launcher.CHORD_ARGS['chord_next_bf16'].parent / 'legacy/chord_next_token.args'
+        self.assertEqual(legacy.read_text().splitlines(), [
+            '--velocity-init=token' if f=='--velocity-init=projected_h0' else f for f in next_args])
+        with tempfile.TemporaryDirectory() as tmp:
+            for retired in ('chord', 'vanilla_next_soft', 'vanilla_next_soft_h0'):
+                with self.assertRaisesRegex(ValueError, 'Unknown active recipe'):
+                    launcher.submit(retired, Path(tmp), STEPS, 'velocity', retired, 'self')
+            self.assertEqual(list(Path(tmp).iterdir()), [])
+
     def test_manifest_and_worker_agree_without_submission(self):
         import subprocess
         class StopBeforeSubmit(Exception): pass
@@ -183,6 +205,9 @@ class ReportsTest(unittest.TestCase):
                     manifest=(root/'bundles/source.json').read_text()
                     s=json.loads(manifest)
                     self.assertEqual((s['schedule_steps'],s['steps'],s['wandb_project']),(STEPS,STEPS,PROJECT))
+                    if recipe in launcher.CHORD_ARGS:
+                        self.assertEqual(s['model_args'], launcher.CHORD_ARGS[recipe].read_text().splitlines())
+                        self.assertEqual(s['velocity_init'], 'token' if recipe=='chord_scalar_bf16' else 'projected_h0')
                     (root/'source.json').write_text(manifest)
                     worker=(root/'train.sh').read_text().split("<<'PY'\n",1)[1].split('\nPY\n',1)[0]
                     subprocess.run([sync.sys.executable,'-c',worker,s['run_id'],recipe],cwd=root,check=True)

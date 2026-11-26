@@ -76,7 +76,7 @@ def initialization_and_cache(c, baseline, data):
     torch.testing.assert_close(torch.cat((prefix, last), 1), hidden, atol=.035, rtol=.02)
 
 
-def benchmark(c, data, verify_resume):
+def benchmark(c, data, verify_resume, schedule_steps=305176):
     model = make(c, True)
     opt, wd = optimizer_for(model)
     if c.velocity_init == 'projected_h0':
@@ -92,7 +92,7 @@ def benchmark(c, data, verify_resume):
     steps = 64
     torch.cuda.reset_peak_memory_stats()
     for step in range(steps):
-        schedule(opt, step, 305176, wd)
+        schedule(opt, step, schedule_steps, wd)
         torch.cuda.synchronize()
         start = time.perf_counter()
         try:
@@ -137,10 +137,10 @@ def benchmark(c, data, verify_resume):
         rng = state.pop('rng')
         del state
         restore_rng(rng)
-        schedule(opt, steps, 305176, wd)
+        schedule(opt, steps, schedule_steps, wd)
         expected = train_step(model, opt, data, steps)
         restore_rng(rng)
-        schedule(other, steps, 305176, wd2)
+        schedule(other, steps, schedule_steps, wd2)
         def paired_gradient(optimizer, args, kwargs):
             for (name, p), (restored_name, q) in zip(model.named_parameters(), restored.named_parameters()):
                 assert name == restored_name and (p.grad is None) == (q.grad is None)

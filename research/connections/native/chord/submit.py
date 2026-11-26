@@ -1,4 +1,4 @@
-"""Submit a native Chord/mHC or vanilla single-step Chord experiment on Hopper."""
+"""Submit a nanochat-1b baseline, Chord, or native mHC experiment on Hopper."""
 import argparse
 import fcntl
 import json
@@ -17,9 +17,11 @@ sys.path.insert(0, str(REPO))
 from nanochat.experiment_logging import ENTITY, PROJECT, STEPS
 from nanochat.research_protocol import validate_identity
 
-RECIPES = ('vanilla_baseline', 'vanilla_baseline_zero', 'vanilla_next_soft', 'vanilla_next_soft_h0',
-           'vanilla_split_update', 'vanilla_norm_no_alpha', 'vanilla_minimal', 'vanilla_small_dynamic',
-           'vanilla_single', 'chord', 'mhc', 'token_vnorm', 'token_bounded', 'token_h')
+CHORD_ARGS = {
+    'chord_scalar_bf16': HERE.parents[1] / 'ngpt/chord.args',
+    'chord_next_bf16': HERE.parents[1] / 'ngpt/chord_next.args',
+}
+RECIPES = ('vanilla_baseline', 'vanilla_baseline_zero', *CHORD_ARGS, 'mhc')
 
 
 def run(*args, cwd=REPO):
@@ -31,8 +33,10 @@ def save(path, value):
 
 
 def submit(recipe, root, steps, group, name, baseline):
+    if recipe not in RECIPES:
+        raise ValueError(f'Unknown active recipe: {recipe}')
     key = root.name
-    ad_key = 'VanillaChordKey' if recipe.startswith('vanilla_') else ('NativeMhcKey' if recipe == 'mhc' else 'NativeChordKey')
+    ad_key = 'NativeMhcKey' if recipe == 'mhc' else 'VanillaChordKey'
     if (root/'state.json').exists():
         state = json.loads((root/'state.json').read_text())
         pinned = state['source']
@@ -59,89 +63,38 @@ def submit(recipe, root, steps, group, name, baseline):
     run_id = uuid.uuid4().hex[:8]
     source = dict(commit=commit, run_id=run_id, plan=key, formal_training=bool(steps), seed=42,
         wandb_project=PROJECT, group=group, run_name=name, baseline_run=baseline, recipe=recipe,
-        initialization='fresh', architecture='native', hopper_only=True,
+        initialization='fresh', hopper_only=True,
         steps=steps, schedule_steps=STEPS, batch_tokens=32768, training_tokens=steps*32768,
-        microbatch=16, attention_backend='fa3', window_pattern='SSSL',
-        model_args=(HERE/('mhc.args' if recipe == 'mhc' else 'train.args')).read_text().splitlines(),
+        microbatch=16,
         data_uri=data['data_uri'],
         dataset_revision=data['manifest']['dataset_revision'], tokenizer=data['manifest']['tokenizer'],
         runtime='mhc-official-runtime-7546767.tar.gz + frozen uv.lock', checkpoint_seconds=1800)
-    if recipe.startswith('vanilla_'):
-        flags = (HERE.parents[1]/'ngpt/chord.args').read_text().splitlines()
-        projection_init = 'normal'
-        velocity_init = 'token'
-        if recipe in ('vanilla_baseline', 'vanilla_baseline_zero'):
-            variant = 'vanilla'
-            velocity_init = 'zero'
-            projection_init = 'zero' if recipe.endswith('_zero') else 'normal'
-            flags = ['--variant=baseline','--architecture=vanilla','--streams=1','--attention-backend=fa2',
-                     '--residual-projection-init='+projection_init]
-        elif recipe in ('vanilla_minimal', 'vanilla_norm_no_alpha'):
-            variant = 'lookahead_minimal'
-            flags[flags.index('--ngpt-velocity-mode=lookahead_split_learned_beta')] = '--ngpt-velocity-mode='+variant
-            flags = [flag for flag in flags if not flag.startswith('--ngpt-alpha-init=')]
-            if recipe == 'vanilla_norm_no_alpha':
-                flags.append('--normalize-minimal-force')
-                source.update(residual_update='normalize(h + normalize(branch))', output_projection_actual_std=.005)
-            else:
-                projection_init = 'zero'
-                flags[flags.index('--residual-projection-init=normal')] = '--residual-projection-init=zero'
-                flags = [flag for flag in flags if not flag.startswith('--ngpt-force-rms-floor=')]
-                source['residual_update'] = 'normalize(h + raw_branch)'
-            source.update(control_parameters=31,
-                          paired_preflight='default static Chord', control_peak_lr=.008*.25*(768/512)**.5)
-        elif recipe in ('vanilla_next_soft', 'vanilla_next_soft_h0'):
-            variant = 'learned_dynamic'
-            projection_init = 'zero'
-            flags[flags.index('--residual-projection-init=normal')] = '--residual-projection-init=zero'
-            flags.extend(('--chord-update-based', '--chord-soft-force-tau=0.05', '--chord-six-controls=learned_dynamic'))
-            source.update(next_run='2574b7dc', next_source='lululu39/NextTransformer@b8bbfa41d8ab4b31eb5447cbde6271fe84074b78',
-                          residual_update='split(force / sqrt(mean(force^2) + 0.05^2))',
-                          modulation_scale_init=.01, paired_preflight='vanilla scalar update-based Chord',
+    if recipe == 'mhc':
+        source.update(architecture='native', attention_backend='fa3', window_pattern='SSSL',
+                      model_args=(HERE/'mhc.args').read_text().splitlines(),
+                      connection_variant='mhc', streams=4, sinkhorn_iterations=20,
+                      residual_projection_init='normal', output_projection_actual_std=.005)
+    else:
+        source.update(architecture='vanilla', attention_backend='fa2', window_pattern='L',
+                      control_optimizer_reference='vanilla_chord')
+        if recipe in CHORD_ARGS:
+            flags = CHORD_ARGS[recipe].read_text().splitlines()
+            options = dict(flag[2:].split('=', 1) for flag in flags if '=' in flag)
+            source.update(model_args=flags, velocity_init=options['velocity-init'],
+                          model_variant=options.get('chord-six-controls', options['ngpt-velocity-mode']),
+                          residual_projection_init=options['residual-projection-init'],
                           control_peak_lr=.008*.25*(768/512)**.5)
-            if recipe == 'vanilla_next_soft_h0':
-                velocity_init = 'projected_h0'
-                flags[flags.index('--velocity-init=token')] = '--velocity-init=projected_h0'
-                source.update(paired_preflight='Next soft-force with token velocity table',
+            if recipe == 'chord_next_bf16':
+                source.update(next_run='2574b7dc', next_source='lululu39/NextTransformer@b8bbfa41d8ab4b31eb5447cbde6271fe84074b78',
+                              residual_update='split(force / sqrt(mean(force^2) + 0.05^2))',
+                              modulation_scale_init=.01, paired_preflight='chord_scalar_bf16',
                               velocity_projection_weight_std=.02/512**.5, velocity_projection_optimizer='muon',
                               velocity_projection_peak_lr=.02*.25)
-        elif recipe == 'vanilla_split_update':
-            variant = 'lookahead_split_learned_beta'
-            flags.append('--chord-update-based')
-            source.update(residual_update='split(normalize(force))', control_parameters=63,
-                          paired_preflight='default static Chord', control_peak_lr=.008*.25*(768/512)**.5)
-        elif recipe == 'vanilla_small_dynamic':
-            flags.append('--chord-six-controls=small_dynamic')
-            source['gate_reference'] = 'lululu39/NextTransformer@0abdf278c64d1ff4ed445fcd6c22b90f4085c52d'
-            variant = 'small_dynamic'
-            source.update(next_run='faea35e6', gate_input='RMSNorm(h)', modulation=.01,
-                          paired_preflight='static six-coefficient Chord', control_peak_lr=.008*.25*(768/512)**.5)
         else:
-            flags[flags.index('--ngpt-velocity-mode=lookahead_split_learned_beta')] = '--ngpt-velocity-mode=lookahead_token_single'
-            source['gate_reference'] = 'lululu39/NextTransformer@98321666f4b56e39447b3ee0d8b59e935c310df4'
-            variant = 'lookahead_token_single'
-        source.update(architecture='vanilla', model_args=flags, attention_backend='fa2', window_pattern='L',
-                      model_variant=variant, velocity_init=velocity_init, residual_projection_init=projection_init,
-                      steps=steps, training_tokens=steps*32768, formal_training=bool(steps),
-                      control_optimizer_reference='vanilla_chord')
-    elif recipe == 'mhc':
-        source.update(connection_variant='mhc', streams=4, sinkhorn_iterations=20,
-                      residual_projection_init='normal', output_projection_actual_std=.005)
-    elif recipe in ('token_vnorm', 'token_bounded', 'token_h'):
-        flags = source['model_args']
-        flags[flags.index('--native-chord-write=three_scalar')] = f'--native-chord-write={recipe}'
-        source.update(native_chord_write=recipe, velocity_init='token', gate_weight_init=0., extra_parameters=95232)
-        if recipe == 'token_h':
-            source.update(gate_input='current_sublayer_h', control_optimizer_reference='nanochat_native_mhc_router',
-                          extra_parameters=47616, control_maps=['linear','softplus','softplus','sigmoid','linear','linear'])
-        elif recipe == 'token_bounded':
-            source.update(gate_reference='lululu39/NextTransformer@c31127b', gate_input_norm='joint_h_v',
-                          gate_joint_rms_eps=1e-6, control_ranges={'mu': [-3, 3], 'alpha': [0, 1],
-                                                                 'beta': [0, 1], 'gamma': [0, 2]})
-        else:
-            source.update(gate_reference='lululu39/NextTransformer@753b013', gate_velocity_rms_eps=1e-6)
-    else:
-        source.update(native_chord_write='three_scalar', velocity_init='token')
+            init = 'zero' if recipe == 'vanilla_baseline_zero' else 'normal'
+            source.update(model_variant='vanilla', velocity_init='zero', residual_projection_init=init,
+                          model_args=['--variant=baseline', '--architecture=vanilla', '--streams=1',
+                                      '--attention-backend=fa2', '--residual-projection-init='+init])
     job_args = f'{run_id} {recipe}'
     save(bundles/'source.json', source)
     # Use the current site's container, transfer plugins, encrypted auth and pool settings.
