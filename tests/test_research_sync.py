@@ -159,6 +159,24 @@ class ReportsTest(unittest.TestCase):
             run.scan_history=lambda **kwargs:self.fail('Finished history should be cached')
             self.assertEqual(sync.fetch(root,root/'cache')[0]['validation_tokens'],target)
 
+    def test_chord_submission_default_and_static_ablation(self):
+        with tempfile.TemporaryDirectory() as tmp, patch.object(launcher, 'HOME', Path(tmp)), \
+                patch.object(launcher, 'submit') as submit:
+            args = ['--group', 'residual-mechanisms', '--baseline-run', 'a2793a7e']
+            launcher.main(args)
+            default = submit.call_args.args[0]
+            self.assertEqual(default, 'chord_next_bf16')
+            flags = launcher.chord_args(default)
+            self.assertEqual((launcher.CHORD_ARGS[default].parent/'chord.args').read_text().splitlines(), flags)
+            self.assertIn('--chord-six-controls=learned_dynamic', flags)
+            self.assertIn('--velocity-init=projected_h0', flags)
+            launcher.main([*args, '--recipe', 'chord_scalar_bf16', '--velocity-init', 'projected_h0'])
+            call = submit.call_args.args
+            self.assertEqual(call[0], 'chord_scalar_bf16')
+            static = launcher.chord_args(call[0], call[-1])
+            self.assertEqual(set(flags) ^ set(static),
+                             {'--chord-six-controls=learned_dynamic', '--chord-six-controls=static'})
+
     def test_active_chord_recipes_and_legacy_next(self):
         self.assertEqual(set(launcher.RECIPES), {
             'chord_scalar_bf16', 'chord_next_bf16', 'vanilla_baseline', 'vanilla_baseline_zero', 'native_baseline', 'vanilla_mhc', 'vanilla_attnres', 'mhc'})

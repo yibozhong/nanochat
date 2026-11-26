@@ -1,15 +1,15 @@
 # Chord residual 配方
 
-新实验默认使用六系数 Chord。每个 token 跨层携带位置 h 和切向速度 v。位置的 RMS 为 1，球面半径为 sqrt(d_model)。Attention 和 FFN 都读取前瞻点，在球面上更新位置，再把这一步的位移写入速度。h、v 以 BF16 保存，几何归约使用 FP32。
+新实验默认使用 token-dependent 六系数 Chord。每个 token 跨层携带位置 h 和切向速度 v。位置的 RMS 为 1，球面半径为 sqrt(d_model)。Attention 和 FFN 都读取前瞻点，在球面上更新位置，再把这一步的位移写入速度。h、v 以 BF16 保存，几何归约使用 FP32。
 
 ## 两个入口，三种初速度
 
 | 控制方式 | 1B 提交参数 | 省略初速度参数时 |
 | --- | --- | --- |
-| Static，每个子层一组跨 token 共享的系数 | `--recipe chord_scalar_bf16` | 独立速度表 |
-| Token-dependent，每个子层按当前 token 的 h 调制系数 | `--recipe chord_next_bf16` | 从 h0 线性生成速度 |
+| Token-dependent（默认），每个子层按当前 token 的 h 调制系数 | 省略 `--recipe` 或指定 `--recipe chord_next_bf16` | 从 h0 线性生成速度 |
+| Static（可选消融），每个子层一组跨 token 共享的系数 | `--recipe chord_scalar_bf16` | 独立速度表 |
 
-两个入口均可指定 `--velocity-init`。比较控制方式时，两侧显式传入同一值。模型参数见 [static 配方](chord.args) 和 [token-dependent 配方](chord_next.args)。
+两个入口均可指定 `--velocity-init`。与默认 Chord 配对做 static 消融时，使用 `--recipe chord_scalar_bf16 --velocity-init projected_h0`，两侧就会使用相同的初速度生成方式。[默认配方](chord.args) · [Static 配方](chord_scalar.args)
 
 - `zero` 从静止开始，初速度没有参数。
 - `token` 查独立 token 速度表，v0 = P(h0, E_v[id])。速度表按标准差 0.02 初始化。

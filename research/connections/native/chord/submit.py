@@ -19,7 +19,7 @@ from nanochat.procedural import DYCK, TASKS, ProceduralData
 from nanochat.research_protocol import validate_identity
 
 CHORD_ARGS = {
-    'chord_scalar_bf16': HERE.parents[1] / 'ngpt/chord.args',
+    'chord_scalar_bf16': HERE.parents[1] / 'ngpt/chord_scalar.args',
     'chord_next_bf16': HERE.parents[1] / 'ngpt/chord_next.args',
 }
 RESIDUAL_STUDY = ('vanilla_baseline', 'native_baseline', 'vanilla_attnres', 'vanilla_mhc', *CHORD_ARGS)
@@ -208,9 +208,10 @@ def submit(recipe, root, steps, group, name, baseline, procedural=None, velocity
     print(job, state['wandb_url'])
 
 
-if __name__ == '__main__':
+def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument('--recipe', choices=(*RECIPES, *SUITES), required=True)
+    parser.add_argument('--recipe', choices=(*RECIPES, *SUITES), default='chord_next_bf16',
+                        help='Default: token-dependent Chord. Select chord_scalar_bf16 for the static ablation.')
     parser.add_argument('--velocity-init', choices=VELOCITY_INITS,
                         help='Chord initial velocity: at rest, a token table, or a transform of normalized h0')
     parser.add_argument('--group', required=True, help='Research question slug, shared by its configurations')
@@ -221,7 +222,7 @@ if __name__ == '__main__':
     parser.add_argument('--procedural-tokens', type=int, default=0)
     parser.add_argument('--procedural-input-length', type=int)
     parser.add_argument('--procedural-reference-updates', type=int, help='Use the published 64-example Union AdamW recipe')
-    args = parser.parse_args()
+    args = parser.parse_args(argv)
     if args.velocity_init and args.recipe not in CHORD_ARGS:
         parser.error('--velocity-init requires an individual six-coefficient Chord recipe')
     procedural = None
@@ -258,3 +259,7 @@ if __name__ == '__main__':
     with (root/'submit.lock').open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         submit(args.recipe, root, steps, group, name, baseline, procedural, args.velocity_init)
+
+
+if __name__ == '__main__':
+    main()
