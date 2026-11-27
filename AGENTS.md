@@ -13,7 +13,7 @@
 
 当前六系数 Chord 的初速度比较见[初速度报告](research/chord-initial-velocity/REPORT.md)，零初速分量消融见[球面与前瞻报告](research/chord-components/REPORT.md)。旧 1B 四标量及其分量实验归入 [Legacy](research/legacy-chord-1b/REPORT.md)，保留原 run ID、状态和可核实的曲线，活动 leaderboard 使用现行结果。
 
-本仓库新授权的正式训练默认从零、seed 42、1B tokens。所有新 1B 配方默认将每层 Attention 输出投影和 FFN down 投影置零。历史作业按其保存的配置恢复。packed FineWeb-Edu 下每步 32,768 tokens，共 30,518 步、1,000,013,824 tokens，warmup 和衰减使用 30,518 步日程。作业恢复沿用自身正式 checkpoint 和 run ID。GPU 诊断仍在同一分配内独立执行，只写本地文件。
+本仓库新授权的正式训练默认从零、seed 42、1B tokens。所有新 1B 配方默认将每层 Attention 输出投影和 FFN down 投影置零。历史作业按其保存的配置恢复。packed FineWeb-Edu 下每步 32,768 tokens，共 30,518 步、1,000,013,824 tokens，warmup 和衰减使用 30,518 步日程。正式训练每满 1 小时（3,600 秒）通过 exit 85 回传 checkpoint；不足一小时完成的作业直接在结束时回传。每 500 步滚动写入本地 latest，best 单独保留。作业恢复沿用自身正式 checkpoint 和 run ID。GPU 诊断仍在同一分配内独立执行，只写本地文件。
 
 - 正式研究只使用 W&B 的 [nanochat-1b 项目](https://wandb.ai/yibozhong657-none/nanochat-1b)。旧 nanochat 项目归档在原处。新协议的同步、分析和排名仅读取新项目。
 - 一个 group 对应一个研究问题，使用稳定的英文短名，如 `chord-initial-velocity`。一个 run 对应一个配置，名称说明架构、改动和 seed。提交前在 `research/<group>/REPORT.md` 写清假设、配对基线、改变的变量和判据；先查已有报告，保留停训及负结果。

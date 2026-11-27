@@ -14,7 +14,7 @@ REPO = HERE.parents[3]
 HOME = Path.home()
 ASSETS = HOME / 'nanochat-runtime-assets'
 sys.path.insert(0, str(REPO))
-from nanochat.experiment_logging import BATCH_TOKENS, ENTITY, PROJECT, STEPS
+from nanochat.experiment_logging import BATCH_TOKENS, CHECKPOINT_INTERVAL_SECONDS, ENTITY, PROJECT, STEPS
 from nanochat.procedural import DYCK, TASKS, ProceduralData
 from nanochat.research_protocol import validate_identity
 
@@ -72,7 +72,7 @@ def make_source(recipe, key, steps, group, name, baseline, commit, data, velocit
         microbatch=16,
         data_uri=data['data_uri'],
         dataset_revision=data['manifest']['dataset_revision'], tokenizer=data['manifest']['tokenizer'],
-        runtime='mhc-official-runtime-7546767.tar.gz + frozen uv.lock', checkpoint_seconds=1800)
+        runtime='mhc-official-runtime-7546767.tar.gz + frozen uv.lock', checkpoint_seconds=CHECKPOINT_INTERVAL_SECONDS)
     native = recipe in ('native_baseline', 'mhc')
     variant = {'vanilla_attnres': 'attnres', 'vanilla_mhc': 'mhc', 'mhc': 'mhc'}.get(recipe, 'baseline')
     streams = 4 if variant == 'mhc' else 1

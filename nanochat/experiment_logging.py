@@ -7,6 +7,7 @@ import uuid
 
 PROJECT = 'nanochat-1b'
 ENTITY = 'yibozhong657-none'
+CHECKPOINT_INTERVAL_SECONDS = 3600
 BATCH_TOKENS = 32768
 STEPS = (10**9 + BATCH_TOKENS - 1) // BATCH_TOKENS
 

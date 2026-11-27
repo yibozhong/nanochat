@@ -16,7 +16,7 @@ import time
 import uuid
 
 import torch
-from nanochat.experiment_logging import BATCH_TOKENS, PROJECT, STEPS, training_run
+from nanochat.experiment_logging import BATCH_TOKENS, CHECKPOINT_INTERVAL_SECONDS, PROJECT, STEPS, training_run
 from nanochat.procedural import DYCK, GENERATOR, TASKS, ProceduralData
 
 from nanochat.connection_model import ConnectionConfig, build_connection_model, optimizer_for, schedule, CONNECTION_VARIANTS
@@ -192,8 +192,8 @@ def main():
     p.add_argument('--evaluate-test', action='store_true')
     p.add_argument('--run-id', default=None)
     p.add_argument('--resume', default=None)
-    p.add_argument('--segment-seconds', type=float, default=1800,
-                   help='Exit85 for durable checkpoint upload; worker-local saves are not durable')
+    p.add_argument('--segment-seconds', type=float, default=CHECKPOINT_INTERVAL_SECONDS,
+                   help='Seconds per training segment before a durable checkpoint transfer (default: %(default)s)')
     p.add_argument('--segment-steps', type=int, default=0,
                    help='Bounded restart validation; 0 uses only the time/signal limit')
     p.add_argument('--seed', type=int, default=42)

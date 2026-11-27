@@ -1,6 +1,6 @@
 {
   "gpu_pool": "Prefer public/non-backfill slots by Rank; is_resumable=true allows research-group backfill. Rank is a preference among available matches, not a hard exclusion or a global scheduling guarantee.",
-  "checkpoint_upload_seconds": 1800,
+  "checkpoint_upload_seconds": 3600,
   "local_save_steps": 500,
   "transport": "checkpoint_exit_code85 with transfer_checkpoint_files; ON_EXIT, not an untested ON_EXIT_OR_EVICT substitution",
   "archive": "Write checkpoints.tar.tmp/results.tar.tmp then atomically rename; archive errors exit74 and never advertise checkpoint success85.",
@@ -16,5 +16,5 @@
   "resume_retention": "Overwrite latest.pt atomically; no numbered/history resume checkpoints. The dev-selected best.pt has an independent evaluation/selection purpose.",
   "user_preference": "High-frequency rolling latest for resume; best/top-k retention is separate. Uploading to the access point is not intrinsically required if storage already survives eviction.",
   "storage_requirement": "Worker scratch alone does not survive cross-node eviction. Keep a verified durable checkpoint mechanism until an equivalent persistent store is in place; local-only writes do not replace it.",
-  "checkpoint_upload_seconds_note": "Existing implementation default safety mechanism, not a user mandate. Avoid unnecessary exit/upload overhead when a verified persistent-storage alternative exists."
+  "checkpoint_upload_seconds_note": "New formal runs checkpoint after each hour of the training loop. Runs finishing within one hour transfer their final checkpoint on completion."
 }

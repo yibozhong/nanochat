@@ -277,6 +277,7 @@ class ReportsTest(unittest.TestCase):
             args = train.call_args.args[0]
             self.assertEqual(args[args.index('--run-id')+1], 'native_baseline')
             self.assertEqual(args[args.index('--resume')+1], 'auto')
+            self.assertEqual(args[args.index('--segment-seconds')+1], '1800')  # Honor the pinned interval on resume.
             train.assert_called_once()
 
     def test_manifest_and_worker_agree_without_submission(self):
@@ -305,6 +306,7 @@ class ReportsTest(unittest.TestCase):
                     s=json.loads(manifest)
                     runs = run_queue.manifest_runs(s, s['run_id'], recipe)
                     for member in runs:
+                        self.assertEqual(member['checkpoint_seconds'], 3600)
                         self.assertEqual((member['schedule_steps'], member['steps'], member['wandb_project']),
                                          (STEPS, STEPS, PROJECT))
                     if recipe == launcher.SUITE:
