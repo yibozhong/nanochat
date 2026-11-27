@@ -433,7 +433,7 @@ class MuonAdamW(torch.optim.Optimizer):
                 torch._foreach_copy_(info["params"], list(info["stacked_params"][:len(info["params"])].unbind(0)))
 
     @torch.no_grad()
-    def step(self):
+    def step(self, *, stage=None):
         # On a single rank (no multi-rank process group), all communication is skipped
         if dist.is_available() and dist.is_initialized():
             rank = dist.get_rank()
@@ -445,6 +445,8 @@ class MuonAdamW(torch.optim.Optimizer):
         # Phase 1: launch all async reduce ops
         active_groups = []
         for group in self.param_groups:
+            if stage is not None and group.get('sequential_stage') != stage:
+                continue
             if group.get('conditional', False):
                 # Conditional groups must be all used or all unused on every
                 # rank. The feedback sampler makes one seed/step draw per update.
@@ -454,6 +456,8 @@ class MuonAdamW(torch.optim.Optimizer):
                 if not all(present):
                     raise RuntimeError('Partially active conditional optimizer group')
             active_groups.append(group)
+        if stage is not None and not active_groups:
+            raise ValueError(f'No optimizer groups for sequential stage {stage!r}')
         reduce_infos: list[dict] = []
         for group in active_groups:
             if group['kind'] == 'adamw':

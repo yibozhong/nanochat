@@ -664,8 +664,10 @@ class ConnectionModel(nn.Module):
 
 
 def optimizer_for(model, batch_tokens=32768, *, matrix_optimizer='muon', arc_mu=1., arc_beta=.5, arc_direction='raw',
-                  arc_step_scale='fan_out', velocity_embedding_lr=None):
+                  arc_step_scale='fan_out', velocity_embedding_lr=None, sequential_backward=False):
     """Same backbone native LR rules; connector parameters get separate AdamW."""
+    if sequential_backward and (matrix_optimizer != 'muon' or type(model) is not ConnectionModel):
+        raise ValueError('Sequential backward requires the vanilla baseline and its Muon/AdamW optimizer')
     if matrix_optimizer != 'arc' and arc_step_scale != 'fan_out':
         raise ValueError('Selecting an Arc step scale requires the Arc matrix optimizer')
     if matrix_optimizer != 'arc' and arc_direction != 'raw':
@@ -728,6 +730,9 @@ def optimizer_for(model, batch_tokens=32768, *, matrix_optimizer='muon', arc_mu=
             feedback_params.append(model.feedback_query.weight)
         groups.append(dict(kind='muon', params=feedback_params, conditional=True,
             lr=.02*batch_scale, momentum=.95, ns_steps=5, beta2=.9, weight_decay=wd))
+    if sequential_backward:
+        from nanochat.sequential_backward import split_optimizer_groups
+        groups = split_optimizer_groups(model, groups)
     ids = [id(p) for g in groups for p in g['params']]
     assert len(ids) == len(set(ids)) and set(ids) == {id(p) for p in model.parameters()}
     if c.residual_mode != 'vanilla' or c.variant in ('mhc_channel_no_sinkhorn', 'scaled_hc', 'scaled_hc_all', 'attnres_scale'):

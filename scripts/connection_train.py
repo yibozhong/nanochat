@@ -23,6 +23,7 @@ from nanochat.connection_model import ConnectionConfig, build_connection_model, 
 from nanochat.packed_training import PackedData, seed_all, evaluate, evaluate_procedural, train_step, snapshot, atomic_save, restore_rng, json_write
 from nanochat.connection_experiment import configure_attention, match_vanilla_initialization
 from nanochat.union_reference import ReferenceAdamW, ReferenceUnion
+from nanochat.sequential_backward import sequential_cost, sequential_step
 
 
 def check_resume_protocol(state, source, protocol, *, latest):
@@ -70,7 +71,7 @@ def record_zero_init_gradients(model, optimizer, path):
 
     def capture(opt, args, kwargs):
         nonlocal captured
-        if captured:
+        if captured or kwargs.get('stage') not in (None, 'endpoints'):
             return
         norms = torch.stack([weight.grad.float().norm() for weight in projections])
         total = torch.stack([p.grad.float().norm() for p in model.parameters() if p.grad is not None]).norm()
@@ -173,6 +174,8 @@ def main():
     p.add_argument('--attnres-block-size', type=int, default=2,
                    help='Moonshot paper S: Attention/MLP sublayers per residual block; even >=2, default2 = one Transformer layer')
     p.add_argument('--steps', type=int)
+    p.add_argument('--sequential-backward', action='store_true',
+                   help='Update each vanilla Transformer block before evaluating its input gradient')
     p.add_argument('--procedural-task', choices=TASKS)
     p.add_argument('--procedural-tokens', type=int, default=0,
                    help='Warm-up model positions within the total budget, rounded to the nearest full batch (positive budgets use at least one)')
@@ -313,6 +316,10 @@ def main():
             if key in source and source[key] != value:
                 p.error(f'Formal argument {key} differs from the submission manifest')
         source.update(identity)
+    if a.sequential_backward and (a.procedural_task or c.architecture != 'vanilla' or c.variant != 'baseline'
+                                  or c.residual_mode != 'vanilla' or c.latent_feedback or c.chord_attnres
+                                  or a.matrix_optimizer != 'muon' or c.ngpt_weight_norm):
+        p.error('--sequential-backward requires the vanilla FineWeb baseline and its Muon/AdamW optimizer')
     prepare_options = dict(compile_blocks=True)
     if a.compile_lookahead_branches:
         if c.residual_mode != 'lookahead_only':
@@ -329,7 +336,7 @@ def main():
         p.error('--eval-zero-v0 requires token-only spherical lookahead')
     new_optimizer=partial(optimizer_for, model, matrix_optimizer=a.matrix_optimizer, arc_mu=a.arc_mu, arc_beta=a.arc_beta,
                          arc_direction=a.arc_direction, arc_step_scale=a.arc_step_scale,
-                         velocity_embedding_lr=a.velocity_embedding_lr)
+                         velocity_embedding_lr=a.velocity_embedding_lr, sequential_backward=a.sequential_backward)
     opt,wd=new_optimizer()
     language_groups = opt.param_groups
     initial_groups=[{k:v for k,v in group.items() if k!='params'} for group in language_groups]
@@ -337,6 +344,8 @@ def main():
                   microbatch=a.microbatch,grad_accum=rows_per_step//a.microbatch,seed=a.seed,
                   attention_backend=a.attention_backend,matched_backbone_init=a.matched_backbone_init,
                   evaluate_test=a.evaluate_test)
+    if a.sequential_backward:
+        protocol['backward_method'] = 'sequential'
     if procedural:
         protocol['procedural'] = dict(generator=procedural.generator, task=procedural.task, input_length=length,
             requested_tokens=a.procedural_tokens, steps=warm_steps, model_tokens=warm_steps*BATCH_TOKENS,
@@ -437,9 +446,12 @@ def main():
     if a.chord_kernel != 'current':
         config['chord_kernel'] = a.chord_kernel
     from nanochat.connection_cost import model_cost
-    cost=model_cost(c,batch=rows_per_step)
+    cost = sequential_cost(c, rows_per_step, a.microbatch) if a.sequential_backward else model_cost(c, batch=rows_per_step)
     config['compute_estimate']=cost
     nominal_flops = cost['estimated_training_flops'] if cost else None
+    # Additional held-out observation at the largest whole step within the baseline FLOP budget.
+    equal_compute_step = (a.steps * cost['standard_training_flops'] // nominal_flops
+                          if a.sequential_backward else None)
     if nominal_flops is None and c.architecture == 'native':
         nominal_flops = model.native.estimate_flops() * protocol['batch_tokens']
         config['flops_scope'] = 'native GPT matrix and attention estimate; excludes connector arithmetic'
@@ -461,6 +473,10 @@ def main():
         config['backbone_optimizer_groups'] = {
             name: initial_groups[next(i for i, group in enumerate(language_groups) if any(p is weight for p in group['params']))]
             for name, weight in anchors.items()}
+        if a.sequential_backward:
+            # Group ownership is execution metadata; the underlying LR, decay and moments are identical.
+            config['backbone_optimizer_groups'] = {name: {k:v for k,v in group.items() if k!='sequential_stage'}
+                                                   for name,group in config['backbone_optimizer_groups'].items()}
         config['comparison_protocol'] = comparison_protocol(config)
         config['arguments'] = vars(a).copy()
     if c.match_velocity_table_with_ffn and 'parameter_match' in source:
@@ -565,6 +581,9 @@ def main():
     def dev_metrics(dev, final_procedural_score=None):
         nonlocal procedural_val_ce
         metrics={'dev/ce':dev, **token_counts()}
+        if a.sequential_backward and step == equal_compute_step:
+            json_write(out/'equal-compute.json', dict(step=step, tokens=step*BATCH_TOKENS, dev_ce=dev,
+                training_flops=step*nominal_flops, baseline_flops=a.steps*cost['standard_training_flops']))
         if procedural:
             print(f"FINEWEB_DEV step={step} fineweb_tokens={metrics['fineweb_tokens']} val_ce={dev:.8f}", flush=True)
         if procedural_dev is not None and step <= warm_steps:
@@ -608,7 +627,9 @@ def main():
                 batch = procedural.batch(step*rows_per_step, rows_per_step) if warming and not reference_union else None
                 log_procedural_run = procedural is not None and (phase_step < 5 or (step+1)%10 == 0 or step+1 == warm_steps)
                 gradient_stats = {} if log_procedural_run else None
-                if warming and reference_union:
+                if a.sequential_backward:
+                    loss = sequential_step(model, opt, data, phase_step, microbatch=a.microbatch)
+                elif warming and reference_union:
                     loss, targets = reference_union.train(model, opt, step, class_ids, a.microbatch, gradient_stats)
                     warm_supervised += targets
                 else:
@@ -684,10 +705,11 @@ def main():
                         json_write(out/'transfer-check.json', report)
                         del before, after
                     print(f'PROCEDURAL_TRANSFER step={step} fineweb_next_row=0', flush=True)
-                if transfer or step==50 or step%250==0 or step==a.steps:
+                scheduled_eval = transfer or step==50 or step%250==0 or step==a.steps
+                if scheduled_eval or step==equal_compute_step:
                     dev,dev_tokens=evaluate(model,data,microbatch=a.microbatch)
                     assert math.isfinite(dev)
-                    if dev<best or transfer:
+                    if scheduled_eval and (dev<best or transfer):
                         best=dev;save_best(dev)
                     run.log(dict(step=step,tokens=step*32768,**dev_metrics(dev, final_procedural_score),**{'dev/tokens':dev_tokens}))
                 if transfer or step==50 or step%500==0 or step==a.steps or stop:save()

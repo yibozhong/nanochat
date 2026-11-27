@@ -39,6 +39,8 @@ def manifest_runs(manifest, run_id, recipe):
         args = dict(option[2:].split('=', 1) for option in s['model_args'] if '=' in option)
         assert args['residual-projection-init'] == 'zero' and args['variant'] == s['connection_variant']
         assert (args['architecture'], args['attention-backend']) == (s['architecture'], s['attention_backend'])
+        if s['recipe'] == 'vanilla_sequential_backward':
+            assert '--sequential-backward' in s['model_args'] and s['backward_method'] == 'sequential'
         if s['recipe'] in ABLATION_ARGS or s['recipe'] in TOKEN_COMPONENTS:
             assert s['model_args'] == chord_args(s['recipe'])
         if s['recipe'] in CHORD_ARGS:
@@ -84,6 +86,11 @@ def preflight(s, directory):
     save(Path('source.json'), s)
     directory.mkdir(parents=True, exist_ok=True)
     env = dict(environment(s), WANDB_MODE='disabled')
+    if s['recipe'] == 'vanilla_sequential_backward':
+        from .sequential_comparison import compare
+        subprocess.run([sys.executable, '-m', 'pytest', '-q', 'tests/test_sequential_backward.py'],
+                       env=env, check=True, timeout=1800)
+        compare(s, directory, env)
     if s.get('procedural'):
         subprocess.run([sys.executable, '-m', 'pytest', '-q', 'tests/test_procedural.py'], env=env, check=True, timeout=900)
     if s['recipe'] in ABLATION_ARGS:
