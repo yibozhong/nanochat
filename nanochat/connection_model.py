@@ -127,7 +127,7 @@ class ConnectionConfig:
         if additive and self.ngpt_velocity_mode not in ('ambient', 'ambient_learned_beta'):
             raise ValueError('Additive lookahead uses Euclidean velocity')
         if self.chord_velocity_geometry is None:
-            self.chord_velocity_geometry = 'ambient' if self.chord_six_controls in ('learned_dynamic', 'static') else 'parallel_transport'
+            self.chord_velocity_geometry = 'project_only' if self.chord_six_controls in ('learned_dynamic', 'static') else 'parallel_transport'
         if self.chord_six_controls not in ('off', 'static', 'small_dynamic', 'learned_dynamic'):
             raise ValueError('Unknown six-coefficient Chord setting')
         if self.chord_zero_mu and self.chord_six_controls != 'learned_dynamic':

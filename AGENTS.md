@@ -1,13 +1,13 @@
 # Chord residual
 
-新实验中，“Chord”或“ChordRes”默认指 token-dependent 六系数 BF16、球面 h 和 ambient v。速度按原弦沿旧速度分解写入。每个子层根据当前 token 的 h 调制系数。Static 六系数版本供显式指定的消融使用。两版共用 vanilla 主干、τ=0.05 的 soft force 和同一个 update-based 球面更新。
+新实验中，“Chord”或“ChordRes”默认指 token-dependent 六系数 BF16、球面 h 和切向速度 v（`project_only`）。每次写入时，将旧速度和实际弦位移投到新位置的切面，再沿投影后的旧速度分解位移。每个子层根据当前 token 的 h 调制系数。Static 六系数版本供显式指定的消融使用。两版共用 vanilla 主干、τ=0.05 的 soft force 和同一个 update-based 球面更新。
 
 | 用户称呼 | 1B 提交参数 | 现有参数文件的初速度 |
 | --- | --- | --- |
 | Chord、ChordRes、token-dependent 或 Next Chord | 默认，可显式指定 `--recipe chord_next_bf16` | 独立 token 速度表。[模型参数](research/connections/ngpt/chord.args) |
 | static 或 scalar 消融 | `--recipe chord_scalar_bf16` | 独立 token 速度表。[模型参数](research/connections/ngpt/chord_scalar.args) |
 
-完整 Chord 默认用独立速度表（`--velocity-init token`），第二种选择是从归一化的 h0 生成（`projected_h0`），从静止开始用 `zero`。比较控制方式时匹配初速度和速度几何。默认查表直接取 v0，projected_h0 仍在初始化时做一次切向投影。仅投影用 `--project-only`，token-dependent 的平行移动消融用 `--parallel-transport`。速度表沿用输入 embedding 的 AdamW 组，W_v 沿用主干矩阵 Muon 组，六系数及 token 调制使用 nanochat routing AdamW 组。历史实验使用各自的 manifest 和归档配方。[Chord 说明](research/connections/ngpt/CHORD.md)
+完整 Chord 默认用独立速度表（`--velocity-init token`），查到的向量先投到 h0 的切面。也可从归一化的 h0 生成初速（`projected_h0`），或从静止开始（`zero`）。比较控制方式时匹配初速度和速度几何。默认切面投影可显式指定 `--project-only`。自由速度消融用 `--ambient-velocity`，token-dependent 的平行移动消融用 `--parallel-transport`。速度表沿用输入 embedding 的 AdamW 组，W_v 沿用主干矩阵 Muon 组，六系数及 token 调制使用 nanochat routing AdamW 组。历史实验使用各自的 manifest 和归档配方。[Chord 说明](research/connections/ngpt/CHORD.md)
 
 ## 1B 实验工作流
 

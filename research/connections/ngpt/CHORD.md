@@ -1,6 +1,6 @@
 # Chord residual 配方
 
-新实验默认使用 token-dependent 六系数 Chord。每个 token 跨层携带球面位置 h 和 ambient 速度 v。速度可以有径向分量。位置的 RMS 为 1，球面半径为 sqrt(d_model)。Attention 和 FFN 都读取前瞻点，在球面上更新位置，再把这一步的位移写入速度。h、v 以 BF16 保存，几何归约使用 FP32。
+新实验默认使用 token-dependent 六系数 Chord。每个 token 跨层携带球面位置 h 和位于 h 切平面内的速度 v。位置的 RMS 为 1，球面半径为 sqrt(d_model)。Attention 和 FFN 都读取前瞻点，在球面上更新位置，再把这一步的位移写入新位置的切向速度。h、v 以 BF16 保存，几何归约使用 FP32。
 
 ## 两个入口，三种初速度
 
@@ -11,7 +11,7 @@
 
 两个入口都可用 `--velocity-init` 指定初速度。比较两种控制方式时，两侧使用相同的初速度和速度几何。[Token-dependent 配方](chord.args) · [Static 配方](chord_scalar.args)
 
-- `token` 是默认方式。查独立 token 速度表，ambient 时 v0 = E_v[id]，表按标准差 0.02 初始化。切向消融在第一层读取前将查表结果投到 h0 的切面。
+- `token` 是默认方式。独立 token 速度表按标准差 0.02 初始化。第一层读取前将查表结果投到 h0 的切面，即 v0 = P(h0, E_v[id])。
 - `projected_h0` 是第二种方式。取 v0 = P(h0, W_v h0)，W_v 是共享的无偏置 d_model × d_model 矩阵，初始化标准差为 0.02 / sqrt(d_model)。该模式在初始化时做一次切向投影，后续速度遵循所选几何。
 - `zero` 从静止开始，初速度没有参数。
 
@@ -19,15 +19,15 @@
 
 ## 每个子层如何更新
 
-1. 用 μ 决定沿旧速度前瞻多远。融合读取按实际 RMS 计算 q = N(h + μv)，然后做分支 pre-norm，运行一次 Attention 或 FFN，得到输出 f。
+1. 用 μ 决定沿旧速度前瞻多远。读取前瞻点 q = N(h + μv)，然后做分支 pre-norm，运行一次 Attention 或 FFN，得到输出 f。
 2. 取建议位移 s = f / sqrt(mean(f²) + 0.05²)，按旧速度 v 拆为平行分量 s∥ 和垂直分量 s⊥。新位置为 h′ = N(h + α∥ s∥ + α⊥ s⊥)。
-3. 取实际弦位移 d = h′ − h，沿原样保留的旧速度 v 把 d 拆成平行和垂直两部分，写入 v′ = βv + γ∥ d∥ + γ⊥ d⊥。当参考速度为零时，平行分量取零。最后一个 FFN 的速度没有下游消费者，只学习三个位置系数。
+3. 将旧速度和实际弦位移投到新位置的切平面，得到 u = P(h′, v) 和 d = P(h′, h′ − h)。沿 u 将 d 分解为 d∥ 和 d⊥，写入 v′ = βu + γ∥ d∥ + γ⊥ d⊥。当 u 为零时，平行分量取零。最后一个 FFN 的速度没有下游消费者，只学习三个位置系数。
 
 μ 初始为 0，两个 α 用 softplus，初始为 0.05。β 用 sigmoid，初始为 0.5。两个 γ 独立、无界，初始均为 0.5。八层 static 共学习 15 × 6 + 3 = 93 个控制标量。Token-dependent 版在各系数的原始参数上加上 RMSNorm(h) 的线性投影，再施加相同的参数化。投影从零初始化，前瞻、位置和速度的调制尺度从 0.01 开始，因此在相同输入和初速度下，两版的初始系数及更新公式一致。[速度写入的来源](https://github.com/lululu39/NextTransformer/tree/chordres-zero/nexttransformer/methods/chordres_velocity_gains)
 
-默认 ambient 的显式提交参数是 `--ambient-velocity`。用 `--project-only` 可复现仅投影版本，先将旧速度和弦位移投到新位置的切平面，再分解并写入速度。Token-dependent 版还支持 `--parallel-transport`，沿短弧搬运旧速度到新切面后再分解。已完成的 1B 配对实验使用零初速，ambient 和仅投影的验证 CE 分别为 3.20090 和 3.20722。[速度几何实验](../../chord-velocity-geometry/REPORT.md)
+默认切面投影可显式指定 `--project-only`。自由速度消融用 `--ambient-velocity`，其查表初速直接取 E_v[id]，写入时用 u = v 和 d = h′ − h 做同样的分解。Token-dependent 版还支持 `--parallel-transport`，沿短弧搬运旧速度到新切面后再分解。查表和零初速各自使用同初速的切面基线。[查表实验](../../chord-ambient-ablation/REPORT.md) · [零初速实验](../../chord-velocity-geometry/REPORT.md)
 
-零初速前瞻消融使用 `--velocity-init zero --chord-zero-mu`。复现历史切向对照时再指定 `--project-only`。[历史前瞻消融](../../legacy-chord-1b/chord-lookahead/REPORT.md)
+零初速前瞻消融使用 `--velocity-init zero --chord-zero-mu`。复现自由速度下的固定 μ 实验时再指定 `--ambient-velocity`。[切向前瞻消融](../../legacy-chord-1b/chord-lookahead/REPORT.md) · [自由速度前瞻消融](../../chord-ambient-ablation/REPORT.md)
 
 ## 优化器与训练
 

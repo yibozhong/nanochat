@@ -200,7 +200,7 @@ class ReportsTest(unittest.TestCase):
             self.assertEqual(default, 'chord_next_bf16')
             flags = launcher.chord_args(default)
             self.assertEqual((launcher.CHORD_ARGS[default].parent/'chord.args').read_text().splitlines(), flags)
-            self.assertIn('--chord-velocity-geometry=ambient', flags)
+            self.assertIn('--chord-velocity-geometry=project_only', flags)
             self.assertIn('--chord-six-controls=learned_dynamic', flags)
             self.assertIn('--velocity-init=token', flags)
             launcher.main([*args, '--recipe', 'chord_scalar_bf16'])
@@ -243,8 +243,9 @@ class ReportsTest(unittest.TestCase):
     def test_ambient_velocity_ablation_matches_zero_init_baseline(self):
         data = dict(data_uri='test', manifest=dict(dataset_revision='v', tokenizer={}))
         args = ('chord_next_bf16', 'job', STEPS, 'chord-velocity-geometry', 'ambient', 'aa44a2d7', 'commit', data, 'zero')
-        base = launcher.make_source(*args, geometry='project_only')
-        ambient = launcher.make_source(*args)
+        base = launcher.make_source(*args)
+        ambient = launcher.make_source(*args, geometry='ambient')
+        self.assertEqual(base['chord_velocity_geometry'], 'project_only')
         self.assertEqual(ambient['chord_velocity_geometry'], 'ambient')
         self.assertEqual(set(base['model_args']) ^ set(ambient['model_args']),
                          {'--chord-velocity-geometry=project_only', '--chord-velocity-geometry=ambient'})

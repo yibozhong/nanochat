@@ -148,7 +148,7 @@ def main():
     p.add_argument('--signed-chord-steps', action='store_true', help='Allow both split-chord step sizes to cross zero independently')
     p.add_argument('--token-chord-gates', action='store_true', help='Modulate positive split steps by independent per-token cosine gates')
     p.add_argument('--chord-velocity-geometry', choices=('parallel_transport','project_only','ambient'),
-                   help='How Chord carries velocity (default: ambient for active six-control Chord)')
+                   help='How Chord carries velocity (default: project_only for active six-control Chord)')
     p.add_argument('--chord-six-controls', choices=('off', 'static', 'small_dynamic', 'learned_dynamic'), default='off',
                    help='Use independent velocity write gains with static or token-corrected controls')
     p.add_argument('--chord-component-gates', action='store_true',
