@@ -2,7 +2,7 @@
 
 ## 假设与实验设计
 
-零初速的完整 Chord 在同一 1B 协议下已完成训练，最终 validation CE 为 3.207224。新实验检验移除速度切向约束后，模型是否使用径向分量，以及这是否改变 CE。[配对基线 aa44a2d7](../chord-initial-velocity/configs/aa44a2d7.json)
+零初速的完整 Chord 在同一 1B 协议下已完成训练，最终 validation CE 为 3.207224。新实验检验移除速度切向约束后，模型是否使用径向分量，以及这是否改变 CE。[配对基线 aa44a2d7](../legacy-chord-1b/configs/aa44a2d7.json)
 
 两边均用 vanilla 8×512、v₀=0、BF16、每 token 六系数、soft force τ=0.05、零输出投影、seed 42 和相同 FineWeb-Edu 数据顺序。每步 32,768 tokens，共 30,518 步。位置更新和两次方向分解的系数均相同。
 

@@ -13,7 +13,7 @@
 
 两边使用 vanilla 8×512、v₀=0、BF16、soft force τ=0.05、零输出投影、同一份 FineWeb-Edu、相同 LR 日程与 seed 42，从零训练 30,518 × 32,768 tokens。消融在融合读取前将 μ 的偏置和 token 调制同时置零，保留完全相同的参数布局和优化器分组。验证记录各子层 μ 的均值与标准差。
 
-按相同训练 tokens 比较 validation CE 曲线。终点 ΔCE 定义为固定 μ=0 的 CE 减去已完成的零初速默认版 CE（3.207224）。已有“仅球面”实验还移除了速度状态，两者可辅助判断读取和写入分别贡献了什么。[配对基线](../../chord-initial-velocity/configs/aa44a2d7.json) · [组件消融](../chord-components/REPORT.md)
+按相同训练 tokens 比较 validation CE 曲线。终点 ΔCE 定义为固定 μ=0 的 CE 减去已完成的零初速默认版 CE（3.207224）。已有“仅球面”实验还移除了速度状态，两者可辅助判断读取和写入分别贡献了什么。[配对基线](../configs/aa44a2d7.json) · [组件消融](../chord-components/REPORT.md)
 
 ## 实验事实
 

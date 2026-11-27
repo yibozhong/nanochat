@@ -44,6 +44,19 @@ class ReportsTest(unittest.TestCase):
             self.assertEqual((len(row['curve']), row['curve'][STEPS*BATCH_TOKENS]), (count, final))
             self.assertTrue((root/row['url']).is_file())
 
+    def test_archived_tangent_baselines_support_offline_comparisons(self):
+        root = launcher.REPO/'research'
+        rows = sync.include_archived_runs([], root)
+        sync.compare(rows)
+        archive = {r['run_id']: r for r in rows}
+        for rid, init, ce in [('aa44a2d7', 'zero', 3.207224488258362),
+                              ('2e37a95d', 'projected_h0', 3.196963369846344)]:
+            row = archive[rid]
+            self.assertEqual(row['config']['model']['velocity_init'], init)
+            self.assertEqual((len(row['curve']), row['final_ce']), (126, ce))
+        self.assertAlmostEqual(archive['e1579b8b']['delta_ce'], 0.002750217914581299)
+        self.assertAlmostEqual(archive['aa44a2d7']['delta_ce'], 0.010261118412017822)
+
     def test_matching_and_closed_group_review(self):
         end = STEPS*BATCH_TOKENS
         self.assertEqual(end,1_000_013_824)
