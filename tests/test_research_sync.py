@@ -217,6 +217,17 @@ class ReportsTest(unittest.TestCase):
                     launcher.submit(retired, Path(tmp), STEPS, 'velocity', retired, 'self')
             self.assertEqual(list(Path(tmp).iterdir()), [])
 
+    def test_ambient_velocity_ablation_matches_zero_init_baseline(self):
+        data = dict(data_uri='test', manifest=dict(dataset_revision='v', tokenizer={}))
+        args = ('chord_next_bf16', 'job', STEPS, 'chord-velocity-geometry', 'ambient', 'aa44a2d7', 'commit', data, 'zero')
+        base = launcher.make_source(*args)
+        ambient = launcher.make_source(*args, ambient_velocity=True)
+        self.assertEqual(set(base['model_args']) ^ set(ambient['model_args']),
+                         {'--chord-velocity-geometry=project_only', '--chord-velocity-geometry=ambient'})
+        self.assertEqual(run_queue.manifest_runs(ambient, ambient['run_id'], ambient['recipe']), [ambient])
+        with self.assertRaises(ValueError):
+            launcher.chord_args('chord_scalar_bf16', 'zero', ambient_velocity=True)
+
     def test_suite_scheduler_uses_current_member(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

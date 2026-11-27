@@ -163,6 +163,7 @@ def _token_read_forward(
     BOUNDED: tl.constexpr,
     INPUTS: tl.constexpr,
     MODULATION: tl.constexpr,
+    AMBIENT: tl.constexpr,
 ):
     row = tl.program_id(0) * BT + tl.arange(0, BT)
     lane = tl.arange(0, BD)
@@ -203,8 +204,10 @@ def _token_read_forward(
     tl.store(dest + 4, gp, row < ROWS)
     tl.store(dest + 5, gt, row < ROWS)
     off = mu[:, None] * v
-    inv = tl.rsqrt(1.0 + tl.sum(off * off, 1) / D)
-    q = ((h + off) * inv[:, None]).to(tl.bfloat16).to(tl.float32)
+    raw = h + off
+    sq = tl.sum(raw * raw, 1) / D if AMBIENT else 1.0 + tl.sum(off * off, 1) / D
+    inv = tl.rsqrt(tl.maximum(sq, 1e-12))
+    q = (raw * inv[:, None]).to(tl.bfloat16).to(tl.float32)
     scale = tl.rsqrt(tl.sum(q * q, 1) / D + 1.1920928955078125e-7)
     tl.store(Q + ix, q * scale[:, None], mask)
 
@@ -229,6 +232,7 @@ def _token_read_backward(
     BOUNDED: tl.constexpr,
     INPUTS: tl.constexpr,
     MODULATION: tl.constexpr,
+    AMBIENT: tl.constexpr,
 ):
     row = tl.program_id(0) * BT + tl.arange(0, BT)
     lane = tl.arange(0, BD)
@@ -255,8 +259,9 @@ def _token_read_backward(
     offc = row.to(tl.int64) * 6
     mu = tl.load(C + offc, row < ROWS, 0.0)
     off = mu[:, None] * v
-    inv = tl.rsqrt(1.0 + tl.sum(off * off, 1) / D)
     raw = h + off
+    sq = tl.sum(raw * raw, 1) / D if AMBIENT else 1.0 + tl.sum(off * off, 1) / D
+    inv = tl.rsqrt(tl.maximum(sq, 1e-12))
     q = (raw * inv[:, None]).to(tl.bfloat16).to(tl.float32)
     scale = tl.rsqrt(tl.sum(q * q, 1) / D + 1.1920928955078125e-7)
     normed = q * scale[:, None]
@@ -268,8 +273,12 @@ def _token_read_backward(
     )
     direct = dq * inv[:, None]
     coeff = tl.sum(dq * raw, 1) / D * inv * inv * inv
-    d_off = direct - off * coeff[:, None]
-    dh = direct
+    if AMBIENT:
+        dh = direct - raw * tl.where(sq >= 1e-12, coeff, 0.)[:, None]
+        d_off = dh
+    else:
+        d_off = direct - off * coeff[:, None]
+        dh = direct
     dv = mu[:, None] * d_off
     grad_gate_v = tl.full((BT, BD), 0.0, tl.float32)
     query_mu_grad = tl.sum(v * d_off, 1)
@@ -321,13 +330,14 @@ def _token_read_backward(
 class TokenRead(torch.autograd.Function):
     @staticmethod
     @torch.amp.custom_fwd(device_type="cuda")
-    def forward(ctx, h, v, weight, mu, steps, beta, gains, bounded=False, small_dynamic=False, modulation=SMALL_DYNAMIC_SCALE):
+    def forward(ctx, h, v, weight, mu, steps, beta, gains, bounded=False, small_dynamic=False, modulation=SMALL_DYNAMIC_SCALE, ambient=False):
         h, v = h.contiguous(), v.contiguous()
         dim = h.shape[-1]
         count = weight.shape[0]
         rows = h.numel() // dim
         query = torch.empty_like(h)
         controls = weight.new_empty((*h.shape[:-1], 6))
+        ctx.ambient = ambient
         ctx.modulation = modulation if small_dynamic else 0.0
         _token_read_forward[(triton.cdiv(rows, 4),)](
             h,
@@ -348,6 +358,7 @@ class TokenRead(torch.autograd.Function):
             bounded,
             weight.shape[1],
             ctx.modulation,
+            ctx.ambient,
             enable_fp_fusion=False,
         )
         ctx.save_for_backward(h, v, weight, controls)
@@ -385,6 +396,7 @@ class TokenRead(torch.autograd.Function):
             ctx.bounded,
             inputs,
             ctx.modulation,
+            ctx.ambient,
             enable_fp_fusion=False,
         )
         dw = torch.empty_like(weight)
@@ -415,4 +427,4 @@ class TokenRead(torch.autograd.Function):
             cols,
             inputs,
         )
-        return (dh, dv, dw, dm, ds, db, dg, None, None, None)[:len(ctx.needs_input_grad)]
+        return (dh, dv, dw, dm, ds, db, dg, None, None, None, None)[:len(ctx.needs_input_grad)]

@@ -42,7 +42,7 @@ def manifest_runs(manifest, run_id, recipe):
         if s['recipe'] in ABLATION_ARGS or s['recipe'] in TOKEN_COMPONENTS:
             assert s['model_args'] == chord_args(s['recipe'])
         if s['recipe'] in CHORD_ARGS:
-            assert s['model_args'] == chord_args(s['recipe'], s['velocity_init'])
+            assert s['model_args'] == chord_args(s['recipe'], s['velocity_init'], s.get('ambient_velocity', False))
             assert args['chord-six-controls'] == s['chord_controls'] and '--chord-update-based' in s['model_args']
             assert args['chord-soft-force-tau'] == '0.05' and args['chord-state-dtype'] == 'bfloat16'
     return runs

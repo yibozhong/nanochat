@@ -349,6 +349,8 @@ class LookaheadModel(MomentumModel):
                 if site.mix_scales is not None:
                     for name, value in zip(('lookahead', 'position', 'velocity'), site.mix_scales.tolist()):
                         metrics[f'residual/sublayer_{i}/{name}_modulation_scale'] = value
+                if site.eval_radial_fraction is not None:
+                    metrics[f'residual/sublayer_{i}/incoming_velocity_radial_energy_fraction'] = site.eval_radial_fraction.item()
                 if site.eval_control_moments is not None:
                     std, mean = (x.tolist() for x in site.eval_control_moments)
                     for j, name in enumerate(CONTROL_NAMES[:site.token_weight.size(0)]):

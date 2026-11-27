@@ -127,12 +127,14 @@ class ConnectionConfig:
             raise ValueError('Additive lookahead uses Euclidean velocity')
         if self.chord_six_controls not in ('off', 'static', 'small_dynamic', 'learned_dynamic'):
             raise ValueError('Unknown six-coefficient Chord setting')
+        ambient_token_chord = self.dynamic_chord_controls and self.chord_velocity_geometry == 'ambient'
+        supported_six_geometry = self.chord_velocity_geometry == 'project_only' or ambient_token_chord
         if self.chord_six_controls != 'off' and (self.architecture != 'vanilla'
                 or self.ngpt_velocity_mode != 'lookahead_split_learned_beta' or not self.fuse_chord_read_norm
-                or self.chord_velocity_geometry != 'project_only' or self.recompute_chord_force
+                or not supported_six_geometry or self.recompute_chord_force
                 or self.channel_chord_coefficients or self.chord_velocity_write or self.chord_attnres
                 or self.chord_query_only_lookahead or self.fixed_first_attention_mu):
-            raise ValueError('Six-coefficient Chord requires vanilla BF16 scalar project-only updates')
+            raise ValueError('Six-coefficient Chord requires vanilla BF16 split updates with a supported velocity geometry')
         if not math.isfinite(self.chord_soft_force_tau) or self.chord_soft_force_tau < 0:
             raise ValueError('Soft force tau must be finite and nonnegative')
         token_update = self.chord_update_based and self.dynamic_chord_controls
@@ -162,10 +164,10 @@ class ConnectionConfig:
         if self.token_chord_gates and (self.ngpt_velocity_mode != 'lookahead_split_learned_beta' or self.signed_chord_steps):
             raise ValueError('Token chord gates require positive split steps and learned velocity decay')
         if self.chord_state_dtype is None:
-            self.chord_state_dtype = 'bfloat16' if self.chord_velocity_geometry == 'project_only' else 'float32'
+            self.chord_state_dtype = 'bfloat16' if supported_six_geometry else 'float32'
         if (self.fuse_chord_read_norm or self.recompute_chord_force) and (
-                self.chord_state_dtype != 'bfloat16' or self.chord_velocity_geometry != 'project_only'):
-            raise ValueError('Fused read/norm and force recomputation require BF16 project-only Chord')
+                self.chord_state_dtype != 'bfloat16' or not supported_six_geometry):
+            raise ValueError('Fused Chord reads require BF16 and a supported velocity geometry')
         if self.chord_state_dtype not in ('bfloat16', 'float32'):
             raise ValueError('Unknown Chord state dtype')
         if self.chord_component_gates:

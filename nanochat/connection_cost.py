@@ -91,7 +91,11 @@ def model_cost(config, batch=1, activation_bytes=2, feedback_passes=None):
             gain_parameters += 2*(sites - 1)
             # Independent along/across writes require the old velocity and
             # displacement projected onto the new tangent space and one dot ratio.
-            residual += batch*t*(sites - 1)*(18*d - 4)
+            split_write = 18*d - 4
+            if c.chord_velocity_geometry == 'ambient':
+                # Skip projections of v, the chord, and the final mixed velocity.
+                split_write -= 3*(4*d - 1)
+            residual += batch*t*(sites - 1)*split_write
             if c.dynamic_chord_controls:
                 outputs = 6*sites - 3
                 if c.chord_six_controls == 'learned_dynamic':

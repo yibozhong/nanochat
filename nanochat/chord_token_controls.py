@@ -12,7 +12,7 @@ SMALL_DYNAMIC_SCALE = 0.01
 CONTROL_NAMES = ('mu', 'alpha_perp', 'alpha_parallel', 'history', 'parallel_write', 'perpendicular_write')
 
 
-def reference_read(h, v, weight, mu, steps, beta, gains, bounded=False, small_dynamic=False, modulation=SMALL_DYNAMIC_SCALE):
+def reference_read(h, v, weight, mu, steps, beta, gains, bounded=False, small_dynamic=False, modulation=SMALL_DYNAMIC_SCALE, ambient=False):
     position = h.to(weight.dtype)
     velocity = v.to(weight.dtype)
     if weight.shape[1] == 1:
@@ -44,12 +44,14 @@ def reference_read(h, v, weight, mu, steps, beta, gains, bounded=False, small_dy
         if bounded:
             g = 2 * g.sigmoid()
     offset = m * velocity
-    read = ((h.to(weight.dtype) + offset) * (1 + offset.square().mean(-1, keepdim=True)).rsqrt()).to(h.dtype)
+    raw = position + offset
+    sq = raw.square().mean(-1, keepdim=True).clamp_min(1e-12) if ambient else 1 + offset.square().mean(-1, keepdim=True)
+    read = (raw * sq.rsqrt()).to(h.dtype)
     q = F.rms_norm(read, (h.shape[-1],), eps=torch.finfo(torch.float32).eps)
     return q, torch.cat((m, alpha, b, g), dim=-1)
 
 
-def reference_write(h, v, force, controls, floor, terminal, soft_tau=0.):
+def reference_write(h, v, force, controls, floor, terminal, soft_tau=0., ambient=False):
     dtype = h.dtype
     h, v, f = h.to(controls.dtype), v.to(controls.dtype), force.to(controls.dtype)
     _, perp, par, a, b, c = controls.unsqueeze(-1).unbind(-2)
@@ -59,7 +61,7 @@ def reference_write(h, v, force, controls, floor, terminal, soft_tau=0.):
     n = normalize_residual((h + perp*delta) + ((par-perp)*along)*v)
     if terminal:
         return n.to(dtype), None
-    u, d = tangent_project(n, v), tangent_project(n, n-h)
+    u, d = (v, n-h) if ambient else (tangent_project(n, v), tangent_project(n, n-h))
     par_d = u * ((u*d).mean(-1, keepdim=True) / u.square().mean(-1, keepdim=True).clamp_min(1e-12))
     return n.to(dtype), (a*u + b*par_d + c*(d-par_d)).to(dtype)
 
@@ -84,7 +86,9 @@ class TokenControlledSite(LookaheadResidual):
                            if config.chord_six_controls == 'learned_dynamic' else None)
         inputs = 1 if self.small_dynamic or config.native_chord_write == 'token_h' else 2
         self.token_weight = torch.nn.Parameter(torch.zeros(3 if self.terminal else 6, inputs, config.width))
+        self.ambient = self.velocity_geometry == 'ambient'
         self.eval_control_moments = None
+        self.eval_radial_fraction = None
 
     def read(self, h, v):
         steps = torch.cat((self.raw, self.raw_parallel))
@@ -104,14 +108,20 @@ class TokenControlledSite(LookaheadResidual):
             weights = weights * torch.stack(row_scales)[:, None, None]
             modulation = 1.
         q, controls = read(h, v, weights, self.mu, steps, self.raw_beta, self.writes,
-                           self.bounded, self.small_dynamic, modulation)
+                           self.bounded, self.small_dynamic, modulation, self.ambient)
         if not self.training and not torch.is_grad_enabled():
             # Keep just the token dispersion and mean of controls from the validation minibatch.
+            if self.ambient:
+                # Sample incoming velocity energy on the last evaluation minibatch.
+                pos = h.reshape(-1, h.size(-1))[::32].float()
+                vel = v.reshape(-1, v.size(-1))[::32].float()
+                radial_energy = (pos * vel).sum(-1).square() / pos.square().sum(-1).clamp_min(1e-12)
+                self.eval_radial_fraction = radial_energy.sum() / vel.square().sum().clamp_min(1e-12)
             self.eval_control_moments = torch.std_mean(controls.flatten(0, -2), dim=0, correction=0)
         return q, controls
 
     def write(self, h, v, force, controls):
         if h.is_cuda and h.dtype == torch.bfloat16 and h.size(-1) in (128, 512):
             from nanochat.chord_triton import TokenWrite
-            return TokenWrite.apply(h, v, force, controls, self.rms_floor, self.terminal, self.soft_tau)
-        return reference_write(h, v, force, controls, self.rms_floor, self.terminal, self.soft_tau)
+            return TokenWrite.apply(h, v, force, controls, self.rms_floor, self.terminal, self.soft_tau, self.ambient)
+        return reference_write(h, v, force, controls, self.rms_floor, self.terminal, self.soft_tau, self.ambient)

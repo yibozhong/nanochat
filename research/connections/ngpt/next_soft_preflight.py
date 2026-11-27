@@ -32,14 +32,16 @@ def check_read(site, h, v):
         beta = (site.raw_beta + z[..., 3:4]*s[2]).sigmoid()
         gamma = site.writes + z[..., 4:6]*s[2]
     offset = m * v.float()
-    preview = ((h.float()+offset) * (1 + offset.square().mean(-1, keepdim=True)).rsqrt()).to(h.dtype)
+    raw = h.float() + offset
+    sq = raw.square().mean(-1, keepdim=True).clamp_min(1e-12) if site.ambient else 1 + offset.square().mean(-1, keepdim=True)
+    preview = (raw * sq.rsqrt()).to(h.dtype)
     oracle = (F.rms_norm(preview, (h.size(-1),), eps=torch.finfo(torch.float32).eps),
               torch.cat((m, alpha, beta, gamma), dim=-1))
     check_read_vjp(oracle, (q, controls), (h, v, *site.parameters()))
 
 
 def check_write(site, h, v, f, controls):
-    # Independent FP64 decomposition in the endpoint tangent space.
+    # Independent FP64 decomposition in the selected velocity space.
     hd, vd, fd, c = leaves = [x.detach().double().requires_grad_() for x in (h, v, f, controls)]
     def along(x, axis):
         return axis * ((axis*x).mean(-1, True) / axis.square().mean(-1, True).clamp_min(1e-12))
@@ -50,12 +52,12 @@ def check_write(site, h, v, f, controls):
     parallel = along(u, vd)
     mixed = hd + al*parallel + ap*(u-parallel)
     n = mixed / mixed.square().mean(-1, True).clamp_min(1e-12).sqrt()
-    carried, chord = tangent(vd, n), tangent(n-hd, n)
+    carried, chord = (vd, n-hd) if site.ambient else (tangent(vd, n), tangent(n-hd, n))
     par_d = along(chord, carried)
     expected = (n,) if site.terminal else (n, beta*carried + gp*par_d + gt*(chord-par_d))
     probes = tuple(torch.randn_like(h) for _ in expected)
     grads = torch.autograd.grad(expected, leaves, tuple(x.double() for x in probes))
-    for outputs in (site.write(h, v, f, controls), reference_write(h, v, f, controls, 1e-6, site.terminal, .05)):
+    for outputs in (site.write(h, v, f, controls), reference_write(h, v, f, controls, 1e-6, site.terminal, .05, site.ambient)):
         outputs = tuple(x for x in outputs if x is not None)
         got = torch.autograd.grad(outputs, (h, v, f, controls), probes)
         for actual, oracle in zip((*outputs, *got), (*expected, *grads)):
@@ -69,6 +71,12 @@ def geometry(c):
         site = TokenControlledSite(c, velocity_consumed=not terminal).cuda()
         h = F.normalize(torch.randn(12, c.width, device='cuda'), dim=-1) * c.width**.5
         v = torch.randn_like(h)
+        if site.ambient:
+            # Aligned and oblique velocities expose radial reads and projected-axis regressions.
+            v[1] = h[1]
+            v[2:] += .7*h[2:]
+            with torch.no_grad():
+                site.mu.fill_(.45)
         v[0].zero_()
         h, v = (t.bfloat16().requires_grad_() for t in (h, v))
         check_read(site, h, v)
@@ -76,6 +84,11 @@ def geometry(c):
         f = (torch.randn_like(h.float()) * h.new_tensor(amps).float()[:, None]).bfloat16().requires_grad_()
         controls = (torch.randn(12, 6, device='cuda')*.12 + h.new_tensor([0., .17, .09, .6, .4, .72]).float()).requires_grad_()
         check_write(site, h, v, f, controls)
+        if site.ambient and not terminal:
+            # Start from rest with a nonzero force: the stored chord has a radial component.
+            n, velocity = site.write(h, torch.zeros_like(v), torch.roll(h, 1, -1), controls)
+            torch.testing.assert_close(n.float().square().mean(-1), torch.ones_like(n[:, 0]).float(), atol=.002, rtol=0)
+            assert (n.float()*velocity.float()).mean(-1).abs().max() > .001
     h = torch.ones_like(h[:1])
     f = torch.zeros_like(h, requires_grad=True)
     c0 = torch.tensor([[0., .05, .05, .5, .5, .5]], device='cuda')
@@ -117,6 +130,10 @@ def check_model(c, data):
     assert torch.isfinite(loss)
     if c.velocity_init == 'projected_h0':
         check_projected_h0(model, ids)
+    elif c.velocity_init == 'zero':
+        h, v = model.initial_state(model.wte(ids), ids)
+        assert h.dtype == v.dtype == torch.bfloat16 and v.count_nonzero() == 0
+        assert model.velocity_projection is model.velocity_embedding is model.velocity_position_embedding is None
     grad_norm = torch.stack([p.grad.float().norm() for p in model.parameters() if p.grad is not None]).norm()
     assert torch.isfinite(grad_norm)
     for block in model.blocks:
@@ -153,13 +170,17 @@ def main():
     torch.backends.cuda.matmul.allow_tf32 = False
     source = json.loads(Path('source.json').read_text())
     assert source['recipe'] == 'chord_next_bf16'
-    assert source['model_args'] == chord_args(source['recipe'], source['velocity_init'])
+    ambient = source.get('ambient_velocity', False)
+    assert source['model_args'] == chord_args(source['recipe'], source['velocity_init'], ambient)
     control = ConnectionConfig(streams=1, residual_dynamics='ngpt_lookahead', velocity_init=source['velocity_init'],
                                chord_soft_force_tau=.05, chord_six_controls='static', chord_update_based=True,
                                ngpt_velocity_mode='lookahead_split_learned_beta', residual_projection_init='zero',
                                chord_velocity_geometry='project_only', fuse_chord_read_norm=True, ngpt_force_rms_floor=1e-6)
     c = replace(control, chord_six_controls='learned_dynamic')
-    run, reference = source['recipe'], 'chord_scalar_bf16'
+    if ambient:
+        control = c
+        c = replace(control, chord_velocity_geometry='ambient')
+    run, reference = source['recipe'], source['paired_preflight']
     data = PackedData('../data')
     geometry(c)
     result = dict(gpu=torch.cuda.get_device_name(), short_batch_init_grad_norm=check_model(c, data),

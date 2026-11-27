@@ -25,6 +25,8 @@
 
 μ 初始为 0，两个 α 用 softplus，初始为 0.05。β 用 sigmoid，初始为 0.5。两个 γ 独立、无界，初始均为 0.5。八层 static 共学习 15 × 6 + 3 = 93 个控制标量。Token-dependent 版在各系数的原始参数上加上 RMSNorm(h) 的线性投影，再施加相同的参数化。投影从零初始化，前瞻、位置和速度的调制尺度从 0.01 开始，因此在相同输入和初速度下，两版的初始系数及更新公式一致。[速度写入的来源](https://github.com/lululu39/NextTransformer/tree/chordres-zero/nexttransformer/methods/chordres_velocity_gains)
 
+零初速的速度几何消融使用 `--velocity-init zero --ambient-velocity`。读取按 h + μv 的实际 RMS 归一化；第二次分解取 u = v、d = h′ − h，两个 γ 分别写入平行和垂直分量。[实验设计](../../chord-velocity-geometry/REPORT.md)
+
 ## 优化器与训练
 
 | 参数 | 对应的 nanochat 组 | 峰值 LR（宽 512、每步 32,768 tokens） |
