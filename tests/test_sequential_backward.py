@@ -7,7 +7,6 @@ import torch
 from nanochat.connection_experiment import configure_attention
 from nanochat.connection_model import ConnectionConfig, ConnectionModel, optimizer_for
 from nanochat.gpt import norm
-from nanochat.optim import MuonAdamW
 from nanochat.sequential_backward import sequential_cost, sequential_step
 
 
@@ -29,17 +28,24 @@ class Rows:
 
 
 def oracle(model, data, microbatch, step):
-    # Independent per-stage optimizers with the hyperparameters from ordinary backprop.
-    whole, _ = optimizer_for(model)
+    # Evaluate each update with a vanilla optimizer on a private model copy, then
+    # transfer only that stage's updated weights. This one-step oracle never uses
+    # the production optimizer's stage dispatch or scratch layout.
+    def update(weights):
+        active = {id(w) for w in weights}
+        clone = copy.deepcopy(model)
+        regular, _ = optimizer_for(clone)
+        pairs = list(zip(model.parameters(), clone.parameters(), strict=True))
+        for p, q in pairs:
+            q.grad = p.grad.clone() if id(p) in active else torch.zeros_like(q)
+        regular.step()
+        with torch.no_grad():
+            for p, q in pairs:
+                if id(p) in active:
+                    p.copy_(q)
+
     ends = [model.lm_head.weight, model.wte.weight]
     params = [list(block.parameters()) for block in model.blocks]
-    def optimizer(weights):
-        ids = {id(w) for w in weights}
-        groups = [dict(g, params=[p for p in g['params'] if id(p) in ids]) for g in whole.param_groups]
-        return MuonAdamW([g for g in groups if g['params']])
-
-    optimizers = [optimizer(weights) for weights in params]
-    endpoints = optimizer(ends)
     records = []
     for offset in range(0, 4, microbatch):
         x, y = data.batch('train', step * 4 + offset, microbatch)
@@ -66,7 +72,7 @@ def oracle(model, data, microbatch, step):
             stale.append(dx)
             for p, grad in zip(params[i], grads):
                 p.grad = grad if p.grad is None else p.grad + grad
-        optimizers[i].step()
+        update(params[i])
         for record, old in zip(records, stale):
             x = record[1][i].detach().requires_grad_()
             new = block(x, model.cos, model.sin)
@@ -74,7 +80,7 @@ def oracle(model, data, microbatch, step):
             changed.append((record[2] - old).float().norm().item())
     for emb, _, gradient, _ in records:
         emb.backward(gradient)
-    endpoints.step()
+    update(ends)
     assert min(changed) > 0
     return sum(r[3] for r in records)
 

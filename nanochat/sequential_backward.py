@@ -33,8 +33,15 @@ def split_optimizer_groups(model, groups):
         by_stage = {}
         for weight in group['params']:
             by_stage.setdefault(owners[id(weight)], []).append(weight)
+        start = 0
         for stage, params in by_stage.items():
-            result.append(dict(group, params=params, sequential_stage=stage))
+            owned = dict(group, params=params, sequential_stage=stage)
+            if group['kind'] == 'muon':
+                # Preserve the original BF16 fused-kernel batch geometry and matrix slots.
+                assert all(p is q for p, q in zip(params, group['params'][start:start + len(params)], strict=True))
+                owned['sequential_layout'] = (start, len(group['params']))
+            result.append(owned)
+            start += len(params)
     return result
 
 

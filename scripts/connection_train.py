@@ -475,7 +475,7 @@ def main():
             for name, weight in anchors.items()}
         if a.sequential_backward:
             # Group ownership is execution metadata; the underlying LR, decay and moments are identical.
-            config['backbone_optimizer_groups'] = {name: {k:v for k,v in group.items() if k!='sequential_stage'}
+            config['backbone_optimizer_groups'] = {name: {k:v for k,v in group.items() if k not in ('sequential_stage','sequential_layout')}
                                                    for name,group in config['backbone_optimizer_groups'].items()}
         config['comparison_protocol'] = comparison_protocol(config)
         config['arguments'] = vars(a).copy()

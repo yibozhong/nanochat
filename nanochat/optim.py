@@ -399,12 +399,26 @@ class MuonAdamW(torch.optim.Optimizer):
             self._muon_beta2_t.fill_(group["beta2"])
             self._muon_lr_t.fill_(group["lr"] * max(1.0, shape[-2] / shape[-1])**0.5)
             self._muon_wd_t.fill_(group["weight_decay"])
+            operands = (grad_chunk[:num_owned], stacked_owned, state["momentum_buffer"][:num_owned],
+                        state["second_momentum_buffer"][:num_owned])
+            layout = group.get('sequential_layout')
+            if layout:
+                # The compiled BF16 reductions and GEMMs can round differently when the
+                # batch of matrices shrinks. Cautious decay uses their sign. Run the
+                # original kernel shape with scratch rows; commit only the active slice.
+                offset, group_size = layout
+                active = slice(offset, offset + num_owned)
+                padded = [v.new_zeros((group_size, *v.shape[1:])) for v in operands]
+                for full, part in zip(padded, operands):
+                    full[active].copy_(part)
             muon_step_fused(
-                grad_chunk[:num_owned], stacked_owned,
-                state["momentum_buffer"][:num_owned], state["second_momentum_buffer"][:num_owned],
+                *(padded if layout else operands),
                 self._muon_momentum_t, self._muon_lr_t, self._muon_wd_t, self._muon_beta2_t,
                 group["ns_steps"], red_dim,
             )
+            if layout:
+                for part, full in zip(operands[1:], padded[1:]):
+                    part.copy_(full[active])
 
         if info['stacked_grads'] is None:
             # Single rank: no gather needed, the updated stack maps directly onto the params
