@@ -1,16 +1,12 @@
-# Ambient Chord 的速度前瞻和查表初速度分别贡献多少？
+# Chord 查表时是否需要切面投影？从静止开始时前瞻贡献多少？
 
 ## 假设与设计
 
-两组对比共用已完成的零初速 ambient Chord。它在每个 Attention 和 FFN 学习前瞻系数 μ，1B tokens 的 validation CE 为 3.200898。固定 μ 的实验检验模型从静止开始后，读取历史速度做前瞻能否改善预测。查表实验检验正常学习 μ 时，用独立 token 表提供初速度能否改善预测。[共同基线 011078b9](https://wandb.ai/yibozhong657-none/nanochat-1b/runs/011078b9)
+查表实验比较速度的几何约束。两边都有独立 token 速度表、可学习的前瞻系数 μ 和 75,545,228 个参数。旧版在初始化和逐层速度写入时都做切面投影；ambient 版直接使用查到的初速度，逐层保留 ambient 速度。这个对照含两处投影的合计影响。[切面查表基线 7337b20d](https://wandb.ai/yibozhong657-none/nanochat-1b/runs/7337b20d)
 
-| 配置 | 初速度 | 前瞻系数 μ | 与共同基线相比的改动 |
-|---|---|---|---|
-| 共同基线，已完成 | 零 | 按 token 学习，初值 0 | 参照 |
-| 固定 μ=0 | 零 | 所有子层恒为 0 | 关闭前瞻读取，保留速度写入和两个方向分解 |
-| 默认查表 | 独立 token 速度表 | 按 token 学习，初值 0 | v0 直接查表，增加 32,768 × 512 个可训练参数 |
+固定 μ=0 的实验单独检验前瞻。该配对的两边都从零初速度开始，使用 ambient 速度；基线按 token 学习 μ，消融把 μ 固定为零。[零初速、可学 μ 基线 011078b9](https://wandb.ai/yibozhong657-none/nanochat-1b/runs/011078b9)
 
-三组均为 vanilla 8 层 × 512，2K 上下文，BF16 状态，球面位置、ambient 速度，Attention 和 FFN 输出投影零初始化。新作业均从零、seed 42，沿用相同数据和 30,518 步的 1B 学习率日程。主指标为同 token 的 validation CE 和相对共同基线的 ΔCE；查表结果包含额外参数的作用。
+两组均为 vanilla 8 层 × 512、2K 上下文、BF16、球面位置，Attention 和 FFN 输出投影零初始化。从零、seed 42 训练 30,518 步。ΔCE 取相同 token 数下实验组与各自基线的 validation CE 之差。
 
 ## 实验结果
 

@@ -342,6 +342,13 @@ def include_archived_runs(records, root):
 
 def publish(records, root, reviewer=None, *, synced_at=None):
     records = include_archived_runs(records, root)
+    # A research question can be re-paired after launch. Keep the training manifest intact.
+    pairings = root/'analysis_baselines.json'
+    if pairings.is_file():
+        baselines = json.loads(pairings.read_text())
+        for row in records:
+            if row['run_id'] in baselines:
+                row['baseline_run'] = baselines[row['run_id']]
     compare(records)
     by_id = {r['run_id']:r for r in records}
     groups = defaultdict(list)

@@ -61,12 +61,13 @@ class ReportsTest(unittest.TestCase):
         end = STEPS*BATCH_TOKENS
         self.assertEqual(end,1_000_013_824)
         records = [record('base','self',{0:9,100:4,end:3.5},complete=True),
-                   record('candidate','base',{100:3.9,end:3.4},complete=True),
+                   record('candidate','self',{100:3.9,end:3.4},complete=True),
                    record('stopped','base',{100:3.8},wb='crashed',job={'stopped':True}),
                    record('mismatch','base',{end:2},complete=True,seed=101),
                    record('unmatched','base',{110:3.8},wb='failed')]
         with tempfile.TemporaryDirectory() as tmp:
             root=Path(tmp)
+            (root/'analysis_baselines.json').write_text(json.dumps({'candidate':'base'}))
             def reviewer(folder, stamp, rows):
                 with (folder/'REPORT.md').open('a') as target:
                     target.write(f'\n<!-- reviewed: {stamp} -->\n\n**实测结论** 仅同协议排名。\n')
@@ -83,6 +84,7 @@ class ReportsTest(unittest.TestCase):
             self.assertNotIn('stopped',leaderboard)
             self.assertIn('已复核',(root/'OVERVIEW.md').read_text())
             self.assertAlmostEqual(records[1]['delta_ce'],-.1)
+            self.assertEqual(records[1]['config']['source']['baseline_run'], 'self')
             self.assertAlmostEqual(records[2]['delta_ce'],-.2)
             self.assertIsNone(records[2]['final_ce'])
             self.assertEqual(records[2]['status'],'主动终止')
