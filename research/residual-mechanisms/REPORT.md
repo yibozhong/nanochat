@@ -14,7 +14,7 @@
 
 每条从零开始，seed 42，8 层、宽 512、上下文 2048，使用相同 packed FineWeb-Edu 数据顺序和 30,518 步学习率日程。每层 Attention 输出和 FFN down 投影均从零开始。六系数 Chord 使用 soft-force τ=0.05。原顺序作业逐配置验证首批梯度与断点恢复。
 
-历史四标量配方和旧消融已移入 [Legacy 归档](../legacy-chord-1b/REPORT.md)。当前两组分别比较[三种初速度](../chord-initial-velocity/REPORT.md)和[球面与速度前瞻](../chord-components/REPORT.md)。
+历史四标量配方和旧消融已移入 [Legacy 归档](../legacy-chord-1b/REPORT.md)。[三种初速度](../chord-initial-velocity/REPORT.md)单独比较；以切向 Chord 为参照的[球面与速度前瞻](../legacy-chord-1b/chord-components/REPORT.md)保留在归档中。
 
 ## 实验事实
 

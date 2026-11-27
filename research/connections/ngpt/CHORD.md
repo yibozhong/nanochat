@@ -27,7 +27,7 @@
 
 默认 ambient 的显式提交参数是 `--ambient-velocity`。用 `--project-only` 可复现仅投影版本，先将旧速度和弦位移投到新位置的切平面，再分解并写入速度。Token-dependent 版还支持 `--parallel-transport`，沿短弧搬运旧速度到新切面后再分解。已完成的 1B 配对实验使用零初速，ambient 和仅投影的验证 CE 分别为 3.20090 和 3.20722。[速度几何实验](../../chord-velocity-geometry/REPORT.md)
 
-零初速前瞻消融使用 `--velocity-init zero --chord-zero-mu`。复现历史切向对照时再指定 `--project-only`。[前瞻消融](../../chord-lookahead/REPORT.md)
+零初速前瞻消融使用 `--velocity-init zero --chord-zero-mu`。复现历史切向对照时再指定 `--project-only`。[历史前瞻消融](../../legacy-chord-1b/chord-lookahead/REPORT.md)
 
 ## 优化器与训练
 

@@ -29,13 +29,20 @@ def record(rid, baseline, points, *, complete=False, seed=42, wb='finished', job
 class ReportsTest(unittest.TestCase):
     def test_frozen_chord_records_take_precedence_over_missing_wandb_data(self):
         root = launcher.REPO/'research'
-        rows = sync.include_archived_runs([{'run_id': '9c3d50ec'}], root)
-        self.assertEqual(len(rows), 4)
+        # The same records must survive deletion from W&B and override live or scheduler entries beforehand.
+        rows = sync.include_archived_runs([], root)
+        self.assertEqual(sync.include_archived_runs([{'run_id': r['run_id']} for r in rows], root), rows)
         self.assertTrue(all(r['group'] == 'legacy-chord-1b' for r in rows))
         archived = {r['run_id']: r for r in rows}
         self.assertEqual(archived['9c3d50ec']['status'], '已完成')
         self.assertAlmostEqual(archived['9c3d50ec']['final_ce'], 3.2080763)
         self.assertEqual(archived['62357991']['trained_tokens'], 0)
+        for rid, count, final in [('e1579b8b', 126, 3.209974706172943), ('961d9458', 125, 3.2677252292633057),
+                                  ('33c7f10a', 126, 3.261841595172882)]:
+            row = archived[rid]
+            self.assertEqual((row['baseline_run'], row['status'], row['wandb_state']), ('aa44a2d7', '已完成', 'finished'))
+            self.assertEqual((len(row['curve']), row['curve'][STEPS*BATCH_TOKENS]), (count, final))
+            self.assertTrue((root/row['url']).is_file())
 
     def test_matching_and_closed_group_review(self):
         end = STEPS*BATCH_TOKENS

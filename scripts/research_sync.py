@@ -333,8 +333,10 @@ def include_archived_runs(records, root):
         source = cfg['source']
         assert source['run_id'] == rid and source['wandb_project'] == PROJECT
         job = dict(stopped='stop_reason' in fact, stop_reason=fact.get('stop_reason'))
-        rows.append(make_record(rid, source['run_name'], archive.name, '', cfg, fact['summary'],
-                                dict(fact['points']), job))
+        row = make_record(rid, source['run_name'], archive.name, fact.get('wandb_state', ''), cfg,
+                          fact['summary'], dict(fact['points']), job)
+        row['url'] = f'{archive.name}/configs/{rid}.json'
+        rows.append(row)
     return sorted(rows, key=lambda r: (r['group'], r['name'], r['run_id']))
 
 
