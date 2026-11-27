@@ -27,6 +27,8 @@
 
 零初速的速度几何消融使用 `--velocity-init zero --ambient-velocity`。读取按 h + μv 的实际 RMS 归一化；第二次分解取 u = v、d = h′ − h，两个 γ 分别写入平行和垂直分量。[实验设计](../../chord-velocity-geometry/REPORT.md)
 
+使用 `--parallel-transport` 可在同一六系数配方中先沿球面短弧搬运旧速度，再按搬运后的切向速度分解本步位移。位置和前瞻仍按原式计算。本轮以 `--velocity-init zero` 对照仅切向投影。[速度几何实验](../../chord-velocity-geometry/REPORT.md)
+
 零初速前瞻消融使用 `--velocity-init zero --chord-zero-mu`。所有 Attention 和 FFN 读取当前位置，两个方向分解仍使用切向速度。[实验设计](../../chord-lookahead/REPORT.md)
 
 ## 优化器与训练

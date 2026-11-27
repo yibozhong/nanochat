@@ -228,6 +228,18 @@ class ReportsTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             launcher.chord_args('chord_scalar_bf16', 'zero', ambient_velocity=True)
 
+    def test_parallel_transport_changes_only_velocity_geometry(self):
+        recipe = 'chord_next_bf16'
+        data = dict(data_uri='test', manifest=dict(dataset_revision='v', tokenizer={}))
+        args = (recipe, 'job', STEPS, 'chord-velocity-geometry', 'transport', 'aa44a2d7', 'commit', data)
+        for init in launcher.VELOCITY_INITS:
+            baseline = launcher.make_source(*args, init)
+            trial = launcher.make_source(*args, init, parallel_transport=True)
+            self.assertEqual(set(trial['model_args']) ^ set(baseline['model_args']),
+                             {'--chord-velocity-geometry=project_only', '--chord-velocity-geometry=parallel_transport'})
+            self.assertEqual(run_queue.manifest_runs(trial, trial['run_id'], recipe), [trial])
+            self.assertEqual(trial['paired_preflight'], 'chord_next_bf16/project_only')
+
     def test_fixed_zero_mu_changes_only_preview(self):
         recipe = 'chord_next_bf16'
         data = dict(data_uri='test', manifest=dict(dataset_revision='v', tokenizer={}))

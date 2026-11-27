@@ -118,10 +118,10 @@ def _write_values(h, v, force, P, BETA: tl.constexpr, FLOOR2: tl.constexpr,
         beta = BETA
     if MODE == 7 or MODE == 9:
         chord = new_h - h
-        along = _velocity_axis(new_h, v, chord, D, GEOMETRY == 2)[6]
+        along = _velocity_axis(new_h, carried, chord, D, GEOMETRY == 2)[6]
         b, c = tl.load(P + 3), tl.load(P + 4)
         # The tangent policy projects once after mixing; ambient keeps the raw chord.
-        velocity = beta * v + c * chord + ((b - c) * along) * v
+        velocity = beta * carried + c * chord + ((b - c) * along) * carried
     else:
         velocity = beta * carried + (1.0 - beta) * (new_h - h)
     radial = _mean(new_h * velocity, D) if GEOMETRY != 2 else 0.
@@ -333,9 +333,9 @@ def _backward(H, V, F, P, DNH, DNV, DH, DV, DF, DP, ROWS, BETA: tl.constexpr,
         d_carried = beta * d_velocity
         if MODE == 7 or MODE == 9:
             chord = new_h - h
-            u, d, vn, dn, u2, den, along = _velocity_axis(new_h, v, chord, D, GEOMETRY == 2)
+            u, d, vn, dn, u2, den, along = _velocity_axis(new_h, carried, chord, D, GEOMETRY == 2)
             b, c = tl.load(P + 3), tl.load(P + 4)
-            du_dot = _mean(d_velocity * v, D)
+            du_dot = _mean(d_velocity * carried, D)
             gb = du_dot * along
             tl.store(dp_row + 2 * dp_stride, D * du_dot)
             tl.store(dp_row + 3 * dp_stride, D * gb)
@@ -353,7 +353,7 @@ def _backward(H, V, F, P, DNH, DNV, DH, DV, DF, DP, ROWS, BETA: tl.constexpr,
                 d_carried -= un * new_h
                 d_chord -= cn * new_h
                 d_new_h = dh_next + d_chord - radial * upstream - dot * velocity
-                d_new_h -= vn * du + un * v + dn * dd + cn * chord
+                d_new_h -= vn * du + un * carried + dn * dd + cn * chord
         if MODE == 2:
             chord = new_h - h
             cosine, recent, chord_radial, h2, r2, inv = _history_alignment(new_h, carried, chord, D)
@@ -536,14 +536,15 @@ class _ChordWrite(torch.autograd.Function):
 class TokenWrite(torch.autograd.Function):
     """Use the same native three-scalar write with a separate control row per token."""
     @staticmethod
-    def forward(ctx, h, v, force, controls, floor, terminal, soft_tau=0., ambient=False):
+    def forward(ctx, h, v, force, controls, floor, terminal, soft_tau=0., ambient=False, transport=False):
         h, v, force = h.contiguous(), v.contiguous(), force.contiguous()
         width = h.size(-1)
         rows = h.numel() // width
         nh = torch.empty_like(h)
         nv = None if terminal else torch.empty_like(v)
         ctx.soft_force = bool(soft_tau)
-        ctx.geometry = _GEOMETRY['ambient'] if ambient else _GEOMETRY['project_only']
+        geometry = 'ambient' if ambient else 'project_only'
+        ctx.geometry = _GEOMETRY['parallel_transport' if transport else geometry]
         ctx.mode = 9 if soft_tau else 7
         ctx.floor2 = soft_tau**2 if soft_tau else floor**2
         _forward[(rows,)](h, v, force, controls, nh, nv, 0., ctx.floor2, width, ctx.mode,
@@ -563,7 +564,7 @@ class TokenWrite(torch.autograd.Function):
         _backward[(rows,)](h, v, force, controls, dnh.contiguous(), None if ctx.terminal else dnv.contiguous(),
                            dh, dv, df, dc, rows, 0., ctx.floor2, width, ctx.mode, controls, ctx.terminal,
                            False, ctx.geometry, 1, TOKEN_CONTROLS=True, SOFT_FORCE=ctx.soft_force, num_warps=4, enable_fp_fusion=False)
-        return (dh, dv, df, dc, None, None, None, None)[:len(ctx.needs_input_grad)]
+        return (dh, dv, df, dc) + (None,) * (len(ctx.needs_input_grad) - 4)
 
 
 class _SplitBoundary(torch.autograd.Function):

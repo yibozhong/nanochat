@@ -60,17 +60,46 @@ def check_write(site, h, v, f, controls):
     parallel = along(u, vd)
     mixed = hd + al*parallel + ap*(u-parallel)
     n = mixed / mixed.square().mean(-1, True).clamp_min(1e-12).sqrt()
-    carried, chord = (vd, n-hd) if site.ambient else (tangent(vd, n), tangent(n-hd, n))
+    history = vd
+    if site.transport:
+        # FP64 bisector reflection; include dependence on both endpoints in the oracle VJP.
+        bisector = n + hd
+        history = vd - 2 * along(vd, bisector)
+    carried, chord = (vd, n-hd) if site.ambient else (tangent(history, n), tangent(n-hd, n))
     par_d = along(chord, carried)
     expected = (n,) if site.terminal else (n, beta*carried + gp*par_d + gt*(chord-par_d))
     probes = tuple(torch.randn_like(h) for _ in expected)
     grads = torch.autograd.grad(expected, leaves, tuple(x.double() for x in probes))
-    for outputs in (site.write(h, v, f, controls), reference_write(h, v, f, controls, 1e-6, site.terminal, .05, site.ambient)):
+    for outputs in (site.write(h, v, f, controls), reference_write(h, v, f, controls, 1e-6, site.terminal, .05, site.ambient, site.transport)):
         outputs = tuple(x for x in outputs if x is not None)
         got = torch.autograd.grad(outputs, (h, v, f, controls), probes)
         for actual, oracle in zip((*outputs, *got), (*expected, *grads)):
             err = (actual.double()-oracle).norm(dim=-1)
             assert torch.all(err <= .012*oracle.norm(dim=-1) + 2e-5), err.max().item()
+
+
+def check_transport_rotation(site, width):
+    # Exact orthogonal sign patterns let BF16 inputs represent this great-circle plane.
+    h = torch.ones(1, width, device='cuda', dtype=torch.bfloat16)
+    t = h.new_tensor([1., -1.]).repeat(1, width // 2)
+    side = h.new_tensor([1., 1., -1., -1.]).repeat(1, width // 4)
+    v = t + .5 * side
+    gains = torch.tensor([[0., 1., 1., 1., 0., 0.]], device=h.device)
+    split_gains = gains.new_tensor([[0., 1., 1., 0., 1., 0.]])
+    for force in (torch.zeros_like(h), t):
+        n, moved = site.write(h, v, force, gains)
+        # Rotate the in-plane direction by the observed endpoint angle, keep side fixed.
+        angle = torch.atan2((n.float()*t).mean(), (n.float()*h).mean())
+        expected = -angle.sin()*h.float() + angle.cos()*t.float() + .5*side.float()
+        torch.testing.assert_close(moved.float(), expected, rtol=.006, atol=.003)
+        torch.testing.assert_close(moved.float().norm(), v.float().norm(), rtol=.005, atol=0)
+        assert (n.float()*moved.float()).mean().abs() < .005
+        # Isolate gamma_parallel. The chord's endpoint tangent component is sin(angle) * rotated_t.
+        _, parallel = site.write(h, v, force, split_gains)
+        torch.testing.assert_close(parallel.float(), expected * (angle.sin() / 1.25), rtol=.009, atol=.003)
+    # The exact antipode has no unique short arc. Exercise the inherited finite fallback.
+    _, opposite = site.write(h, v, -h, gains * gains.new_tensor([1., 3., 3., 1., 1., 1.]))
+    torch.testing.assert_close(opposite, v)
 
 
 def geometry(c):
@@ -92,6 +121,8 @@ def geometry(c):
         f = (torch.randn_like(h.float()) * h.new_tensor(amps).float()[:, None]).bfloat16().requires_grad_()
         controls = (torch.randn(12, 6, device='cuda')*.12 + h.new_tensor([0., .17, .09, .6, .4, .72]).float()).requires_grad_()
         check_write(site, h, v, f, controls)
+        if site.transport and not terminal:
+            check_transport_rotation(site, c.width)
         if site.zero_mu and not terminal:
             with torch.no_grad():
                 # Starting from rest, one write builds tangent velocity and the next position uses it.
@@ -190,15 +221,17 @@ def main():
     assert source['recipe'] == 'chord_next_bf16'
     ambient = source.get('ambient_velocity', False)
     zero_mu = source.get('chord_zero_mu', False)
-    assert source['model_args'] == chord_args(source['recipe'], source['velocity_init'], ambient, zero_mu)
+    transport = source.get('parallel_transport', False)
+    assert source['model_args'] == chord_args(source['recipe'], source['velocity_init'], ambient, zero_mu, transport)
     control = ConnectionConfig(streams=1, residual_dynamics='ngpt_lookahead', velocity_init=source['velocity_init'],
                                chord_soft_force_tau=.05, chord_six_controls='static', chord_update_based=True,
                                ngpt_velocity_mode='lookahead_split_learned_beta', residual_projection_init='zero',
                                chord_velocity_geometry='project_only', fuse_chord_read_norm=True, ngpt_force_rms_floor=1e-6)
     c = replace(control, chord_six_controls='learned_dynamic')
-    if ambient or zero_mu:
+    if ambient or zero_mu or transport:
         control = c
-        c = replace(control, chord_velocity_geometry='ambient' if ambient else 'project_only', chord_zero_mu=zero_mu)
+        geometry_mode = 'parallel_transport' if transport else control.chord_velocity_geometry
+        c = replace(control, chord_velocity_geometry='ambient' if ambient else geometry_mode, chord_zero_mu=zero_mu)
     run, reference = source['recipe'], source['paired_preflight']
     data = PackedData('../data')
     geometry(c)

@@ -95,6 +95,9 @@ def model_cost(config, batch=1, activation_bytes=2, feedback_passes=None):
             if c.chord_velocity_geometry == 'ambient':
                 # Skip projections of v, the chord, and the final mixed velocity.
                 split_write -= 3*(4*d - 1)
+            elif c.chord_velocity_geometry == 'parallel_transport':
+                # h+n, two dot products, then a scaled subtraction per channel.
+                split_write += 7*d - 2
             residual += batch*t*(sites - 1)*split_write
             if c.dynamic_chord_controls:
                 outputs = 6*sites - 3

@@ -9,6 +9,13 @@ from nanochat.geodesic_residual import geodesic_split_write
 from nanochat.momentum import MomentumModel, NormalizedResidual, normalize_residual, state_dtype, tangent_project
 
 
+def chord_transport(h, n, v):
+    """Reflect across the bisector to carry a tangent velocity along the short great-circle arc."""
+    bisector = h + n
+    norm2 = bisector.square().mean(-1, keepdim=True)
+    return v - (2 * (v * bisector).mean(-1, keepdim=True) / norm2.clamp_min(1e-12)) * bisector
+
+
 def _read(h, v, mu, ambient):
     offset = mu[0] * state_dtype(v)
     read = state_dtype(h) + offset
@@ -179,10 +186,7 @@ class LookaheadResidual(_ChordLookaheadRead, NormalizedResidual):
         # The Householder reflector with normal h + new_h gives short-arc
         # parallel transport. At opposite poles the two tangent planes coincide.
         if self.velocity_geometry == 'parallel_transport':
-            bisector = h + new_h
-            norm2 = bisector.square().mean(-1, keepdim=True)
-            scale = 2 * (v * bisector).mean(-1, keepdim=True) / norm2.clamp_min(1e-12)
-            carried = v - scale * bisector
+            carried = chord_transport(h, new_h, v)
         else:
             carried = v
         chord = new_h - h

@@ -4,7 +4,7 @@ import math
 import torch
 from torch.nn import functional as F
 
-from nanochat.lookahead import LookaheadResidual
+from nanochat.lookahead import LookaheadResidual, chord_transport
 from nanochat.momentum import normalize_residual, tangent_project
 
 GATE_EPS = 1e-6
@@ -51,7 +51,7 @@ def reference_read(h, v, weight, mu, steps, beta, gains, bounded=False, small_dy
     return q, torch.cat((m, alpha, b, g), dim=-1)
 
 
-def reference_write(h, v, force, controls, floor, terminal, soft_tau=0., ambient=False):
+def reference_write(h, v, force, controls, floor, terminal, soft_tau=0., ambient=False, transport=False):
     dtype = h.dtype
     h, v, f = h.to(controls.dtype), v.to(controls.dtype), force.to(controls.dtype)
     _, perp, par, a, b, c = controls.unsqueeze(-1).unbind(-2)
@@ -61,7 +61,8 @@ def reference_write(h, v, force, controls, floor, terminal, soft_tau=0., ambient
     n = normalize_residual((h + perp*delta) + ((par-perp)*along)*v)
     if terminal:
         return n.to(dtype), None
-    u, d = (v, n-h) if ambient else (tangent_project(n, v), tangent_project(n, n-h))
+    carried = chord_transport(h, n, v) if transport else v
+    u, d = (v, n-h) if ambient else (tangent_project(n, carried), tangent_project(n, n-h))
     par_d = u * ((u*d).mean(-1, keepdim=True) / u.square().mean(-1, keepdim=True).clamp_min(1e-12))
     return n.to(dtype), (a*u + b*par_d + c*(d-par_d)).to(dtype)
 
@@ -88,6 +89,7 @@ class TokenControlledSite(LookaheadResidual):
         self.token_weight = torch.nn.Parameter(torch.zeros(3 if self.terminal else 6, inputs, config.width))
         self.zero_mu = config.chord_zero_mu
         self.ambient = self.velocity_geometry == 'ambient'
+        self.transport = self.velocity_geometry == 'parallel_transport'
         self.eval_control_moments = None
         self.eval_radial_fraction = None
 
@@ -130,5 +132,5 @@ class TokenControlledSite(LookaheadResidual):
     def write(self, h, v, force, controls):
         if h.is_cuda and h.dtype == torch.bfloat16 and h.size(-1) in (128, 512):
             from nanochat.chord_triton import TokenWrite
-            return TokenWrite.apply(h, v, force, controls, self.rms_floor, self.terminal, self.soft_tau, self.ambient)
-        return reference_write(h, v, force, controls, self.rms_floor, self.terminal, self.soft_tau, self.ambient)
+            return TokenWrite.apply(h, v, force, controls, self.rms_floor, self.terminal, self.soft_tau, self.ambient, self.transport)
+        return reference_write(h, v, force, controls, self.rms_floor, self.terminal, self.soft_tau, self.ambient, self.transport)

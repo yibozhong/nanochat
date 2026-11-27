@@ -130,8 +130,8 @@ class ConnectionConfig:
             raise ValueError('Unknown six-coefficient Chord setting')
         if self.chord_zero_mu and self.chord_six_controls != 'learned_dynamic':
             raise ValueError('Fixed-zero lookahead uses the token-dependent six-control Chord read')
-        ambient_token_chord = self.dynamic_chord_controls and self.chord_velocity_geometry == 'ambient'
-        supported_six_geometry = self.chord_velocity_geometry == 'project_only' or ambient_token_chord
+        supported_six_geometry = self.chord_velocity_geometry == 'project_only' or (
+            self.dynamic_chord_controls and self.chord_velocity_geometry in ('parallel_transport', 'ambient'))
         if self.chord_six_controls != 'off' and (self.architecture != 'vanilla'
                 or self.ngpt_velocity_mode != 'lookahead_split_learned_beta' or not self.fuse_chord_read_norm
                 or not supported_six_geometry or self.recompute_chord_force

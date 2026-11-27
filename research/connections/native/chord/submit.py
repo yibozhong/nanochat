@@ -45,16 +45,19 @@ def save(path, value):
     path.write_text(json.dumps(value, indent=2) + '\n')
 
 
-def chord_args(recipe, velocity_init=None, ambient_velocity=False, zero_mu=False):
+def chord_args(recipe, velocity_init=None, ambient_velocity=False, zero_mu=False, parallel_transport=False):
     flags = (CHORD_ARGS | ABLATION_ARGS | TOKEN_COMPONENTS)[recipe].read_text().splitlines()
     if velocity_init is not None and (recipe not in CHORD_ARGS or velocity_init not in VELOCITY_INITS):
         raise ValueError('Select a six-coefficient Chord recipe and a supported initial velocity')
     if (ambient_velocity or zero_mu) and (recipe != 'chord_next_bf16' or velocity_init != 'zero'):
         raise ValueError('These ablations pair token-dependent Chord from rest')
+    if parallel_transport and (recipe != 'chord_next_bf16' or ambient_velocity or zero_mu):
+        raise ValueError('Parallel transport uses the full token-dependent Chord recipe')
     if zero_mu:
         flags.append('--chord-zero-mu')
-    if ambient_velocity:
-        flags[flags.index('--chord-velocity-geometry=project_only')] = '--chord-velocity-geometry=ambient'
+    if ambient_velocity or parallel_transport:
+        geometry = 'parallel_transport' if parallel_transport else 'ambient'
+        flags[flags.index('--chord-velocity-geometry=project_only')] = f'--chord-velocity-geometry={geometry}'
     if recipe == 'chord_scalar_from_rest':
         velocity_init = 'zero'
     if velocity_init is not None:
@@ -63,7 +66,7 @@ def chord_args(recipe, velocity_init=None, ambient_velocity=False, zero_mu=False
     return flags
 
 
-def make_source(recipe, key, steps, group, name, baseline, commit, data, velocity_init=None, ambient_velocity=False, zero_mu=False):
+def make_source(recipe, key, steps, group, name, baseline, commit, data, velocity_init=None, ambient_velocity=False, zero_mu=False, parallel_transport=False):
     run_id = uuid.uuid4().hex[:8]
     source = dict(commit=commit, run_id=run_id, plan=key, formal_training=bool(steps), seed=42,
         wandb_project=PROJECT, group=group, run_name=name, baseline_run=baseline, recipe=recipe,
@@ -81,7 +84,7 @@ def make_source(recipe, key, steps, group, name, baseline, commit, data, velocit
                   connection_variant=variant, streams=streams, matched_backbone_init=True,
                   residual_projection_init='zero', output_projection_actual_std=0.)
     if recipe in CHORD_ARGS or recipe in ABLATION_ARGS or recipe in TOKEN_COMPONENTS:
-        flags = chord_args(recipe, velocity_init, ambient_velocity, zero_mu)
+        flags = chord_args(recipe, velocity_init, ambient_velocity, zero_mu, parallel_transport)
         options = dict(flag[2:].split('=', 1) for flag in flags if '=' in flag)
         source.update(model_args=flags, velocity_init=options['velocity-init'],
                       model_variant=options.get('chord-six-controls', options.get('ngpt-velocity-mode', options['residual-dynamics'])),
@@ -97,7 +100,11 @@ def make_source(recipe, key, steps, group, name, baseline, commit, data, velocit
                 source.update(velocity_embedding_optimizer='adamw', velocity_embedding_peak_lr=.3*.25*(768/512)**.5)
         if recipe == 'chord_next_bf16':
             source.update(next_run='2574b7dc', next_source='lululu39/NextTransformer@b8bbfa41d8ab4b31eb5447cbde6271fe84074b78',
-                          modulation_scale_init=.01, paired_preflight='chord_next_bf16/project_only' if ambient_velocity or zero_mu else 'chord_scalar_bf16')
+                          modulation_scale_init=.01, paired_preflight='chord_scalar_bf16')
+            if ambient_velocity or zero_mu or parallel_transport:
+                source['paired_preflight'] = 'chord_next_bf16/project_only'
+            if parallel_transport:
+                source['parallel_transport'] = True
             if ambient_velocity:
                 source['ambient_velocity'] = True
             if zero_mu:
@@ -118,13 +125,13 @@ def make_source(recipe, key, steps, group, name, baseline, commit, data, velocit
     return source
 
 
-def submit(recipe, root, steps, group, name, baseline, procedural=None, velocity_init=None, *, ambient_velocity=False, zero_mu=False):
+def submit(recipe, root, steps, group, name, baseline, procedural=None, velocity_init=None, *, ambient_velocity=False, zero_mu=False, parallel_transport=False):
     if recipe not in (*RECIPES, *SUITES):
         raise ValueError(f'Unknown active recipe: {recipe}')
     if velocity_init is not None and (recipe not in CHORD_ARGS or velocity_init not in VELOCITY_INITS):
         raise ValueError('--velocity-init applies only to individual six-coefficient Chord recipes')
-    if ambient_velocity or zero_mu:
-        chord_args(recipe, velocity_init, ambient_velocity, zero_mu)
+    if ambient_velocity or zero_mu or parallel_transport:
+        chord_args(recipe, velocity_init, ambient_velocity, zero_mu, parallel_transport)
     if recipe == SUITE and baseline != 'self':
         raise ValueError('The residual suite pairs its own baseline runs')
     if recipe == ABLATION_SUITE and baseline == 'self':
@@ -136,7 +143,7 @@ def submit(recipe, root, steps, group, name, baseline, procedural=None, velocity
     if (root/'state.json').exists():
         state = json.loads((root/'state.json').read_text())
         pinned = state['source']
-        if recipe in CHORD_ARGS and pinned.get('model_args') != chord_args(recipe, velocity_init, ambient_velocity, zero_mu):
+        if recipe in CHORD_ARGS and pinned.get('model_args') != chord_args(recipe, velocity_init, ambient_velocity, zero_mu, parallel_transport):
             raise ValueError('This job directory has different Chord controls or initial velocity; choose a distinct --name')
         if pinned.get('procedural') != procedural:
             raise ValueError('This job directory has a different procedural configuration')
@@ -172,7 +179,7 @@ def submit(recipe, root, steps, group, name, baseline, procedural=None, velocity
         run_id = sources[0]['run_id']
         source = dict(recipe=recipe, run_id=run_id, group=group, run_name=name, baseline_run=baseline, runs=sources)
     else:
-        source = make_source(recipe, key, steps, group, name, baseline, commit, data, velocity_init, ambient_velocity, zero_mu)
+        source = make_source(recipe, key, steps, group, name, baseline, commit, data, velocity_init, ambient_velocity, zero_mu, parallel_transport)
         if procedural:
             source['procedural'] = procedural
         run_id = source['run_id']
@@ -233,6 +240,7 @@ def main(argv=None):
                         help='Chord initial velocity: token table (default), transform of normalized h0, or zero')
     ablation = parser.add_mutually_exclusive_group()
     ablation.add_argument('--chord-zero-mu', action='store_true', help='Fix lookahead to zero in both sublayers; keep the tangent velocity writes')
+    ablation.add_argument('--parallel-transport', action='store_true', help='Carry the old velocity along the short great-circle arc before splitting the chord')
     ablation.add_argument('--ambient-velocity', action='store_true', help='Write velocity in the ambient space (paired Chord from rest)')
     parser.add_argument('--group', required=True, help='Research question slug, shared by its configurations')
     parser.add_argument('--name', help='Configuration name (defaults to recipe, seed and budget)')
@@ -271,12 +279,16 @@ def main(argv=None):
     suffix = f"-{procedural['task']}-len{length}-{procedural['tokens']}t" if procedural else ''
     if args.procedural_reset_vocab:
         suffix += '-reset-vocab'
+    if args.parallel_transport and args.recipe != 'chord_next_bf16':
+        parser.error('--parallel-transport uses --recipe chord_next_bf16')
     if (args.ambient_velocity or args.chord_zero_mu) and (args.recipe != 'chord_next_bf16' or args.velocity_init != 'zero'):
         parser.error('These Chord ablations use --recipe chord_next_bf16 --velocity-init zero')
     if args.recipe in CHORD_ARGS:
-        flags = chord_args(args.recipe, args.velocity_init, args.ambient_velocity, args.chord_zero_mu)
+        flags = chord_args(args.recipe, args.velocity_init, args.ambient_velocity, args.chord_zero_mu, args.parallel_transport)
         velocity, = (f.split('=', 1)[1] for f in flags if f.startswith('--velocity-init='))
         suffix += '-six-' + velocity.replace('_', '-') + ('-ambient' if args.ambient_velocity else '')
+        if args.parallel_transport:
+            suffix += '-parallel-transport'
         if args.chord_zero_mu:
             suffix += '-mu0'
     name = args.name or args.recipe.replace('_', '-') + suffix + '-s42-1b'
@@ -290,7 +302,7 @@ def main(argv=None):
     with (root/'submit.lock').open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         submit(args.recipe, root, steps, group, name, baseline, procedural, args.velocity_init,
-               ambient_velocity=args.ambient_velocity, zero_mu=args.chord_zero_mu)
+               ambient_velocity=args.ambient_velocity, zero_mu=args.chord_zero_mu, parallel_transport=args.parallel_transport)
 
 
 if __name__ == '__main__':
