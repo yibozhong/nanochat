@@ -379,6 +379,11 @@ def publish(records, root, reviewer=None, *, synced_at=None):
         folder = root/group
         counts = Counter(r['status'] for r in rows)
         overview.append(f"- [{group}]({group}/REPORT.md) · " + ('，'.join(f'{k} {n}' for k,n in sorted(counts.items())) or '待实验'))
+        report = folder/'REPORT.md'
+        if report.is_file() and '<!-- sync:summary-only -->' in report.read_text() and all(r['status'] == '主动终止' for r in rows):
+            # Keep retired findings visible without recreating their deleted experiment files.
+            reviewed_groups[group] = True
+            continue
         lines = ['| 配置 | 状态 | 验证 tokens | 最近 CE | ΔCE | 基线 |','|---|---|---:|---:|---:|---|']
         for r in rows:
             rid = r['run_id']

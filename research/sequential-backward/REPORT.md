@@ -1,17 +1,12 @@
-# Sequential Backward
+# Sequential Backward（已停止）
 
-检验一个问题：每层更新后再计算传给前一层的输入梯度，能否用更少的 FineWeb-Edu tokens 达到相同验证 CE？
+<!-- sync:summary-only -->
 
-配对基线为 vanilla run `a2793a7e`。使用相同的 58,720,256 参数、全注意力、零初始化残差输出投影、seed 42、packed FineWeb-Edu 数据与顺序。每步 32,768 tokens，完整预算 30,518 步。基线最终验证 CE 为 3.292653，测试 CE 为 3.279382。[基线配置](../residual-mechanisms/configs/a2793a7e.json)
+**实测结论** 在已完成的训练区间，最后三个相同 token 数的验证点，Sequential Backward 的 FineWeb-Edu 验证 CE 均高于 vanilla。第 5,000 步（163,840,000 tokens）两者分别为 3.818493 和 3.784088，差值 +0.034405。
 
-保留初次前向时的每层输入。LM head 按原参数计算交叉熵、头部参数梯度和最顶层传入梯度。每个 Transformer block 从后向前收齐整个有效 batch 的参数梯度，执行一次原 Muon 更新，再用相同的输入和传入梯度，通过更新后的 block 重算输入梯度。输入 embedding 收到第一个 block 重算的梯度。两个独立的端点各执行一次原 AdamW 更新。全局学习率、动量和权重衰减日程每个训练步前进一次。Muon 保留 vanilla 按形状分组的 BF16 内核批次形状与矩阵位置，只有当前层的权重和动量写回；同卡吞吐包含填充带来的优化器开销。跨层共享存储会在创建优化器时拒绝，防止顺序更新更改尚待反传的参数。
+seed 42，vanilla 基线 `a2793a7e`。同卡 H200 短测中，顺序更新约 30.2 万 tokens/s，vanilla 约 50.6 万 tokens/s。按相同口径估算，顺序更新每步的矩阵 FLOPs 增加 45.84%。
 
-| 比较 | 观测口径 |
-| --- | --- |
-| 数据效率 | 对齐训练 tokens，比较固定 FineWeb-Edu dev 集的 CE 和完整曲线。 |
-| 计算效率 | vanilla 完整预算对应 Sequential Backward 的第 20,925 个整步；额外评估同一 dev 集，保持两组原有 LR 日程与 best checkpoint 的选择频率。 |
-| 速度 | 同一次 GPU 分配，两个方法都从相同参数训练 50 步，排除前 10 步，以剩余 tokens 除以同步训练耗时。不计验证、编译预热与 checkpoint 写盘。 |
+2026-11-27 按用户指令提前终止。最后记录的训练步为 5,250，累计 172,032,000 tokens。原定预算为 1B tokens。[W&B 训练记录](https://wandb.ai/yibozhong657-none/nanochat-1b/runs/bcc7c95f)
 
-默认 microbatch 16 时，vanilla 每步估算 9.8964 TFLOPs，Sequential Backward 每步 14.4327 TFLOPs，增加 45.84%。按仓库口径，乘加计两次，注意力仅计因果位置对。新增工作包括更新后的 block 前向和输入梯度；旧参数梯度的计算省去 Q/K/V 对 block 输入的梯度。拆成多个 microbatch 或启用激活检查点时，另计为各 microbatch 重算原始 block 前向的开销。上述估算排除优化器、逐元素运算和内核内部重算。
-
-实际运行结果由训练归档与曲线同步器记录。预检生成 `results/sequential-comparison.json`，正式训练在基线 FLOP 预算处生成 `results/train/equal-compute.json`。数据效率与计算效率分别以对应预算的验证 CE 判断。
+<!-- sync:begin -->
+<!-- sync:end -->

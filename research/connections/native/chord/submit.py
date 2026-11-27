@@ -25,7 +25,7 @@ CHORD_ARGS = {
 RESIDUAL_STUDY = ('vanilla_baseline', 'native_baseline', 'vanilla_attnres', 'vanilla_mhc', *CHORD_ARGS)
 TOKEN_COMPONENTS = {'chord_token_sphere_only': HERE.parents[1] / 'ngpt/token_sphere_only.args',
                     'chord_token_lookahead_only': HERE.parents[1] / 'ngpt/token_lookahead_only.args'}
-RECIPES = (*RESIDUAL_STUDY, 'vanilla_sequential_backward', 'vanilla_baseline_zero', 'mhc', *TOKEN_COMPONENTS)
+RECIPES = (*RESIDUAL_STUDY, 'vanilla_baseline_zero', 'mhc', *TOKEN_COMPONENTS)
 SUITE = 'residual_suite'
 ABLATION_SUITE = 'scalar_ablation_suite'
 VELOCITY_INITS = ('token', 'projected_h0', 'zero')
@@ -114,9 +114,6 @@ def make_source(recipe, key, steps, group, name, baseline, commit, data, velocit
     else:
         flags = [f'--variant={variant}', f'--architecture={arch}', f'--streams={streams}',
                  f'--attention-backend={backend}', f'--window-pattern={window}', '--residual-projection-init=zero']
-        if recipe == 'vanilla_sequential_backward':
-            flags.append('--sequential-backward')
-            source['backward_method'] = 'sequential'
         if variant == 'attnres':
             flags += ['--attnres-block-size=2']
         if variant == 'mhc':
@@ -138,8 +135,6 @@ def submit(recipe, root, steps, group, name, baseline, procedural=None, velocity
         raise ValueError('The residual suite pairs its own baseline runs')
     if recipe == ABLATION_SUITE and baseline == 'self':
         raise ValueError('Select the paired vanilla baseline run for Scalar Chord ablations')
-    if procedural and recipe == 'vanilla_sequential_backward':
-        raise ValueError('Sequential backward uses the vanilla FineWeb objective')
     if procedural and recipe in SUITES:
         raise ValueError('Select the single model recipe for the procedural comparison')
     key = root.name

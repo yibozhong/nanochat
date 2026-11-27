@@ -399,26 +399,12 @@ class MuonAdamW(torch.optim.Optimizer):
             self._muon_beta2_t.fill_(group["beta2"])
             self._muon_lr_t.fill_(group["lr"] * max(1.0, shape[-2] / shape[-1])**0.5)
             self._muon_wd_t.fill_(group["weight_decay"])
-            operands = (grad_chunk[:num_owned], stacked_owned, state["momentum_buffer"][:num_owned],
-                        state["second_momentum_buffer"][:num_owned])
-            layout = group.get('sequential_layout')
-            if layout:
-                # The compiled BF16 reductions and GEMMs can round differently when the
-                # batch of matrices shrinks. Cautious decay uses their sign. Run the
-                # original kernel shape with scratch rows; commit only the active slice.
-                offset, group_size = layout
-                active = slice(offset, offset + num_owned)
-                padded = [v.new_zeros((group_size, *v.shape[1:])) for v in operands]
-                for full, part in zip(padded, operands):
-                    full[active].copy_(part)
             muon_step_fused(
-                *(padded if layout else operands),
+                grad_chunk[:num_owned], stacked_owned,
+                state["momentum_buffer"][:num_owned], state["second_momentum_buffer"][:num_owned],
                 self._muon_momentum_t, self._muon_lr_t, self._muon_wd_t, self._muon_beta2_t,
                 group["ns_steps"], red_dim,
             )
-            if layout:
-                for part, full in zip(operands[1:], padded[1:]):
-                    part.copy_(full[active])
 
         if info['stacked_grads'] is None:
             # Single rank: no gather needed, the updated stack maps directly onto the params
@@ -447,7 +433,7 @@ class MuonAdamW(torch.optim.Optimizer):
                 torch._foreach_copy_(info["params"], list(info["stacked_params"][:len(info["params"])].unbind(0)))
 
     @torch.no_grad()
-    def step(self, *, stage=None):
+    def step(self):
         # On a single rank (no multi-rank process group), all communication is skipped
         if dist.is_available() and dist.is_initialized():
             rank = dist.get_rank()
@@ -459,8 +445,6 @@ class MuonAdamW(torch.optim.Optimizer):
         # Phase 1: launch all async reduce ops
         active_groups = []
         for group in self.param_groups:
-            if stage is not None and group.get('sequential_stage') != stage:
-                continue
             if group.get('conditional', False):
                 # Conditional groups must be all used or all unused on every
                 # rank. The feedback sampler makes one seed/step draw per update.
@@ -470,8 +454,6 @@ class MuonAdamW(torch.optim.Optimizer):
                 if not all(present):
                     raise RuntimeError('Partially active conditional optimizer group')
             active_groups.append(group)
-        if stage is not None and not active_groups:
-            raise ValueError(f'No optimizer groups for sequential stage {stage!r}')
         reduce_infos: list[dict] = []
         for group in active_groups:
             if group['kind'] == 'adamw':
