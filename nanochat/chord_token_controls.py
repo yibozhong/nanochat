@@ -86,6 +86,7 @@ class TokenControlledSite(LookaheadResidual):
                            if config.chord_six_controls == 'learned_dynamic' else None)
         inputs = 1 if self.small_dynamic or config.native_chord_write == 'token_h' else 2
         self.token_weight = torch.nn.Parameter(torch.zeros(3 if self.terminal else 6, inputs, config.width))
+        self.zero_mu = config.chord_zero_mu
         self.ambient = self.velocity_geometry == 'ambient'
         self.eval_control_moments = None
         self.eval_radial_fraction = None
@@ -97,17 +98,23 @@ class TokenControlledSite(LookaheadResidual):
             read = TokenRead.apply
         else:
             read = reference_read
+        mu = self.mu
         weights = self.token_weight
         modulation = SMALL_DYNAMIC_SCALE
         if self.mix_scales is not None:
             # Scaling projection rows shares the same token kernel and differentiates both W and the gains.
             scales = self.mix_scales
-            row_scales = [scales[0], scales[1], scales[1]]
+            preview_scale = scales[0]
+            if self.zero_mu:
+                # Disable both terms in mu(h) while matching the baseline's parameter layout and optimizer.
+                mu = mu * 0.
+                preview_scale = preview_scale * 0.
+            row_scales = [preview_scale, scales[1], scales[1]]
             if not self.terminal:
                 row_scales.extend([scales[2]] * 3)
             weights = weights * torch.stack(row_scales)[:, None, None]
             modulation = 1.
-        q, controls = read(h, v, weights, self.mu, steps, self.raw_beta, self.writes,
+        q, controls = read(h, v, weights, mu, steps, self.raw_beta, self.writes,
                            self.bounded, self.small_dynamic, modulation, self.ambient)
         if not self.training and not torch.is_grad_enabled():
             # Keep just the token dispersion and mean of controls from the validation minibatch.

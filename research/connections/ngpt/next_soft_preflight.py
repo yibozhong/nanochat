@@ -19,12 +19,20 @@ from research.connections.ngpt.chord_checks import benchmark, check_read_vjp, ma
 def check_read(site, h, v):
     with torch.no_grad():
         site.token_weight.normal_(std=.025)
+        if site.zero_mu:
+            site.mu.fill_(.7)  # A nonzero bias and row must still produce exactly zero preview.
         site.mix_scales.copy_(site.mix_scales.new_tensor([-.12, .07, .19][:len(site.mix_scales)]))
     q, controls = site.read(h, v)
     normalized = F.rms_norm(h.float(), (h.size(-1),), eps=1e-6)
     z = F.linear(normalized, site.token_weight[:, 0])
     s = site.mix_scales
     m = site.mu + z[..., :1]*s[0]
+    if site.zero_mu:
+        m = m * 0.
+        assert torch.count_nonzero(controls[..., 0]) == 0
+        q_other, _ = site.read(h, -v)
+        assert torch.equal(q_other, q)
+        torch.testing.assert_close(q, F.rms_norm(h, (h.shape[-1],), eps=torch.finfo(torch.float32).eps))
     alpha = F.softplus(torch.cat((site.raw, site.raw_parallel)) + z[..., 1:3]*s[1])
     if site.terminal:
         beta, gamma = torch.full_like(m, .5), torch.full_like(alpha, .5)
@@ -84,6 +92,16 @@ def geometry(c):
         f = (torch.randn_like(h.float()) * h.new_tensor(amps).float()[:, None]).bfloat16().requires_grad_()
         controls = (torch.randn(12, 6, device='cuda')*.12 + h.new_tensor([0., .17, .09, .6, .4, .72]).float()).requires_grad_()
         check_write(site, h, v, f, controls)
+        if site.zero_mu and not terminal:
+            with torch.no_grad():
+                # Starting from rest, one write builds tangent velocity and the next position uses it.
+                force = h.roll(1, -1)
+                gains = h.new_tensor([[0., .05, .35, .5, .3, .6]]).float().expand(h.size(0), -1).contiguous()
+                n, velocity = site.write(h, torch.zeros_like(v), force, gains)
+                assert velocity.float().norm() > 0 and (velocity.float()*n.float()).mean(-1).abs().max() < .001
+                a, _ = site.write(n, velocity, force, gains)
+                b, _ = site.write(n, torch.zeros_like(v), force, gains)
+                assert (a.float()-b.float()).abs().max() > .01
         if site.ambient and not terminal:
             # Start from rest with a nonzero force: the stored chord has a radial component.
             n, velocity = site.write(h, torch.zeros_like(v), torch.roll(h, 1, -1), controls)
@@ -171,15 +189,16 @@ def main():
     source = json.loads(Path('source.json').read_text())
     assert source['recipe'] == 'chord_next_bf16'
     ambient = source.get('ambient_velocity', False)
-    assert source['model_args'] == chord_args(source['recipe'], source['velocity_init'], ambient)
+    zero_mu = source.get('chord_zero_mu', False)
+    assert source['model_args'] == chord_args(source['recipe'], source['velocity_init'], ambient, zero_mu)
     control = ConnectionConfig(streams=1, residual_dynamics='ngpt_lookahead', velocity_init=source['velocity_init'],
                                chord_soft_force_tau=.05, chord_six_controls='static', chord_update_based=True,
                                ngpt_velocity_mode='lookahead_split_learned_beta', residual_projection_init='zero',
                                chord_velocity_geometry='project_only', fuse_chord_read_norm=True, ngpt_force_rms_floor=1e-6)
     c = replace(control, chord_six_controls='learned_dynamic')
-    if ambient:
+    if ambient or zero_mu:
         control = c
-        c = replace(control, chord_velocity_geometry='ambient')
+        c = replace(control, chord_velocity_geometry='ambient' if ambient else 'project_only', chord_zero_mu=zero_mu)
     run, reference = source['recipe'], source['paired_preflight']
     data = PackedData('../data')
     geometry(c)

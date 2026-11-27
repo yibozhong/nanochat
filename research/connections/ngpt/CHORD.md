@@ -27,6 +27,8 @@
 
 零初速的速度几何消融使用 `--velocity-init zero --ambient-velocity`。读取按 h + μv 的实际 RMS 归一化；第二次分解取 u = v、d = h′ − h，两个 γ 分别写入平行和垂直分量。[实验设计](../../chord-velocity-geometry/REPORT.md)
 
+零初速前瞻消融使用 `--velocity-init zero --chord-zero-mu`。所有 Attention 和 FFN 读取当前位置，两个方向分解仍使用切向速度。[实验设计](../../chord-lookahead/REPORT.md)
+
 ## 优化器与训练
 
 | 参数 | 对应的 nanochat 组 | 峰值 LR（宽 512、每步 32,768 tokens） |

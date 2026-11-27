@@ -52,6 +52,7 @@ class ConnectionConfig:
     ngpt_alpha_init: float = 0.05
     lookahead_mu_init: float = 0.0
     fixed_first_attention_mu: bool = False
+    chord_zero_mu: bool = False
     ngpt_weight_norm: bool | None = None
     ngpt_velocity_mode: str | None = None
     momentum_velocity_rms_floor: float = 0.1
@@ -127,6 +128,8 @@ class ConnectionConfig:
             raise ValueError('Additive lookahead uses Euclidean velocity')
         if self.chord_six_controls not in ('off', 'static', 'small_dynamic', 'learned_dynamic'):
             raise ValueError('Unknown six-coefficient Chord setting')
+        if self.chord_zero_mu and self.chord_six_controls != 'learned_dynamic':
+            raise ValueError('Fixed-zero lookahead uses the token-dependent six-control Chord read')
         ambient_token_chord = self.dynamic_chord_controls and self.chord_velocity_geometry == 'ambient'
         supported_six_geometry = self.chord_velocity_geometry == 'project_only' or ambient_token_chord
         if self.chord_six_controls != 'off' and (self.architecture != 'vanilla'

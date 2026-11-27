@@ -140,6 +140,7 @@ def main():
     p.add_argument('--chord-kernel', choices=('current', 'terminal', 'boundary', 'both'), default='current',
                    help='Execution path for layer-beta Chord (terminal write, fused next read, or both)')
     p.add_argument('--lookahead-mu-init', type=float, default=0.)
+    p.add_argument('--chord-zero-mu', action='store_true', help='Fix effective token lookahead to zero at every Chord read')
     p.add_argument('--fixed-first-attention-mu', action='store_true', help='Fix the first Attention lookahead at one')
     p.add_argument('--ngpt-alpha-init', type=float, default=.05)
     p.add_argument('--signed-chord-steps', action='store_true', help='Allow both split-chord step sizes to cross zero independently')
@@ -256,7 +257,7 @@ def main():
                        momentum_eta_init=a.momentum_eta_init, ngpt_force_rms_floor=a.ngpt_force_rms_floor,
                        chord_update_based=a.chord_update_based, chord_soft_force_tau=a.chord_soft_force_tau,
                        normalize_minimal_force=a.normalize_minimal_force, fixed_first_attention_mu=a.fixed_first_attention_mu,
-                       lookahead_mu_init=a.lookahead_mu_init, ngpt_alpha_init=a.ngpt_alpha_init, ngpt_weight_norm=a.ngpt_weight_norm,
+                       lookahead_mu_init=a.lookahead_mu_init, chord_zero_mu=a.chord_zero_mu, ngpt_alpha_init=a.ngpt_alpha_init, ngpt_weight_norm=a.ngpt_weight_norm,
                        ngpt_velocity_mode=a.ngpt_velocity_mode, signed_chord_steps=a.signed_chord_steps, token_chord_gates=a.token_chord_gates,
                        chord_six_controls=a.chord_six_controls, chord_component_gates=a.chord_component_gates,
                        chord_velocity_write=a.chord_velocity_write, channel_chord_coefficients=a.channel_chord_coefficients, token_beta_gate=a.token_beta_gate, chord_velocity_geometry=a.chord_velocity_geometry, chord_state_dtype=a.chord_state_dtype,
@@ -487,6 +488,7 @@ def main():
                     ('-signed-steps' if c.signed_chord_steps else '')+
                     ('-token-alpha-gates' if c.token_chord_gates else '')+
                     ('-zero-init-velocity-embed' if c.velocity_init=='token' and c.velocity_embedding_std==0 else '')+
+                    ('-mu0' if c.chord_zero_mu else '')+
                     ('-fixed-first-attn-mu1' if c.fixed_first_attention_mu else '')+
                     (f'-chordattnres-s{c.attnres_block_size}' if c.chord_attnres else '')+
                     ('-history-correction' if c.chord_history_correction else '')+

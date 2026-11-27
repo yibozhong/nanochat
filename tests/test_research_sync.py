@@ -228,6 +228,19 @@ class ReportsTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             launcher.chord_args('chord_scalar_bf16', 'zero', ambient_velocity=True)
 
+    def test_fixed_zero_mu_changes_only_preview(self):
+        recipe = 'chord_next_bf16'
+        data = dict(data_uri='test', manifest=dict(dataset_revision='v', tokenizer={}))
+        args = (recipe, 'job', STEPS, 'chord-lookahead', 'mu0', 'aa44a2d7', 'commit', data, 'zero')
+        baseline = launcher.make_source(*args)
+        ablation = launcher.make_source(*args, zero_mu=True)
+        self.assertEqual(ablation['model_args'], [*baseline['model_args'], '--chord-zero-mu'])
+        self.assertEqual(run_queue.manifest_runs(ablation, ablation['run_id'], recipe), [ablation])
+        with tempfile.TemporaryDirectory() as tmp, patch.object(launcher, 'HOME', Path(tmp)), patch.object(launcher, 'submit') as submit:
+            launcher.main(['--group', 'chord-lookahead', '--baseline-run', 'aa44a2d7', '--velocity-init', 'zero', '--chord-zero-mu'])
+            self.assertTrue(submit.call_args.kwargs['zero_mu'])
+            self.assertFalse(submit.call_args.kwargs['ambient_velocity'])
+
     def test_suite_scheduler_uses_current_member(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

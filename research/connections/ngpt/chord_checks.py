@@ -88,6 +88,12 @@ def benchmark(c, data, verify_resume, schedule_steps):
     if verify_resume:
         for block in model.blocks:
             for site in (block.attn_residual, block.mlp_residual):
+                if c.chord_zero_mu:
+                    # Check every actual model site after training, including terminal FFN.
+                    assert site.mu.grad.count_nonzero() == site.token_weight.grad[0].count_nonzero() == 0
+                    assert site.mix_scales.grad[0].item() == 0
+                    std, mean = site.eval_control_moments
+                    assert std[0].item() == mean[0].item() == 0
                 for param in site.parameters():
                     assert param.grad is not None and torch.isfinite(param.grad).all()
         with TemporaryDirectory(dir='..') as tmp:
