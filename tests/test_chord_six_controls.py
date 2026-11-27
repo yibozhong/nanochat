@@ -11,10 +11,11 @@ from test_chord_soft_scalar import scalar_config
 from test_momentum import gpu, inputs, make
 
 
+@pytest.mark.parametrize('geometry', ['ambient', 'project_only'])
 @pytest.mark.parametrize('controls', ['static', 'learned_dynamic'])
 @pytest.mark.parametrize('init', ['zero', 'token', 'projected_h0'])
-def test_six_controls_and_initial_velocity(controls, init):
-    cfg = replace(scalar_config(), chord_six_controls=controls, velocity_init=init,
+def test_six_controls_and_initial_velocity(controls, init, geometry):
+    cfg = replace(scalar_config(), chord_six_controls=controls, velocity_init=init, chord_velocity_geometry=geometry,
                   chord_update_based=True, residual_projection_init='zero')
     assert ConnectionConfig.from_checkpoint(asdict(cfg)) == cfg
     model = make(cfg, perturb=False)
@@ -37,7 +38,7 @@ def test_six_controls_and_initial_velocity(controls, init):
         else:
             raw = model.velocity_projection(unit.to(x.dtype)).float()
             assert groups[id(model.velocity_projection.weight)] is groups[id(model.blocks[0].attn.c_q.weight)]
-        expected = raw - unit * (unit*raw).mean(-1, True)
+        expected = raw if init == 'token' and geometry == 'ambient' else raw - unit * (unit*raw).mean(-1, True)
         torch.testing.assert_close(v.float(), expected, atol=.0003, rtol=.008)
     sites = [s for b in model.blocks for s in (b.attn_residual, b.mlp_residual)]
     routing = groups[id(sites[0].mu)]
@@ -55,15 +56,19 @@ def test_six_controls_and_initial_velocity(controls, init):
     assert all(b.c_proj.weight.grad.norm() > 0 for block in model.blocks for b in (block.attn, block.mlp))
 
 
-def test_static_fused_write_matches_token_equation_and_gradients():
-    cfg = replace(scalar_config(), chord_six_controls='static', chord_update_based=True)
+@pytest.mark.parametrize('geometry', ['project_only', 'ambient'])
+def test_static_fused_write_matches_token_equation_and_gradients(geometry):
+    cfg = replace(scalar_config(), chord_six_controls='static', chord_update_based=True, chord_velocity_geometry=geometry)
     site = residual_update(cfg).cuda()
     with torch.no_grad():
         site.raw_parallel.add_(.7)
         site.writes.copy_(site.writes.new_tensor([.25, .8]))
     h = torch.nn.functional.normalize(torch.randn(12, 128, device='cuda')) * 128**.5
     v = torch.randn_like(h)
-    v -= h * (h*v).mean(-1, True)
+    if geometry == 'project_only':
+        v -= h * (h*v).mean(-1, True)
+    else:
+        v[1] = h[1]
     v[0].zero_()
     f = torch.randn_like(h)
     f[1].zero_()
@@ -71,7 +76,7 @@ def test_static_fused_write_matches_token_equation_and_gradients():
     h, v, f = (x.bfloat16().requires_grad_() for x in (h, v, f))
     params = (site.raw, site.raw_parallel, site.raw_beta, site.writes)
     coeff = torch.stack((site.mu[0], site.alpha(), site.step_size(site.raw_parallel), site.beta(), *site.writes))
-    expected = reference_write(h.double(), v.double(), f.double(), coeff.double(), site.rms_floor, False, site.soft_tau)
+    expected = reference_write(h.double(), v.double(), f.double(), coeff.double(), site.rms_floor, False, site.soft_tau, ambient=geometry == 'ambient')
     actual = site(h, v, f)
     probe = [torch.randn_like(n) for n in actual]
     inputs = (h, v, f, *params)

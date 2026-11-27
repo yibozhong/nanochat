@@ -628,7 +628,7 @@ def fused_split_write(h, v, force, params, floor, geometry='parallel_transport',
     """Pack the position steps and velocity coefficients for this write policy."""
     mode = 5 if params.ndim == 2 else 3
     if params.shape == (5,):
-        assert geometry == 'project_only'
+        assert geometry in ('project_only', 'ambient')
         mode = 9 if update_based else 7
     elif update_based:
         assert params.shape == (3,)

@@ -65,7 +65,7 @@ class ConnectionConfig:
     chord_velocity_write: bool = False
     chord_six_controls: str = 'off'
     chord_component_gates: bool = False
-    chord_velocity_geometry: str = 'parallel_transport'
+    chord_velocity_geometry: str | None = None
     chord_state_dtype: str | None = None
     fuse_chord_read_norm: bool = False
     recompute_chord_force: bool = False
@@ -126,12 +126,15 @@ class ConnectionConfig:
             raise ValueError('Ambient learned retention requires additive lookahead')
         if additive and self.ngpt_velocity_mode not in ('ambient', 'ambient_learned_beta'):
             raise ValueError('Additive lookahead uses Euclidean velocity')
+        if self.chord_velocity_geometry is None:
+            self.chord_velocity_geometry = 'ambient' if self.chord_six_controls in ('learned_dynamic', 'static') else 'parallel_transport'
         if self.chord_six_controls not in ('off', 'static', 'small_dynamic', 'learned_dynamic'):
             raise ValueError('Unknown six-coefficient Chord setting')
         if self.chord_zero_mu and self.chord_six_controls != 'learned_dynamic':
             raise ValueError('Fixed-zero lookahead uses the token-dependent six-control Chord read')
-        supported_six_geometry = self.chord_velocity_geometry == 'project_only' or (
-            self.dynamic_chord_controls and self.chord_velocity_geometry in ('parallel_transport', 'ambient'))
+        supported_six_geometry = (self.chord_velocity_geometry == 'project_only'
+                                  or (self.chord_velocity_geometry == 'ambient' and self.chord_six_controls != 'off')
+                                  or (self.chord_velocity_geometry == 'parallel_transport' and self.dynamic_chord_controls))
         if self.chord_six_controls != 'off' and (self.architecture != 'vanilla'
                 or self.ngpt_velocity_mode != 'lookahead_split_learned_beta' or not self.fuse_chord_read_norm
                 or not supported_six_geometry or self.recompute_chord_force
@@ -226,8 +229,8 @@ class ConnectionConfig:
         if self.velocity_init not in ('zero', 'token', 'token_position', 'projected_h0'):
             raise ValueError('Unknown velocity initialization')
         if self.velocity_init == 'projected_h0' and (self.architecture != 'vanilla'
-                or self.residual_mode != 'ngpt_lookahead' or self.chord_velocity_geometry == 'ambient'):
-            raise ValueError('Projected h0 velocity requires vanilla spherical lookahead with tangent velocity')
+                or self.residual_mode != 'ngpt_lookahead' or (self.chord_velocity_geometry == 'ambient' and self.chord_six_controls == 'off')):
+            raise ValueError('Projected h0 velocity requires vanilla spherical lookahead with a supported velocity geometry')
         if self.velocity_init == 'token' and self.residual_mode not in ('heavy_ball', 'heavy_ball_rms', 'ngpt_heavy_ball', 'ngpt_lookahead'):
             raise ValueError('Token-only velocity requires heavy ball or spherical lookahead')
         if not math.isfinite(self.velocity_embedding_std) or self.velocity_embedding_std < 0:
@@ -354,6 +357,7 @@ class ConnectionConfig:
         # architecture while newly constructed momentum models default to tokens.
         config.setdefault('velocity_init', 'zero')
         config.setdefault('chord_state_dtype', 'float32')
+        config.setdefault('chord_velocity_geometry', 'parallel_transport')
         # Never reinterpret an ambient checkpoint as tangent/normalized momentum.
         config.setdefault('ngpt_velocity_mode', 'ambient')
         if config.pop('vocab_gate', False):

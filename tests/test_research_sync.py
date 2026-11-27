@@ -178,6 +178,7 @@ class ReportsTest(unittest.TestCase):
             self.assertEqual(default, 'chord_next_bf16')
             flags = launcher.chord_args(default)
             self.assertEqual((launcher.CHORD_ARGS[default].parent/'chord.args').read_text().splitlines(), flags)
+            self.assertIn('--chord-velocity-geometry=ambient', flags)
             self.assertIn('--chord-six-controls=learned_dynamic', flags)
             self.assertIn('--velocity-init=token', flags)
             launcher.main([*args, '--recipe', 'chord_scalar_bf16'])
@@ -202,7 +203,7 @@ class ReportsTest(unittest.TestCase):
         self.assertEqual(set(next_args) - set(scalar), {'--chord-six-controls=learned_dynamic'})
         self.assertEqual(len(next_args), len(set(next_args)))
         legacy = launcher.CHORD_ARGS['chord_next_bf16'].parent / 'legacy/chord_next_token.args'
-        self.assertEqual(legacy.read_text().splitlines(), next_args)
+        self.assertEqual(legacy.read_text().splitlines(), launcher.chord_args('chord_next_bf16', geometry='project_only'))
         data = dict(data_uri='test', manifest=dict(dataset_revision='v', tokenizer={}))
         for recipe in launcher.CHORD_ARGS:
             for init in launcher.VELOCITY_INITS:
@@ -220,21 +221,22 @@ class ReportsTest(unittest.TestCase):
     def test_ambient_velocity_ablation_matches_zero_init_baseline(self):
         data = dict(data_uri='test', manifest=dict(dataset_revision='v', tokenizer={}))
         args = ('chord_next_bf16', 'job', STEPS, 'chord-velocity-geometry', 'ambient', 'aa44a2d7', 'commit', data, 'zero')
-        base = launcher.make_source(*args)
-        ambient = launcher.make_source(*args, ambient_velocity=True)
+        base = launcher.make_source(*args, geometry='project_only')
+        ambient = launcher.make_source(*args)
+        self.assertEqual(ambient['chord_velocity_geometry'], 'ambient')
         self.assertEqual(set(base['model_args']) ^ set(ambient['model_args']),
                          {'--chord-velocity-geometry=project_only', '--chord-velocity-geometry=ambient'})
         self.assertEqual(run_queue.manifest_runs(ambient, ambient['run_id'], ambient['recipe']), [ambient])
         with self.assertRaises(ValueError):
-            launcher.chord_args('chord_scalar_bf16', 'zero', ambient_velocity=True)
+            launcher.chord_args('chord_token_sphere_only', geometry='ambient')
 
     def test_parallel_transport_changes_only_velocity_geometry(self):
         recipe = 'chord_next_bf16'
         data = dict(data_uri='test', manifest=dict(dataset_revision='v', tokenizer={}))
         args = (recipe, 'job', STEPS, 'chord-velocity-geometry', 'transport', 'aa44a2d7', 'commit', data)
         for init in launcher.VELOCITY_INITS:
-            baseline = launcher.make_source(*args, init)
-            trial = launcher.make_source(*args, init, parallel_transport=True)
+            baseline = launcher.make_source(*args, init, geometry='project_only')
+            trial = launcher.make_source(*args, init, geometry='parallel_transport')
             self.assertEqual(set(trial['model_args']) ^ set(baseline['model_args']),
                              {'--chord-velocity-geometry=project_only', '--chord-velocity-geometry=parallel_transport'})
             self.assertEqual(run_queue.manifest_runs(trial, trial['run_id'], recipe), [trial])
@@ -251,7 +253,7 @@ class ReportsTest(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp, patch.object(launcher, 'HOME', Path(tmp)), patch.object(launcher, 'submit') as submit:
             launcher.main(['--group', 'chord-lookahead', '--baseline-run', 'aa44a2d7', '--velocity-init', 'zero', '--chord-zero-mu'])
             self.assertTrue(submit.call_args.kwargs['zero_mu'])
-            self.assertFalse(submit.call_args.kwargs['ambient_velocity'])
+            self.assertIsNone(submit.call_args.kwargs['geometry'])
 
     def test_suite_scheduler_uses_current_member(self):
         with tempfile.TemporaryDirectory() as tmp:

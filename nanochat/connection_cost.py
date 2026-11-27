@@ -29,7 +29,8 @@ def model_cost(config, batch=1, activation_bytes=2, feedback_passes=None):
             # Leading vector arithmetic per token: read 5d, sphere log ~8d,
             # split + EMA 11d, Exp/transport + roundoff projections ~19d.
             per_site=43*d
-        if c.residual_mode == 'ngpt_lookahead':
+        if c.residual_mode == 'ngpt_lookahead' and (c.velocity_init == 'projected_h0' or (
+                c.velocity_init != 'zero' and c.chord_velocity_geometry != 'ambient')):
             initial += 4*d-1  # v0 tangent projection
         if c.residual_mode == 'heavy_ball_rms' and c.velocity_init == 'token':
             initial += 3*d-1

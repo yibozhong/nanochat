@@ -125,11 +125,13 @@ def geometry(c):
             check_transport_rotation(site, c.width)
         if site.zero_mu and not terminal:
             with torch.no_grad():
-                # Starting from rest, one write builds tangent velocity and the next position uses it.
+                # A first write from rest must affect the next position even with no preview.
                 force = h.roll(1, -1)
                 gains = h.new_tensor([[0., .05, .35, .5, .3, .6]]).float().expand(h.size(0), -1).contiguous()
                 n, velocity = site.write(h, torch.zeros_like(v), force, gains)
-                assert velocity.float().norm() > 0 and (velocity.float()*n.float()).mean(-1).abs().max() < .001
+                assert velocity.float().norm() > 0
+                if not site.ambient:
+                    assert (velocity.float()*n.float()).mean(-1).abs().max() < .001
                 a, _ = site.write(n, velocity, force, gains)
                 b, _ = site.write(n, torch.zeros_like(v), force, gains)
                 assert (a.float()-b.float()).abs().max() > .01
@@ -179,6 +181,9 @@ def check_model(c, data):
     assert torch.isfinite(loss)
     if c.velocity_init == 'projected_h0':
         check_projected_h0(model, ids)
+    elif c.velocity_init == 'token' and c.chord_velocity_geometry == 'ambient':
+        _, v = model.initial_state(model.wte(ids), ids)
+        torch.testing.assert_close(v, model.velocity_embedding(ids).to(v.dtype), rtol=0, atol=0)
     elif c.velocity_init == 'zero':
         h, v = model.initial_state(model.wte(ids), ids)
         assert h.dtype == v.dtype == torch.bfloat16 and v.count_nonzero() == 0
@@ -219,20 +224,22 @@ def main():
     torch.backends.cuda.matmul.allow_tf32 = False
     source = json.loads(Path('source.json').read_text())
     assert source['recipe'] == 'chord_next_bf16'
-    ambient = source.get('ambient_velocity', False)
-    zero_mu = source.get('chord_zero_mu', False)
-    transport = source.get('parallel_transport', False)
-    assert source['model_args'] == chord_args(source['recipe'], source['velocity_init'], ambient, zero_mu, transport)
-    control = ConnectionConfig(streams=1, residual_dynamics='ngpt_lookahead', velocity_init=source['velocity_init'],
-                               chord_soft_force_tau=.05, chord_six_controls='static', chord_update_based=True,
-                               ngpt_velocity_mode='lookahead_split_learned_beta', residual_projection_init='zero',
-                               chord_velocity_geometry='project_only', fuse_chord_read_norm=True, ngpt_force_rms_floor=1e-6)
-    c = replace(control, chord_six_controls='learned_dynamic')
-    if ambient or zero_mu or transport:
-        control = c
-        geometry_mode = 'parallel_transport' if transport else control.chord_velocity_geometry
-        c = replace(control, chord_velocity_geometry='ambient' if ambient else geometry_mode, chord_zero_mu=zero_mu)
     run, reference = source['recipe'], source['paired_preflight']
+    options = dict(flag[2:].split('=', 1) for flag in source['model_args'] if '=' in flag)
+    geometry_mode = options['chord-velocity-geometry']
+    zero_mu = '--chord-zero-mu' in source['model_args']
+    assert source['model_args'] == chord_args(run, source['velocity_init'], geometry_mode, zero_mu)
+    c = ConnectionConfig(streams=1, residual_dynamics='ngpt_lookahead', velocity_init=source['velocity_init'],
+                         chord_soft_force_tau=.05, chord_six_controls='learned_dynamic', chord_update_based=True,
+                         ngpt_velocity_mode='lookahead_split_learned_beta', residual_projection_init='zero',
+                         chord_velocity_geometry=geometry_mode, chord_zero_mu=zero_mu, fuse_chord_read_norm=True,
+                         ngpt_force_rms_floor=1e-6)
+    if reference == 'chord_scalar_bf16':
+        control = replace(c, chord_six_controls='static')
+    else:
+        family, geometry_name = reference.split('/')
+        assert family == run
+        control = replace(c, chord_velocity_geometry=geometry_name, chord_zero_mu=False)
     data = PackedData('../data')
     geometry(c)
     result = dict(gpu=torch.cuda.get_device_name(), short_batch_init_grad_norm=check_model(c, data),

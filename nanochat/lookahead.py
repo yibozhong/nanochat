@@ -202,10 +202,9 @@ class LookaheadResidual(_ChordLookaheadRead, NormalizedResidual):
         if self.writes is None:
             velocity = beta * carried + (1 - beta) * chord
         else:
-            # Resolve the realized displacement in the endpoint tangent plane.
-            # At rest, the parallel component is zero and the new direction gets c.
-            u = tangent_project(new_h, carried)
-            d = tangent_project(new_h, chord)
+            u, d = carried, chord
+            if self.velocity_geometry != 'ambient':
+                u, d = tangent_project(new_h, carried), tangent_project(new_h, chord)
             along = (u * d).mean(-1, keepdim=True) / u.square().mean(-1, keepdim=True).clamp_min(1e-12)
             b, c = self.writes.unbind()
             velocity = beta * carried + c * chord + ((b - c) * along) * carried
@@ -332,7 +331,7 @@ class LookaheadModel(MomentumModel):
         h, v = super().initial_state(x, token_ids, start)
         if self.config.residual_mode == 'lookahead_only':
             return h.to(x.dtype), v.bfloat16() if self.config.chord_state_dtype == 'bfloat16' else v
-        if (self.velocity_embedding is not None or self.velocity_projection is not None) and self.config.chord_velocity_geometry != 'ambient':
+        if self.velocity_projection is not None or (self.velocity_embedding is not None and self.config.chord_velocity_geometry != 'ambient'):
             v = tangent_project(h, v)
         if self.config.chord_state_dtype == 'bfloat16':
             return h.bfloat16(), v.bfloat16()

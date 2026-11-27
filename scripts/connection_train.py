@@ -52,8 +52,10 @@ def velocity_usage_metrics(model, data, microbatch, normal_ce):
     # and optimizer state are never touched.
     with model.velocity_embedding.register_forward_hook(lambda module, args, output: torch.zeros_like(output)):
         zero_ce, _ = evaluate(model, data, microbatch=microbatch)
+    rms_key = ('residual/initial_ambient_velocity_rms' if model.config.chord_velocity_geometry == 'ambient'
+               else 'residual/initial_tangent_velocity_rms')
     return {'dev/zero_v0_ce': zero_ce, 'dev/zero_v0_delta_ce': zero_ce - normal_ce,
-            'residual/initial_tangent_velocity_rms': v0_rms, 'residual/first_read_offset_rms': abs(mu)*v0_rms,
+            rms_key: v0_rms, 'residual/first_read_offset_rms': abs(mu)*v0_rms,
             'residual/velocity_embedding_rms': table_rms}
 
 
@@ -146,7 +148,7 @@ def main():
     p.add_argument('--signed-chord-steps', action='store_true', help='Allow both split-chord step sizes to cross zero independently')
     p.add_argument('--token-chord-gates', action='store_true', help='Modulate positive split steps by independent per-token cosine gates')
     p.add_argument('--chord-velocity-geometry', choices=('parallel_transport','project_only','ambient'),
-                   default='parallel_transport', help='How Chord carries velocity to the next sublayer')
+                   help='How Chord carries velocity (default: ambient for active six-control Chord)')
     p.add_argument('--chord-six-controls', choices=('off', 'static', 'small_dynamic', 'learned_dynamic'), default='off',
                    help='Use independent velocity write gains with static or token-corrected controls')
     p.add_argument('--chord-component-gates', action='store_true',
