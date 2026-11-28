@@ -87,6 +87,10 @@ def record_zero_init_gradients(model, optimizer, path):
 def main():
     p = argparse.ArgumentParser(fromfile_prefix_chars='@')
     p.add_argument('--variant', choices=CONNECTION_VARIANTS, required=True)
+    for dimension in ('depth', 'width', 'heads'):
+        p.add_argument('--'+dimension, type=int)
+    p.add_argument('--residual-grad-every', type=int, default=0,
+                   help='Sample block-output NTP gradients on the first microbatch at this interval')
     p.add_argument('--sequence-length', type=int, default=2048)
     p.add_argument('--attention-kernel', choices=('original','fla_triton'), default='original')
     p.add_argument('--architecture', choices=('vanilla', 'native'), default='vanilla')
@@ -242,7 +246,16 @@ def main():
             a.residual_projection_init = state['config'].get('residual_projection_init')
         elif a.formal_training and a.schedule_steps == STEPS:
             a.residual_projection_init = 'zero'
-    c=ConnectionConfig(variant=a.variant,streams=a.streams,sinkhorn_iterations=a.sinkhorn_iterations,
+    shape = {}
+    for key in ('depth', 'width', 'heads'):
+        value = getattr(a, key)
+        saved = state['config'][key] if a.resume else getattr(ConnectionConfig, key)
+        if a.resume and value is not None and value != saved:
+            p.error(f'{key} differs from the checkpoint')
+        shape[key] = saved if value is None else value
+    if a.residual_grad_every < 0:
+        p.error('--residual-grad-every must be nonnegative')
+    c=ConnectionConfig(**shape, variant=a.variant,streams=a.streams,sinkhorn_iterations=a.sinkhorn_iterations,
                        sequence_length=a.sequence_length, compact_routing=a.compact_routing,
                        attnres_block_size=a.attnres_block_size,
                        attention_kernel=a.attention_kernel,
@@ -298,6 +311,10 @@ def main():
         source = state['source'].copy()
     else:
         source=dict(commit=subprocess.check_output(['git','rev-parse','HEAD'],text=True).strip())
+    if source.get('model_shape', shape) != shape:
+        p.error('Model dimensions differ from the submission manifest')
+    if a.residual_grad_every and (a.architecture != 'vanilla' or a.variant != 'baseline' or a.latent_feedback or warm_steps):
+        p.error('Block gradient sampling requires the vanilla backbone and packed NTP')
     legacy_resume = bool(a.formal_training and a.resume and 'wandb_project' not in state['source'])
     if a.formal_training and not legacy_resume:
         from nanochat.research_protocol import validate_identity
@@ -607,13 +624,16 @@ def main():
                 torch.cuda.synchronize();start=time.perf_counter()
                 batch = procedural.batch(step*rows_per_step, rows_per_step) if warming and not reference_union else None
                 log_procedural_run = procedural is not None and (phase_step < 5 or (step+1)%10 == 0 or step+1 == warm_steps)
-                gradient_stats = {} if log_procedural_run else None
+                sample_depth = a.residual_grad_every and (step == 0 or (step+1) % a.residual_grad_every == 0)
+                residual_grads = {} if sample_depth else None
+                gradient_stats = {} if log_procedural_run or sample_depth else None
                 if warming and reference_union:
                     loss, targets = reference_union.train(model, opt, step, class_ids, a.microbatch, gradient_stats)
                     warm_supervised += targets
                 else:
                     loss=train_step(model,opt,data,phase_step,microbatch=a.microbatch,seed=a.seed,masked_batch=batch,
-                                    class_ids=class_ids if warming else None, gradient_stats=gradient_stats)
+                                    class_ids=class_ids if warming else None, gradient_stats=gradient_stats,
+                                    residual_grads=residual_grads)
                     if warming:
                         warm_supervised += int(batch[2].sum())
                 torch.cuda.synchronize();duration=time.perf_counter()-start
@@ -621,6 +641,8 @@ def main():
                 row=dict(step=step,tokens=step*32768,loss=loss,seconds=duration,lr_multiplier=lr)
                 if gradient_stats:
                     row.update(gradient_stats)
+                if sample_depth:
+                    row.update(residual_grads)
                 if procedural:
                     row.update(phase='procedural' if warming else 'fineweb', phase_step=phase_step+1, **token_counts())
                 if c.latent_feedback:
@@ -633,7 +655,7 @@ def main():
                 if step_flops is not None:
                     training_flops += step_flops
                 log.write(json.dumps(row)+'\n')
-                if step<=5 or step%10==0 or log_procedural_run:
+                if step<=5 or step%10==0 or log_procedural_run or sample_depth:
                     print(json.dumps(row),flush=True)
                     loss_key = 'procedural/ce' if warming else 'train/ce'
                     perf={loss_key:loss, **token_counts(),'perf/step_seconds':duration,'perf/tokens_per_second':32768/duration,
@@ -644,6 +666,8 @@ def main():
                     if gradient_stats:
                         prefix = 'procedural' if warming else 'train'
                         perf[prefix+'/gradient_norm'] = gradient_stats['gradient_norm']
+                    if sample_depth:
+                        perf.update(residual_grads)
                     if cost:
                         perf['perf/estimated_forward_flops_per_step'] = step_cost['estimated_forward_flops']
                     if step_flops is not None:

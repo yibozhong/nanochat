@@ -65,6 +65,10 @@ def train_args(s, *, smoke=False):
     flags = [] if not warm else [
         '--procedural-task', warm['task'], '--procedural-input-length', str(warm['length']),
         '--procedural-tokens', str(2*BATCH_TOKENS if smoke else warm['tokens'])]
+    if 'model_shape' in s:
+        for key, value in s['model_shape'].items():
+            flags.extend(['--'+key, str(value)])
+        flags.extend(['--residual-grad-every', str(s['residual_grad_every'])])
     if warm and warm.get('reset_vocab'):
         flags.append('--procedural-reset-vocab')
     if warm and 'reference_updates' in warm:
@@ -139,6 +143,14 @@ def preflight(s, directory):
         assert config['logging_backend'] == 'local' and config['actual_attention_backend'] == s['attention_backend']
         report = dict(source=s, first_gradients=read(out/'first-gradients.json'), gpu=config['gpu'],
                       step_losses=[r['loss'] for r in rows], resumed_at=2, final_dev_ce=summary['final_dev_ce'])
+        if 'model_shape' in s:
+            assert all(config['model'][key] == value for key, value in s['model_shape'].items())
+            assert config['protocol']['microbatch'] == 8 and config['protocol']['grad_accum'] == 2
+            depth = s['model_shape']['depth']
+            rates = {f'residual_grad/block_{i}_rms': rows[0][f'residual_grad/block_{i}_rms']
+                     for i in (1, depth//2, depth)}
+            assert all(math.isfinite(value) and value > 0 for value in rates.values())
+            report.update(initial_residual_grad_rms=rates, step_seconds=[row['seconds'] for row in rows])
         if s.get('procedural'):
             report.update(transfer=boundary, resumed_steps=[1, 2], procedural_val_ce=summary['procedural_val_ce'],
                           fineweb_tokens=summary['fineweb_tokens'],

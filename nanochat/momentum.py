@@ -305,6 +305,8 @@ class MomentumModel(ConnectionModel):
                 state = checkpoint(fn, *state, cos, sin, use_reentrant=False)
             else:
                 state = fn(*state, cos, sin, kv_cache)
+            if i in self.residual_grad_hooks:
+                state[0].register_hook(self.residual_grad_hooks[i])
             if return_layers:
                 states.append(state[0])
         # Both streams are local to one token's depth traversal; no extra

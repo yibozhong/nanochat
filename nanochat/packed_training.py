@@ -105,7 +105,7 @@ def evaluate_procedural(model, batch, microbatch, *, with_accuracy=False, class_
 
 
 def train_step(model,opt,data,step,microbatch=16,batch_tokens=32768,seed=42,masked_batch=None,
-               class_ids=None, gradient_stats=None):
+               class_ids=None, gradient_stats=None, residual_grads=None):
     T=model.config.sequence_length
     rows=batch_tokens//T
     assert rows % microbatch == 0
@@ -121,7 +121,21 @@ def train_step(model,opt,data,step,microbatch=16,batch_tokens=32768,seed=42,mask
         for start in range(0,rows,microbatch):
             if masked_batch is None:
                 x,y=data.batch('train',step*rows+start,microbatch)
-                loss=model(x,y,**options)/(rows//microbatch)
+                if residual_grads is not None and start == 0:
+                    depth = model.config.depth
+                    def sample(block):
+                        def capture(grad):
+                            rms = torch.linalg.vector_norm(grad.detach(), dtype=torch.float32) / math.sqrt(grad.numel())
+                            residual_grads[f'residual_grad/block_{block+1}_rms'] = rms
+                        return capture
+                    model.residual_grad_hooks = {i: sample(i) for i in (0, (depth-1)//2, depth-1)}
+                    try:
+                        output = model(x, y, **options)
+                    finally:
+                        model.residual_grad_hooks = {}
+                else:
+                    output = model(x, y, **options)
+                loss=output/(rows//microbatch)
                 loss.backward()
             else:
                 sl = slice(start, start + microbatch)
@@ -142,6 +156,14 @@ def train_step(model,opt,data,step,microbatch=16,batch_tokens=32768,seed=42,mask
     finite=torch.stack([torch.isfinite(g).all() for g in grads]).all()
     if not bool(finite) or not torch.isfinite(total):
         raise FloatingPointError('Nonfinite loss/gradient before optimizer update')
+    if residual_grads is not None:
+        expected = {f'residual_grad/block_{i}_rms' for i in (1, (model.config.depth+1)//2, model.config.depth)}
+        if residual_grads.keys() != expected:
+            raise RuntimeError('Missing residual gradient sample')
+        values = torch.stack(list(residual_grads.values())).tolist()
+        if not all(math.isfinite(v) for v in values):
+            raise FloatingPointError('Nonfinite residual gradient before optimizer update')
+        residual_grads.update(zip(residual_grads, values))
     if gradient_stats is not None:
         gradient_stats['gradient_norm'] = torch.stack([g.detach().float().norm() for g in grads]).norm().item()
     opt.step()

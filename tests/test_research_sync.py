@@ -240,6 +240,23 @@ class ReportsTest(unittest.TestCase):
                     launcher.submit(retired, Path(tmp), STEPS, 'velocity', retired, 'self')
             self.assertEqual(list(Path(tmp).iterdir()), [])
 
+    def test_depth_study_geometry_reaches_both_entry_points(self):
+        data = dict(data_uri='test', manifest=dict(dataset_revision='v', tokenizer={}))
+        for depth in (32, 64, 128):
+            for recipe in ('vanilla_baseline', *launcher.CHORD_ARGS):
+                source = launcher.make_source(recipe, 'key', STEPS, 'depth', recipe, 'self', 'commit',
+                                              data, depth_study_layers=depth)
+                run_queue.manifest_runs(source, source['run_id'], recipe)
+                for smoke in (True, False):
+                    flags = run_queue.train_args(source, smoke=smoke)
+                    for key, value in dict(depth=depth, width=256, heads=2, microbatch=8,
+                                           residual_grad_every=250).items():
+                        self.assertEqual(flags[flags.index('--' + key.replace('_', '-'))+1], str(value))
+                if recipe in launcher.CHORD_ARGS:
+                    self.assertEqual(source['velocity_init'], 'token')
+                    self.assertAlmostEqual(source['control_peak_lr'], .002 * 3**.5)
+                    self.assertEqual(source['chord_velocity_geometry'], 'project_only')
+
     def test_ambient_velocity_ablation_matches_zero_init_baseline(self):
         data = dict(data_uri='test', manifest=dict(dataset_revision='v', tokenizer={}))
         args = ('chord_next_bf16', 'job', STEPS, 'chord-velocity-geometry', 'ambient', 'aa44a2d7', 'commit', data, 'zero')

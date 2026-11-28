@@ -57,13 +57,14 @@ def test_six_controls_and_initial_velocity(controls, init, geometry):
 
 
 @pytest.mark.parametrize('geometry', ['project_only', 'ambient'])
-def test_static_fused_write_matches_token_equation_and_gradients(geometry):
-    cfg = replace(scalar_config(), chord_six_controls='static', chord_update_based=True, chord_velocity_geometry=geometry)
+@pytest.mark.parametrize('width', [128, 256])
+def test_static_fused_write_matches_token_equation_and_gradients(geometry, width):
+    cfg = replace(scalar_config(), width=width, chord_six_controls='static', chord_update_based=True, chord_velocity_geometry=geometry)
     site = residual_update(cfg).cuda()
     with torch.no_grad():
         site.raw_parallel.add_(.7)
         site.writes.copy_(site.writes.new_tensor([.25, .8]))
-    h = torch.nn.functional.normalize(torch.randn(12, 128, device='cuda')) * 128**.5
+    h = torch.nn.functional.normalize(torch.randn(12, width, device='cuda')) * width**.5
     v = torch.randn_like(h)
     if geometry == 'project_only':
         v -= h * (h*v).mean(-1, True)

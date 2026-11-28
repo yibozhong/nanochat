@@ -544,6 +544,7 @@ class ConnectionModel(nn.Module):
         if config.architecture != 'vanilla':
             raise ValueError('Use build_connection_model for native nanochat')
         self.config = config
+        self.residual_grad_hooks = {}
         native = GPTConfig(sequence_len=config.sequence_length, vocab_size=config.vocab_size,
             n_layer=config.depth, n_head=config.heads, n_kv_head=config.heads,
             n_embd=config.width, window_pattern='L')
@@ -636,6 +637,8 @@ class ConnectionModel(nn.Module):
                 x = checkpoint(fn, x, cos, sin, use_reentrant=False)
             else:
                 x = fn(x, cos, sin, kv_cache)
+            if i in self.residual_grad_hooks:
+                x.register_hook(self.residual_grad_hooks[i])
             if return_layers:
                 states.append(x)
         if self.stream_head is not None:

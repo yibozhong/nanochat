@@ -130,7 +130,7 @@ class TokenControlledSite(LookaheadResidual):
         return q, controls
 
     def write(self, h, v, force, controls):
-        if h.is_cuda and h.dtype == torch.bfloat16 and h.size(-1) in (128, 512):
+        if h.is_cuda and h.dtype == torch.bfloat16 and h.size(-1) in (128, 256, 512):
             from nanochat.chord_triton import TokenWrite
             return TokenWrite.apply(h, v, force, controls, self.rms_floor, self.terminal, self.soft_tau, self.ambient, self.transport)
         return reference_write(h, v, force, controls, self.rms_floor, self.terminal, self.soft_tau, self.ambient, self.transport)

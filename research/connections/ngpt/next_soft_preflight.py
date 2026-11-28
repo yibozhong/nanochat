@@ -234,13 +234,23 @@ def main():
                          ngpt_velocity_mode='lookahead_split_learned_beta', residual_projection_init='zero',
                          chord_velocity_geometry=geometry_mode, chord_zero_mu=zero_mu, fuse_chord_read_norm=True,
                          ngpt_force_rms_floor=1e-6)
+    data = PackedData('../data')
+    if 'model_shape' in source:
+        # Kernel math and KV cache only need two blocks. The queue checks the real
+        # full-depth model, gradient accumulation, finite steps and checkpoint resume.
+        shape = source['model_shape']
+        probe = replace(c, depth=2, width=shape['width'], heads=shape['heads'])
+        geometry(probe)
+        result = dict(width=probe.width, short_batch_init_grad_norm=check_model(probe, data))
+        json_write(Path('results/depth-kernel-preflight.json'), result)
+        print('DEPTH_KERNEL_PREFLIGHT_PASS', result, flush=True)
+        return
     if reference == 'chord_scalar_bf16':
         control = replace(c, chord_six_controls='static')
     else:
         family, geometry_name = reference.split('/')
         assert family == run
         control = replace(c, chord_velocity_geometry=geometry_name, chord_zero_mu=False)
-    data = PackedData('../data')
     geometry(c)
     result = dict(gpu=torch.cuda.get_device_name(), short_batch_init_grad_norm=check_model(c, data),
                   checked_lookahead_and_force_gradients=True, checked_causal_and_cache=True)

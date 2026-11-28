@@ -34,6 +34,7 @@ ABLATION_ARGS = {
     'chord_scalar_sphere_only': HERE.parents[1] / 'ngpt/legacy/scalar_sphere_only.args',
     'chord_scalar_lookahead_only': HERE.parents[1] / 'ngpt/legacy/scalar_lookahead_only.args',
 }
+DEPTH_STUDY = (32, 64, 128)
 SUITES = {SUITE: RESIDUAL_STUDY, ABLATION_SUITE: tuple(ABLATION_ARGS)}
 
 
@@ -68,7 +69,7 @@ def chord_args(recipe, velocity_init=None, geometry=None, zero_mu=False):
     return flags
 
 
-def make_source(recipe, key, steps, group, name, baseline, commit, data, velocity_init=None, geometry=None, zero_mu=False):
+def make_source(recipe, key, steps, group, name, baseline, commit, data, velocity_init=None, geometry=None, zero_mu=False, depth_study_layers=None):
     run_id = uuid.uuid4().hex[:8]
     source = dict(commit=commit, run_id=run_id, plan=key, formal_training=bool(steps), seed=42,
         wandb_project=PROJECT, group=group, run_name=name, baseline_run=baseline, recipe=recipe,
@@ -78,6 +79,13 @@ def make_source(recipe, key, steps, group, name, baseline, commit, data, velocit
         data_uri=data['data_uri'],
         dataset_revision=data['manifest']['dataset_revision'], tokenizer=data['manifest']['tokenizer'],
         runtime='mhc-official-runtime-7546767.tar.gz + frozen uv.lock', checkpoint_seconds=CHECKPOINT_INTERVAL_SECONDS)
+    width = 512
+    if depth_study_layers is not None:
+        if depth_study_layers not in DEPTH_STUDY or recipe not in ('vanilla_baseline', *CHORD_ARGS):
+            raise ValueError('Depth study requires a vanilla backbone and 32, 64 or 128 layers')
+        width = 256
+        source.update(model_shape=dict(depth=depth_study_layers, width=width, heads=2),
+                      microbatch=8, residual_grad_every=250)
     native = recipe in ('native_baseline', 'mhc')
     variant = {'vanilla_attnres': 'attnres', 'vanilla_mhc': 'mhc', 'mhc': 'mhc'}.get(recipe, 'baseline')
     streams = 4 if variant == 'mhc' else 1
@@ -91,15 +99,15 @@ def make_source(recipe, key, steps, group, name, baseline, commit, data, velocit
         source.update(model_args=flags, velocity_init=options['velocity-init'],
                       model_variant=options.get('chord-six-controls', options.get('ngpt-velocity-mode', options['residual-dynamics'])),
                       residual_projection_init=options['residual-projection-init'],
-                      control_peak_lr=.008*.25*(768/512)**.5)
+                      control_peak_lr=.008*.25*(768/width)**.5)
         if recipe in CHORD_ARGS:
             source.update(residual_update='split(force / sqrt(mean(force^2) + 0.05^2))',
                           chord_controls=options['chord-six-controls'], chord_velocity_geometry=options['chord-velocity-geometry'])
             if source['velocity_init'] == 'projected_h0':
-                source.update(velocity_projection_weight_std=.02/512**.5, velocity_projection_optimizer='muon',
+                source.update(velocity_projection_weight_std=.02/width**.5, velocity_projection_optimizer='muon',
                               velocity_projection_peak_lr=.02*.25)
             elif source['velocity_init'] == 'token':
-                source.update(velocity_embedding_optimizer='adamw', velocity_embedding_peak_lr=.3*.25*(768/512)**.5)
+                source.update(velocity_embedding_optimizer='adamw', velocity_embedding_peak_lr=.3*.25*(768/width)**.5)
         if recipe == 'chord_next_bf16':
             source.update(next_run='2574b7dc', next_source='lululu39/NextTransformer@b8bbfa41d8ab4b31eb5447cbde6271fe84074b78',
                           modulation_scale_init=.01, paired_preflight='chord_scalar_bf16')
@@ -124,7 +132,7 @@ def make_source(recipe, key, steps, group, name, baseline, commit, data, velocit
     return source
 
 
-def submit(recipe, root, steps, group, name, baseline, procedural=None, velocity_init=None, *, geometry=None, zero_mu=False):
+def submit(recipe, root, steps, group, name, baseline, procedural=None, velocity_init=None, *, geometry=None, zero_mu=False, depth_study_layers=None):
     if recipe not in (*RECIPES, *SUITES):
         raise ValueError(f'Unknown active recipe: {recipe}')
     if velocity_init is not None and (recipe not in CHORD_ARGS or velocity_init not in VELOCITY_INITS):
@@ -137,6 +145,8 @@ def submit(recipe, root, steps, group, name, baseline, procedural=None, velocity
         raise ValueError('Select the paired vanilla baseline run for Scalar Chord ablations')
     if procedural and recipe in SUITES:
         raise ValueError('Select the single model recipe for the procedural comparison')
+    if depth_study_layers and (recipe not in ('vanilla_baseline', *CHORD_ARGS) or procedural):
+        raise ValueError('Depth study requires one vanilla-backbone FineWeb run')
     key = root.name
     ad_key = 'NativeMhcKey' if recipe == 'mhc' else 'VanillaChordKey'
     if (root/'state.json').exists():
@@ -144,6 +154,8 @@ def submit(recipe, root, steps, group, name, baseline, procedural=None, velocity
         pinned = state['source']
         if recipe in CHORD_ARGS and pinned.get('model_args') != chord_args(recipe, velocity_init, geometry, zero_mu):
             raise ValueError('This job directory has different Chord controls or initial velocity; choose a distinct --name')
+        if pinned.get('model_shape', {}).get('depth') != depth_study_layers:
+            raise ValueError('This job directory belongs to another model depth')
         if pinned.get('procedural') != procedural:
             raise ValueError('This job directory has a different procedural configuration')
         if (pinned['recipe'], pinned['group'], pinned['run_name'], pinned['baseline_run']) != (recipe, group, name, baseline):
@@ -178,13 +190,20 @@ def submit(recipe, root, steps, group, name, baseline, procedural=None, velocity
         run_id = sources[0]['run_id']
         source = dict(recipe=recipe, run_id=run_id, group=group, run_name=name, baseline_run=baseline, runs=sources)
     else:
-        source = make_source(recipe, key, steps, group, name, baseline, commit, data, velocity_init, geometry, zero_mu)
+        source = make_source(recipe, key, steps, group, name, baseline, commit, data, velocity_init,
+                             geometry, zero_mu, depth_study_layers)
         if procedural:
             source['procedural'] = procedural
         run_id = source['run_id']
     job_args = f'{run_id} {recipe}'
     save(bundles/'source.json', source)
     # Use the current site's container, transfer plugins, encrypted auth and pool settings.
+    # Keep the large final archives in staging, while Condor handles the ordinary exit-85 restart.
+    archive = None
+    if depth_study_layers:
+        relative = Path('nanochat-1b-depth-stability') / key
+        (Path('/staging/y') / HOME.name / relative).mkdir(parents=True, exist_ok=True)
+        archive = f'osdf:///chtc/staging/y/{HOME.name}/{relative}/train-$(Cluster).$(Process)-checkpoints.tar'
     lines = []
     for line in (ASSETS/'gate.sub').read_text().splitlines():
         if line.startswith('queue '):
@@ -194,14 +213,23 @@ def submit(recipe, root, steps, group, name, baseline, procedural=None, velocity
         line = line.replace('nanochat-depth-diagnostic', key)
         if line.startswith('transfer_input_files'):
             line = line.replace('bundles/gate-data.tar,bundles/inputs.sha256', data['data_uri']+','+str(HOME/'.netrc'))
+        elif depth_study_layers and line.startswith('request_memory'):
+            line = 'request_memory = 32GB'
+        elif depth_study_layers and line.startswith('gpus_minimum_memory'):
+            line = 'gpus_minimum_memory = 78000M'
         elif line.startswith('request_disk'):
             line = 'request_disk = 100GB' if recipe in SUITES else 'request_disk = 80GB'
         elif line.startswith('require_gpus'):
             line = line.replace('(Capability == 9.0)', '(Capability == 9.0 && regexp("H100|H200",DeviceName))')
+            if depth_study_layers:
+                line = line.replace('GlobalMemoryMb >= 22000', 'GlobalMemoryMb >= 78000')
         elif line.startswith('transfer_output_files'):
             line = 'transfer_output_files = results.tar,checkpoints.tar'
         elif line.startswith('transfer_output_remaps'):
             line = 'transfer_output_remaps = "results.tar=results/train-$(Cluster).$(Process).tar;checkpoints.tar=results/train-$(Cluster).$(Process)-checkpoints.tar"'
+            if archive:
+                line = line.replace('checkpoints.tar=results/train-$(Cluster).$(Process)-checkpoints.tar',
+                                    f'checkpoints.tar={archive}')
         lines.append(line)
     lines += [f'arguments = {job_args}', 'checkpoint_exit_code = 85',
               'transfer_checkpoint_files = checkpoints.tar,results.tar', f'encrypt_input_files = {HOME}/.netrc',
@@ -218,10 +246,12 @@ def submit(recipe, root, steps, group, name, baseline, procedural=None, velocity
     ad, = json.loads(run('condor_q',job,'-json'))
     assert ad['JobStatus']==5 and not ad.get('NumJobStarts',0) and ad['Args']==job_args
     assert ad[ad_key]==key and ad['RequestGPUs']==1 and ad['RequestDisk']==(100 if recipe in SUITES else 80)*1024**2
-    assert ad['RequestMemory']==16384 and ad['RequestCpus']==2 and ad['InteractiveJob']
+    assert ad['RequestMemory']==(32768 if depth_study_layers else 16384) and ad['RequestCpus']==2 and ad['InteractiveJob']
     assert 'H100|H200' in ad['RequireGPUs'] and ad['GPUsMinCapability']==9
     assert data['data_uri'] in ad['TransferInput'] and 'nanochat-uv-v4.sif' in ad['TransferInput']
     assert 'source.tar' in ad['TransferInput'] and '.netrc' in ad['EncryptInputFiles']
+    if archive:
+        assert 'osdf:///chtc/staging/' in ad['TransferOutputRemaps'] and ad['GPUsMinMemory'] >= 78000
     assert ad['SuccessCheckpointExitCode']==85
     assert set(ad['TransferCheckpoint'].split(','))==set(ad['TransferOutput'].split(','))=={'checkpoints.tar','results.tar'}
     save(root/'submission-verified.json',{k:ad[k] for k in ('ClusterId','ProcId','Args','RequireGPUs','TransferInput','RequestMemory','RequestDisk','TransferCheckpoint','EncryptInputFiles')})
@@ -242,6 +272,8 @@ def main(argv=None):
     ablation.add_argument('--parallel-transport', dest='geometry', action='store_const', const='parallel_transport', help='Carry the old velocity along the short great-circle arc before splitting the chord')
     ablation.add_argument('--ambient-velocity', dest='geometry', action='store_const', const='ambient', help='Write velocity in ambient space')
     ablation.add_argument('--project-only', dest='geometry', action='store_const', const='project_only', help='Project the velocity into the new tangent plane (default for six-control Chord)')
+    parser.add_argument('--depth-study-layers', choices=DEPTH_STUDY, type=int,
+                        help='Full-attention depth study at width 256, two heads and microbatch eight')
     parser.add_argument('--group', required=True, help='Research question slug, shared by its configurations')
     parser.add_argument('--name', help='Configuration name (defaults to recipe, seed and budget)')
     parser.add_argument('--baseline-run', required=True, help='nanochat-1b baseline ID or self')
@@ -292,6 +324,8 @@ def main(argv=None):
         suffix += '-six-' + velocity.replace('_', '-') + '-' + geometry.replace('_', '-')
         if args.chord_zero_mu:
             suffix += '-mu0'
+    if args.depth_study_layers:
+        suffix += f'-d{args.depth_study_layers}-w256'
     name = args.name or args.recipe.replace('_', '-') + suffix + '-s42-1b'
     group, name, baseline = validate_identity(args.group, name, args.baseline_run)
     slug = re.sub(r'[^a-z0-9]+', '-', name.lower()).strip('-')
@@ -303,7 +337,7 @@ def main(argv=None):
     with (root/'submit.lock').open('a') as lock:
         fcntl.flock(lock, fcntl.LOCK_EX | fcntl.LOCK_NB)
         submit(args.recipe, root, steps, group, name, baseline, procedural, args.velocity_init,
-               geometry=args.geometry, zero_mu=args.chord_zero_mu)
+               geometry=args.geometry, zero_mu=args.chord_zero_mu, depth_study_layers=args.depth_study_layers)
 
 
 if __name__ == '__main__':

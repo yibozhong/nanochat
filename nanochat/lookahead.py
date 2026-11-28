@@ -28,7 +28,7 @@ class _ChordLookaheadRead:
     def query(self, h, v):
         # The tangent-only denominator omits the vanishing cross term.
         ambient = self.velocity_geometry == 'ambient'
-        if h.dtype == torch.bfloat16 and h.is_cuda and h.size(-1) in (128, 512):
+        if h.dtype == torch.bfloat16 and h.is_cuda and h.size(-1) in (128, 256, 512):
             from nanochat.chord_triton import bf16_query
             return bf16_query(h, v, self.mu, ambient)
         if h.dtype == torch.bfloat16 and torch.is_grad_enabled():
@@ -36,7 +36,7 @@ class _ChordLookaheadRead:
         return _read(h, v, self.mu, ambient).to(h.dtype)
 
     def branch_input(self, h, v, dtype, fuse_norm):
-        if fuse_norm and h.is_cuda and h.dtype == dtype == torch.bfloat16 and h.size(-1) in (128, 512):
+        if fuse_norm and h.is_cuda and h.dtype == dtype == torch.bfloat16 and h.size(-1) in (128, 256, 512):
             from nanochat.chord_triton import bf16_query
             return bf16_query(h, v, self.mu, self.velocity_geometry == 'ambient', normalize=True)
         q = self.query(h, v).to(dtype)
@@ -124,7 +124,7 @@ class LookaheadResidual(_ChordLookaheadRead, NormalizedResidual):
 
     def forward(self, h, v, force, projection=()):
         if (self.geodesic or not h.is_cuda or h.dtype not in (torch.bfloat16, torch.float32) or v.dtype != h.dtype
-                or force.dtype not in (torch.bfloat16, torch.float32) or h.size(-1) not in (128, 512)):
+                or force.dtype not in (torch.bfloat16, torch.float32) or h.size(-1) not in (128, 256, 512)):
             if h.dtype == torch.bfloat16 and torch.is_grad_enabled():
                 return checkpoint(self.reference_write, h, v, force, use_reentrant=False, preserve_rng_state=False)
             return self.reference_write(h, v, force)
