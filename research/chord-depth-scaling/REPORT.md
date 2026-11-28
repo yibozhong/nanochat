@@ -15,3 +15,10 @@
 ## 进度
 
 正式结果待同步。[W&B 实验组](https://wandb.ai/yibozhong657-none/nanochat-1b/groups/chord-depth-scaling)
+
+<!-- sync:begin -->
+<!-- sync:end -->
+
+<!-- agent:begin -->
+待完整配对结果后复核。
+<!-- agent:end -->
